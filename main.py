@@ -15,7 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 
-DEMO = os.environ.get('DEMO', '').lower() in ('1', 'true', 'yes')
+DEMO    = os.environ.get('DEMO', '').lower() in ('1', 'true', 'yes')
+VERSION = '1.2.0'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,7 +48,7 @@ ws_clients: set[WebSocket] = set()
 async def broadcast(data: dict):
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
     alarms.check(check_data)
-    payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count}
+    payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
     dead = set()
     for ws in list(ws_clients):
         try:

@@ -406,7 +406,7 @@
 <body>
 
 <header>
-  <div class="logo">MAVE <span>Bord Monitor</span></div>
+  <div class="logo">MAVE <span>Bord Monitor</span> <span id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
   <div class="header-right">
     <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1496,6 +1496,7 @@ function updatePowerSources(data) {
 
 function handleData(data) {
   if (data.ping) return;
+  if (data.version) $('versionBadge').textContent = 'v' + data.version;
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
   if (data.lights)  updateChannels(data.lights.channels ?? []);
