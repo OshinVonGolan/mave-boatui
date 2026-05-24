@@ -2,6 +2,8 @@
 import asyncio
 import json
 import logging
+import math
+import os
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,6 +13,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from can_reader import BoatState, CanInterface
+
+DEMO = os.environ.get('DEMO', '').lower() in ('1', 'true', 'yes')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,22 +39,64 @@ async def broadcast(data: dict):
             await ws.send_json(data)
         except Exception:
             dead.add(ws)
-    ws_clients -= dead
+    ws_clients.difference_update(dead)
 
 
 can_if.on_change(broadcast)
 
 
+async def _demo_task():
+    """Generiert realistische Testdaten — kein CAN-Bus nötig (DEMO=1)."""
+    t = 0
+    light_channels = [0] * 9
+    while True:
+        t += 1
+        soc     = 72 + 12 * math.sin(t * 0.04)
+        voltage = 12.45 + 0.35 * math.sin(t * 0.03)
+        current = 4.5 * math.sin(t * 0.06) - 1.2
+
+        state.battery.update({
+            'soc':             round(soc, 1),
+            'voltage':         round(voltage, 2),
+            'current':         round(current, 1),
+            'power':           round(voltage * current, 1),
+            'consumed_ah':     round(18.4 + t * 0.005, 1),
+            'cycles':          47,
+            'starter_voltage': round(12.28 + 0.08 * math.sin(t * 0.02), 2),
+            'min_voltage':     11.92,
+            'max_voltage':     13.18,
+            'time_since_full': 7200 + t * 2,
+        })
+        state.tanks['tank1'] = round(63 + 4 * math.sin(t * 0.015), 1)
+        state.tanks['tank2'] = round(28 + 2 * math.sin(t * 0.02), 1)
+
+        # Kanal-Animation: alle 8 s neues Muster
+        phase = (t // 8) % 4
+        if   phase == 0: light_channels = [0]*9
+        elif phase == 1: light_channels = [255,255,255,255,0,0,0,0,0]
+        elif phase == 2: light_channels = [80,80,80,80,80,80,80,80,1]
+        elif phase == 3: light_channels = [255]*8 + [1]
+        state.lights['channels'] = light_channels
+
+        await broadcast(state.to_dict())
+        await asyncio.sleep(1)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    loop = asyncio.get_event_loop()
-    can_if.set_loop(loop)
-    t = threading.Thread(target=can_if.run, daemon=True, name='can-reader')
-    t.start()
-    log.info("CAN-Reader gestartet")
+    if DEMO:
+        log.info("★ DEMO-Modus aktiv — keine CAN-Hardware nötig")
+        asyncio.ensure_future(_demo_task())
+    else:
+        loop = asyncio.get_event_loop()
+        can_if.set_loop(loop)
+        t = threading.Thread(target=can_if.run, daemon=True, name='can-reader')
+        t.start()
+        log.info("CAN-Reader gestartet")
     yield
-    can_if.stop()
-    log.info("CAN-Reader gestoppt")
+    if not DEMO:
+        can_if.stop()
+        log.info("CAN-Reader gestoppt")
 
 
 app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
