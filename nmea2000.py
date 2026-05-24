@@ -14,14 +14,14 @@ def parse_can_id(arb_id: int) -> tuple[int, int]:
     pf  = (arb_id >> 16) & 0xFF
     ps  = (arb_id >> 8)  & 0xFF
     dp  = (arb_id >> 24) & 0x01
-    pgn = (dp << 17) | (pf << 8) | (ps if pf >= 240 else 0)
+    pgn = (dp << 16) | (pf << 8) | (ps if pf >= 240 else 0)
     return pgn, src
 
 
 def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
     """Erstellt einen 29-Bit NMEA2000 CAN-ID."""
     pf = (pgn >> 8) & 0xFF
-    dp = (pgn >> 17) & 0x01
+    dp = (pgn >> 16) & 0x01
     ps = (pgn & 0xFF) if pf >= 240 else dst
     return (priority << 26) | (dp << 24) | (pf << 16) | (ps << 8) | src
 
