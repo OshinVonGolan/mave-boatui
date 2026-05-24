@@ -411,61 +411,84 @@
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
 
     /* ── Light detail ── */
-    .ch-slider-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+    .light-ch-grid {
+      display: grid; grid-template-columns: 1fr; gap: 0;
     }
-    .ch-slider-row:last-child { border-bottom: none; }
-    .ch-slider-label { font-size: 12px; color: var(--text2); width: 56px; flex-shrink: 0; }
+    @media (min-width: 500px) {
+      .light-ch-grid { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+    }
+    .ch-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 0; border-bottom: 1px solid var(--surface2);
+    }
+    .ch-row:last-child { border-bottom: none; }
+    .ch-num {
+      font-size: 10px; font-weight: 700; color: var(--text3);
+      background: var(--surface2); border-radius: 4px;
+      padding: 2px 5px; flex-shrink: 0; min-width: 22px; text-align: center;
+    }
     .ch-slider {
       flex: 1; -webkit-appearance: none; appearance: none;
-      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      height: 6px; border-radius: 3px; outline: none; cursor: pointer;
       background: linear-gradient(to right, var(--accent) 0%, var(--surface2) 0%);
     }
     .ch-slider::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
+      -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%;
       background: var(--accent); border: 2px solid #fff;
-      box-shadow: 0 1px 5px rgba(0,0,0,.5); cursor: pointer;
+      box-shadow: 0 1px 6px rgba(0,0,0,.55); cursor: pointer;
     }
     .ch-slider::-moz-range-thumb {
-      width: 22px; height: 22px; border-radius: 50%;
-      background: var(--accent); border: 2px solid #fff; cursor: pointer;
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff; cursor: pointer; border: none;
     }
-    .ch-slider-val { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums;
-      width: 28px; text-align: right; flex-shrink: 0; }
-    .relay-section { padding: 12px 0; display: flex; align-items: center; gap: 14px; }
-    .relay-label { font-size: 13px; color: var(--text2); }
+    .ch-val {
+      font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums;
+      width: 26px; text-align: right; flex-shrink: 0;
+    }
+    .relay-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0;
+    }
+    .relay-row-label { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+    .relay-status { font-size: 11px; color: var(--text3); }
     .relay-btn {
-      padding: 10px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      padding: 11px 36px; border-radius: 10px; font-size: 15px; font-weight: 700;
       cursor: pointer; font-family: inherit; border: 1px solid var(--border);
-      transition: all .15s;
+      transition: all .15s; letter-spacing: .04em;
     }
-    .relay-btn.on  { background: var(--orange); border-color: var(--orange); color: #fff; }
-    .relay-btn.off { background: var(--surface2); color: var(--text2); }
-    .preset-edit-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+    .relay-btn.on  { background: var(--orange); border-color: var(--orange); color: #fff; box-shadow: 0 0 0 3px rgba(249,115,22,.2); }
+    .relay-btn.off { background: var(--surface2); color: var(--text3); }
+    .preset-save-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
     }
-    .preset-edit-row:last-child { border-bottom: none; }
-    .preset-edit-emoji { font-size: 18px; flex-shrink: 0; width: 28px; text-align: center; }
+    @media (max-width: 380px) { .preset-save-grid { grid-template-columns: 1fr; } }
+    .preset-save-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .preset-save-card-top { display: flex; align-items: center; gap: 6px; }
+    .preset-save-card-emoji { font-size: 16px; }
     .preset-edit-name {
-      flex: 1; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 13px;
+      flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 8px; color: var(--text); font-size: 13px;
       outline: none; font-family: inherit; transition: border-color .15s;
     }
     .preset-edit-name:focus { border-color: var(--accent); }
-    .preset-save-btn {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text2);
-      cursor: pointer; font-family: inherit; white-space: nowrap; transition: all .15s;
-      flex-shrink: 0;
+    .preset-save-card-btn {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 7px; padding: 8px; font-size: 12px; font-weight: 600;
+      color: var(--text2); cursor: pointer; font-family: inherit;
+      transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 5px;
     }
-    .preset-save-btn:hover { background: var(--accent); border-color: var(--accent); color: #0f172a; }
-    .preset-save-feedback {
-      font-size: 11px; color: var(--green); opacity: 0; transition: opacity .3s;
-      flex-shrink: 0;
+    .preset-save-card-btn:hover { background: var(--accent); border-color: var(--accent); color: #0f172a; }
+    .preset-save-card-btn.saved { background: rgba(34,197,94,.15); border-color: var(--green); color: var(--green); }
+    .light-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3);
+      padding-bottom: 8px; margin-bottom: 4px;
+      border-bottom: 1px solid var(--border);
     }
-    .preset-save-feedback.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -847,29 +870,30 @@
         <circle cx="12" cy="12" r="5"/>
         <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
-      Beleuchtung — Steuerung
+      Beleuchtung
     </div>
     <button class="ov-close" onclick="closeLightDetail()">✕</button>
   </div>
-  <div class="ov-body" style="max-width:600px">
+  <div class="ov-body" style="max-width:640px">
 
-    <div class="settings-section">
-      <div class="settings-section-title">PWM-Kanäle</div>
-      <div id="chSlidersWrap"></div>
+    <div style="margin-bottom:20px">
+      <div class="light-section-title">PWM — Kanäle 1–8</div>
+      <div class="light-ch-grid" id="chSlidersWrap"></div>
     </div>
 
-    <div class="settings-section">
-      <div class="settings-section-title">Relais</div>
-      <div class="relay-section">
-        <span class="relay-label">Kanal 9</span>
+    <div style="margin-bottom:20px">
+      <div class="light-section-title">Relais — Kanal 9</div>
+      <div class="relay-row">
+        <div class="relay-row-label">
+          <span id="relayHint" class="relay-status">Relais offen</span>
+        </div>
         <button class="relay-btn off" id="relayBtn" onclick="toggleRelay()">AUS</button>
-        <span style="font-size:12px;color:var(--text3)" id="relayHint"></span>
       </div>
     </div>
 
-    <div class="settings-section">
-      <div class="settings-section-title">Als Preset speichern</div>
-      <div id="presetEditList"></div>
+    <div>
+      <div class="light-section-title">Als Preset speichern</div>
+      <div class="preset-save-grid" id="presetEditList"></div>
     </div>
 
   </div>
@@ -1672,9 +1696,11 @@ function connect() {
 
 // ── Light detail ───────────────────────────────────────────────────────────
 
-let liveChannels = Array(9).fill(0);
+let liveChannels  = Array(9).fill(0);
 let lightDetailOpen = false;
-let sendTimer = null;
+let _dragging     = false;
+let _throttleTimer = null;
+let _throttlePending = false;
 
 function openLightDetail() {
   liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))];
@@ -1692,7 +1718,7 @@ function closeLightDetail() {
 function sliderFill(slider, v) {
   const pct = (v / 255 * 100).toFixed(1);
   slider.style.background =
-    `linear-gradient(to right, var(--accent) 0%, var(--accent) ${pct}%, var(--surface2) ${pct}%, var(--surface2) 100%)`;
+    `linear-gradient(to right, var(--accent) 0%, var(--accent) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
 }
 
 function buildLightSliders() {
@@ -1701,20 +1727,22 @@ function buildLightSliders() {
   for (let i = 0; i < 8; i++) {
     const v = liveChannels[i] ?? 0;
     const row = document.createElement('div');
-    row.className = 'ch-slider-row';
+    row.className = 'ch-row';
     row.innerHTML = `
-      <label class="ch-slider-label" for="chs${i}">Kanal ${i + 1}</label>
+      <span class="ch-num">${i + 1}</span>
       <input class="ch-slider" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">
-      <span class="ch-slider-val" id="chv${i}">${v}</span>`;
+      <span class="ch-val" id="chv${i}">${v}</span>`;
     wrap.appendChild(row);
     const slider = $(`chs${i}`);
     sliderFill(slider, v);
+    slider.addEventListener('pointerdown', () => { _dragging = true; });
+    slider.addEventListener('pointerup',   () => { _dragging = false; });
     slider.addEventListener('input', () => {
       const val = parseInt(slider.value);
       liveChannels[i] = val;
       $(`chv${i}`).textContent = val;
       sliderFill(slider, val);
-      scheduleSend();
+      throttleSend();
     });
   }
   updateRelayBtn();
@@ -1722,20 +1750,24 @@ function buildLightSliders() {
 
 function updateRelayBtn() {
   const on = (liveChannels[8] ?? 0) > 0;
-  $('relayBtn').textContent = on ? 'AN' : 'AUS';
-  $('relayBtn').className   = 'relay-btn ' + (on ? 'on' : 'off');
+  $('relayBtn').textContent  = on ? 'AN' : 'AUS';
+  $('relayBtn').className    = 'relay-btn ' + (on ? 'on' : 'off');
   $('relayHint').textContent = on ? 'Relais geschlossen' : 'Relais offen';
 }
 
 function toggleRelay() {
   liveChannels[8] = liveChannels[8] > 0 ? 0 : 1;
   updateRelayBtn();
-  scheduleSend();
+  throttleSend();
 }
 
-function scheduleSend() {
-  clearTimeout(sendTimer);
-  sendTimer = setTimeout(sendChannels, 60);
+function throttleSend() {
+  if (_throttleTimer) { _throttlePending = true; return; }
+  sendChannels();
+  _throttleTimer = setTimeout(() => {
+    _throttleTimer = null;
+    if (_throttlePending) { _throttlePending = false; throttleSend(); }
+  }, 80);
 }
 
 async function sendChannels() {
@@ -1749,31 +1781,36 @@ async function sendChannels() {
 }
 
 function syncLightOverlay(channels) {
-  if (!lightDetailOpen || sendTimer) return;
+  if (!lightDetailOpen || _dragging) return;
   liveChannels = [...channels];
   for (let i = 0; i < 8; i++) {
     const s = $(`chs${i}`);
     if (!s) continue;
-    s.value = channels[i] ?? 0;
-    sliderFill(s, s.value);
-    $(`chv${i}`).textContent = s.value;
+    const v = channels[i] ?? 0;
+    s.value = v;
+    sliderFill(s, v);
+    $(`chv${i}`).textContent = v;
   }
   updateRelayBtn();
 }
 
 function renderPresetEditList() {
-  const list = $('presetEditList');
-  list.innerHTML = presets.map((p, i) => `
-    <div class="preset-edit-row" id="per${i}">
-      <span class="preset-edit-emoji">${p.emoji}</span>
-      <input class="preset-edit-name" id="pen${i}" type="text" value="${p.name}" maxlength="24" placeholder="Preset ${i+1}">
-      <button class="preset-save-btn" onclick="saveCurrentAsPreset(${i})">Speichern</button>
-      <span class="preset-save-feedback" id="pef${i}">✓</span>
+  $('presetEditList').innerHTML = presets.map((p, i) => `
+    <div class="preset-save-card" id="per${i}">
+      <div class="preset-save-card-top">
+        <span class="preset-save-card-emoji">${p.emoji}</span>
+        <input class="preset-edit-name" id="pen${i}" type="text"
+               value="${p.name}" maxlength="24" placeholder="Preset ${i + 1}">
+      </div>
+      <button class="preset-save-card-btn" id="psb${i}" onclick="saveCurrentAsPreset(${i})">
+        Werte speichern
+      </button>
     </div>`).join('');
 }
 
 async function saveCurrentAsPreset(idx) {
   const name = $(`pen${idx}`)?.value.trim() || presets[idx]?.name || `Preset ${idx + 1}`;
+  const btn  = $(`psb${idx}`);
   try {
     const data = await fetch(`/api/lights/preset/${idx}`, {
       method: 'PATCH',
@@ -1782,9 +1819,9 @@ async function saveCurrentAsPreset(idx) {
     }).then(r => r.json());
     presets = data.presets ?? presets;
     renderPresets();
-    const fb = $(`pef${idx}`);
-    fb.classList.add('show');
-    setTimeout(() => fb.classList.remove('show'), 2000);
+    btn.textContent = '✓ Gespeichert';
+    btn.classList.add('saved');
+    setTimeout(() => { btn.textContent = 'Werte speichern'; btn.classList.remove('saved'); }, 2000);
   } catch(e) { console.error('Preset speichern fehlgeschlagen', e); }
 }
 
