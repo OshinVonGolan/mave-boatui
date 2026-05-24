@@ -149,3 +149,8 @@ async def apply_preset(preset_id: int):
 @app.get('/api/status')
 async def get_status():
     return state.to_dict()
+
+
+@app.get('/api/network')
+async def get_network():
+    return can_if.get_network_stats()

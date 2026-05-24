@@ -342,15 +342,129 @@
       0%   { background-position: -200% 0; }
       100% { background-position:  200% 0; }
     }
+
+    /* ── Network button ─────────────────────────────────────────────────── */
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .net-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text2);
+      cursor: pointer;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      transition: all 0.15s;
+    }
+    .net-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent2); }
+
+    /* ── Network overlay ─────────────────────────────────────────────────── */
+    .net-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .net-overlay.hidden { display: none; }
+
+    .net-ov-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .net-ov-title {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text2);
+    }
+
+    .net-close-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text2);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 10px;
+      line-height: 1.4;
+      transition: all 0.15s;
+    }
+    .net-close-btn:hover { background: var(--surface2); color: var(--text); }
+
+    .net-table-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .net-empty {
+      color: var(--text3);
+      text-align: center;
+      padding: 60px 20px;
+      font-size: 14px;
+    }
+
+    table.net-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .net-table th {
+      text-align: left;
+      color: var(--text3);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .net-table td {
+      padding: 10px 10px;
+      border-bottom: 1px solid var(--surface2);
+      vertical-align: middle;
+    }
+
+    .net-table tr:last-child td { border-bottom: none; }
+
+    .net-td-name { color: var(--text); }
+    .net-td-pgn  { font-size: 10px; color: var(--text3); font-family: monospace; margin-top: 2px; }
+    .net-td-src  { color: var(--accent); font-family: monospace; font-size: 12px; }
+    .net-td-iv   { color: var(--text2); }
+    .net-td-cnt  { color: var(--text2); }
+
+    .net-age-ok   { color: var(--green); }
+    .net-age-warn { color: var(--text2); }
+    .net-age-old  { color: var(--text3); }
   </style>
 </head>
 <body>
 
 <header>
   <div class="logo">MAVE <span>Bord Monitor</span></div>
-  <div class="conn-badge">
-    <div class="conn-dot" id="connDot"></div>
-    <span id="connLabel">Verbinde…</span>
+  <div class="header-right">
+    <button class="net-btn" onclick="openNetwork()" title="Netzwerk">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+        <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
+      </svg>
+    </button>
+    <div class="conn-badge">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">Verbinde…</span>
+    </div>
   </div>
 </header>
 
@@ -456,6 +570,23 @@
   </section>
 
 </main>
+
+<!-- ── Netzwerk-Overlay ──────────────────────────────────────────────────── -->
+<div id="networkOverlay" class="net-overlay hidden">
+  <div class="net-ov-header">
+    <div class="net-ov-title">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-right:7px;vertical-align:-1px">
+        <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+        <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
+      </svg>
+      Netzwerk
+    </div>
+    <button class="net-close-btn" onclick="closeNetwork()">✕</button>
+  </div>
+  <div id="netContent" class="net-table-wrap">
+    <div class="net-empty">Lade…</div>
+  </div>
+</div>
 
 <script>
 // ── Hilfsfunktionen ────────────────────────────────────────────────────────
@@ -684,6 +815,67 @@ function connect() {
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connect, 4000);
   };
+}
+
+// ── Netzwerk-Overlay ───────────────────────────────────────────────────────
+
+let netRefreshTimer = null;
+
+function openNetwork() {
+  $('networkOverlay').classList.remove('hidden');
+  fetchNetwork();
+  netRefreshTimer = setInterval(fetchNetwork, 5000);
+}
+
+function closeNetwork() {
+  $('networkOverlay').classList.add('hidden');
+  clearInterval(netRefreshTimer);
+  netRefreshTimer = null;
+}
+
+async function fetchNetwork() {
+  try {
+    const res = await fetch('/api/network');
+    const data = await res.json();
+    renderNetwork(data);
+  } catch (_) {
+    $('netContent').innerHTML = '<div class="net-empty">Keine Verbindung</div>';
+  }
+}
+
+function renderNetwork(entries) {
+  const wrap = $('netContent');
+  if (!entries.length) {
+    wrap.innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
+    return;
+  }
+
+  const rows = entries.map(e => {
+    const iv  = e.interval_ms != null ? `${e.interval_ms} ms` : '—';
+    const age = e.age_s < 3  ? '<span class="net-age-ok">aktiv</span>'
+              : e.age_s < 15 ? `<span class="net-age-warn">${e.age_s} s</span>`
+              :                 `<span class="net-age-old">${e.age_s} s</span>`;
+    const srcHex = '0x' + e.src.toString(16).toUpperCase().padStart(2, '0');
+    const pgnHex = '0x' + e.pgn.toString(16).toUpperCase();
+    return `<tr>
+      <td><div class="net-td-name">${e.description}</div><div class="net-td-pgn">${e.pgn} &nbsp;${pgnHex}</div></td>
+      <td class="net-td-src">${srcHex}</td>
+      <td class="net-td-iv">${iv}</td>
+      <td class="net-td-cnt">${e.count}</td>
+      <td>${age}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="net-table">
+    <thead><tr>
+      <th>PGN / Beschreibung</th>
+      <th>Quelle</th>
+      <th>Intervall</th>
+      <th>Meldungen</th>
+      <th>Zuletzt</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

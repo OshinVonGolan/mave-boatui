@@ -10,7 +10,7 @@ from nmea2000 import (
     build_brightness_frames, make_can_id,
     parse_battery_stats, parse_brightness,
     parse_can_id, parse_dc_status, parse_fluid_level,
-    RPI_SOURCE_ADDRESS,
+    PGN_NAMES, RPI_SOURCE_ADDRESS,
 )
 
 log = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ class CanInterface:
         self._loop        = None
         self._on_change   = None   # async callback(data: dict)
         self._broadcast_pending = False
+        self._network: dict = {}   # (pgn, src) → tracking entry
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -73,11 +74,44 @@ class CanInterface:
 
     # ── Empfangen ───────────────────────────────────────────────────────────
 
+    def _track_network(self, pgn: int, src: int):
+        now = time.monotonic()
+        key = (pgn, src)
+        if key not in self._network:
+            self._network[key] = {'count': 1, 'first_seen': now, 'last_seen': now, 'intervals': []}
+        else:
+            e = self._network[key]
+            e['intervals'].append(now - e['last_seen'])
+            if len(e['intervals']) > 20:
+                e['intervals'] = e['intervals'][-20:]
+            e['last_seen'] = now
+            e['count'] += 1
+
+    def get_network_stats(self) -> list[dict]:
+        now = time.monotonic()
+        result = []
+        for (pgn, src), e in sorted(self._network.items(), key=lambda x: (x[0][1], x[0][0])):
+            ivs = e['intervals']
+            avg_ms = round(sum(ivs) / len(ivs) * 1000) if ivs else None
+            result.append({
+                'pgn':         pgn,
+                'src':         src,
+                'description': PGN_NAMES.get(pgn, f'PGN {pgn}'),
+                'count':       e['count'],
+                'interval_ms': avg_ms,
+                'age_s':       round(now - e['last_seen'], 1),
+            })
+        return result
+
     def _handle(self, msg: can.Message):
         pgn, src = parse_can_id(msg.arbitration_id)
         raw = bytes(msg.data)
 
-        payload = self._fp.process(pgn, src, raw) if pgn in FAST_PACKET_PGNS else raw
+        is_fp = pgn in FAST_PACKET_PGNS
+        if not is_fp or (raw and (raw[0] & 0x1F) == 0):
+            self._track_network(pgn, src)
+
+        payload = self._fp.process(pgn, src, raw) if is_fp else raw
 
         if payload is None:
             return

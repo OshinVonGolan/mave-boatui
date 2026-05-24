@@ -128,6 +128,42 @@ def parse_brightness(data: bytes):
 
 # ── CAN-Frame-Sender ─────────────────────────────────────────────────────────
 
+PGN_NAMES: dict[int, str] = {
+    59392:  'ISO Acknowledge',
+    59904:  'ISO Request',
+    60928:  'ISO Address Claim',
+    65240:  'ISO Commanded Address',
+    126208: 'NMEA Request/Command',
+    126720: 'Proprietary Fast-Packet',
+    126992: 'System Time',
+    126996: 'Product Information',
+    127245: 'Rudder',
+    127250: 'Vessel Heading',
+    127251: 'Rate of Turn',
+    127257: 'Attitude',
+    127488: 'Engine Parameters Rapid',
+    127489: 'Engine Parameters Dynamic',
+    127501: 'Binary Switch Bank Status',
+    127502: 'Switch Bank Control',
+    127505: 'Fluid Level',
+    127506: 'DC Detailed Status',
+    127508: 'Battery Status',
+    128259: 'Speed',
+    128267: 'Water Depth',
+    129025: 'Position Rapid',
+    129026: 'COG & SOG Rapid',
+    129029: 'GNSS Position Data',
+    129283: 'Cross Track Error',
+    129284: 'Navigation Data',
+    129291: 'Set & Drift',
+    130306: 'Wind Data',
+    130310: 'Environmental Parameters',
+    130311: 'Environmental Parameters 2',
+    130312: 'Temperature',
+    130900: 'Battery Stats (Custom)',
+}
+
+
 def build_brightness_frames(values: list[int], seq_id: int = 0) -> list[tuple]:
     """Erstellt Fast-Packet CAN-Frames für PGN 126720 Typ 0xA1 (11 Byte Payload)."""
     payload = bytes([0xA1, LIGHT_BANK_INSTANCE] + [int(v) for v in values[:9]])
