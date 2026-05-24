@@ -18,9 +18,10 @@ def _get_field(state: dict, field: str):
 
 class AlarmEngine:
     def __init__(self):
-        self._rules:   dict = {}
-        self._alarms:  list = []   # alle nicht gelöschten Alarme
-        self._active:  dict = {}   # key → alarm-id (aktuell ausgelöste Bedingungen)
+        self._rules:      dict = {}
+        self._alarms:     list = []   # alle nicht gelöschten Alarme
+        self._active:     dict = {}   # key → alarm-id (aktuell ausgelöste Bedingungen)
+        self._data_seen:  set  = set()   # keys die mindestens einmal Daten hatten
         self._load()
 
     def _load(self):
@@ -33,14 +34,14 @@ class AlarmEngine:
     # ── Regeln ──────────────────────────────────────────────────────────────
 
     def get_rules(self) -> dict:
-        return self._rules
+        return {k: {**v, 'data_available': k in self._data_seen} for k, v in self._rules.items()}
 
     def update_rules(self, updates: dict) -> dict:
         for key, patch in updates.items():
             if key in self._rules:
                 self._rules[key].update(patch)
         self._save()
-        return self._rules
+        return self.get_rules()
 
     # ── State prüfen ─────────────────────────────────────────────────────────
 
@@ -51,15 +52,24 @@ class AlarmEngine:
         for key, rule in self._rules.items():
             val = _get_field(state, rule['field'])
 
+            if val is not None:
+                self._data_seen.add(key)
+
             if not rule.get('enabled') or val is None:
                 if key in self._active:
                     self._active.pop(key)
                     changed = True
                 continue
 
-            op        = rule['op']
-            threshold = rule['threshold']
-            triggered = (op == '<' and val < threshold) or (op == '>' and val > threshold)
+            op = rule['op']
+            if op == 'range':
+                triggered = val < rule['min'] or val > rule['max']
+            elif op == '<':
+                triggered = val < rule['threshold']
+            elif op == '>':
+                triggered = val > rule['threshold']
+            else:
+                triggered = False
 
             if triggered and key not in self._active:
                 alarm = {
@@ -67,7 +77,9 @@ class AlarmEngine:
                     'key':          key,
                     'name':         rule['name'],
                     'value':        round(val, 2),
-                    'threshold':    threshold,
+                    'threshold':    rule.get('threshold') if op != 'range' else None,
+                    'min':          rule.get('min'),
+                    'max':          rule.get('max'),
                     'op':           op,
                     'severity':     rule['severity'],
                     'timestamp':    time.time(),

@@ -16,5 +16,9 @@
     "35":  "B&G Chartplotter",
     "48":  "B&G Triton",
     "100": "RPi"
+  },
+  "batteries": {
+    "service_instance": 0,
+    "starter_instance": 1
   }
 }

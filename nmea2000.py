@@ -129,6 +129,18 @@ def parse_dc_detailed(data: bytes):
     return {'instance': data[1], 'dc_type': data[2] & 0x0F}
 
 
+def parse_temperature(data: bytes):
+    """PGN 130312 – Temperature (Single Frame, 8 Byte). Gibt Temperatur in °C zurück."""
+    if len(data) < 5:
+        return None
+    source  = data[1]
+    t_raw   = struct.unpack_from('<H', data, 2)[0]
+    if t_raw == 0xFFFF:
+        return None
+    temp_c = round(t_raw * 0.01 - 273.15, 1)
+    return {'instance': data[0], 'source': source, 'temperature_c': temp_c}
+
+
 def parse_brightness(data: bytes):
     """PGN 126720 Typ 0xA1 – PWM-Helligkeit (Fast Packet, 11 Byte)."""
     if len(data) < 11 or data[0] != 0xA1 or data[1] != LIGHT_BANK_INSTANCE:

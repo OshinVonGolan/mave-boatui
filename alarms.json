@@ -1,11 +1,13 @@
 {
   "rules": {
-    "bat_soc_warn":  {"name": "Batterie SOC niedrig",      "field": "battery.soc",            "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true},
-    "bat_soc_crit":  {"name": "Batterie SOC kritisch",     "field": "battery.soc",            "op": "<", "threshold": 10,   "severity": "critical", "enabled": true},
-    "bat_v_low":     {"name": "Batterie Spannung niedrig", "field": "battery.voltage",         "op": "<", "threshold": 12.0, "severity": "warning",  "enabled": true},
-    "bat_v_high":    {"name": "Batterie Spannung hoch",    "field": "battery.voltage",         "op": ">", "threshold": 14.6, "severity": "warning",  "enabled": false},
-    "starter_v_low": {"name": "Starterbatterie niedrig",   "field": "battery.starter_voltage", "op": "<", "threshold": 11.8, "severity": "warning",  "enabled": true},
-    "tank1_low":     {"name": "Tank 1 niedrig",            "field": "tanks.tank1",             "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true},
-    "tank2_low":     {"name": "Tank 2 niedrig",            "field": "tanks.tank2",             "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true}
+    "bat_soc_warn":      {"name": "SOC niedrig",           "field": "battery.soc",             "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "bat_soc_crit":      {"name": "SOC kritisch",          "field": "battery.soc",             "op": "<",     "threshold": 10,   "severity": "critical", "enabled": true},
+    "bat_voltage":       {"name": "Batterie Spannung",     "field": "battery.voltage",          "op": "range", "min": 11.8, "max": 14.6, "step": 0.1,  "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
+    "starter_voltage":   {"name": "Starterbatterie",       "field": "battery.starter_voltage",  "op": "range", "min": 11.5, "max": 14.6, "step": 0.1,  "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
+    "bat_cell_voltage":  {"name": "Zellspannung",          "field": "battery.cell_voltage_min", "op": "range", "min": 2.80, "max": 3.65, "step": 0.01, "bounds": [2.0,  4.2],  "unit": "V", "severity": "critical", "enabled": true},
+    "bat_temp_high":     {"name": "Batterietemperatur",    "field": "battery.temperature",      "op": ">",     "threshold": 45,   "severity": "warning",  "enabled": true},
+    "tank1_low":         {"name": "Tank 1 niedrig",        "field": "tanks.tank1",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "tank2_low":         {"name": "Tank 2 niedrig",        "field": "tanks.tank2",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "network_error":     {"name": "CAN-Bus Fehler",        "field": "_network_age",             "op": ">",     "threshold": 30,   "severity": "critical", "enabled": true}
   }
 }

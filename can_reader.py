@@ -11,6 +11,7 @@ from nmea2000 import (
     build_brightness_frames, make_can_id,
     parse_battery_stats, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
+    parse_temperature,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
 )
 
@@ -24,6 +25,8 @@ class BoatState:
             'power': None, 'consumed_ah': None, 'cycles': None,
             'starter_voltage': None, 'min_voltage': None,
             'max_voltage': None, 'time_since_full': None,
+            'cell_voltage_min': None, 'cell_voltage_max': None,
+            'temperature': None,
         }
         self.tanks  = {'tank1': None, 'tank2': None}
         self.lights = {'channels': [0] * 9}
@@ -55,6 +58,12 @@ class CanInterface:
         self._broadcast_pending = False
         self._network:  dict = {}   # (pgn, src) → tracking entry
         self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
+        self._service_instance: int = 0
+        self._starter_instance: int = 1
+
+    def set_battery_instances(self, service: int, starter: int):
+        self._service_instance = service
+        self._starter_instance = starter
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -140,6 +149,13 @@ class CanInterface:
             })
         return result
 
+    def time_since_last_message(self) -> float:
+        if not self._network:
+            return float('inf')
+        now    = time.monotonic()
+        latest = max(e['last_seen'] for e in self._network.values())
+        return round(now - latest, 1)
+
     def _handle(self, msg: can.Message):
         pgn, src = parse_can_id(msg.arbitration_id)
         raw = bytes(msg.data)
@@ -174,12 +190,12 @@ class CanInterface:
                 inst = p['instance']
                 dc_type = self._dc_types.get(inst)
 
-                if inst == 0:
+                if inst == self._service_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
                     for field, key in [('voltage', 'voltage'), ('current', 'current')]:
                         if p[field] is not None and self.state.battery[key] != p[field]:
                             self.state.battery[key] = p[field]
                             changed = True
-                elif inst == 1 and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
+                elif inst == self._starter_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
                     if p['voltage'] is not None and self.state.battery['starter_voltage'] != p['voltage']:
                         self.state.battery['starter_voltage'] = p['voltage']
                         changed = True
@@ -206,6 +222,12 @@ class CanInterface:
                     if self.state.battery.get(k) != v:
                         self.state.battery[k] = v
                         changed = True
+
+        elif pgn == 130312:
+            p = parse_temperature(payload)
+            if p and self.state.battery['temperature'] != p['temperature_c']:
+                self.state.battery['temperature'] = p['temperature_c']
+                changed = True
 
         elif pgn == 126720:
             p = parse_brightness(payload)

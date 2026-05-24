@@ -273,10 +273,12 @@
     /* ── Alarm rules ── */
     .rule-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 20px; }
     .rule-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 12px 0; border-bottom: 1px solid var(--surface2);
     }
     .rule-row:last-child { border-bottom: none; }
+    .rule-row.no-data { opacity: .45; }
+    .rule-header { display: flex; align-items: center; gap: 10px; }
     .rule-toggle { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
     .rule-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
     .rule-slider {
@@ -291,7 +293,9 @@
     .rule-toggle input:checked + .rule-slider { background: var(--accent); }
     .rule-toggle input:checked + .rule-slider::before { transform: translateX(16px); }
     .rule-name { flex: 1; font-size: 13px; color: var(--text); }
+    .rule-threshold-wrap { display: flex; align-items: center; gap: 5px; }
     .rule-op   { font-size: 12px; color: var(--text3); white-space: nowrap; }
+    .rule-unit { font-size: 12px; color: var(--text3); }
     .rule-input {
       width: 72px; background: var(--surface2); border: 1px solid var(--border);
       border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 13px;
@@ -302,6 +306,32 @@
       border-radius: 4px; white-space: nowrap; }
     .rule-severity.warning  { background: rgba(234,179,8,.15);  color: var(--yellow); }
     .rule-severity.critical { background: rgba(239,68,68,.15); color: var(--red); }
+    .rule-no-data { font-size: 11px; color: var(--text3); font-style: italic; padding-left: 46px; }
+
+    /* ── Dual-range slider ── */
+    .dr-wrap { padding: 4px 0 2px; }
+    .dr-vals { display: flex; justify-content: space-between; font-size: 12px;
+               color: var(--accent); font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+    .dr-track { position: relative; height: 44px; display: flex; align-items: center; }
+    .dr-track-bg { position: absolute; left: 22px; right: 22px; height: 4px;
+                   top: 50%; transform: translateY(-50%);
+                   background: var(--surface2); border-radius: 2px; }
+    .dr-fill { position: absolute; height: 4px; top: 50%; transform: translateY(-50%);
+               background: var(--accent); border-radius: 2px; pointer-events: none; }
+    .dr-thumb {
+      position: absolute; width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: grab; touch-action: none; transform: translateX(-50%);
+      z-index: 2;
+    }
+    .dr-thumb::after {
+      content: ''; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.5);
+    }
+    .dr-thumb:active { cursor: grabbing; }
+    .dr-bounds { display: flex; justify-content: space-between; font-size: 10px;
+                 color: var(--text3); padding: 0 0; margin-top: 2px; }
 
     /* ── Settings ── */
     .settings-section { margin-bottom: 28px; }
@@ -685,6 +715,19 @@
       </div>
     </div>
 
+    <!-- Batterien -->
+    <div class="settings-section">
+      <div class="settings-section-title">Batterien</div>
+      <div class="settings-row">
+        <label class="settings-label" for="sBattService">Servicebatterie — CAN-Instanz</label>
+        <input class="settings-input narrow" id="sBattService" type="number" min="0" max="15" step="1" value="0" />
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="sBattStarter">Starterbatterie — CAN-Instanz</label>
+        <input class="settings-input narrow" id="sBattStarter" type="number" min="0" max="15" step="1" value="1" />
+      </div>
+    </div>
+
     <div class="settings-actions">
       <span class="settings-feedback" id="settingsFeedback"></span>
       <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
@@ -732,8 +775,9 @@ function timeSince(s) {
 
 // ── Config (geladen aus /api/presets) ─────────────────────────────────────
 
-let tanksConfig  = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };
-let devicesConfig = {};
+let tanksConfig    = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };
+let devicesConfig  = {};
+let batteriesConfig = { service_instance: 0, starter_instance: 1 };
 
 // ── SOC-Gauge ──────────────────────────────────────────────────────────────
 
@@ -889,8 +933,9 @@ async function loadPresets() {
   try {
     const data = await fetch('/api/presets').then(r => r.json());
     presets = data.presets ?? [];
-    if (data.tanks)   tanksConfig  = data.tanks;
-    if (data.devices) devicesConfig = data.devices;
+    if (data.tanks)     tanksConfig     = data.tanks;
+    if (data.devices)   devicesConfig   = data.devices;
+    if (data.batteries) batteriesConfig = data.batteries;
     // Apply tank names from config
     $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
     $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';
@@ -1194,27 +1239,157 @@ async function loadRules() {
 }
 
 function renderRules(rules) {
-  $('ruleList').innerHTML = Object.entries(rules).map(([key, r]) => `
-    <div class="rule-row">
-      <label class="rule-toggle">
-        <input type="checkbox" id="r_${key}_en" ${r.enabled ? 'checked' : ''}>
-        <span class="rule-slider"></span>
-      </label>
-      <span class="rule-name">${r.name}</span>
-      <span class="rule-op">${r.op === '<' ? 'unter' : 'über'}</span>
-      <input class="rule-input" id="r_${key}_thr" type="number" step="0.1" value="${r.threshold}">
-      <span class="rule-severity ${r.severity}">${r.severity === 'critical' ? 'Kritisch' : 'Warnung'}</span>
-    </div>`).join('');
+  $('ruleList').innerHTML = Object.entries(rules).map(([key, r]) => {
+    const noData   = !r.data_available;
+    const sevLabel = r.severity === 'critical' ? 'Kritisch' : 'Warnung';
+    const header   = `
+      <div class="rule-header">
+        <label class="rule-toggle">
+          <input type="checkbox" id="r_${key}_en" ${r.enabled ? 'checked' : ''}>
+          <span class="rule-slider"></span>
+        </label>
+        <span class="rule-name">${r.name}</span>
+        <span class="rule-severity ${r.severity}">${sevLabel}</span>
+      </div>`;
+    const noDataRow = noData
+      ? `<div class="rule-no-data">(keine Daten empfangen)</div>` : '';
+
+    let control;
+    if (r.op === 'range') {
+      const unit = r.unit || '';
+      const dec  = (r.step ?? 0.1) < 0.1 ? 2 : 1;
+      control = `
+        <div class="dr-wrap">
+          <div class="dr-vals">
+            <span id="dr_${key}_lo">${Number(r.min).toFixed(dec)} ${unit}</span>
+            <span id="dr_${key}_hi">${Number(r.max).toFixed(dec)} ${unit}</span>
+          </div>
+          <div class="dr-track" id="dr_${key}"
+               data-min="${r.min}" data-max="${r.max}"
+               data-low="${r.bounds[0]}" data-high="${r.bounds[1]}"
+               data-step="${r.step ?? 0.1}" data-unit="${unit}" data-dec="${dec}">
+            <div class="dr-track-bg"></div>
+            <div class="dr-fill" id="dr_${key}_fill"></div>
+            <div class="dr-thumb dr-thumb-low" id="dr_${key}_tlo"></div>
+            <div class="dr-thumb dr-thumb-high" id="dr_${key}_thi"></div>
+          </div>
+          <div class="dr-bounds">
+            <span>${Number(r.bounds[0]).toFixed(dec)}</span>
+            <span>${Number(r.bounds[1]).toFixed(dec)}</span>
+          </div>
+        </div>`;
+    } else {
+      const opLabel = r.op === '<' ? 'unter' : 'über';
+      control = `
+        <div class="rule-threshold-wrap" style="padding-left:46px">
+          <span class="rule-op">${opLabel}</span>
+          <input class="rule-input" id="r_${key}_thr" type="number"
+                 step="${r.step ?? 1}" value="${r.threshold}">
+        </div>`;
+    }
+
+    return `<div class="rule-row${noData ? ' no-data' : ''}">${header}${control}${noDataRow}</div>`;
+  }).join('');
+
+  // init dual-range sliders after DOM insertion
+  Object.entries(rules).forEach(([key, r]) => {
+    if (r.op === 'range') initDualRange(key, r);
+  });
+}
+
+function initDualRange(key, r) {
+  const track = $(`dr_${key}`);
+  const fill  = $(`dr_${key}_fill`);
+  const tlo   = $(`dr_${key}_tlo`);
+  const thi   = $(`dr_${key}_thi`);
+  const lblLo = $(`dr_${key}_lo`);
+  const lblHi = $(`dr_${key}_hi`);
+  if (!track) return;
+
+  const low  = parseFloat(track.dataset.low);
+  const high = parseFloat(track.dataset.high);
+  const step = parseFloat(track.dataset.step);
+  const unit = track.dataset.unit;
+  const dec  = parseInt(track.dataset.dec);
+  let minVal = parseFloat(track.dataset.min);
+  let maxVal = parseFloat(track.dataset.max);
+
+  // Each thumb is 44px wide with transform:translateX(-50%).
+  // Setting left=X puts the thumb CENTER at X.
+  // Center travels: 22px (f=0) → W-22px (f=1)  → left = calc(f*100% + 22*(1-2f)px)
+  // Fill left edge = tlo center, fill right edge = thi center.
+  // CSS right property = W - right_edge = W - (22 + fhi*(W-44)) = calc((1-fhi)*100% + (44*fhi-22)px)
+  function toFrac(v)    { return (v - low) / (high - low); }
+  function snap(v)      { return parseFloat((Math.round(v / step) * step).toFixed(dec)); }
+  function thumbCSS(f)  { return `calc(${(f*100).toFixed(4)}% + ${(22*(1-2*f)).toFixed(2)}px)`; }
+  function fillRightCSS(f){ return `calc(${((1-f)*100).toFixed(4)}% + ${(44*f-22).toFixed(2)}px)`; }
+
+  function update() {
+    const flo = toFrac(minVal);
+    const fhi = toFrac(maxVal);
+    tlo.style.left  = thumbCSS(flo);
+    thi.style.left  = thumbCSS(fhi);
+    fill.style.left  = thumbCSS(flo);
+    fill.style.right = fillRightCSS(fhi);
+    fill.style.width = '';          // use left+right instead of width
+    lblLo.textContent = minVal.toFixed(dec) + ' ' + unit;
+    lblHi.textContent = maxVal.toFixed(dec) + ' ' + unit;
+    track.dataset.min = minVal;
+    track.dataset.max = maxVal;
+  }
+
+  function getPct(clientX) {
+    const rect = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (clientX - rect.left - 22) / (rect.width - 44)));
+  }
+
+  function drag(thumb, isLow) {
+    function onMove(cx) {
+      let val = snap(low + getPct(cx) * (high - low));
+      val = Math.max(low, Math.min(high, val));
+      if (isLow) minVal = Math.min(val, maxVal - step);
+      else       maxVal = Math.max(val, minVal + step);
+      update();
+    }
+    thumb.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const mv = e2 => onMove(e2.touches[0].clientX);
+      const up = () => { document.removeEventListener('touchmove', mv); document.removeEventListener('touchend', up); };
+      document.addEventListener('touchmove', mv, { passive: false });
+      document.addEventListener('touchend', up);
+    }, { passive: false });
+    thumb.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const mv = e2 => onMove(e2.clientX);
+      const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); };
+      document.addEventListener('mousemove', mv);
+      document.addEventListener('mouseup', up);
+    });
+  }
+
+  drag(tlo, true);
+  drag(thi, false);
+  update();
 }
 
 async function saveRules() {
   const fb = $('rulesFeedback');
   const updates = {};
   Object.keys(_rulesCache).forEach(key => {
-    updates[key] = {
-      enabled:   $(`r_${key}_en`)?.checked ?? _rulesCache[key].enabled,
-      threshold: parseFloat($(`r_${key}_thr`)?.value) ?? _rulesCache[key].threshold,
-    };
+    const r = _rulesCache[key];
+    if (r.op === 'range') {
+      const track = $(`dr_${key}`);
+      updates[key] = {
+        enabled: $(`r_${key}_en`)?.checked ?? r.enabled,
+        min: track ? parseFloat(track.dataset.min) : r.min,
+        max: track ? parseFloat(track.dataset.max) : r.max,
+      };
+    } else {
+      updates[key] = {
+        enabled:   $(`r_${key}_en`)?.checked ?? r.enabled,
+        threshold: parseFloat($(`r_${key}_thr`)?.value) ?? r.threshold,
+      };
+    }
   });
   try {
     const data = await fetch('/api/alarms/rules', {
@@ -1235,10 +1410,12 @@ async function saveRules() {
 // ── Settings ───────────────────────────────────────────────────────────────
 
 function openSettings() {
-  $('sTank1Name').value = tanksConfig.tank1?.name ?? '';
-  $('sTank1Cap').value  = tanksConfig.tank1?.capacity_l ?? '';
-  $('sTank2Name').value = tanksConfig.tank2?.name ?? '';
-  $('sTank2Cap').value  = tanksConfig.tank2?.capacity_l ?? '';
+  $('sTank1Name').value   = tanksConfig.tank1?.name ?? '';
+  $('sTank1Cap').value    = tanksConfig.tank1?.capacity_l ?? '';
+  $('sTank2Name').value   = tanksConfig.tank2?.name ?? '';
+  $('sTank2Cap').value    = tanksConfig.tank2?.capacity_l ?? '';
+  $('sBattService').value = batteriesConfig.service_instance ?? 0;
+  $('sBattStarter').value = batteriesConfig.starter_instance ?? 1;
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
   $('settingsOverlay').classList.remove('hidden');
@@ -1251,12 +1428,18 @@ async function saveSettings() {
   const fb  = $('settingsFeedback');
   btn.disabled = true;
 
-  const body = { tanks: {
-    tank1: { name: $('sTank1Name').value.trim() || 'Tank 1',
-             capacity_l: parseInt($('sTank1Cap').value) || 200 },
-    tank2: { name: $('sTank2Name').value.trim() || 'Tank 2',
-             capacity_l: parseInt($('sTank2Cap').value) || 120 },
-  }};
+  const body = {
+    tanks: {
+      tank1: { name: $('sTank1Name').value.trim() || 'Tank 1',
+               capacity_l: parseInt($('sTank1Cap').value) || 200 },
+      tank2: { name: $('sTank2Name').value.trim() || 'Tank 2',
+               capacity_l: parseInt($('sTank2Cap').value) || 120 },
+    },
+    batteries: {
+      service_instance: parseInt($('sBattService').value) || 0,
+      starter_instance: parseInt($('sBattStarter').value) || 1,
+    },
+  };
 
   try {
     const data = await fetch('/api/settings', {
@@ -1265,7 +1448,8 @@ async function saveSettings() {
       body: JSON.stringify(body),
     }).then(r => r.json());
 
-    if (data.tanks) tanksConfig = data.tanks;
+    if (data.tanks)     tanksConfig     = data.tanks;
+    if (data.batteries) batteriesConfig = data.batteries;
     $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
     $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';
     renderTank(1, tankLast[1]);

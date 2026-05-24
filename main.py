@@ -31,11 +31,22 @@ state   = BoatState()
 can_if  = CanInterface(channel='can0', state=state)
 alarms  = AlarmEngine()
 
+def _apply_presets_config():
+    data = json.loads(PRESETS_FILE.read_text())
+    batt = data.get('batteries', {})
+    can_if.set_battery_instances(
+        service=int(batt.get('service_instance', 0)),
+        starter=int(batt.get('starter_instance', 1)),
+    )
+
+_apply_presets_config()
+
 ws_clients: set[WebSocket] = set()
 
 
 async def broadcast(data: dict):
-    alarms.check(data)
+    check_data = {**data, '_network_age': can_if.time_since_last_message()}
+    alarms.check(check_data)
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count}
     dead = set()
     for ws in list(ws_clients):
@@ -60,16 +71,19 @@ async def _demo_task():
         current = 4.5 * math.sin(t * 0.06) - 1.2
 
         state.battery.update({
-            'soc':             round(soc, 1),
-            'voltage':         round(voltage, 2),
-            'current':         round(current, 1),
-            'power':           round(voltage * current, 1),
-            'consumed_ah':     round(18.4 + t * 0.005, 1),
-            'cycles':          47,
-            'starter_voltage': round(12.28 + 0.08 * math.sin(t * 0.02), 2),
-            'min_voltage':     11.92,
-            'max_voltage':     13.18,
-            'time_since_full': 7200 + t * 2,
+            'soc':              round(soc, 1),
+            'voltage':          round(voltage, 2),
+            'current':          round(current, 1),
+            'power':            round(voltage * current, 1),
+            'consumed_ah':      round(18.4 + t * 0.005, 1),
+            'cycles':           47,
+            'starter_voltage':  round(12.28 + 0.08 * math.sin(t * 0.02), 2),
+            'min_voltage':      11.92,
+            'max_voltage':      13.18,
+            'time_since_full':  7200 + t * 2,
+            'cell_voltage_min': round(3.28 + 0.04 * math.sin(t * 0.03), 3),
+            'cell_voltage_max': round(3.31 + 0.04 * math.sin(t * 0.03 + 0.2), 3),
+            'temperature':      round(28.5 + 2 * math.sin(t * 0.02), 1),
         })
         state.tanks['tank1'] = round(63 + 4 * math.sin(t * 0.015), 1)
         state.tanks['tank2'] = round(28 + 2 * math.sin(t * 0.02), 1)
@@ -209,5 +223,8 @@ async def update_settings(body: dict):
                 data['tanks'][key].update(val)
     if 'devices' in body:
         data.setdefault('devices', {}).update(body['devices'])
+    if 'batteries' in body:
+        data.setdefault('batteries', {}).update(body['batteries'])
+        _apply_presets_config()
     PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
     return data
