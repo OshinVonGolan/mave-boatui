@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Mave — Bord Monitor</title>
+  <style>
+    /* ── Reset & Custom Properties ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f172a;
+      --surface:   #1e293b;
+      --surface2:  #263348;
+      --border:    #334155;
+      --text:      #f1f5f9;
+      --text2:     #94a3b8;
+      --text3:     #64748b;
+      --accent:    #06b6d4;
+      --accent2:   #0891b2;
+      --green:     #22c55e;
+      --yellow:    #eab308;
+      --red:       #ef4444;
+      --orange:    #f97316;
+      --radius:    14px;
+      --gap:       16px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    .logo span { color: var(--text2); font-weight: 400; font-size: 13px; letter-spacing: 0.04em; margin-left: 10px; }
+
+    .conn-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      color: var(--text2);
+    }
+    .conn-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--red);
+      transition: background 0.4s;
+    }
+    .conn-dot.ok   { background: var(--green); }
+    .conn-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    /* ── Grid layout ───────────────────────────────────────────────────── */
+    main {
+      display: grid;
+      gap: var(--gap);
+      padding: var(--gap);
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "battery"
+        "tanks"
+        "lights";
+    }
+
+    @media (min-width: 640px) {
+      main {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "battery tanks"
+          "lights  lights";
+      }
+    }
+
+    @media (min-width: 1024px) {
+      main {
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-areas: "battery tanks lights";
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+    }
+
+    /* ── Cards ─────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card-battery { grid-area: battery; }
+    .card-tanks   { grid-area: tanks;   }
+    .card-lights  { grid-area: lights;  }
+
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text3);
+    }
+    .card-title svg { flex-shrink: 0; }
+
+    /* ── SOC Gauge ─────────────────────────────────────────────────────── */
+    .gauge-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .gauge-svg { width: 160px; height: 120px; overflow: visible; }
+
+    .gauge-track { fill: none; stroke: var(--border); stroke-width: 10; stroke-linecap: round; }
+    .gauge-value { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dasharray 0.7s ease, stroke 0.5s; }
+
+    .gauge-center { text-anchor: middle; dominant-baseline: middle; }
+    .gauge-pct    { font-size: 28px; font-weight: 700; fill: var(--text); }
+    .gauge-label  { font-size: 11px; fill: var(--text3); letter-spacing: 0.08em; }
+
+    /* ── Battery value grid ─────────────────────────────────────────────── */
+    .batt-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .batt-item {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .batt-item .label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+    .batt-item .value { font-size: 18px; font-weight: 600; line-height: 1; }
+    .batt-item .unit  { font-size: 11px; color: var(--text2); margin-left: 2px; }
+
+    .batt-sub {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 4px;
+      border-top: 1px solid var(--border);
+    }
+    .batt-sub-item { font-size: 12px; color: var(--text2); }
+    .batt-sub-item b { color: var(--text); font-weight: 600; }
+
+    .val-green  { color: var(--green) !important; }
+    .val-yellow { color: var(--yellow) !important; }
+    .val-red    { color: var(--red) !important; }
+    .val-orange { color: var(--orange) !important; }
+    .val-accent { color: var(--accent) !important; }
+
+    /* ── Tanks ──────────────────────────────────────────────────────────── */
+    .tanks-row {
+      display: flex;
+      gap: 16px;
+      flex: 1;
+    }
+
+    .tank {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tank-name { font-size: 12px; color: var(--text2); }
+
+    .tank-bar-wrap {
+      flex: 1;
+      width: 100%;
+      min-height: 120px;
+      background: var(--surface2);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .tank-fill {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      border-radius: 0 0 10px 10px;
+      transition: height 0.8s ease, background 0.5s;
+      background: var(--green);
+    }
+
+    .tank-pct-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+
+    .tank-pct-below {
+      font-size: 13px;
+      color: var(--text2);
+    }
+
+    /* ── Light presets ──────────────────────────────────────────────────── */
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 400px) {
+      .presets-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .preset-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      color: var(--text);
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .preset-btn:hover:not(.disabled) {
+      border-color: var(--accent2);
+      background: #1a3244;
+    }
+    .preset-btn:active:not(.disabled) { transform: scale(0.96); }
+
+    .preset-btn.active {
+      border-color: var(--accent);
+      background: rgba(6,182,212,0.12);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .preset-btn.disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .preset-emoji { font-size: 22px; line-height: 1; }
+    .preset-name  { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; }
+
+    /* ── Channel mini bars ──────────────────────────────────────────────── */
+    .channels-row {
+      display: flex;
+      gap: 5px;
+      align-items: flex-end;
+      height: 32px;
+    }
+
+    .ch-bar-wrap {
+      flex: 1;
+      height: 100%;
+      background: var(--surface2);
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ch-bar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: height 0.5s ease;
+      opacity: 0.85;
+    }
+
+    .ch-bar.relay { background: var(--orange); }
+
+    .channels-label {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px;
+    }
+
+    .ch-num {
+      flex: 1;
+      text-align: center;
+      font-size: 9px;
+      color: var(--text3);
+    }
+
+    /* ── Divider ─────────────────────────────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0 -4px;
+    }
+
+    /* ── No-data shimmer ─────────────────────────────────────────────────── */
+    .no-data {
+      color: var(--text3);
+      font-size: 13px;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position:  200% 0; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">MAVE <span>Bord Monitor</span></div>
+  <div class="conn-badge">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="connLabel">Verbinde…</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── Batterie ─────────────────────────────────────────────────── -->
+  <section class="card card-battery">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/><path d="M7 7V4"/><path d="M11 7V4"/>
+      </svg>
+      Batterie
+    </div>
+
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 160 120">
+        <path class="gauge-track" id="gaugeTrack"/>
+        <path class="gauge-value" id="gaugeValue"/>
+        <text class="gauge-center" x="80" y="90">
+          <tspan class="gauge-pct" id="gaugePct">--</tspan>
+          <tspan class="gauge-label" x="80" dy="18">SOC</tspan>
+        </text>
+      </svg>
+    </div>
+
+    <div class="batt-grid">
+      <div class="batt-item">
+        <div class="label">Spannung</div>
+        <div class="value"><span id="battV">--</span><span class="unit">V</span></div>
+      </div>
+      <div class="batt-item">
+        <div class="label">Strom</div>
+        <div class="value"><span id="battI">--</span><span class="unit">A</span></div>
+      </div>
+      <div class="batt-item">
+        <div class="label">Leistung</div>
+        <div class="value"><span id="battP">--</span><span class="unit">W</span></div>
+      </div>
+      <div class="batt-item">
+        <div class="label">Verbraucht</div>
+        <div class="value"><span id="battAh">--</span><span class="unit">Ah</span></div>
+      </div>
+    </div>
+
+    <div class="batt-sub">
+      <div class="batt-sub-item">Starter <b id="battStarter">--</b> V</div>
+      <div class="batt-sub-item">Zyklen <b id="battCycles">--</b></div>
+      <div class="batt-sub-item">Voll vor <b id="battFull">--</b></div>
+    </div>
+  </section>
+
+  <!-- ── Tanks ────────────────────────────────────────────────────── -->
+  <section class="card card-tanks">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      Tanks
+    </div>
+
+    <div class="tanks-row">
+      <div class="tank">
+        <div class="tank-name">Tank 1</div>
+        <div class="tank-bar-wrap">
+          <div class="tank-fill" id="tank1Fill" style="height:0%"></div>
+          <div class="tank-pct-label" id="tank1Pct">--</div>
+        </div>
+        <div class="tank-pct-below" id="tank1Sub">&nbsp;</div>
+      </div>
+      <div class="tank">
+        <div class="tank-name">Tank 2</div>
+        <div class="tank-bar-wrap">
+          <div class="tank-fill" id="tank2Fill" style="height:0%"></div>
+          <div class="tank-pct-label" id="tank2Pct">--</div>
+        </div>
+        <div class="tank-pct-below" id="tank2Sub">&nbsp;</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Beleuchtung ──────────────────────────────────────────────── -->
+  <section class="card card-lights">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      Beleuchtung
+    </div>
+
+    <!-- Aktuelle Helligkeiten -->
+    <div>
+      <div class="channels-row" id="channelsRow"></div>
+      <div class="channels-label" id="channelsLabel"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Preset-Buttons -->
+    <div class="presets-grid" id="presetsGrid">
+      <div style="color:var(--text3);font-size:13px">Lade…</div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// ── Hilfsfunktionen ────────────────────────────────────────────────────────
+
+const $ = id => document.getElementById(id);
+const fmt = (v, d=1) => v == null ? '--' : Number(v).toFixed(d);
+const fmtV = v => v == null ? '--' : v.toFixed(2);
+
+function colorClass(v, greenMin, yellowMin) {
+  if (v == null) return '';
+  if (v >= greenMin)  return 'val-green';
+  if (v >= yellowMin) return 'val-yellow';
+  return 'val-red';
+}
+
+function timeSince(seconds) {
+  if (seconds == null) return '--';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 48) return `${Math.floor(h/24)} T`;
+  if (h > 0)  return `${h} h`;
+  return `${m} min`;
+}
+
+// ── SOC-Gauge ──────────────────────────────────────────────────────────────
+
+const GAUGE_CX = 80, GAUGE_CY = 100, GAUGE_R = 62;
+const GAUGE_START_DEG = 225, GAUGE_SWEEP = 270;
+
+function polarXY(cx, cy, r, degClockFromTop) {
+  const rad = (degClockFromTop - 90) * Math.PI / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+
+function arcPath(cx, cy, r, startDeg, sweepDeg) {
+  const [x1, y1] = polarXY(cx, cy, r, startDeg);
+  const [x2, y2] = polarXY(cx, cy, r, startDeg + sweepDeg);
+  const large = sweepDeg > 180 ? 1 : 0;
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
+// Statischer Hinterground-Arc
+$('gaugeTrack').setAttribute('d', arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, GAUGE_START_DEG, GAUGE_SWEEP));
+
+function updateGauge(soc) {
+  const pct = soc == null ? 0 : Math.max(0, Math.min(100, soc));
+  const sweep = GAUGE_SWEEP * pct / 100;
+  const path  = sweep < 2 ? '' : arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, GAUGE_START_DEG, sweep);
+  const color = pct >= 50 ? 'var(--green)' : pct >= 20 ? 'var(--yellow)' : 'var(--red)';
+
+  $('gaugeValue').setAttribute('d', path);
+  $('gaugeValue').style.stroke = color;
+  $('gaugePct').textContent = soc == null ? '--' : Math.round(soc) + '%';
+  $('gaugePct').style.fill = color;
+}
+
+updateGauge(null);
+
+// ── Battery Update ─────────────────────────────────────────────────────────
+
+function updateBattery(b) {
+  updateGauge(b.soc);
+
+  // Spannung
+  const vEl = $('battV');
+  vEl.textContent = fmtV(b.voltage);
+  vEl.className = colorClass(b.voltage, 12.6, 12.0);
+
+  // Strom
+  const iEl = $('battI');
+  iEl.textContent = fmt(b.current);
+  iEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
+
+  // Leistung
+  const pEl = $('battP');
+  pEl.textContent = fmt(b.power, 0);
+  pEl.className = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange';
+
+  $('battAh').textContent  = fmt(b.consumed_ah, 1);
+  $('battStarter').textContent = fmtV(b.starter_voltage);
+  $('battCycles').textContent  = b.cycles ?? '--';
+  $('battFull').textContent    = timeSince(b.time_since_full);
+}
+
+// ── Tanks Update ───────────────────────────────────────────────────────────
+
+function updateTank(idx, pct) {
+  const fill  = $(`tank${idx}Fill`);
+  const label = $(`tank${idx}Pct`);
+  const sub   = $(`tank${idx}Sub`);
+
+  if (pct == null) {
+    fill.style.height = '0%';
+    label.textContent = '--';
+    sub.textContent   = '';
+    fill.style.background = 'var(--border)';
+    return;
+  }
+
+  const clamped = Math.max(0, Math.min(100, pct));
+  fill.style.height = clamped + '%';
+  label.textContent = Math.round(clamped) + '%';
+  sub.textContent   = '';
+  fill.style.background = clamped >= 50 ? 'var(--green)'
+                        : clamped >= 20 ? 'var(--yellow)'
+                        :                 'var(--red)';
+}
+
+// ── Channel Mini-Bars ──────────────────────────────────────────────────────
+
+function buildChannelBars() {
+  const row   = $('channelsRow');
+  const label = $('channelsLabel');
+  row.innerHTML = '';
+  label.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'ch-bar' + (i === 8 ? ' relay' : '');
+    bar.id = `chBar${i}`;
+    bar.style.height = '0%';
+    wrap.appendChild(bar);
+    row.appendChild(wrap);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'ch-num';
+    lbl.textContent = i < 8 ? (i + 1) : 'R';
+    label.appendChild(lbl);
+  }
+}
+buildChannelBars();
+
+function updateChannels(channels) {
+  for (let i = 0; i < 9; i++) {
+    const v = channels[i] ?? 0;
+    const bar = $(`chBar${i}`);
+    bar.style.height = (i < 8 ? (v / 255 * 100) : (v > 0 ? 100 : 0)) + '%';
+    bar.style.opacity = v > 0 ? '0.9' : '0.2';
+  }
+}
+
+// ── Presets ────────────────────────────────────────────────────────────────
+
+let presets = [];
+let activePreset = null;
+
+async function loadPresets() {
+  try {
+    const res = await fetch('/api/presets');
+    const data = await res.json();
+    presets = data.presets ?? [];
+    renderPresets();
+  } catch (e) {
+    console.error('Presets nicht geladen:', e);
+  }
+}
+
+function renderPresets() {
+  const grid = $('presetsGrid');
+  grid.innerHTML = '';
+  presets.forEach((p, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn' + (p.values == null ? ' disabled' : '') + (activePreset === i ? ' active' : '');
+    btn.innerHTML = `<span class="preset-emoji">${p.emoji}</span><span class="preset-name">${p.name}</span>`;
+    if (p.values != null) {
+      btn.addEventListener('click', () => applyPreset(i));
+    }
+    grid.appendChild(btn);
+  });
+}
+
+async function applyPreset(id) {
+  const preset = presets[id];
+  if (!preset || preset.values == null) return;
+
+  activePreset = id;
+  renderPresets();
+
+  try {
+    await fetch(`/api/lights/preset/${id}`, { method: 'POST' });
+  } catch (e) {
+    console.error('Preset-Fehler:', e);
+    activePreset = null;
+    renderPresets();
+  }
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+
+let ws = null;
+let reconnectTimer = null;
+
+function setConnState(state) {
+  const dot   = $('connDot');
+  const label = $('connLabel');
+  if (state === 'ok') {
+    dot.className = 'conn-dot ok';
+    label.textContent = 'Verbunden';
+  } else if (state === 'warn') {
+    dot.className = 'conn-dot warn';
+    label.textContent = 'Verbinde…';
+  } else {
+    dot.className = 'conn-dot';
+    label.textContent = 'Getrennt';
+  }
+}
+
+function handleData(data) {
+  if (data.ping) return;
+
+  if (data.battery)  updateBattery(data.battery);
+  if (data.tanks)    { updateTank(1, data.tanks.tank1); updateTank(2, data.tanks.tank2); }
+  if (data.lights)   updateChannels(data.lights.channels ?? []);
+}
+
+function connect() {
+  setConnState('warn');
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen    = ()    => { setConnState('ok'); clearTimeout(reconnectTimer); };
+  ws.onmessage = (ev)  => { try { handleData(JSON.parse(ev.data)); } catch (_) {} };
+  ws.onclose   = ws.onerror = () => {
+    setConnState('off');
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 4000);
+  };
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+
+loadPresets();
+connect();
+</script>
+</body>
+</html>

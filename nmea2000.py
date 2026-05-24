@@ -1,0 +1,142 @@
+"""NMEA 2000 PGN-Parser und Fast-Packet Reassembler für den Boat-Monitor."""
+import math
+import struct
+
+LIGHT_BANK_INSTANCE = 1
+RPI_SOURCE_ADDRESS  = 100   # CAN-Quelladresse des Raspberry Pi
+
+
+# ── CAN-ID Hilfsfunktionen ───────────────────────────────────────────────────
+
+def parse_can_id(arb_id: int) -> tuple[int, int]:
+    """Extrahiert (PGN, Quelladresse) aus einem 29-Bit NMEA2000 CAN-ID."""
+    src = arb_id & 0xFF
+    pf  = (arb_id >> 16) & 0xFF
+    ps  = (arb_id >> 8)  & 0xFF
+    dp  = (arb_id >> 24) & 0x01
+    pgn = (dp << 17) | (pf << 8) | (ps if pf >= 240 else 0)
+    return pgn, src
+
+
+def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
+    """Erstellt einen 29-Bit NMEA2000 CAN-ID."""
+    pf = (pgn >> 8) & 0xFF
+    dp = (pgn >> 17) & 0x01
+    ps = (pgn & 0xFF) if pf >= 240 else dst
+    return (priority << 26) | (dp << 24) | (pf << 16) | (ps << 8) | src
+
+
+# ── Fast-Packet Reassembler ──────────────────────────────────────────────────
+
+FAST_PACKET_PGNS = {126720, 130900}
+
+
+class FastPacketReassembler:
+    """Reassembliert mehrteilige NMEA2000 Fast-Packet-Nachrichten."""
+
+    def __init__(self):
+        self._buf: dict = {}
+
+    def process(self, pgn: int, src: int, raw: bytes):
+        """Gibt den vollständigen Payload zurück, sobald alle Frames empfangen wurden."""
+        if not raw:
+            return None
+
+        frame_num = raw[0] & 0x1F
+        seq_id    = (raw[0] >> 5) & 0x07
+        key       = (pgn, src, seq_id)
+
+        if frame_num == 0:
+            if len(raw) < 2:
+                return None
+            self._buf[key] = {'total': raw[1], 'data': bytearray(raw[2:])}
+        else:
+            if key not in self._buf:
+                return None
+            self._buf[key]['data'].extend(raw[1:])
+
+        entry = self._buf.get(key)
+        if entry and len(entry['data']) >= entry['total']:
+            result = bytes(entry['data'][:entry['total']])
+            del self._buf[key]
+            return result
+
+        return None
+
+
+# ── PGN-Parser ───────────────────────────────────────────────────────────────
+
+def parse_fluid_level(data: bytes):
+    """PGN 127505 – Fluid Level (Single Frame, 7 Byte)."""
+    if len(data) < 7:
+        return None
+    instance  = data[0] & 0x0F
+    level_raw = struct.unpack_from('<H', data, 1)[0]
+    if level_raw == 0xFFFF:
+        return None
+    return {'instance': instance, 'level': round(level_raw * 0.004, 1)}
+
+
+def parse_dc_status(data: bytes):
+    """PGN 127508 – Battery Status (Single Frame, 8 Byte)."""
+    if len(data) < 6:
+        return None
+    instance = data[1]
+    v_raw    = struct.unpack_from('<H', data, 2)[0]
+    i_raw    = struct.unpack_from('<h', data, 4)[0]
+    return {
+        'instance': instance,
+        'voltage':  round(v_raw * 0.01, 2) if v_raw != 0xFFFF  else None,
+        'current':  round(i_raw * 0.1,  1) if i_raw != -32768  else None,
+    }
+
+
+def parse_battery_stats(data: bytes):
+    """PGN 130900 – Custom Battery Stats (Fast Packet, 26 Byte)."""
+    if len(data) < 26:
+        return None
+
+    def _f(offset):
+        v = struct.unpack_from('<f', data, offset)[0]
+        return None if (math.isnan(v) or math.isinf(v)) else v
+
+    power       = _f(0)
+    consumed_ah = _f(4)
+    cycles      = struct.unpack_from('<H', data,  8)[0]
+    min_v       = _f(10)
+    max_v       = _f(14)
+    time_since  = struct.unpack_from('<I', data, 18)[0]
+    soc         = _f(22)
+
+    return {
+        'power':           round(power,       1) if power       is not None else None,
+        'consumed_ah':     round(consumed_ah, 1) if consumed_ah is not None else None,
+        'cycles':          cycles      if cycles     != 0xFFFF        else None,
+        'min_voltage':     round(min_v, 3)        if min_v      is not None else None,
+        'max_voltage':     round(max_v, 3)        if max_v      is not None else None,
+        'time_since_full': time_since  if time_since != 0xFFFF_FFFF   else None,
+        'soc':             round(soc,  1)         if soc        is not None else None,
+    }
+
+
+def parse_brightness(data: bytes):
+    """PGN 126720 Typ 0xA1 – PWM-Helligkeit (Fast Packet, 11 Byte)."""
+    if len(data) < 11 or data[0] != 0xA1 or data[1] != LIGHT_BANK_INSTANCE:
+        return None
+    return {'channels': list(data[2:11])}
+
+
+# ── CAN-Frame-Sender ─────────────────────────────────────────────────────────
+
+def build_brightness_frames(values: list[int], seq_id: int = 0) -> list[tuple]:
+    """Erstellt Fast-Packet CAN-Frames für PGN 126720 Typ 0xA1 (11 Byte Payload)."""
+    payload = bytes([0xA1, LIGHT_BANK_INSTANCE] + [int(v) for v in values[:9]])
+    can_id  = make_can_id(126720, RPI_SOURCE_ADDRESS)
+    s       = (seq_id & 0x07) << 5
+
+    pad = lambda b, n: b + b'\xff' * max(0, n - len(b))
+
+    return [
+        (can_id, bytes([s | 0, len(payload)]) + pad(payload[0:6], 6)),
+        (can_id, bytes([s | 1])               + pad(payload[6:],  7)),
+    ]
