@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "bat_soc_warn":  {"name": "Batterie SOC niedrig",      "field": "battery.soc",            "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true},
+    "bat_soc_crit":  {"name": "Batterie SOC kritisch",     "field": "battery.soc",            "op": "<", "threshold": 10,   "severity": "critical", "enabled": true},
+    "bat_v_low":     {"name": "Batterie Spannung niedrig", "field": "battery.voltage",         "op": "<", "threshold": 12.0, "severity": "warning",  "enabled": true},
+    "bat_v_high":    {"name": "Batterie Spannung hoch",    "field": "battery.voltage",         "op": ">", "threshold": 14.6, "severity": "warning",  "enabled": false},
+    "starter_v_low": {"name": "Starterbatterie niedrig",   "field": "battery.starter_voltage", "op": "<", "threshold": 11.8, "severity": "warning",  "enabled": true},
+    "tank1_low":     {"name": "Tank 1 niedrig",            "field": "tanks.tank1",             "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true},
+    "tank2_low":     {"name": "Tank 2 niedrig",            "field": "tanks.tank2",             "op": "<", "threshold": 20,   "severity": "warning",  "enabled": true}
+  }
+}

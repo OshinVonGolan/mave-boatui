@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 
 DEMO = os.environ.get('DEMO', '').lower() in ('1', 'true', 'yes')
@@ -26,17 +27,20 @@ BASE_DIR     = Path(__file__).parent
 PRESETS_FILE = BASE_DIR / 'presets.json'
 STATIC_DIR   = BASE_DIR / 'static'
 
-state  = BoatState()
-can_if = CanInterface(channel='can0', state=state)
+state   = BoatState()
+can_if  = CanInterface(channel='can0', state=state)
+alarms  = AlarmEngine()
 
 ws_clients: set[WebSocket] = set()
 
 
 async def broadcast(data: dict):
+    alarms.check(data)
+    payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count}
     dead = set()
     for ws in list(ws_clients):
         try:
-            await ws.send_json(data)
+            await ws.send_json(payload)
         except Exception:
             dead.add(ws)
     ws_clients.difference_update(dead)
@@ -164,6 +168,36 @@ async def get_status():
 @app.get('/api/network')
 async def get_network():
     return can_if.get_network_stats()
+
+
+@app.get('/api/alarms')
+async def get_alarms():
+    return alarms.get_alarms()
+
+@app.post('/api/alarms/ack-all')
+async def ack_all_alarms():
+    alarms.acknowledge_all()
+    return {'ok': True}
+
+@app.post('/api/alarms/{alarm_id}/ack')
+async def ack_alarm(alarm_id: str):
+    if not alarms.acknowledge(alarm_id):
+        raise HTTPException(404)
+    return {'ok': True}
+
+@app.delete('/api/alarms/{alarm_id}')
+async def delete_alarm(alarm_id: str):
+    if not alarms.delete(alarm_id):
+        raise HTTPException(404)
+    return {'ok': True}
+
+@app.get('/api/alarms/rules')
+async def get_alarm_rules():
+    return alarms.get_rules()
+
+@app.patch('/api/alarms/rules')
+async def update_alarm_rules(body: dict):
+    return alarms.update_rules(body)
 
 
 @app.patch('/api/settings')

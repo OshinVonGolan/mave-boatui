@@ -210,6 +210,99 @@
     .chart-unit { font-size: 11px; color: var(--text2); margin-left: 2px; }
     canvas.chart { width: 100%; height: 80px; display: block; border-radius: 6px; }
 
+    /* ── Alarm badge ── */
+    .alarm-btn { position: relative; }
+    .alarm-badge {
+      position: absolute; top: -5px; right: -5px;
+      background: var(--red); color: #fff; border-radius: 50%;
+      min-width: 16px; height: 16px; padding: 0 3px;
+      font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .alarm-badge.hidden { display: none; }
+
+    /* ── Alarm overlay tabs ── */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab-btn {
+      padding: 10px 18px; font-size: 13px; font-weight: 500;
+      border: none; background: none; color: var(--text2); cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: all .15s; font-family: inherit;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── Alarm cards ── */
+    .alarm-list { display: flex; flex-direction: column; gap: 10px; }
+    .alarm-empty { color: var(--text3); text-align: center; padding: 50px 20px; font-size: 14px; }
+    .alarm-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+      transition: opacity .3s;
+    }
+    .alarm-card.warning  { border-left: 3px solid var(--yellow); }
+    .alarm-card.critical { border-left: 3px solid var(--red); }
+    .alarm-card.acknowledged { opacity: .55; }
+    .alarm-card.resolved { border-left-color: var(--border); }
+    .alarm-header { display: flex; align-items: center; gap: 8px; }
+    .alarm-severity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .warning  .alarm-severity-dot { background: var(--yellow); }
+    .critical .alarm-severity-dot { background: var(--red); }
+    .resolved .alarm-severity-dot { background: var(--border); }
+    .alarm-name { font-size: 14px; font-weight: 600; flex: 1; }
+    .alarm-time { font-size: 11px; color: var(--text3); }
+    .alarm-detail { font-size: 12px; color: var(--text2); }
+    .alarm-detail b { color: var(--text); }
+    .alarm-resolved-badge {
+      font-size: 11px; color: var(--green); font-weight: 600;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .alarm-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
+    .alarm-ack-btn, .alarm-del-btn {
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 12px; font-size: 12px; cursor: pointer;
+      font-family: inherit; transition: all .15s; background: none; color: var(--text2);
+    }
+    .alarm-ack-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent2); }
+    .alarm-del-btn:hover { background: rgba(239,68,68,.1); color: var(--red); border-color: var(--red); }
+    .ack-all-row { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+
+    /* ── Alarm rules ── */
+    .rule-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 20px; }
+    .rule-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+    }
+    .rule-row:last-child { border-bottom: none; }
+    .rule-toggle { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+    .rule-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .rule-slider {
+      position: absolute; inset: 0; background: var(--border);
+      border-radius: 20px; cursor: pointer; transition: background .2s;
+    }
+    .rule-slider::before {
+      content: ''; position: absolute; width: 14px; height: 14px;
+      left: 3px; top: 3px; background: #fff; border-radius: 50%;
+      transition: transform .2s;
+    }
+    .rule-toggle input:checked + .rule-slider { background: var(--accent); }
+    .rule-toggle input:checked + .rule-slider::before { transform: translateX(16px); }
+    .rule-name { flex: 1; font-size: 13px; color: var(--text); }
+    .rule-op   { font-size: 12px; color: var(--text3); white-space: nowrap; }
+    .rule-input {
+      width: 72px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 8px; color: var(--text); font-size: 13px;
+      outline: none; text-align: right; font-family: inherit;
+    }
+    .rule-input:focus { border-color: var(--accent); }
+    .rule-severity { font-size: 10px; font-weight: 600; padding: 2px 6px;
+      border-radius: 4px; white-space: nowrap; }
+    .rule-severity.warning  { background: rgba(234,179,8,.15);  color: var(--yellow); }
+    .rule-severity.critical { background: rgba(239,68,68,.15); color: var(--red); }
+
     /* ── Settings ── */
     .settings-section { margin-bottom: 28px; }
     .settings-section-title {
@@ -285,6 +378,12 @@
 <header>
   <div class="logo">MAVE <span>Bord Monitor</span></div>
   <div class="header-right">
+    <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      <span class="alarm-badge hidden" id="alarmBadge">0</span>
+    </button>
     <button class="icon-btn" onclick="openNetwork()" title="Netzwerk">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
@@ -506,6 +605,44 @@
           <span><span class="chart-current" id="cI">--</span><span class="chart-unit">A</span></span>
         </div>
         <canvas class="chart" id="chartI"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Alarm Overlay ──────────────────────────────────────────────────────── -->
+<div id="alarmOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      Alarme
+    </div>
+    <button class="ov-close" onclick="closeAlarms()">✕</button>
+  </div>
+  <div class="ov-body">
+    <div class="tabs">
+      <button class="tab-btn active" id="tabAktivBtn" onclick="switchTab('aktiv')">Aktiv</button>
+      <button class="tab-btn" id="tabRegelnBtn" onclick="switchTab('regeln')">Regeln</button>
+    </div>
+
+    <!-- Tab: Aktive Alarme -->
+    <div class="tab-pane active" id="tabAktiv">
+      <div class="ack-all-row">
+        <button class="btn-primary" id="ackAllBtn" onclick="ackAllAlarms()" style="font-size:12px;padding:7px 14px">Alle bestätigen</button>
+      </div>
+      <div class="alarm-list" id="alarmList">
+        <div class="alarm-empty">Keine Alarme ✓</div>
+      </div>
+    </div>
+
+    <!-- Tab: Alarmregeln -->
+    <div class="tab-pane" id="tabRegeln">
+      <div class="rule-list" id="ruleList">Lade…</div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="rulesFeedback"></span>
+        <button class="btn-primary" onclick="saveRules()">Speichern</button>
       </div>
     </div>
   </div>
@@ -962,6 +1099,139 @@ function renderNetwork(entries) {
   $('netContent').innerHTML = `<div class="net-grid">${cards}</div>`;
 }
 
+// ── Alarme ─────────────────────────────────────────────────────────────────
+
+let _rulesCache = {};
+
+function openAlarms() {
+  $('alarmOverlay').classList.remove('hidden');
+  switchTab('aktiv');
+}
+function closeAlarms() { $('alarmOverlay').classList.add('hidden'); }
+
+function switchTab(name) {
+  ['aktiv', 'regeln'].forEach(t => {
+    $(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('active', t === name);
+    $(`tab${t.charAt(0).toUpperCase()+t.slice(1)}Btn`).classList.toggle('active', t === name);
+  });
+  if (name === 'regeln') loadRules();
+}
+
+function updateAlarmBadge(count) {
+  const badge = $('alarmBadge');
+  badge.textContent = count;
+  badge.classList.toggle('hidden', count === 0);
+}
+
+function timeAgo(ts) {
+  const s = Math.round(Date.now() / 1000 - ts);
+  if (s < 60)  return `${s} s`;
+  if (s < 3600) return `${Math.floor(s/60)} min`;
+  return `${Math.floor(s/3600)} h`;
+}
+
+function renderAlarms(list) {
+  const el = $('alarmList');
+  const visible = list.filter(a => !a._deleted);
+  if (!visible.length) {
+    el.innerHTML = '<div class="alarm-empty">Keine Alarme ✓</div>';
+    $('ackAllBtn').style.display = 'none';
+    return;
+  }
+  const unacked = visible.filter(a => !a.acknowledged && !a.resolved).length;
+  $('ackAllBtn').style.display = unacked ? '' : 'none';
+
+  el.innerHTML = visible.map(a => {
+    const cls = [a.severity, a.acknowledged ? 'acknowledged' : '', a.resolved ? 'resolved' : ''].filter(Boolean).join(' ');
+    const opLabel = a.op === '<' ? 'unter' : 'über';
+    const resolvedBadge = a.resolved ? '<div class="alarm-resolved-badge">✓ Behoben</div>' : '';
+    const ackBtn = !a.acknowledged && !a.resolved
+      ? `<button class="alarm-ack-btn" onclick="ackAlarm('${a.id}')">Bestätigen</button>` : '';
+    return `<div class="alarm-card ${cls}" id="alarm-${a.id}">
+      <div class="alarm-header">
+        <div class="alarm-severity-dot"></div>
+        <div class="alarm-name">${a.name}</div>
+        <div class="alarm-time">${timeAgo(a.timestamp)}</div>
+      </div>
+      <div class="alarm-detail">
+        Wert: <b>${a.value}</b> — Grenzwert ${opLabel} <b>${a.threshold}</b>
+      </div>
+      ${resolvedBadge}
+      <div class="alarm-actions">
+        ${ackBtn}
+        <button class="alarm-del-btn" onclick="deleteAlarm('${a.id}')">Löschen</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function ackAlarm(id) {
+  await fetch(`/api/alarms/${id}/ack`, { method: 'POST' });
+  const card = $(`alarm-${id}`);
+  if (card) card.classList.add('acknowledged');
+}
+
+async function deleteAlarm(id) {
+  await fetch(`/api/alarms/${id}`, { method: 'DELETE' });
+  const card = $(`alarm-${id}`);
+  if (card) card.remove();
+  if (!$('alarmList').querySelector('.alarm-card')) {
+    $('alarmList').innerHTML = '<div class="alarm-empty">Keine Alarme ✓</div>';
+  }
+}
+
+async function ackAllAlarms() {
+  await fetch('/api/alarms/ack-all', { method: 'POST' });
+  document.querySelectorAll('.alarm-card:not(.resolved)').forEach(c => c.classList.add('acknowledged'));
+  $('ackAllBtn').style.display = 'none';
+}
+
+async function loadRules() {
+  try {
+    _rulesCache = await fetch('/api/alarms/rules').then(r => r.json());
+    renderRules(_rulesCache);
+  } catch(_) { $('ruleList').textContent = 'Fehler beim Laden'; }
+}
+
+function renderRules(rules) {
+  $('ruleList').innerHTML = Object.entries(rules).map(([key, r]) => `
+    <div class="rule-row">
+      <label class="rule-toggle">
+        <input type="checkbox" id="r_${key}_en" ${r.enabled ? 'checked' : ''}>
+        <span class="rule-slider"></span>
+      </label>
+      <span class="rule-name">${r.name}</span>
+      <span class="rule-op">${r.op === '<' ? 'unter' : 'über'}</span>
+      <input class="rule-input" id="r_${key}_thr" type="number" step="0.1" value="${r.threshold}">
+      <span class="rule-severity ${r.severity}">${r.severity === 'critical' ? 'Kritisch' : 'Warnung'}</span>
+    </div>`).join('');
+}
+
+async function saveRules() {
+  const fb = $('rulesFeedback');
+  const updates = {};
+  Object.keys(_rulesCache).forEach(key => {
+    updates[key] = {
+      enabled:   $(`r_${key}_en`)?.checked ?? _rulesCache[key].enabled,
+      threshold: parseFloat($(`r_${key}_thr`)?.value) ?? _rulesCache[key].threshold,
+    };
+  });
+  try {
+    const data = await fetch('/api/alarms/rules', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    }).then(r => r.json());
+    _rulesCache = data;
+    fb.className = 'settings-feedback show';
+    fb.textContent = 'Gespeichert ✓';
+    setTimeout(() => fb.classList.remove('show'), 2500);
+  } catch(_) {
+    fb.className = 'settings-feedback error show';
+    fb.textContent = 'Fehler beim Speichern';
+  }
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 
 function openSettings() {
@@ -1046,6 +1316,13 @@ function handleData(data) {
   if (data.tanks)   updateTanks(data.tanks);
   if (data.lights)  updateChannels(data.lights.channels ?? []);
   updatePowerSources(data);
+  if (data.alarms != null) {
+    updateAlarmBadge(data.unack_alarms ?? 0);
+    if (!$('alarmOverlay').classList.contains('hidden') &&
+        $('tabAktiv').classList.contains('active')) {
+      renderAlarms(data.alarms);
+    }
+  }
 }
 
 function connect() {
