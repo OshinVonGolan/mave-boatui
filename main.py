@@ -175,6 +175,36 @@ async def apply_preset(preset_id: int):
     return {'ok': True, 'preset': preset['name']}
 
 
+@app.post('/api/lights/channels')
+async def set_channels(body: dict):
+    values = body.get('values', [])
+    if len(values) != 9:
+        raise HTTPException(400, detail='9 Werte erforderlich')
+    values = [max(0, min(255, int(v))) for v in values]
+    can_if.send_brightness(values)
+    state.lights['channels'] = values
+    return {'ok': True}
+
+
+@app.patch('/api/lights/preset/{preset_id}')
+async def update_preset(preset_id: int, body: dict):
+    data    = json.loads(PRESETS_FILE.read_text())
+    presets = data.get('presets', [])
+    if not (0 <= preset_id < len(presets)):
+        raise HTTPException(404, detail='Preset nicht gefunden')
+    if 'name' in body:
+        presets[preset_id]['name'] = str(body['name'])[:32]
+    if 'emoji' in body:
+        presets[preset_id]['emoji'] = str(body['emoji'])[:4]
+    if 'values' in body:
+        vals = list(body['values'])
+        if len(vals) == 9:
+            presets[preset_id]['values'] = [max(0, min(255, int(v))) for v in vals]
+    PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    log.info("Preset %d aktualisiert: '%s'", preset_id, presets[preset_id]['name'])
+    return data
+
+
 @app.get('/api/status')
 async def get_status():
     return state.to_dict()

@@ -409,6 +409,63 @@
     .age-old  { color: var(--text3); }
 
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
+
+    /* ── Light detail ── */
+    .ch-slider-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+    }
+    .ch-slider-row:last-child { border-bottom: none; }
+    .ch-slider-label { font-size: 12px; color: var(--text2); width: 56px; flex-shrink: 0; }
+    .ch-slider {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--accent) 0%, var(--surface2) 0%);
+    }
+    .ch-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 26px; height: 26px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff;
+      box-shadow: 0 1px 5px rgba(0,0,0,.5); cursor: pointer;
+    }
+    .ch-slider::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff; cursor: pointer;
+    }
+    .ch-slider-val { font-size: 13px; color: var(--text); font-variant-numeric: tabular-nums;
+      width: 28px; text-align: right; flex-shrink: 0; }
+    .relay-section { padding: 12px 0; display: flex; align-items: center; gap: 14px; }
+    .relay-label { font-size: 13px; color: var(--text2); }
+    .relay-btn {
+      padding: 10px 28px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer; font-family: inherit; border: 1px solid var(--border);
+      transition: all .15s;
+    }
+    .relay-btn.on  { background: var(--orange); border-color: var(--orange); color: #fff; }
+    .relay-btn.off { background: var(--surface2); color: var(--text2); }
+    .preset-edit-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 0; border-bottom: 1px solid var(--surface2);
+    }
+    .preset-edit-row:last-child { border-bottom: none; }
+    .preset-edit-emoji { font-size: 18px; flex-shrink: 0; width: 28px; text-align: center; }
+    .preset-edit-name {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 13px;
+      outline: none; font-family: inherit; transition: border-color .15s;
+    }
+    .preset-edit-name:focus { border-color: var(--accent); }
+    .preset-save-btn {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text2);
+      cursor: pointer; font-family: inherit; white-space: nowrap; transition: all .15s;
+      flex-shrink: 0;
+    }
+    .preset-save-btn:hover { background: var(--accent); border-color: var(--accent); color: #0f172a; }
+    .preset-save-feedback {
+      font-size: 11px; color: var(--green); opacity: 0; transition: opacity .3s;
+      flex-shrink: 0;
+    }
+    .preset-save-feedback.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -547,13 +604,20 @@
   </section>
 
   <!-- ── Beleuchtung ── -->
-  <section class="card card-lights" id="lightsCard">
+  <section class="card card-lights" id="lightsCard"
+           style="cursor:pointer;transition:border-color .2s"
+           onclick="openLightDetail()"
+           onmouseenter="this.style.borderColor='var(--accent2)'"
+           onmouseleave="this.style.borderColor=''">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <circle cx="12" cy="12" r="5"/>
         <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
       Beleuchtung
+      <span style="margin-left:auto;font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:none;font-weight:400">
+        Steuern →
+      </span>
     </div>
     <div>
       <div class="channels-row" id="channelsRow"></div>
@@ -775,6 +839,42 @@
   </div>
 </div>
 
+<!-- ── Licht Detail Overlay ──────────────────────────────────────────────── -->
+<div id="lightOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      Beleuchtung — Steuerung
+    </div>
+    <button class="ov-close" onclick="closeLightDetail()">✕</button>
+  </div>
+  <div class="ov-body" style="max-width:600px">
+
+    <div class="settings-section">
+      <div class="settings-section-title">PWM-Kanäle</div>
+      <div id="chSlidersWrap"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Relais</div>
+      <div class="relay-section">
+        <span class="relay-label">Kanal 9</span>
+        <button class="relay-btn off" id="relayBtn" onclick="toggleRelay()">AUS</button>
+        <span style="font-size:12px;color:var(--text3)" id="relayHint"></span>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Als Preset speichern</div>
+      <div id="presetEditList"></div>
+    </div>
+
+  </div>
+</div>
+
 <script>
 // ── Hilfsfunktionen ────────────────────────────────────────────────────────
 
@@ -800,6 +900,7 @@ function timeSince(s) {
 let tanksConfig    = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };
 let devicesConfig  = {};
 let batteriesConfig = { service_instance: 0, starter_instance: 1 };
+let state = { lights: { channels: Array(9).fill(0) } };
 
 // ── SOC-Gauge ──────────────────────────────────────────────────────────────
 
@@ -1541,7 +1642,11 @@ function handleData(data) {
   if (data.version) $('versionBadge').textContent = 'v' + data.version;
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
-  if (data.lights)  updateChannels(data.lights.channels ?? []);
+  if (data.lights) {
+    state.lights = data.lights;
+    updateChannels(data.lights.channels ?? []);
+    syncLightOverlay(data.lights.channels ?? []);
+  }
   updatePowerSources(data);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
@@ -1563,6 +1668,124 @@ function connect() {
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connect, 4000);
   };
+}
+
+// ── Light detail ───────────────────────────────────────────────────────────
+
+let liveChannels = Array(9).fill(0);
+let lightDetailOpen = false;
+let sendTimer = null;
+
+function openLightDetail() {
+  liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))];
+  lightDetailOpen = true;
+  buildLightSliders();
+  renderPresetEditList();
+  $('lightOverlay').classList.remove('hidden');
+}
+
+function closeLightDetail() {
+  lightDetailOpen = false;
+  $('lightOverlay').classList.add('hidden');
+}
+
+function sliderFill(slider, v) {
+  const pct = (v / 255 * 100).toFixed(1);
+  slider.style.background =
+    `linear-gradient(to right, var(--accent) 0%, var(--accent) ${pct}%, var(--surface2) ${pct}%, var(--surface2) 100%)`;
+}
+
+function buildLightSliders() {
+  const wrap = $('chSlidersWrap');
+  wrap.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const v = liveChannels[i] ?? 0;
+    const row = document.createElement('div');
+    row.className = 'ch-slider-row';
+    row.innerHTML = `
+      <label class="ch-slider-label" for="chs${i}">Kanal ${i + 1}</label>
+      <input class="ch-slider" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">
+      <span class="ch-slider-val" id="chv${i}">${v}</span>`;
+    wrap.appendChild(row);
+    const slider = $(`chs${i}`);
+    sliderFill(slider, v);
+    slider.addEventListener('input', () => {
+      const val = parseInt(slider.value);
+      liveChannels[i] = val;
+      $(`chv${i}`).textContent = val;
+      sliderFill(slider, val);
+      scheduleSend();
+    });
+  }
+  updateRelayBtn();
+}
+
+function updateRelayBtn() {
+  const on = (liveChannels[8] ?? 0) > 0;
+  $('relayBtn').textContent = on ? 'AN' : 'AUS';
+  $('relayBtn').className   = 'relay-btn ' + (on ? 'on' : 'off');
+  $('relayHint').textContent = on ? 'Relais geschlossen' : 'Relais offen';
+}
+
+function toggleRelay() {
+  liveChannels[8] = liveChannels[8] > 0 ? 0 : 1;
+  updateRelayBtn();
+  scheduleSend();
+}
+
+function scheduleSend() {
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(sendChannels, 60);
+}
+
+async function sendChannels() {
+  try {
+    await fetch('/api/lights/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: liveChannels }),
+    });
+  } catch(e) { console.error('Senden fehlgeschlagen', e); }
+}
+
+function syncLightOverlay(channels) {
+  if (!lightDetailOpen || sendTimer) return;
+  liveChannels = [...channels];
+  for (let i = 0; i < 8; i++) {
+    const s = $(`chs${i}`);
+    if (!s) continue;
+    s.value = channels[i] ?? 0;
+    sliderFill(s, s.value);
+    $(`chv${i}`).textContent = s.value;
+  }
+  updateRelayBtn();
+}
+
+function renderPresetEditList() {
+  const list = $('presetEditList');
+  list.innerHTML = presets.map((p, i) => `
+    <div class="preset-edit-row" id="per${i}">
+      <span class="preset-edit-emoji">${p.emoji}</span>
+      <input class="preset-edit-name" id="pen${i}" type="text" value="${p.name}" maxlength="24" placeholder="Preset ${i+1}">
+      <button class="preset-save-btn" onclick="saveCurrentAsPreset(${i})">Speichern</button>
+      <span class="preset-save-feedback" id="pef${i}">✓</span>
+    </div>`).join('');
+}
+
+async function saveCurrentAsPreset(idx) {
+  const name = $(`pen${idx}`)?.value.trim() || presets[idx]?.name || `Preset ${idx + 1}`;
+  try {
+    const data = await fetch(`/api/lights/preset/${idx}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, values: liveChannels }),
+    }).then(r => r.json());
+    presets = data.presets ?? presets;
+    renderPresets();
+    const fb = $(`pef${idx}`);
+    fb.classList.add('show');
+    setTimeout(() => fb.classList.remove('show'), 2000);
+  } catch(e) { console.error('Preset speichern fehlgeschlagen', e); }
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
