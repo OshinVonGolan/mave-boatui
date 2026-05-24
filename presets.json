@@ -8,11 +8,12 @@
     { "id": 5, "name": "Preset 6",   "emoji": "💡", "values": null }
   ],
   "tanks": {
-    "tank1": { "name": "Tank 1", "capacity_l": 200 },
-    "tank2": { "name": "Tank 2", "capacity_l": 120 }
+    "tank1": { "name": "Tank 1", "capacity_l": 200, "color": "#22c55e" },
+    "tank2": { "name": "Tank 2", "capacity_l": 120, "color": "#3b82f6" }
   },
   "devices": {
-    "22":  "Victron BMS",
+    "10":  "Battery Board",
+    "22":  "Mave Net Monitor",
     "35":  "B&G Chartplotter",
     "48":  "B&G Triton",
     "100": "RPi"

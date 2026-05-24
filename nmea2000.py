@@ -79,11 +79,11 @@ def parse_fluid_level(data: bytes):
 
 def parse_dc_status(data: bytes):
     """PGN 127508 – Battery Status (Single Frame, 8 Byte)."""
-    if len(data) < 6:
+    if len(data) < 5:
         return None
-    instance = data[1]
-    v_raw    = struct.unpack_from('<H', data, 2)[0]
-    i_raw    = struct.unpack_from('<h', data, 4)[0]
+    instance = data[0]
+    v_raw    = struct.unpack_from('<H', data, 1)[0]
+    i_raw    = struct.unpack_from('<h', data, 3)[0]
     return {
         'instance': instance,
         'voltage':  round(v_raw * 0.01, 2) if v_raw != 0xFFFF  else None,
