@@ -119,6 +119,16 @@ def parse_battery_stats(data: bytes):
     }
 
 
+DC_TYPE_ALTERNATOR = 1
+DC_TYPE_SOLAR      = 4
+
+def parse_dc_detailed(data: bytes):
+    """PGN 127506 – DC Detailed Status: liefert Instanz + DC-Typ."""
+    if len(data) < 3:
+        return None
+    return {'instance': data[1], 'dc_type': data[2] & 0x0F}
+
+
 def parse_brightness(data: bytes):
     """PGN 126720 Typ 0xA1 – PWM-Helligkeit (Fast Packet, 11 Byte)."""
     if len(data) < 11 or data[0] != 0xA1 or data[1] != LIGHT_BANK_INSTANCE:
@@ -146,7 +156,7 @@ PGN_NAMES: dict[int, str] = {
     127501: 'Binary Switch Bank Status',
     127502: 'Switch Bank Control',
     127505: 'Fluid Level',
-    127506: 'DC Detailed Status',
+    127506: 'DC Detailed Status (Solar/Alternator)',
     127508: 'Battery Status',
     128259: 'Speed',
     128267: 'Water Depth',

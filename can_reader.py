@@ -6,10 +6,11 @@ import time
 import can
 
 from nmea2000 import (
+    DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
     build_brightness_frames, make_can_id,
     parse_battery_stats, parse_brightness,
-    parse_can_id, parse_dc_status, parse_fluid_level,
+    parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
 )
 
@@ -26,12 +27,16 @@ class BoatState:
         }
         self.tanks  = {'tank1': None, 'tank2': None}
         self.lights = {'channels': [0] * 9}
+        self.solar      = {'power': None, 'current': None, 'voltage': None}
+        self.alternator = {'power': None, 'current': None, 'voltage': None}
 
     def to_dict(self) -> dict:
         return {
-            'battery': dict(self.battery),
-            'tanks':   dict(self.tanks),
-            'lights':  dict(self.lights),
+            'battery':    dict(self.battery),
+            'tanks':      dict(self.tanks),
+            'lights':     dict(self.lights),
+            'solar':      dict(self.solar),
+            'alternator': dict(self.alternator),
         }
 
 
@@ -48,7 +53,8 @@ class CanInterface:
         self._loop        = None
         self._on_change   = None   # async callback(data: dict)
         self._broadcast_pending = False
-        self._network: dict = {}   # (pgn, src) → tracking entry
+        self._network:  dict = {}   # (pgn, src) → tracking entry
+        self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
@@ -149,7 +155,12 @@ class CanInterface:
 
         changed = False
 
-        if pgn == 127505:
+        if pgn == 127506:
+            p = parse_dc_detailed(payload)
+            if p:
+                self._dc_types[p['instance']] = p['dc_type']
+
+        elif pgn == 127505:
             p = parse_fluid_level(payload)
             if p:
                 key = 'tank1' if p['instance'] == 0 else 'tank2'
@@ -160,14 +171,32 @@ class CanInterface:
         elif pgn == 127508:
             p = parse_dc_status(payload)
             if p:
-                if p['instance'] == 0:
+                inst = p['instance']
+                dc_type = self._dc_types.get(inst)
+
+                if inst == 0:
                     for field, key in [('voltage', 'voltage'), ('current', 'current')]:
                         if p[field] is not None and self.state.battery[key] != p[field]:
                             self.state.battery[key] = p[field]
                             changed = True
-                elif p['instance'] == 1:
+                elif inst == 1 and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
                     if p['voltage'] is not None and self.state.battery['starter_voltage'] != p['voltage']:
                         self.state.battery['starter_voltage'] = p['voltage']
+                        changed = True
+
+                if dc_type == DC_TYPE_SOLAR:
+                    v, i = p.get('voltage'), p.get('current')
+                    pwr = round(v * i, 1) if v is not None and i is not None else None
+                    new = {'power': pwr, 'current': i, 'voltage': v}
+                    if new != self.state.solar:
+                        self.state.solar.update(new)
+                        changed = True
+                elif dc_type == DC_TYPE_ALTERNATOR:
+                    v, i = p.get('voltage'), p.get('current')
+                    pwr = round(v * i, 1) if v is not None and i is not None else None
+                    new = {'power': pwr, 'current': i, 'voltage': v}
+                    if new != self.state.alternator:
+                        self.state.alternator.update(new)
                         changed = True
 
         elif pgn == 130900:

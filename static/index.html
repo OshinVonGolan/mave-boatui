@@ -109,6 +109,17 @@
     .batt-sub-item { font-size: 12px; color: var(--text2); }
     .batt-sub-item b { color: var(--text); font-weight: 600; }
 
+    /* ── Power sources (Solar / Alternator) ── */
+    .src-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .src-row.hidden { display: none; }
+    .src-item { display: none; flex: 1; min-width: 110px; align-items: center; gap: 6px;
+      background: var(--surface2); border-radius: 8px; padding: 7px 11px; font-size: 12px; color: var(--text2); }
+    .src-item.visible { display: flex; }
+    .src-icon { font-size: 14px; line-height: 1; }
+    .src-val  { font-size: 15px; font-weight: 700; }
+    .src-solar .src-val { color: var(--yellow); }
+    .src-alt   .src-val { color: var(--accent); }
+
     .val-green  { color: var(--green)  !important; }
     .val-yellow { color: var(--yellow) !important; }
     .val-red    { color: var(--red)    !important; }
@@ -335,6 +346,20 @@
       <div class="batt-item">
         <div class="label">Verbraucht</div>
         <div class="value"><span id="battAh">--</span><span class="unit">Ah</span></div>
+      </div>
+    </div>
+
+    <!-- Solar & Lichtmaschine — nur sichtbar wenn Daten ankommen -->
+    <div class="src-row hidden" id="srcRow">
+      <div class="src-item src-solar" id="srcSolar">
+        <span class="src-icon">☀</span>
+        <span class="src-val" id="solarW">--</span>
+        <span>W Solar</span>
+      </div>
+      <div class="src-item src-alt" id="srcAlt">
+        <span class="src-icon">⚡</span>
+        <span class="src-val" id="altW">--</span>
+        <span>W Lichtmaschine</span>
       </div>
     </div>
 
@@ -997,11 +1022,30 @@ function setConnState(state) {
   else                { dot.className='conn-dot';       lbl.textContent='Getrennt'; }
 }
 
+function updatePowerSources(data) {
+  let anyVisible = false;
+
+  function showSource(itemId, valId, watts) {
+    const item = $(itemId);
+    if (watts != null) {
+      $(valId).textContent = Math.round(watts);
+      item.classList.add('visible');
+      anyVisible = true;
+    }
+  }
+
+  if (data.solar?.power != null)      showSource('srcSolar', 'solarW', data.solar.power);
+  if (data.alternator?.power != null) showSource('srcAlt',   'altW',   data.alternator.power);
+
+  $('srcRow').classList.toggle('hidden', !anyVisible);
+}
+
 function handleData(data) {
   if (data.ping) return;
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
   if (data.lights)  updateChannels(data.lights.channels ?? []);
+  updatePowerSources(data);
 }
 
 function connect() {
