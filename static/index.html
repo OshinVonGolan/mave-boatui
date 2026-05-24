@@ -436,7 +436,7 @@
 <main>
 
   <!-- ── Batterie ── -->
-  <section class="card card-battery" onclick="openBattDetail()">
+  <section class="card card-battery" id="battCard" onclick="openBattDetail()">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/><path d="M7 7V4"/><path d="M11 7V4"/>
@@ -500,7 +500,7 @@
   </section>
 
   <!-- ── Tanks ── -->
-  <section class="card card-tanks" onclick="toggleTanks()">
+  <section class="card card-tanks" id="tankCard" onclick="toggleTanks()">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -539,7 +539,7 @@
   </section>
 
   <!-- ── Beleuchtung ── -->
-  <section class="card card-lights">
+  <section class="card card-lights" id="lightsCard">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <circle cx="12" cy="12" r="5"/>
@@ -825,6 +825,9 @@ function updateChargeStatus(b) {
 // ── Battery update ─────────────────────────────────────────────────────────
 
 function updateBattery(b) {
+  const hasData = b.voltage != null || b.soc != null;
+  $('battCard').style.display = hasData ? '' : 'none';
+  if (!hasData) return;
   updateGauge(b.soc);
   updateChargeStatus(b);
   const vEl = $('battV'); vEl.textContent = fmtV(b.voltage); vEl.className = colorClass(b.voltage, 12.6, 12.0);
@@ -897,6 +900,8 @@ function renderTank(idx, pct) {
 }
 
 function updateTanks(tanks) {
+  const hasAny = tanks.tank1 != null || tanks.tank2 != null;
+  $('tankCard').style.display = hasAny ? '' : 'none';
   renderTank(1, tanks.tank1);
   renderTank(2, tanks.tank2);
 }
@@ -1239,7 +1244,11 @@ async function loadRules() {
 }
 
 function renderRules(rules) {
-  $('ruleList').innerHTML = Object.entries(rules).map(([key, r]) => {
+  const entries = Object.entries(rules);
+  const available   = entries.filter(([, r]) =>  r.data_available);
+  const unavailable = entries.filter(([, r]) => !r.data_available);
+
+  $('ruleList').innerHTML = available.map(([key, r]) => {
     const noData   = !r.data_available;
     const sevLabel = r.severity === 'critical' ? 'Kritisch' : 'Warnung';
     const header   = `
@@ -1288,11 +1297,15 @@ function renderRules(rules) {
         </div>`;
     }
 
-    return `<div class="rule-row${noData ? ' no-data' : ''}">${header}${control}${noDataRow}</div>`;
-  }).join('');
+    return `<div class="rule-row">${header}${control}</div>`;
+  }).join('') + (unavailable.length ? `
+    <div style="margin-top:12px;font-size:12px;color:var(--text3)">
+      ${unavailable.length} Regel${unavailable.length > 1 ? 'n' : ''} ohne Daten ausgeblendet
+      (${unavailable.map(([,r]) => r.name).join(', ')})
+    </div>` : '');
 
   // init dual-range sliders after DOM insertion
-  Object.entries(rules).forEach(([key, r]) => {
+  available.forEach(([key, r]) => {
     if (r.op === 'range') initDualRange(key, r);
   });
 }
