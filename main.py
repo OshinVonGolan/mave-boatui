@@ -143,7 +143,7 @@ async def ws_endpoint(ws: WebSocket):
     ws_clients.add(ws)
     log.info("WebSocket verbunden (%d aktiv)", len(ws_clients))
     try:
-        await ws.send_json(state.to_dict())
+        await ws.send_json({**state.to_dict(), 'version': VERSION})
         while True:
             try:
                 await asyncio.wait_for(ws.receive_text(), timeout=30)
