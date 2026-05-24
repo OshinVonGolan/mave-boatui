@@ -87,6 +87,37 @@ class CanInterface:
             e['last_seen'] = now
             e['count'] += 1
 
+    def seed_demo_network(self):
+        """Füllt _network mit realistischen Fake-Einträgen für den Demo-Modus."""
+        import random
+        now = time.monotonic()
+        entries = [
+            (127508, 22, 1.0),   # Victron BMS — Battery Status
+            (130900, 22, 1.0),   # Victron BMS — Battery Stats Custom
+            (127505, 22, 1.5),   # Victron BMS — Fluid Level
+            (127501, 22, 1.0),   # Victron BMS — Switch Bank Status
+            (129029, 35, 1.0),   # B&G Zeus — GNSS Position
+            (129026, 35, 0.1),   # B&G Zeus — COG & SOG Rapid
+            (127250, 35, 0.1),   # B&G Zeus — Vessel Heading
+            (129283, 35, 1.0),   # B&G Zeus — Cross Track Error
+            (130306, 48, 0.1),   # B&G Triton — Wind Data
+            (127257, 48, 0.1),   # B&G Triton — Attitude
+            (126720, 100, 0.5),  # RPi — Proprietary (Helligkeit)
+            (60928,  22, 60.0),  # ISO Address Claim
+            (60928,  35, 60.0),
+            (60928,  48, 60.0),
+        ]
+        for pgn, src, interval_s in entries:
+            n = random.randint(60, 3600)
+            ivs = [interval_s + random.uniform(-interval_s * 0.05, interval_s * 0.05)
+                   for _ in range(min(n, 20))]
+            self._network[(pgn, src)] = {
+                'count':      n,
+                'first_seen': now - n * interval_s,
+                'last_seen':  now - random.uniform(0, interval_s * 1.5),
+                'intervals':  ivs,
+            }
+
     def get_network_stats(self) -> list[dict]:
         now = time.monotonic()
         result = []

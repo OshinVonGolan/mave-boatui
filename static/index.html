@@ -7,447 +7,266 @@
   <meta name="theme-color" content="#0f172a" />
   <title>Mave — Bord Monitor</title>
   <style>
-    /* ── Reset & Custom Properties ─────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0f172a;
-      --surface:   #1e293b;
-      --surface2:  #263348;
-      --border:    #334155;
-      --text:      #f1f5f9;
-      --text2:     #94a3b8;
-      --text3:     #64748b;
-      --accent:    #06b6d4;
-      --accent2:   #0891b2;
-      --green:     #22c55e;
-      --yellow:    #eab308;
-      --red:       #ef4444;
-      --orange:    #f97316;
-      --radius:    14px;
-      --gap:       16px;
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --surface2: #263348;
+      --border:   #334155;
+      --text:     #f1f5f9;
+      --text2:    #94a3b8;
+      --text3:    #64748b;
+      --accent:   #06b6d4;
+      --accent2:  #0891b2;
+      --green:    #22c55e;
+      --yellow:   #eab308;
+      --red:      #ef4444;
+      --orange:   #f97316;
+      --radius:   14px;
+      --gap:      16px;
     }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
+    html, body { height: 100%; background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
+      -webkit-font-smoothing: antialiased; }
 
-    /* ── Header ────────────────────────────────────────────────────────── */
+    /* ── Header ── */
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px 12px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+      background: var(--surface); position: sticky; top: 0; z-index: 10;
     }
-
-    .logo {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      color: var(--accent);
-      text-transform: uppercase;
-    }
-    .logo span { color: var(--text2); font-weight: 400; font-size: 13px; letter-spacing: 0.04em; margin-left: 10px; }
-
-    .conn-badge {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 13px;
-      color: var(--text2);
-    }
-    .conn-dot {
-      width: 9px; height: 9px;
-      border-radius: 50%;
-      background: var(--red);
-      transition: background 0.4s;
-    }
+    .logo { font-size: 20px; font-weight: 700; letter-spacing: .18em;
+      color: var(--accent); text-transform: uppercase; }
+    .logo span { color: var(--text2); font-weight: 400; font-size: 13px;
+      letter-spacing: .04em; margin-left: 10px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .conn-badge { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); }
+    .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); transition: background .4s; }
     .conn-dot.ok   { background: var(--green); }
     .conn-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.35; }
+    /* ── Icon button (shared) ── */
+    .icon-btn {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text2); cursor: pointer; padding: 6px 8px;
+      display: flex; align-items: center; transition: all .15s;
     }
+    .icon-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent2); }
 
-    /* ── Grid layout ───────────────────────────────────────────────────── */
-    main {
-      display: grid;
-      gap: var(--gap);
-      padding: var(--gap);
+    /* ── Main grid ── */
+    main { display: grid; gap: var(--gap); padding: var(--gap);
       grid-template-columns: 1fr;
-      grid-template-areas:
-        "battery"
-        "tanks"
-        "lights";
-    }
-
+      grid-template-areas: "battery" "tanks" "lights"; }
     @media (min-width: 640px) {
-      main {
-        grid-template-columns: 1fr 1fr;
-        grid-template-areas:
-          "battery tanks"
-          "lights  lights";
-      }
-    }
-
+      main { grid-template-columns: 1fr 1fr;
+        grid-template-areas: "battery tanks" "lights lights"; } }
     @media (min-width: 1024px) {
-      main {
-        grid-template-columns: 1fr 1fr 1fr;
+      main { grid-template-columns: 1fr 1fr 1fr;
         grid-template-areas: "battery tanks lights";
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-    }
+        max-width: 1200px; margin: 0 auto; } }
 
-    /* ── Cards ─────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+      display: flex; flex-direction: column; gap: 16px; }
     .card-battery { grid-area: battery; }
-    .card-tanks   { grid-area: tanks;   }
-    .card-lights  { grid-area: lights;  }
-
-    .card-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text3);
-    }
+    .card-tanks   { grid-area: tanks; }
+    .card-lights  { grid-area: lights; }
+    .card-title { display: flex; align-items: center; gap: 8px; font-size: 11px;
+      font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
     .card-title svg { flex-shrink: 0; }
 
-    /* ── SOC Gauge ─────────────────────────────────────────────────────── */
-    .gauge-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
+    /* ── Battery card — clickable ── */
+    .card-battery {
+      cursor: pointer; transition: border-color .2s, box-shadow .2s;
+      -webkit-tap-highlight-color: transparent; user-select: none;
     }
+    .card-battery:hover { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
+    .card-battery:active { opacity: .9; }
 
-    .gauge-svg { width: 160px; height: 120px; overflow: visible; }
 
+    /* ── SOC Gauge ── */
+    .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .gauge-svg { width: 160px; height: 112px; overflow: visible; }
     .gauge-track { fill: none; stroke: var(--border); stroke-width: 10; stroke-linecap: round; }
-    .gauge-value { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dasharray 0.7s ease, stroke 0.5s; }
-
+    .gauge-value { fill: none; stroke-width: 10; stroke-linecap: round;
+      transition: stroke-dasharray .7s ease, stroke .5s; }
     .gauge-center { text-anchor: middle; dominant-baseline: middle; }
-    .gauge-pct    { font-size: 28px; font-weight: 700; fill: var(--text); }
-    .gauge-label  { font-size: 11px; fill: var(--text3); letter-spacing: 0.08em; }
+    .gauge-pct   { font-size: 28px; font-weight: 700; fill: var(--text); }
+    .gauge-label { font-size: 11px; fill: var(--text3); letter-spacing: .08em; }
 
-    /* ── Battery value grid ─────────────────────────────────────────────── */
-    .batt-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .batt-item {
-      background: var(--surface2);
-      border-radius: 10px;
-      padding: 10px 12px;
-    }
+    /* ── Battery grid ── */
+    .batt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .batt-item { background: var(--surface2); border-radius: 10px; padding: 10px 12px; }
     .batt-item .label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
     .batt-item .value { font-size: 18px; font-weight: 600; line-height: 1; }
     .batt-item .unit  { font-size: 11px; color: var(--text2); margin-left: 2px; }
-
-    .batt-sub {
-      display: flex;
-      justify-content: space-between;
-      padding-top: 4px;
-      border-top: 1px solid var(--border);
-    }
+    .batt-sub { display: flex; justify-content: space-between; padding-top: 4px;
+      border-top: 1px solid var(--border); flex-wrap: wrap; gap: 4px; }
     .batt-sub-item { font-size: 12px; color: var(--text2); }
     .batt-sub-item b { color: var(--text); font-weight: 600; }
 
-    .val-green  { color: var(--green) !important; }
+    .val-green  { color: var(--green)  !important; }
     .val-yellow { color: var(--yellow) !important; }
-    .val-red    { color: var(--red) !important; }
+    .val-red    { color: var(--red)    !important; }
     .val-orange { color: var(--orange) !important; }
     .val-accent { color: var(--accent) !important; }
 
-    /* ── Tanks ──────────────────────────────────────────────────────────── */
-    .tanks-row {
-      display: flex;
-      gap: 16px;
-      flex: 1;
-    }
-
-    .tank {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
-
+    /* ── Tanks ── */
+    .card-tanks { cursor: pointer; -webkit-tap-highlight-color: transparent;
+      transition: border-color .2s; }
+    .card-tanks:hover { border-color: var(--accent2); }
+    .card-tanks:active { opacity: .9; }
+    .tanks-row { display: flex; gap: 16px; flex: 1; }
+    .tank { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .tank-name { font-size: 12px; color: var(--text2); }
+    .tank-bar-wrap { flex: 1; width: 100%; min-height: 120px; background: var(--surface2);
+      border-radius: 10px; position: relative; overflow: hidden; border: 1px solid var(--border); }
+    .tank-fill { position: absolute; bottom: 0; left: 0; right: 0;
+      border-radius: 0 0 10px 10px; transition: height .8s ease, background .5s;
+      background: var(--green); }
+    .tank-pct-label { position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0; }
+    .tank-val-big  { font-size: 28px; font-weight: 700; color: var(--text);
+      text-shadow: 0 1px 6px rgba(0,0,0,.7); line-height: 1; }
+    .tank-val-unit { font-size: 15px; font-weight: 600; color: var(--text);
+      text-shadow: 0 1px 4px rgba(0,0,0,.7); opacity: .75; margin-top: 2px; }
+    .tank-pct-below { font-size: 13px; color: var(--text2); }
 
-    .tank-bar-wrap {
-      flex: 1;
-      width: 100%;
-      min-height: 120px;
-      background: var(--surface2);
-      border-radius: 10px;
-      position: relative;
-      overflow: hidden;
-      border: 1px solid var(--border);
-    }
-
-    .tank-fill {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      border-radius: 0 0 10px 10px;
-      transition: height 0.8s ease, background 0.5s;
-      background: var(--green);
-    }
-
-    .tank-pct-label {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-      text-shadow: 0 1px 4px rgba(0,0,0,0.6);
-    }
-
-    .tank-pct-below {
-      font-size: 13px;
-      color: var(--text2);
-    }
-
-    /* ── Light presets ──────────────────────────────────────────────────── */
-    .presets-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-    }
-
-    @media (max-width: 400px) {
-      .presets-grid { grid-template-columns: repeat(2, 1fr); }
-    }
-
-    .preset-btn {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 10px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s;
-      color: var(--text);
-      user-select: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    .preset-btn:hover:not(.disabled) {
-      border-color: var(--accent2);
-      background: #1a3244;
-    }
-    .preset-btn:active:not(.disabled) { transform: scale(0.96); }
-
-    .preset-btn.active {
-      border-color: var(--accent);
-      background: rgba(6,182,212,0.12);
-      box-shadow: 0 0 0 1px var(--accent);
-    }
-
-    .preset-btn.disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-
+    /* ── Lights ── */
+    .presets-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    @media (max-width: 400px) { .presets-grid { grid-template-columns: repeat(2,1fr); } }
+    .preset-btn { background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 10px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      transition: all .15s; color: var(--text);
+      user-select: none; -webkit-tap-highlight-color: transparent; }
+    .preset-btn:hover:not(.disabled) { border-color: var(--accent2); background: #1a3244; }
+    .preset-btn:active:not(.disabled) { transform: scale(.96); }
+    .preset-btn.active { border-color: var(--accent); background: rgba(6,182,212,.12);
+      box-shadow: 0 0 0 1px var(--accent); }
+    .preset-btn.disabled { opacity: .35; cursor: not-allowed; }
     .preset-emoji { font-size: 22px; line-height: 1; }
     .preset-name  { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; }
-
-    /* ── Channel mini bars ──────────────────────────────────────────────── */
-    .channels-row {
-      display: flex;
-      gap: 5px;
-      align-items: flex-end;
-      height: 32px;
-    }
-
-    .ch-bar-wrap {
-      flex: 1;
-      height: 100%;
-      background: var(--surface2);
-      border-radius: 4px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .ch-bar {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      background: var(--accent);
-      border-radius: 4px;
-      transition: height 0.5s ease;
-      opacity: 0.85;
-    }
-
+    .channels-row { display: flex; gap: 5px; align-items: flex-end; height: 32px; }
+    .ch-bar-wrap { flex: 1; height: 100%; background: var(--surface2); border-radius: 4px;
+      position: relative; overflow: hidden; }
+    .ch-bar { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent);
+      border-radius: 4px; transition: height .5s ease; opacity: .85; }
     .ch-bar.relay { background: var(--orange); }
+    .channels-label { display: flex; gap: 5px; margin-top: 4px; }
+    .ch-num { flex: 1; text-align: center; font-size: 9px; color: var(--text3); }
+    .divider { height: 1px; background: var(--border); margin: 0 -4px; }
 
-    .channels-label {
-      display: flex;
-      gap: 5px;
-      margin-top: 4px;
+    /* ── Full-screen overlay (shared base) ── */
+    .overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100;
+      display: flex; flex-direction: column; }
+    .overlay.hidden { display: none; }
+    .ov-header { display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0; }
+    .ov-title { font-size: 13px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text2);
+      display: flex; align-items: center; gap: 8px; }
+    .ov-close { background: none; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text2); font-size: 16px; cursor: pointer; padding: 4px 10px;
+      line-height: 1.4; transition: all .15s; }
+    .ov-close:hover { background: var(--surface2); color: var(--text); }
+    .ov-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+    /* ── Battery detail ── */
+    .batt-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-bottom: 20px; }
+    @media (min-width: 500px) { .batt-detail-grid { grid-template-columns: repeat(3,1fr); } }
+    .batt-detail-item { background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; }
+    .batt-detail-item .label { font-size: 11px; color: var(--text3); margin-bottom: 4px; letter-spacing: .05em; }
+    .batt-detail-item .value { font-size: 22px; font-weight: 700; line-height: 1; }
+    .batt-detail-item .unit  { font-size: 12px; color: var(--text2); margin-left: 2px; }
+
+    /* ── Charts ── */
+    .chart-section { display: flex; flex-direction: column; gap: 14px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 16px; }
+    .chart-header { display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 10px; }
+    .chart-title { font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3); }
+    .chart-current { font-size: 18px; font-weight: 700; }
+    .chart-unit { font-size: 11px; color: var(--text2); margin-left: 2px; }
+    canvas.chart { width: 100%; height: 80px; display: block; border-radius: 6px; }
+
+    /* ── Settings ── */
+    .settings-section { margin-bottom: 28px; }
+    .settings-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3); margin-bottom: 4px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
     }
-
-    .ch-num {
-      flex: 1;
-      text-align: center;
-      font-size: 9px;
-      color: var(--text3);
+    .settings-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--surface2);
     }
-
-    /* ── Divider ─────────────────────────────────────────────────────────── */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 0 -4px;
+    .settings-row:last-child { border-bottom: none; }
+    .settings-label { font-size: 13px; color: var(--text2); min-width: 120px; flex-shrink: 0; }
+    .settings-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 12px; color: var(--text); font-size: 14px;
+      outline: none; transition: border-color .15s; font-family: inherit;
     }
-
-    /* ── No-data shimmer ─────────────────────────────────────────────────── */
-    .no-data {
-      color: var(--text3);
-      font-size: 13px;
+    .settings-input:focus { border-color: var(--accent); }
+    .settings-input.narrow { max-width: 100px; }
+    .settings-actions {
+      display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;
     }
-
-    @keyframes shimmer {
-      0%   { background-position: -200% 0; }
-      100% { background-position:  200% 0; }
+    .btn-primary {
+      background: var(--accent); color: #0f172a; border: none;
+      border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background .15s; font-family: inherit;
     }
-
-    /* ── Network button ─────────────────────────────────────────────────── */
-    .header-right { display: flex; align-items: center; gap: 12px; }
-
-    .net-btn {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text2);
-      cursor: pointer;
-      padding: 6px 8px;
-      display: flex;
-      align-items: center;
-      transition: all 0.15s;
+    .btn-primary:hover { background: var(--accent2); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .settings-feedback {
+      font-size: 13px; color: var(--green); margin-right: auto;
+      align-self: center; opacity: 0; transition: opacity .3s;
     }
-    .net-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent2); }
+    .settings-feedback.show { opacity: 1; }
+    .settings-feedback.error { color: var(--red); }
 
-    /* ── Network overlay ─────────────────────────────────────────────────── */
-    .net-overlay {
-      position: fixed;
-      inset: 0;
-      background: var(--bg);
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-    }
-    .net-overlay.hidden { display: none; }
+    /* ── Network overlay — device cards ── */
+    .net-grid { display: grid; gap: 12px;
+      grid-template-columns: 1fr; }
+    @media (min-width: 600px)  { .net-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1000px) { .net-grid { grid-template-columns: 1fr 1fr 1fr; } }
 
-    .net-ov-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-    }
+    .net-device-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; }
+    .net-device-header { display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; border-bottom: 1px solid var(--border);
+      background: var(--surface2); }
+    .net-device-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .net-device-dot.ok   { background: var(--green); }
+    .net-device-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }
+    .net-device-dot.old  { background: var(--border); }
+    .net-device-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+    .net-device-src  { font-size: 11px; color: var(--text3); font-family: monospace; }
 
-    .net-ov-title {
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text2);
-    }
+    .net-pgn-list { padding: 4px 0; }
+    .net-pgn-row { display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-bottom: 1px solid var(--surface2); }
+    .net-pgn-row:last-child { border-bottom: none; }
+    .net-pgn-desc { flex: 1; font-size: 13px; color: var(--text); }
+    .net-pgn-num  { font-size: 10px; color: var(--text3); font-family: monospace; }
+    .net-pgn-iv   { font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .net-pgn-age  { font-size: 11px; white-space: nowrap; min-width: 38px; text-align: right; }
+    .age-ok   { color: var(--green); }
+    .age-warn { color: var(--yellow); }
+    .age-old  { color: var(--text3); }
 
-    .net-close-btn {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text2);
-      font-size: 16px;
-      cursor: pointer;
-      padding: 4px 10px;
-      line-height: 1.4;
-      transition: all 0.15s;
-    }
-    .net-close-btn:hover { background: var(--surface2); color: var(--text); }
-
-    .net-table-wrap {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-    }
-
-    .net-empty {
-      color: var(--text3);
-      text-align: center;
-      padding: 60px 20px;
-      font-size: 14px;
-    }
-
-    table.net-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    .net-table th {
-      text-align: left;
-      color: var(--text3);
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    .net-table td {
-      padding: 10px 10px;
-      border-bottom: 1px solid var(--surface2);
-      vertical-align: middle;
-    }
-
-    .net-table tr:last-child td { border-bottom: none; }
-
-    .net-td-name { color: var(--text); }
-    .net-td-pgn  { font-size: 10px; color: var(--text3); font-family: monospace; margin-top: 2px; }
-    .net-td-src  { color: var(--accent); font-family: monospace; font-size: 12px; }
-    .net-td-iv   { color: var(--text2); }
-    .net-td-cnt  { color: var(--text2); }
-
-    .net-age-ok   { color: var(--green); }
-    .net-age-warn { color: var(--text2); }
-    .net-age-old  { color: var(--text3); }
+    .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -455,10 +274,16 @@
 <header>
   <div class="logo">MAVE <span>Bord Monitor</span></div>
   <div class="header-right">
-    <button class="net-btn" onclick="openNetwork()" title="Netzwerk">
+    <button class="icon-btn" onclick="openNetwork()" title="Netzwerk">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
         <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
+      </svg>
+    </button>
+    <button class="icon-btn" onclick="openSettings()" title="Einstellungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
     </button>
     <div class="conn-badge">
@@ -470,22 +295,26 @@
 
 <main>
 
-  <!-- ── Batterie ─────────────────────────────────────────────────── -->
-  <section class="card card-battery">
+  <!-- ── Batterie ── -->
+  <section class="card card-battery" onclick="openBattDetail()">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/><path d="M7 7V4"/><path d="M11 7V4"/>
       </svg>
       Batterie
+      <span style="margin-left:auto;font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:none;font-weight:400">
+        Details →
+      </span>
     </div>
 
     <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 160 120">
+      <svg class="gauge-svg" viewBox="0 0 160 112">
         <path class="gauge-track" id="gaugeTrack"/>
         <path class="gauge-value" id="gaugeValue"/>
-        <text class="gauge-center" x="80" y="90">
+        <text class="gauge-center" x="80" y="66">
           <tspan class="gauge-pct" id="gaugePct">--</tspan>
           <tspan class="gauge-label" x="80" dy="18">SOC</tspan>
+          <tspan id="gaugeArrow" x="80" dy="15" font-size="13" fill="var(--text3)"></tspan>
         </text>
       </svg>
     </div>
@@ -516,54 +345,59 @@
     </div>
   </section>
 
-  <!-- ── Tanks ────────────────────────────────────────────────────── -->
-  <section class="card card-tanks">
+  <!-- ── Tanks ── -->
+  <section class="card card-tanks" onclick="toggleTanks()">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-        <path d="M12 6v6l4 2"/>
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18M9 21V9"/>
       </svg>
       Tanks
+      <span id="tankUnitLabel" style="margin-left:auto;font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:none;font-weight:400">
+        % · Tippen für Liter
+      </span>
     </div>
 
     <div class="tanks-row">
       <div class="tank">
-        <div class="tank-name">Tank 1</div>
+        <div class="tank-name" id="tank1Name">Tank 1</div>
         <div class="tank-bar-wrap">
           <div class="tank-fill" id="tank1Fill" style="height:0%"></div>
-          <div class="tank-pct-label" id="tank1Pct">--</div>
+          <div class="tank-pct-label">
+            <div class="tank-val-big" id="tank1Val">--</div>
+            <div class="tank-val-unit" id="tank1Unit">%</div>
+          </div>
         </div>
         <div class="tank-pct-below" id="tank1Sub">&nbsp;</div>
       </div>
       <div class="tank">
-        <div class="tank-name">Tank 2</div>
+        <div class="tank-name" id="tank2Name">Tank 2</div>
         <div class="tank-bar-wrap">
           <div class="tank-fill" id="tank2Fill" style="height:0%"></div>
-          <div class="tank-pct-label" id="tank2Pct">--</div>
+          <div class="tank-pct-label">
+            <div class="tank-val-big" id="tank2Val">--</div>
+            <div class="tank-val-unit" id="tank2Unit">%</div>
+          </div>
         </div>
         <div class="tank-pct-below" id="tank2Sub">&nbsp;</div>
       </div>
     </div>
   </section>
 
-  <!-- ── Beleuchtung ──────────────────────────────────────────────── -->
+  <!-- ── Beleuchtung ── -->
   <section class="card card-lights">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
       Beleuchtung
     </div>
-
-    <!-- Aktuelle Helligkeiten -->
     <div>
       <div class="channels-row" id="channelsRow"></div>
       <div class="channels-label" id="channelsLabel"></div>
     </div>
-
     <div class="divider"></div>
-
-    <!-- Preset-Buttons -->
     <div class="presets-grid" id="presetsGrid">
       <div style="color:var(--text3);font-size:13px">Lade…</div>
     </div>
@@ -571,19 +405,145 @@
 
 </main>
 
-<!-- ── Netzwerk-Overlay ──────────────────────────────────────────────────── -->
-<div id="networkOverlay" class="net-overlay hidden">
-  <div class="net-ov-header">
-    <div class="net-ov-title">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-right:7px;vertical-align:-1px">
+<!-- ── Batterie Detail ────────────────────────────────────────────────────── -->
+<div id="battOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/>
+      </svg>
+      Batterie — Details
+    </div>
+    <button class="ov-close" onclick="closeBattDetail()">✕</button>
+  </div>
+  <div class="ov-body">
+    <div class="batt-detail-grid">
+      <div class="batt-detail-item">
+        <div class="label">Ladezustand</div>
+        <div class="value"><span id="dSoc">--</span><span class="unit">%</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Spannung</div>
+        <div class="value"><span id="dV">--</span><span class="unit">V</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Strom</div>
+        <div class="value"><span id="dI">--</span><span class="unit">A</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Leistung</div>
+        <div class="value"><span id="dP">--</span><span class="unit">W</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Verbraucht</div>
+        <div class="value"><span id="dAh">--</span><span class="unit">Ah</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Starterbatterie</div>
+        <div class="value"><span id="dStarter">--</span><span class="unit">V</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Ladezyklen</div>
+        <div class="value"><span id="dCycles">--</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Min. Spannung</div>
+        <div class="value"><span id="dMinV">--</span><span class="unit">V</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Max. Spannung</div>
+        <div class="value"><span id="dMaxV">--</span><span class="unit">V</span></div>
+      </div>
+      <div class="batt-detail-item">
+        <div class="label">Voll vor</div>
+        <div class="value"><span id="dFull">--</span></div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Ladezustand</span>
+          <span><span class="chart-current" id="cSoc">--</span><span class="chart-unit">%</span></span>
+        </div>
+        <canvas class="chart" id="chartSoc"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Spannung</span>
+          <span><span class="chart-current" id="cV">--</span><span class="chart-unit">V</span></span>
+        </div>
+        <canvas class="chart" id="chartV"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header">
+          <span class="chart-title">Strom</span>
+          <span><span class="chart-current" id="cI">--</span><span class="chart-unit">A</span></span>
+        </div>
+        <canvas class="chart" id="chartI"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Einstellungen Overlay ─────────────────────────────────────────────── -->
+<div id="settingsOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      Einstellungen
+    </div>
+    <button class="ov-close" onclick="closeSettings()">✕</button>
+  </div>
+  <div class="ov-body" style="max-width:600px">
+
+    <!-- Tanks -->
+    <div class="settings-section">
+      <div class="settings-section-title">Tanks</div>
+      <div class="settings-row">
+        <label class="settings-label" for="sTank1Name">Tank 1 — Name</label>
+        <input class="settings-input" id="sTank1Name" type="text" placeholder="z.B. Frischwasser" maxlength="24" />
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="sTank1Cap">Tank 1 — Kapazität</label>
+        <input class="settings-input narrow" id="sTank1Cap" type="number" min="1" max="9999" step="1" />
+        <span style="font-size:13px;color:var(--text2)">Liter</span>
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="sTank2Name">Tank 2 — Name</label>
+        <input class="settings-input" id="sTank2Name" type="text" placeholder="z.B. Diesel" maxlength="24" />
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="sTank2Cap">Tank 2 — Kapazität</label>
+        <input class="settings-input narrow" id="sTank2Cap" type="number" min="1" max="9999" step="1" />
+        <span style="font-size:13px;color:var(--text2)">Liter</span>
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <span class="settings-feedback" id="settingsFeedback"></span>
+      <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Netzwerk Overlay ────────────────────────────────────────────────────── -->
+<div id="networkOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
         <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
       </svg>
       Netzwerk
     </div>
-    <button class="net-close-btn" onclick="closeNetwork()">✕</button>
+    <button class="ov-close" onclick="closeNetwork()">✕</button>
   </div>
-  <div id="netContent" class="net-table-wrap">
+  <div class="ov-body" id="netContent">
     <div class="net-empty">Lade…</div>
   </div>
 </div>
@@ -592,290 +552,469 @@
 // ── Hilfsfunktionen ────────────────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
-const fmt = (v, d=1) => v == null ? '--' : Number(v).toFixed(d);
-const fmtV = v => v == null ? '--' : v.toFixed(2);
+const fmt  = (v, d=1) => v == null ? '--' : Number(v).toFixed(d);
+const fmtV = v => v == null ? '--' : Number(v).toFixed(2);
 
 function colorClass(v, greenMin, yellowMin) {
   if (v == null) return '';
-  if (v >= greenMin)  return 'val-green';
-  if (v >= yellowMin) return 'val-yellow';
-  return 'val-red';
+  return v >= greenMin ? 'val-green' : v >= yellowMin ? 'val-yellow' : 'val-red';
 }
 
-function timeSince(seconds) {
-  if (seconds == null) return '--';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
+function timeSince(s) {
+  if (s == null) return '--';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
   if (h > 48) return `${Math.floor(h/24)} T`;
   if (h > 0)  return `${h} h`;
   return `${m} min`;
 }
 
+// ── Config (geladen aus /api/presets) ─────────────────────────────────────
+
+let tanksConfig  = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };
+let devicesConfig = {};
+
 // ── SOC-Gauge ──────────────────────────────────────────────────────────────
 
-const GAUGE_CX = 80, GAUGE_CY = 100, GAUGE_R = 62;
-const GAUGE_START_DEG = 225, GAUGE_SWEEP = 270;
+const GAUGE_CX = 80, GAUGE_CY = 76, GAUGE_R = 58;
+const GAUGE_START = 225, GAUGE_SWEEP = 270;
 
-function polarXY(cx, cy, r, degClockFromTop) {
-  const rad = (degClockFromTop - 90) * Math.PI / 180;
+function polarXY(cx, cy, r, deg) {
+  const rad = (deg - 90) * Math.PI / 180;
   return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
 }
-
-function arcPath(cx, cy, r, startDeg, sweepDeg) {
-  const [x1, y1] = polarXY(cx, cy, r, startDeg);
-  const [x2, y2] = polarXY(cx, cy, r, startDeg + sweepDeg);
-  const large = sweepDeg > 180 ? 1 : 0;
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+function arcPath(cx, cy, r, start, sweep) {
+  const [x1,y1] = polarXY(cx,cy,r,start);
+  const [x2,y2] = polarXY(cx,cy,r,start+sweep);
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${sweep>180?1:0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
-
-// Statischer Hinterground-Arc
-$('gaugeTrack').setAttribute('d', arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, GAUGE_START_DEG, GAUGE_SWEEP));
+$('gaugeTrack').setAttribute('d', arcPath(GAUGE_CX,GAUGE_CY,GAUGE_R,GAUGE_START,GAUGE_SWEEP));
 
 function updateGauge(soc) {
-  const pct = soc == null ? 0 : Math.max(0, Math.min(100, soc));
+  const pct   = soc == null ? 0 : Math.max(0, Math.min(100, soc));
   const sweep = GAUGE_SWEEP * pct / 100;
-  const path  = sweep < 2 ? '' : arcPath(GAUGE_CX, GAUGE_CY, GAUGE_R, GAUGE_START_DEG, sweep);
   const color = pct >= 50 ? 'var(--green)' : pct >= 20 ? 'var(--yellow)' : 'var(--red)';
-
-  $('gaugeValue').setAttribute('d', path);
+  $('gaugeValue').setAttribute('d', sweep < 2 ? '' : arcPath(GAUGE_CX,GAUGE_CY,GAUGE_R,GAUGE_START,sweep));
   $('gaugeValue').style.stroke = color;
   $('gaugePct').textContent = soc == null ? '--' : Math.round(soc) + '%';
-  $('gaugePct').style.fill = color;
+  $('gaugePct').style.fill  = color;
 }
-
 updateGauge(null);
 
-// ── Battery Update ─────────────────────────────────────────────────────────
+// ── Charge arrow (inside gauge) ────────────────────────────────────────────
+
+function updateChargeStatus(b) {
+  const arrow = $('gaugeArrow');
+  const i = b.current;
+  if (i == null || Math.abs(i) <= 0.3) {
+    arrow.textContent = '';
+  } else if (i > 0.3) {
+    arrow.textContent = '▲';
+    arrow.setAttribute('fill', '#22c55e');
+  } else {
+    arrow.textContent = '▼';
+    arrow.setAttribute('fill', '#f97316');
+  }
+}
+
+// ── Battery update ─────────────────────────────────────────────────────────
 
 function updateBattery(b) {
   updateGauge(b.soc);
-
-  // Spannung
-  const vEl = $('battV');
-  vEl.textContent = fmtV(b.voltage);
-  vEl.className = colorClass(b.voltage, 12.6, 12.0);
-
-  // Strom
-  const iEl = $('battI');
-  iEl.textContent = fmt(b.current);
-  iEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
-
-  // Leistung
-  const pEl = $('battP');
-  pEl.textContent = fmt(b.power, 0);
-  pEl.className = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange';
-
-  $('battAh').textContent  = fmt(b.consumed_ah, 1);
+  updateChargeStatus(b);
+  const vEl = $('battV'); vEl.textContent = fmtV(b.voltage); vEl.className = colorClass(b.voltage, 12.6, 12.0);
+  const iEl = $('battI'); iEl.textContent = fmt(b.current); iEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
+  const pEl = $('battP'); pEl.textContent = fmt(b.power, 0); pEl.className = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange';
+  $('battAh').textContent      = fmt(b.consumed_ah);
   $('battStarter').textContent = fmtV(b.starter_voltage);
   $('battCycles').textContent  = b.cycles ?? '--';
   $('battFull').textContent    = timeSince(b.time_since_full);
+
+  // Detail-Overlay-Felder
+  $('dSoc').textContent     = b.soc     != null ? Math.round(b.soc)  : '--';
+  $('dV').textContent       = fmtV(b.voltage);
+  $('dI').textContent       = fmt(b.current);
+  $('dP').textContent       = fmt(b.power, 0);
+  $('dAh').textContent      = fmt(b.consumed_ah);
+  $('dStarter').textContent = fmtV(b.starter_voltage);
+  $('dCycles').textContent  = b.cycles ?? '--';
+  $('dMinV').textContent    = fmtV(b.min_voltage);
+  $('dMaxV').textContent    = fmtV(b.max_voltage);
+  $('dFull').textContent    = timeSince(b.time_since_full);
+
+  recordHistory(b);
+  if (!$('battOverlay').classList.contains('hidden')) renderCharts();
 }
 
-// ── Tanks Update ───────────────────────────────────────────────────────────
+// ── Tanks ──────────────────────────────────────────────────────────────────
 
-function updateTank(idx, pct) {
-  const fill  = $(`tank${idx}Fill`);
-  const label = $(`tank${idx}Pct`);
-  const sub   = $(`tank${idx}Sub`);
+let tankShowLiters = false;
+const tankLast = { 1: null, 2: null };
+
+function toggleTanks() {
+  tankShowLiters = !tankShowLiters;
+  $('tankUnitLabel').textContent = tankShowLiters ? 'L · Tippen für Prozent' : '% · Tippen für Liter';
+  renderTank(1, tankLast[1]);
+  renderTank(2, tankLast[2]);
+}
+
+function renderTank(idx, pct) {
+  tankLast[idx] = pct;
+  const fill = $(`tank${idx}Fill`);
+  const val  = $(`tank${idx}Val`);
+  const unit = $(`tank${idx}Unit`);
+  const sub  = $(`tank${idx}Sub`);
 
   if (pct == null) {
     fill.style.height = '0%';
-    label.textContent = '--';
-    sub.textContent   = '';
     fill.style.background = 'var(--border)';
+    val.textContent  = '--';
+    unit.textContent = tankShowLiters ? 'L' : '%';
+    sub.textContent  = '';
     return;
   }
 
   const clamped = Math.max(0, Math.min(100, pct));
   fill.style.height = clamped + '%';
-  label.textContent = Math.round(clamped) + '%';
-  sub.textContent   = '';
-  fill.style.background = clamped >= 50 ? 'var(--green)'
-                        : clamped >= 20 ? 'var(--yellow)'
-                        :                 'var(--red)';
+  fill.style.background = clamped >= 50 ? 'var(--green)' : clamped >= 20 ? 'var(--yellow)' : 'var(--red)';
+
+  const cap = tanksConfig[`tank${idx}`]?.capacity_l ?? 100;
+
+  if (tankShowLiters) {
+    val.textContent  = Math.round(clamped / 100 * cap);
+    unit.textContent = 'L';
+    sub.textContent  = `${Math.round(clamped)} %`;
+  } else {
+    val.textContent  = Math.round(clamped);
+    unit.textContent = '%';
+    sub.textContent  = `${Math.round(clamped / 100 * cap)} L`;
+  }
 }
 
-// ── Channel Mini-Bars ──────────────────────────────────────────────────────
+function updateTanks(tanks) {
+  renderTank(1, tanks.tank1);
+  renderTank(2, tanks.tank2);
+}
+
+// ── Channel bars ───────────────────────────────────────────────────────────
 
 function buildChannelBars() {
-  const row   = $('channelsRow');
-  const label = $('channelsLabel');
-  row.innerHTML = '';
-  label.innerHTML = '';
+  const row = $('channelsRow'), lbl = $('channelsLabel');
+  row.innerHTML = lbl.innerHTML = '';
   for (let i = 0; i < 9; i++) {
-    const wrap = document.createElement('div');
-    wrap.className = 'ch-bar-wrap';
-    const bar = document.createElement('div');
-    bar.className = 'ch-bar' + (i === 8 ? ' relay' : '');
-    bar.id = `chBar${i}`;
-    bar.style.height = '0%';
-    wrap.appendChild(bar);
-    row.appendChild(wrap);
-
-    const lbl = document.createElement('div');
-    lbl.className = 'ch-num';
-    lbl.textContent = i < 8 ? (i + 1) : 'R';
-    label.appendChild(lbl);
+    const wrap = document.createElement('div'); wrap.className = 'ch-bar-wrap';
+    const bar  = document.createElement('div'); bar.className = 'ch-bar' + (i===8?' relay':'');
+    bar.id = `chBar${i}`; bar.style.height = '0%';
+    wrap.appendChild(bar); row.appendChild(wrap);
+    const l = document.createElement('div'); l.className = 'ch-num';
+    l.textContent = i < 8 ? (i+1) : 'R'; lbl.appendChild(l);
   }
 }
 buildChannelBars();
 
 function updateChannels(channels) {
   for (let i = 0; i < 9; i++) {
-    const v = channels[i] ?? 0;
-    const bar = $(`chBar${i}`);
-    bar.style.height = (i < 8 ? (v / 255 * 100) : (v > 0 ? 100 : 0)) + '%';
+    const v = channels[i] ?? 0, bar = $(`chBar${i}`);
+    bar.style.height  = (i < 8 ? v/255*100 : v>0?100:0) + '%';
     bar.style.opacity = v > 0 ? '0.9' : '0.2';
   }
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
 
-let presets = [];
-let activePreset = null;
+let presets = [], activePreset = null;
 
 async function loadPresets() {
   try {
-    const res = await fetch('/api/presets');
-    const data = await res.json();
+    const data = await fetch('/api/presets').then(r => r.json());
     presets = data.presets ?? [];
+    if (data.tanks)   tanksConfig  = data.tanks;
+    if (data.devices) devicesConfig = data.devices;
+    // Apply tank names from config
+    $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
+    $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';
     renderPresets();
-  } catch (e) {
-    console.error('Presets nicht geladen:', e);
-  }
+  } catch(e) { console.error('Presets nicht geladen:', e); }
 }
 
 function renderPresets() {
-  const grid = $('presetsGrid');
-  grid.innerHTML = '';
+  const grid = $('presetsGrid'); grid.innerHTML = '';
   presets.forEach((p, i) => {
     const btn = document.createElement('button');
-    btn.className = 'preset-btn' + (p.values == null ? ' disabled' : '') + (activePreset === i ? ' active' : '');
+    btn.className = 'preset-btn' + (p.values==null?' disabled':'') + (activePreset===i?' active':'');
     btn.innerHTML = `<span class="preset-emoji">${p.emoji}</span><span class="preset-name">${p.name}</span>`;
-    if (p.values != null) {
-      btn.addEventListener('click', () => applyPreset(i));
-    }
+    if (p.values != null) btn.addEventListener('click', () => applyPreset(i));
     grid.appendChild(btn);
   });
 }
 
 async function applyPreset(id) {
-  const preset = presets[id];
-  if (!preset || preset.values == null) return;
+  if (!presets[id] || presets[id].values == null) return;
+  activePreset = id; renderPresets();
+  try { await fetch(`/api/lights/preset/${id}`, { method: 'POST' }); }
+  catch(e) { activePreset = null; renderPresets(); }
+}
 
-  activePreset = id;
-  renderPresets();
+// ── Battery detail + charts ────────────────────────────────────────────────
+
+const MAX_PTS = 120;
+const hist = { soc: [], voltage: [], current: [] };
+
+function recordHistory(b) {
+  const push = (arr, v) => { arr.push(v ?? null); if (arr.length > MAX_PTS) arr.shift(); };
+  push(hist.soc,     b.soc);
+  push(hist.voltage, b.voltage);
+  push(hist.current, b.current);
+}
+
+function drawChart(canvasId, data, color, fixedMin, fixedMax) {
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) return;
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = rect.height;
+
+  const pts = data.filter(v => v != null);
+  if (pts.length < 2) { ctx.fillStyle = '#1e293b'; ctx.fillRect(0,0,W,H); return; }
+
+  const lo = fixedMin ?? Math.min(...pts);
+  const hi = fixedMax ?? Math.max(...pts);
+  const range = hi - lo || 1;
+
+  // background
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, W, H);
+
+  // subtle grid lines (3 lines)
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    const y = Math.round(H * i / 4) + 0.5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, color + '55');
+  grad.addColorStop(1, color + '00');
+
+  // build point list (skip nulls)
+  const xOf = i => (i / (MAX_PTS - 1)) * W;
+  const yOf = v => H - ((v - lo) / range) * H * 0.88 - H * 0.06;
+
+  ctx.beginPath();
+  let first = true;
+  data.forEach((v, i) => {
+    if (v == null) { first = true; return; }
+    const x = xOf(i), y = yOf(v);
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  });
+  // fill area
+  const lastIdx = data.length - 1;
+  let lastNonNull = null;
+  for (let i = lastIdx; i >= 0; i--) { if (data[i] != null) { lastNonNull = i; break; } }
+  if (lastNonNull != null) {
+    ctx.lineTo(xOf(lastNonNull), H);
+    ctx.lineTo(xOf(0), H);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  // line
+  ctx.beginPath(); first = true;
+  data.forEach((v, i) => {
+    if (v == null) { first = true; return; }
+    const x = xOf(i), y = yOf(v);
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // current value dot
+  if (lastNonNull != null && data[lastNonNull] != null) {
+    const x = xOf(lastNonNull), y = yOf(data[lastNonNull]);
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
+  }
+}
+
+function renderCharts() {
+  const lastSoc = hist.soc.filter(v=>v!=null).at(-1);
+  const lastV   = hist.voltage.filter(v=>v!=null).at(-1);
+  const lastI   = hist.current.filter(v=>v!=null).at(-1);
+  $('cSoc').textContent = lastSoc != null ? Math.round(lastSoc) : '--';
+  $('cV').textContent   = lastV   != null ? lastV.toFixed(2)   : '--';
+  $('cI').textContent   = lastI   != null ? lastI.toFixed(1)   : '--';
+  $('cSoc').className   = colorClass(lastSoc, 50, 20);
+  $('cV').className     = colorClass(lastV, 12.6, 12.0);
+  $('cI').className     = lastI == null ? '' : lastI >= 0 ? 'val-green' : 'val-orange';
+
+  drawChart('chartSoc', hist.soc,     '#22c55e', 0,    100);
+  drawChart('chartV',   hist.voltage, '#06b6d4', 11.5, 14.5);
+  drawChart('chartI',   hist.current, '#f97316', null, null);
+}
+
+function openBattDetail() {
+  $('battOverlay').classList.remove('hidden');
+  setTimeout(renderCharts, 50);
+}
+function closeBattDetail() { $('battOverlay').classList.add('hidden'); }
+
+// ── Network overlay ────────────────────────────────────────────────────────
+
+let netTimer = null;
+
+function openNetwork() {
+  $('networkOverlay').classList.remove('hidden');
+  fetchNetwork();
+  netTimer = setInterval(fetchNetwork, 5000);
+}
+function closeNetwork() {
+  $('networkOverlay').classList.add('hidden');
+  clearInterval(netTimer); netTimer = null;
+}
+
+async function fetchNetwork() {
+  try {
+    const data = await fetch('/api/network').then(r => r.json());
+    renderNetwork(data);
+  } catch(_) {
+    $('netContent').innerHTML = '<div class="net-empty">Keine Verbindung</div>';
+  }
+}
+
+function renderNetwork(entries) {
+  if (!entries.length) {
+    $('netContent').innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
+    return;
+  }
+
+  // Group by src
+  const bySource = {};
+  entries.forEach(e => {
+    if (!bySource[e.src]) bySource[e.src] = [];
+    bySource[e.src].push(e);
+  });
+
+  const cards = Object.entries(bySource).map(([src, pgns]) => {
+    const srcNum  = parseInt(src);
+    const srcHex  = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
+    const name    = devicesConfig[src] ?? `Gerät ${srcHex}`;
+    const minAge  = Math.min(...pgns.map(p => p.age_s));
+    const dotCls  = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
+
+    const rows = pgns.map(p => {
+      const iv  = p.interval_ms != null ? `${p.interval_ms} ms` : '—';
+      const ageCls = p.age_s < 3 ? 'age-ok' : p.age_s < 15 ? 'age-warn' : 'age-old';
+      const ageStr = p.age_s < 2 ? 'aktiv' : `${p.age_s} s`;
+      return `<div class="net-pgn-row">
+        <div>
+          <div class="net-pgn-desc">${p.description}</div>
+          <div class="net-pgn-num">${p.pgn} · 0x${p.pgn.toString(16).toUpperCase()}</div>
+        </div>
+        <div class="net-pgn-iv">${iv}</div>
+        <div class="net-pgn-age ${ageCls}">${ageStr}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="net-device-card">
+      <div class="net-device-header">
+        <div class="net-device-dot ${dotCls}"></div>
+        <div class="net-device-name">${name}</div>
+        <div class="net-device-src">${srcHex} (${srcNum})</div>
+      </div>
+      <div class="net-pgn-list">${rows}</div>
+    </div>`;
+  }).join('');
+
+  $('netContent').innerHTML = `<div class="net-grid">${cards}</div>`;
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+
+function openSettings() {
+  $('sTank1Name').value = tanksConfig.tank1?.name ?? '';
+  $('sTank1Cap').value  = tanksConfig.tank1?.capacity_l ?? '';
+  $('sTank2Name').value = tanksConfig.tank2?.name ?? '';
+  $('sTank2Cap').value  = tanksConfig.tank2?.capacity_l ?? '';
+  $('settingsFeedback').className = 'settings-feedback';
+  $('settingsFeedback').textContent = '';
+  $('settingsOverlay').classList.remove('hidden');
+}
+
+function closeSettings() { $('settingsOverlay').classList.add('hidden'); }
+
+async function saveSettings() {
+  const btn = $('saveSettingsBtn');
+  const fb  = $('settingsFeedback');
+  btn.disabled = true;
+
+  const body = { tanks: {
+    tank1: { name: $('sTank1Name').value.trim() || 'Tank 1',
+             capacity_l: parseInt($('sTank1Cap').value) || 200 },
+    tank2: { name: $('sTank2Name').value.trim() || 'Tank 2',
+             capacity_l: parseInt($('sTank2Cap').value) || 120 },
+  }};
 
   try {
-    await fetch(`/api/lights/preset/${id}`, { method: 'POST' });
-  } catch (e) {
-    console.error('Preset-Fehler:', e);
-    activePreset = null;
-    renderPresets();
+    const data = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+
+    if (data.tanks) tanksConfig = data.tanks;
+    $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
+    $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';
+    renderTank(1, tankLast[1]);
+    renderTank(2, tankLast[2]);
+
+    fb.className = 'settings-feedback show';
+    fb.textContent = 'Gespeichert ✓';
+    setTimeout(() => fb.classList.remove('show'), 2500);
+  } catch(e) {
+    fb.className = 'settings-feedback error show';
+    fb.textContent = 'Fehler beim Speichern';
   }
+  btn.disabled = false;
 }
 
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
-let ws = null;
-let reconnectTimer = null;
+let ws = null, reconnectTimer = null;
 
 function setConnState(state) {
-  const dot   = $('connDot');
-  const label = $('connLabel');
-  if (state === 'ok') {
-    dot.className = 'conn-dot ok';
-    label.textContent = 'Verbunden';
-  } else if (state === 'warn') {
-    dot.className = 'conn-dot warn';
-    label.textContent = 'Verbinde…';
-  } else {
-    dot.className = 'conn-dot';
-    label.textContent = 'Getrennt';
-  }
+  const dot = $('connDot'), lbl = $('connLabel');
+  if (state==='ok')   { dot.className='conn-dot ok';   lbl.textContent='Verbunden'; }
+  else if (state==='warn') { dot.className='conn-dot warn'; lbl.textContent='Verbinde…'; }
+  else                { dot.className='conn-dot';       lbl.textContent='Getrennt'; }
 }
 
 function handleData(data) {
   if (data.ping) return;
-
-  if (data.battery)  updateBattery(data.battery);
-  if (data.tanks)    { updateTank(1, data.tanks.tank1); updateTank(2, data.tanks.tank2); }
-  if (data.lights)   updateChannels(data.lights.channels ?? []);
+  if (data.battery) updateBattery(data.battery);
+  if (data.tanks)   updateTanks(data.tanks);
+  if (data.lights)  updateChannels(data.lights.channels ?? []);
 }
 
 function connect() {
   setConnState('warn');
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-
-  ws.onopen    = ()    => { setConnState('ok'); clearTimeout(reconnectTimer); };
-  ws.onmessage = (ev)  => { try { handleData(JSON.parse(ev.data)); } catch (_) {} };
-  ws.onclose   = ws.onerror = () => {
+  ws.onopen    = () => { setConnState('ok'); clearTimeout(reconnectTimer); };
+  ws.onmessage = ev => { try { handleData(JSON.parse(ev.data)); } catch(_) {} };
+  ws.onclose = ws.onerror = () => {
     setConnState('off');
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connect, 4000);
   };
-}
-
-// ── Netzwerk-Overlay ───────────────────────────────────────────────────────
-
-let netRefreshTimer = null;
-
-function openNetwork() {
-  $('networkOverlay').classList.remove('hidden');
-  fetchNetwork();
-  netRefreshTimer = setInterval(fetchNetwork, 5000);
-}
-
-function closeNetwork() {
-  $('networkOverlay').classList.add('hidden');
-  clearInterval(netRefreshTimer);
-  netRefreshTimer = null;
-}
-
-async function fetchNetwork() {
-  try {
-    const res = await fetch('/api/network');
-    const data = await res.json();
-    renderNetwork(data);
-  } catch (_) {
-    $('netContent').innerHTML = '<div class="net-empty">Keine Verbindung</div>';
-  }
-}
-
-function renderNetwork(entries) {
-  const wrap = $('netContent');
-  if (!entries.length) {
-    wrap.innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
-    return;
-  }
-
-  const rows = entries.map(e => {
-    const iv  = e.interval_ms != null ? `${e.interval_ms} ms` : '—';
-    const age = e.age_s < 3  ? '<span class="net-age-ok">aktiv</span>'
-              : e.age_s < 15 ? `<span class="net-age-warn">${e.age_s} s</span>`
-              :                 `<span class="net-age-old">${e.age_s} s</span>`;
-    const srcHex = '0x' + e.src.toString(16).toUpperCase().padStart(2, '0');
-    const pgnHex = '0x' + e.pgn.toString(16).toUpperCase();
-    return `<tr>
-      <td><div class="net-td-name">${e.description}</div><div class="net-td-pgn">${e.pgn} &nbsp;${pgnHex}</div></td>
-      <td class="net-td-src">${srcHex}</td>
-      <td class="net-td-iv">${iv}</td>
-      <td class="net-td-cnt">${e.count}</td>
-      <td>${age}</td>
-    </tr>`;
-  }).join('');
-
-  wrap.innerHTML = `<table class="net-table">
-    <thead><tr>
-      <th>PGN / Beschreibung</th>
-      <th>Quelle</th>
-      <th>Intervall</th>
-      <th>Meldungen</th>
-      <th>Zuletzt</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

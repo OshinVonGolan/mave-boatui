@@ -78,6 +78,15 @@ async def _demo_task():
         elif phase == 3: light_channels = [255]*8 + [1]
         state.lights['channels'] = light_channels
 
+        # Demo-Netzwerkaktivität simulieren
+        for pgn, src, every in [
+            (127508, 22, 1), (130900, 22, 1), (127505, 22, 2),
+            (129026, 35, 1), (127250, 35, 1), (130306, 48, 1),
+            (126720, 100, 1), (60928, 22, 60), (60928, 35, 60),
+        ]:
+            if t % every == 0:
+                can_if._track_network(pgn, src)
+
         await broadcast(state.to_dict())
         await asyncio.sleep(1)
 
@@ -86,6 +95,7 @@ async def _demo_task():
 async def lifespan(_app: FastAPI):
     if DEMO:
         log.info("★ DEMO-Modus aktiv — keine CAN-Hardware nötig")
+        can_if.seed_demo_network()
         asyncio.ensure_future(_demo_task())
     else:
         loop = asyncio.get_event_loop()
@@ -154,3 +164,16 @@ async def get_status():
 @app.get('/api/network')
 async def get_network():
     return can_if.get_network_stats()
+
+
+@app.patch('/api/settings')
+async def update_settings(body: dict):
+    data = json.loads(PRESETS_FILE.read_text())
+    if 'tanks' in body:
+        for key, val in body['tanks'].items():
+            if key in data.get('tanks', {}):
+                data['tanks'][key].update(val)
+    if 'devices' in body:
+        data.setdefault('devices', {}).update(body['devices'])
+    PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    return data

@@ -1,40 +1,20 @@
 {
   "presets": [
-    {
-      "id": 0,
-      "name": "Alles aus",
-      "emoji": "🌙",
-      "values": [0, 0, 0, 0, 0, 0, 0, 0, 0]
-    },
-    {
-      "id": 1,
-      "name": "Alles an",
-      "emoji": "☀️",
-      "values": [255, 255, 255, 255, 255, 255, 255, 255, 1]
-    },
-    {
-      "id": 2,
-      "name": "Preset 3",
-      "emoji": "💡",
-      "values": null
-    },
-    {
-      "id": 3,
-      "name": "Preset 4",
-      "emoji": "💡",
-      "values": null
-    },
-    {
-      "id": 4,
-      "name": "Preset 5",
-      "emoji": "💡",
-      "values": null
-    },
-    {
-      "id": 5,
-      "name": "Preset 6",
-      "emoji": "💡",
-      "values": null
-    }
-  ]
+    { "id": 0, "name": "Alles aus",  "emoji": "🌙", "values": [0, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { "id": 1, "name": "Alles an",   "emoji": "☀️", "values": [255, 255, 255, 255, 255, 255, 255, 255, 1] },
+    { "id": 2, "name": "Preset 3",   "emoji": "💡", "values": null },
+    { "id": 3, "name": "Preset 4",   "emoji": "💡", "values": null },
+    { "id": 4, "name": "Preset 5",   "emoji": "💡", "values": null },
+    { "id": 5, "name": "Preset 6",   "emoji": "💡", "values": null }
+  ],
+  "tanks": {
+    "tank1": { "name": "Tank 1", "capacity_l": 200 },
+    "tank2": { "name": "Tank 2", "capacity_l": 120 }
+  },
+  "devices": {
+    "22":  "Victron BMS",
+    "35":  "B&G Chartplotter",
+    "48":  "B&G Triton",
+    "100": "RPi"
+  }
 }
