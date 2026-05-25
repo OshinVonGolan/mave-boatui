@@ -539,9 +539,44 @@
       border-radius: 10px; padding: 12px; text-align: center;
       transition: border-color .4s;
     }
-    .bms-cell .cell-num  { font-size: 10px; color: var(--text3); margin-bottom: 4px; letter-spacing: .06em; text-transform: uppercase; }
-    .bms-cell .cell-volt { font-size: 19px; font-weight: 700; line-height: 1; }
-    .bms-cell .cell-temp { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .bms-cell .cell-num  { font-size: 10px; color: var(--text3); margin-bottom: 6px; letter-spacing: .06em; text-transform: uppercase; }
+    .bms-cell .cell-volt { font-size: 22px; font-weight: 700; line-height: 1; }
+    .bms-cell .cell-temp { font-size: 13px; color: var(--text2); margin-top: 6px; }
+
+    /* ── Battery detail layout ── */
+    .bd-hero {
+      display: flex; gap: 0; background: var(--surface2);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 12px;
+    }
+    .bd-soc-box {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px 20px; border-right: 1px solid var(--border); min-width: 100px;
+    }
+    .bd-soc-num { font-size: 52px; font-weight: 700; line-height: 1; }
+    .bd-metrics { flex: 1; display: grid; grid-template-columns: repeat(3,1fr); }
+    .bd-metric {
+      padding: 16px; border-right: 1px solid var(--border);
+    }
+    .bd-metric:last-child { border-right: none; }
+    .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+    .bd-val { font-size: 24px; font-weight: 700; line-height: 1.1; }
+    .bd-unit { font-size: 12px; color: var(--text2); margin-left: 2px; font-weight: 400; }
+    .bd-sec-grid {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 16px;
+    }
+    @media (max-width:440px) { .bd-metrics { grid-template-columns: repeat(2,1fr); } .bd-sec-grid { grid-template-columns: repeat(2,1fr); } }
+    .bd-sec-item {
+      background: var(--surface2); border-radius: 8px; padding: 10px 12px;
+    }
+    .bd-sec-val { font-size: 17px; font-weight: 600; margin-top: 3px; }
+
+    /* BMS pack row */
+    .bms-pack-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .bms-pack-item {
+      flex: 1; min-width: 90px; background: var(--surface2);
+      border-radius: 8px; padding: 10px 12px;
+    }
+    .bms-pack-val { font-size: 17px; font-weight: 600; margin-top: 3px; }
   </style>
 </head>
 <body>
@@ -718,47 +753,55 @@
     </div>
     <button class="ov-close" onclick="closeBattDetail()">✕</button>
   </div>
-  <div class="ov-body">
-    <div class="batt-detail-grid">
-      <div class="batt-detail-item">
-        <div class="label">Ladezustand</div>
-        <div class="value"><span id="dSoc">--</span><span class="unit">%</span></div>
+  <div class="ov-body" style="max-width:700px">
+
+    <!-- Hero: SOC + main metrics -->
+    <div class="bd-hero">
+      <div class="bd-soc-box">
+        <div class="bd-label">SOC</div>
+        <div class="bd-soc-num"><span id="dSoc">--</span><span class="bd-unit" style="font-size:20px">%</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Spannung</div>
-        <div class="value"><span id="dV">--</span><span class="unit">V</span></div>
+      <div class="bd-metrics">
+        <div class="bd-metric">
+          <div class="bd-label">Spannung</div>
+          <div class="bd-val"><span id="dV">--</span><span class="bd-unit">V</span></div>
+        </div>
+        <div class="bd-metric">
+          <div class="bd-label">Strom</div>
+          <div class="bd-val"><span id="dI">--</span><span class="bd-unit">A</span></div>
+        </div>
+        <div class="bd-metric">
+          <div class="bd-label">Leistung</div>
+          <div class="bd-val"><span id="dP">--</span><span class="bd-unit">W</span></div>
+        </div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Strom</div>
-        <div class="value"><span id="dI">--</span><span class="unit">A</span></div>
+    </div>
+
+    <!-- Secondary metrics -->
+    <div class="bd-sec-grid">
+      <div class="bd-sec-item">
+        <div class="bd-label">Verbraucht</div>
+        <div class="bd-sec-val"><span id="dAh">--</span><span class="bd-unit">Ah</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Leistung</div>
-        <div class="value"><span id="dP">--</span><span class="unit">W</span></div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Starterbatterie</div>
+        <div class="bd-sec-val"><span id="dStarter">--</span><span class="bd-unit">V</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Verbraucht</div>
-        <div class="value"><span id="dAh">--</span><span class="unit">Ah</span></div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Ladezyklen</div>
+        <div class="bd-sec-val"><span id="dCycles">--</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Starterbatterie</div>
-        <div class="value"><span id="dStarter">--</span><span class="unit">V</span></div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Voll vor</div>
+        <div class="bd-sec-val"><span id="dFull">--</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Ladezyklen</div>
-        <div class="value"><span id="dCycles">--</span></div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Min. Spannung</div>
+        <div class="bd-sec-val"><span id="dMinV">--</span><span class="bd-unit">V</span></div>
       </div>
-      <div class="batt-detail-item">
-        <div class="label">Min. Spannung</div>
-        <div class="value"><span id="dMinV">--</span><span class="unit">V</span></div>
-      </div>
-      <div class="batt-detail-item">
-        <div class="label">Max. Spannung</div>
-        <div class="value"><span id="dMaxV">--</span><span class="unit">V</span></div>
-      </div>
-      <div class="batt-detail-item">
-        <div class="label">Voll vor</div>
-        <div class="value"><span id="dFull">--</span></div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Max. Spannung</div>
+        <div class="bd-sec-val"><span id="dMaxV">--</span><span class="bd-unit">V</span></div>
       </div>
     </div>
 
@@ -783,11 +826,14 @@
     </div>
 
     <!-- BMS section -->
-    <div id="bmsSection" style="display:none; margin-top:24px">
+    <div id="bmsSection" style="margin-top:24px">
       <div class="bms-section-title">BMS — 123SmartBMS</div>
-      <div class="batt-detail-grid" id="bmsPackGrid"></div>
-      <div class="bms-flags-row" id="bmsFlags"></div>
-      <div class="bms-cell-grid" id="bmsCellGrid"></div>
+      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:16px 0 8px">Kein Signal — warte auf Daten…</div>
+      <div id="bmsDataWrap" style="display:none">
+        <div class="bms-pack-row" id="bmsPackRow"></div>
+        <div class="bms-flags-row" id="bmsFlags"></div>
+        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+      </div>
     </div>
 
   </div>
@@ -1224,6 +1270,14 @@ function renderChartLegend(pts) {
   }).join('');
 }
 
+function fmtAxisTime(ts, nowTs) {
+  const d = nowTs - ts;
+  if (d < 90)    return 'jetzt';
+  if (d < 3600)  return `-${Math.round(d/60)}m`;
+  if (d < 86400) return `-${Math.round(d/3600)}h`;
+  return `-${Math.round(d/86400)}T`;
+}
+
 function renderCharts() {
   const canvas = $('chartMain');
   if (!canvas) return;
@@ -1243,20 +1297,33 @@ function renderCharts() {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
 
+  const PAD_R = 54, PAD_B = 20, PAD_T = 4;
+  const CW = W - PAD_R, CH = H - PAD_B - PAD_T;
+
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
+
+  // X-axis time labels
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textAlign = 'center';
+  const tMin0 = now - chartRangeSec, tMax0 = now;
+  for (let i = 0; i <= 4; i++) {
+    const ts = tMin0 + (tMax0 - tMin0) * i / 4;
+    ctx.fillText(fmtAxisTime(ts, now), CW * i / 4, H - 4);
+  }
 
   if (pts.length < 2) return;
 
   const tMin = pts[0].ts, tMax = pts[pts.length - 1].ts;
   const tRange = tMax - tMin || 1;
-  const xOf = ts => ((ts - tMin) / tRange) * W;
+  const xOf = ts => ((ts - tMin) / tRange) * CW;
 
   // grid lines
   ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
   for (let i = 1; i <= 3; i++) {
-    const y = Math.round(H * i / 4) + 0.5;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    const y = PAD_T + Math.round(CH * i / 4) + 0.5;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
   }
 
   Object.entries(SERIES_DEF).forEach(([key, def]) => {
@@ -1268,22 +1335,22 @@ function renderCharts() {
     const pad = (hi - lo) * 0.12 || 0.5;
     lo -= pad; hi += pad;
     const yRange = hi - lo;
-    const yOf = v => H - ((v - lo) / yRange) * H * 0.9 - H * 0.05;
+    const yOf = v => PAD_T + CH - ((v - lo) / yRange) * CH * 0.9 - CH * 0.05;
 
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
     grad.addColorStop(0, def.color + '44');
     grad.addColorStop(1, def.color + '00');
 
-    let first = true, lastX = 0, lastY = 0;
+    let first = true, lastX = 0, lastY = 0, lastVal = null;
     ctx.beginPath();
     pts.forEach(d => {
       const v = d[key]; if (v == null) { first = true; return; }
       const x = xOf(d.ts), y = yOf(v);
       if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-      lastX = x; lastY = y;
+      lastX = x; lastY = y; lastVal = v;
     });
     if (!first) {
-      ctx.lineTo(lastX, H); ctx.lineTo(xOf(tMin), H);
+      ctx.lineTo(lastX, PAD_T + CH); ctx.lineTo(0, PAD_T + CH);
       ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
     }
 
@@ -1297,9 +1364,16 @@ function renderCharts() {
     ctx.strokeStyle = def.color; ctx.lineWidth = 2;
     ctx.lineJoin = 'round'; ctx.stroke();
 
-    if (!first) {
+    if (!first && lastVal != null) {
       ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
+
+      // current value label on right
+      ctx.fillStyle = def.color;
+      ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+      ctx.textAlign = 'left';
+      const clampY = Math.max(PAD_T + 8, Math.min(H - PAD_B - 4, lastY + 4));
+      ctx.fillText(def.fmt(lastVal), CW + 5, clampY);
     }
   });
 }
@@ -1327,26 +1401,23 @@ function updateBms(bms) {
   if (!bms) return;
   _lastBms = bms;
   const hasBms = bms.voltage != null;
-  $('bmsSection').style.display = hasBms ? '' : 'none';
+  $('bmsNoSignal').style.display  = hasBms ? 'none' : '';
+  $('bmsDataWrap').style.display  = hasBms ? ''     : 'none';
   if (!hasBms) return;
 
-  // Pack data grid
+  // Pack row
   const packItems = [
-    { label: 'Pack SOC',     val: bms.soc     != null ? bms.soc + ' %'        : '--' },
-    { label: 'Pack Spannung',val: bms.voltage  != null ? bms.voltage.toFixed(2) + ' V' : '--' },
-    { label: 'Strom',        val: bms.current_total != null ? bms.current_total.toFixed(1) + ' A' : '--' },
-    { label: 'Kapazität',    val: bms.capacity_ah != null ? bms.capacity_ah.toFixed(0) + ' Ah' : '--' },
-    { label: 'Verbleibend',  val: bms.remaining_kwh != null ? bms.remaining_kwh.toFixed(2) + ' kWh' : '--' },
-    { label: 'Zellen',       val: bms.cell_count ?? '--' },
-    { label: 'Min-Zelle',    val: bms.lowest_cell_v  != null ? `Z${bms.lowest_cell_nr} · ${bms.lowest_cell_v.toFixed(3)} V` : '--' },
-    { label: 'Max-Zelle',    val: bms.highest_cell_v != null ? `Z${bms.highest_cell_nr} · ${bms.highest_cell_v.toFixed(3)} V` : '--' },
-    { label: 'Temp min',     val: bms.lowest_temp  != null ? bms.lowest_temp.toFixed(1)  + ' °C' : '--' },
-    { label: 'Temp max',     val: bms.highest_temp != null ? bms.highest_temp.toFixed(1) + ' °C' : '--' },
+    { label: 'SOC',        val: bms.soc != null ? bms.soc + ' %' : '--' },
+    { label: 'Spannung',   val: bms.voltage != null ? bms.voltage.toFixed(2) + ' V' : '--' },
+    { label: 'Strom',      val: bms.current_total != null ? bms.current_total.toFixed(1) + ' A' : '--' },
+    { label: 'Kapazität',  val: bms.capacity_ah != null ? bms.capacity_ah.toFixed(0) + ' Ah' : '--' },
+    { label: 'Verbleibend',val: bms.remaining_kwh != null ? bms.remaining_kwh.toFixed(2) + ' kWh' : '--' },
+    { label: 'Zellen',     val: bms.cell_count ?? '--' },
   ];
-  $('bmsPackGrid').innerHTML = packItems.map(it =>
-    `<div class="batt-detail-item">
-      <div class="label">${it.label}</div>
-      <div class="value" style="font-size:17px">${it.val}</div>
+  $('bmsPackRow').innerHTML = packItems.map(it =>
+    `<div class="bms-pack-item">
+      <div class="bd-label">${it.label}</div>
+      <div class="bms-pack-val">${it.val}</div>
     </div>`
   ).join('');
 
@@ -1354,11 +1425,11 @@ function updateBms(bms) {
   const flags = [
     { label: 'Laden OK',   cls: bms.allow_charge    ? 'ok'  : 'err', icon: bms.allow_charge    ? '✓' : '✕' },
     { label: 'Entladen OK',cls: bms.allow_discharge ? 'ok'  : 'err', icon: bms.allow_discharge ? '✓' : '✕' },
-    { label: 'Komm.',      cls: bms.comm_error      ? 'err' : 'ok',  icon: bms.comm_error      ? '!' : '✓' },
-    { label: 'V min',      cls: bms.alarm_min_volt  ? 'err' : 'ok',  icon: bms.alarm_min_volt  ? '!' : '✓' },
-    { label: 'V max',      cls: bms.alarm_max_volt  ? 'err' : 'ok',  icon: bms.alarm_max_volt  ? '!' : '✓' },
-    { label: 'T min',      cls: bms.alarm_min_temp  ? 'warn': 'ok',  icon: bms.alarm_min_temp  ? '!' : '✓' },
-    { label: 'T max',      cls: bms.alarm_max_temp  ? 'warn': 'ok',  icon: bms.alarm_max_temp  ? '!' : '✓' },
+    { label: 'Kommunikation', cls: bms.comm_error   ? 'err' : 'ok',  icon: bms.comm_error      ? '!' : '✓' },
+    { label: 'Alarm V min',cls: bms.alarm_min_volt  ? 'err' : 'ok',  icon: bms.alarm_min_volt  ? '!' : '✓' },
+    { label: 'Alarm V max',cls: bms.alarm_max_volt  ? 'err' : 'ok',  icon: bms.alarm_max_volt  ? '!' : '✓' },
+    { label: 'Alarm T min',cls: bms.alarm_min_temp  ? 'warn': 'ok',  icon: bms.alarm_min_temp  ? '!' : '✓' },
+    { label: 'Alarm T max',cls: bms.alarm_max_temp  ? 'warn': 'ok',  icon: bms.alarm_max_temp  ? '!' : '✓' },
   ];
   $('bmsFlags').innerHTML = flags.map(f =>
     `<div class="bms-flag ${f.cls}">${f.icon} ${f.label}</div>`
@@ -1366,12 +1437,14 @@ function updateBms(bms) {
 
   // Cell grid
   const cells = bms.cells ?? [];
-  $('bmsCellGrid').innerHTML = cells.map((c, i) => {
+  const n     = cells.length || (bms.cell_count ?? 0);
+  $('bmsCellGrid').innerHTML = Array.from({length: n}, (_, i) => {
+    const c    = cells[i];
     const isLo = i === (bms.lowest_cell_nr  - 1);
     const isHi = i === (bms.highest_cell_nr - 1);
-    const color = cellColor(c.voltage, isLo, isHi, bms.alarm_min_volt, bms.alarm_max_volt);
-    const vStr  = c.voltage != null ? c.voltage.toFixed(3) + ' V' : '--';
-    const tStr  = c.temp    != null ? c.temp.toFixed(1)    + ' °C' : '--';
+    const color = c ? cellColor(c.voltage, isLo, isHi, bms.alarm_min_volt, bms.alarm_max_volt) : 'var(--border)';
+    const vStr  = c?.voltage != null ? c.voltage.toFixed(3) + ' V' : '-- V';
+    const tStr  = c?.temp    != null ? c.temp.toFixed(1)    + ' °C' : '-- °C';
     return `<div class="bms-cell" style="border-color:${color}">
       <div class="cell-num">Zelle ${i + 1}</div>
       <div class="cell-volt" style="color:${color}">${vStr}</div>
