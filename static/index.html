@@ -385,7 +385,7 @@
 
     /* ── Network overlay — device cards ── */
     .net-grid { display: grid; gap: 12px;
-      grid-template-columns: 1fr; }
+      grid-template-columns: 1fr; max-width: 1100px; }
     @media (min-width: 600px)  { .net-grid { grid-template-columns: 1fr 1fr; } }
     @media (min-width: 1000px) { .net-grid { grid-template-columns: 1fr 1fr 1fr; } }
 
@@ -416,9 +416,14 @@
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
 
     /* ── Light detail — channel cards ── */
+    #chSlidersWrap {
+      display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px;
+    }
+    @media (min-width: 540px) {
+      #chSlidersWrap { grid-template-columns: 1fr 1fr; }
+    }
     .ch-card {
       background: var(--surface2); border-radius: 14px; padding: 16px 18px;
-      margin-bottom: 10px;
     }
     .ch-card-header {
       display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
@@ -595,6 +600,19 @@
     .bd-sec-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
     .bd-sec-val { font-size: 16px; font-weight: 600; margin-top: 3px; }
 
+    /* ── Charge source donut ── */
+    .charge-src-wrap {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface2); border-radius: 10px; padding: 12px 14px;
+      margin-top: 12px;
+    }
+    .charge-src-legend { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+    .charge-src-row { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+    .charge-src-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .charge-src-label { flex: 1; color: var(--text2); }
+    .charge-src-val { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    .charge-src-pct { font-size: 10px; color: var(--text3); margin-left: 3px; }
+
     /* BMS pack row */
     .bms-pack-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
     .bms-pack-item {
@@ -648,12 +666,28 @@
       height: 100%; border-radius: 4px; background: var(--green);
       transition: width .7s ease, background .5s;
     }
+
+    /* Phone-style topbar battery */
+    .topbar-batt {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: 600; color: var(--green);
+      font-variant-numeric: tabular-nums; transition: color .5s;
+    }
+
+    /* Mobile: compact topbar */
+    @media (max-width: 500px) {
+      .logo-sub, .logo-ver { display: none; }
+      #connLabel { display: none; }
+      .topbar-batt-pct { display: none; }
+      header { padding: 12px 14px 10px; }
+      .header-right { gap: 8px; }
+    }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">MAVE <span>Bord Monitor</span> <span id="versionBadge" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
+  <div class="logo">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
   <div class="header-right">
     <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -661,22 +695,24 @@
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
     </button>
+    <div class="topbar-batt" id="topbarBatt" title="Ladestand Servicebatterie">
+      <svg width="24" height="13" viewBox="0 0 24 13" fill="none">
+        <rect x="0.75" y="0.75" width="19.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
+        <rect x="20.75" y="4" width="2.5" height="5" rx="1" fill="currentColor"/>
+        <rect x="2.5" y="2.5" width="0" height="8" rx="1" fill="currentColor" id="topbarBattFill"/>
+      </svg>
+      <span class="topbar-batt-pct" id="topbarBattPct">--%</span>
+    </div>
     <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M1.5 8.5a12 12 0 0 1 21 0"/>
-          <path d="M5 12.5a7 7 0 0 1 14 0"/>
-          <path d="M8.5 16.5a3 3 0 0 1 7 0"/>
-          <circle cx="12" cy="20" r="1" fill="currentColor"/>
+          <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+          <circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>
         </svg>
         <div class="conn-inet-dot" id="connInetDot"></div>
       </div>
-    </button>
-    <button class="icon-btn" onclick="openNetwork()" title="Netzwerk">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-        <line x1="12" y1="7" x2="5" y2="17"/><line x1="12" y1="7" x2="19" y2="17"/>
-      </svg>
     </button>
     <button class="icon-btn" onclick="openSettings()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -891,6 +927,22 @@
         <div class="bd-sec-val"><span id="dMaxV">--</span><span class="bd-unit">V</span></div>
       </div>
     </div>
+    <!-- Ladeströme Donut -->
+    <div id="chargeSourceCard" style="display:none;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="bd-label">Ladeströme</div>
+        <div style="display:flex;gap:3px">
+          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
+          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
+          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
+        </div>
+      </div>
+      <div class="charge-src-wrap">
+        <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
+        <div class="charge-src-legend" id="chargeSourceLegend"></div>
+      </div>
+    </div>
+
   </div><!-- bd-left -->
   <div class="bd-right">
 
@@ -980,61 +1032,76 @@
     </div>
     <button class="ov-close" onclick="closeSettings()">✕</button>
   </div>
-  <div class="ov-body" style="max-width:600px">
+  <div class="ov-body" style="padding:0">
 
-    <!-- Tanks -->
-    <div class="settings-section">
-      <div class="settings-section-title">Tanks</div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank1Name">Tank 1 — Name</label>
-        <input class="settings-input" id="sTank1Name" type="text" placeholder="z.B. Frischwasser" maxlength="24" />
-      </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank1Cap">Tank 1 — Kapazität</label>
-        <input class="settings-input narrow" id="sTank1Cap" type="number" min="1" max="9999" step="1" />
-        <span style="font-size:13px;color:var(--text2)">Liter</span>
-      </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank1Color">Tank 1 — Farbe</label>
-        <div class="settings-color-wrap">
-          <input class="settings-color" id="sTank1Color" type="color" value="#22c55e" />
-          <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
-        </div>
-      </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank2Name">Tank 2 — Name</label>
-        <input class="settings-input" id="sTank2Name" type="text" placeholder="z.B. Diesel" maxlength="24" />
-      </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank2Cap">Tank 2 — Kapazität</label>
-        <input class="settings-input narrow" id="sTank2Cap" type="number" min="1" max="9999" step="1" />
-        <span style="font-size:13px;color:var(--text2)">Liter</span>
-      </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sTank2Color">Tank 2 — Farbe</label>
-        <div class="settings-color-wrap">
-          <input class="settings-color" id="sTank2Color" type="color" value="#3b82f6" />
-          <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
-        </div>
-      </div>
+    <div class="tabs" style="padding:0 16px">
+      <button class="tab-btn active" id="stTabEinstellBtn" onclick="switchSettingsTab('einstell')">Einstellungen</button>
+      <button class="tab-btn" id="stTabNetzBtn" onclick="switchSettingsTab('netz')">Netzwerk</button>
     </div>
 
-    <!-- Batterien -->
-    <div class="settings-section">
-      <div class="settings-section-title">Batterien</div>
-      <div class="settings-row">
-        <label class="settings-label" for="sBattService">Servicebatterie — CAN-Instanz</label>
-        <input class="settings-input narrow" id="sBattService" type="number" min="0" max="15" step="1" value="0" />
+    <!-- Tab: Einstellungen -->
+    <div class="tab-pane active" id="stTabEinstell" style="padding:16px;max-width:600px">
+
+      <!-- Tanks -->
+      <div class="settings-section">
+        <div class="settings-section-title">Tanks</div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank1Name">Tank 1 — Name</label>
+          <input class="settings-input" id="sTank1Name" type="text" placeholder="z.B. Frischwasser" maxlength="24" />
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank1Cap">Tank 1 — Kapazität</label>
+          <input class="settings-input narrow" id="sTank1Cap" type="number" min="1" max="9999" step="1" />
+          <span style="font-size:13px;color:var(--text2)">Liter</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank1Color">Tank 1 — Farbe</label>
+          <div class="settings-color-wrap">
+            <input class="settings-color" id="sTank1Color" type="color" value="#22c55e" />
+            <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank2Name">Tank 2 — Name</label>
+          <input class="settings-input" id="sTank2Name" type="text" placeholder="z.B. Diesel" maxlength="24" />
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank2Cap">Tank 2 — Kapazität</label>
+          <input class="settings-input narrow" id="sTank2Cap" type="number" min="1" max="9999" step="1" />
+          <span style="font-size:13px;color:var(--text2)">Liter</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sTank2Color">Tank 2 — Farbe</label>
+          <div class="settings-color-wrap">
+            <input class="settings-color" id="sTank2Color" type="color" value="#3b82f6" />
+            <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
+          </div>
+        </div>
       </div>
-      <div class="settings-row">
-        <label class="settings-label" for="sBattStarter">Starterbatterie — CAN-Instanz</label>
-        <input class="settings-input narrow" id="sBattStarter" type="number" min="0" max="15" step="1" value="1" />
+
+      <!-- Batterien -->
+      <div class="settings-section">
+        <div class="settings-section-title">Batterien</div>
+        <div class="settings-row">
+          <label class="settings-label" for="sBattService">Servicebatterie — CAN-Instanz</label>
+          <input class="settings-input narrow" id="sBattService" type="number" min="0" max="15" step="1" value="0" />
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sBattStarter">Starterbatterie — CAN-Instanz</label>
+          <input class="settings-input narrow" id="sBattStarter" type="number" min="0" max="15" step="1" value="1" />
+        </div>
       </div>
+
+      <div class="settings-actions">
+        <span class="settings-feedback" id="settingsFeedback"></span>
+        <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
+      </div>
+
     </div>
 
-    <div class="settings-actions">
-      <span class="settings-feedback" id="settingsFeedback"></span>
-      <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
+    <!-- Tab: Netzwerk (CAN-Bus) -->
+    <div class="tab-pane" id="stTabNetz" style="padding:16px">
+      <div id="settingsNetContent"><div class="net-empty">Lade…</div></div>
     </div>
 
   </div>
@@ -1097,7 +1164,7 @@
       <button class="ov-close" onclick="closeLightDetail()">✕</button>
     </div>
   </div>
-  <div class="ov-body" style="max-width:540px">
+  <div class="ov-body" style="max-width:860px">
 
     <div id="chSlidersWrap"></div>
 
@@ -1221,8 +1288,27 @@ function updateBattery(b) {
   $('dMaxV').textContent    = fmtV(b.max_voltage);
   $('dFull').textContent    = timeSince(b.time_since_full);
 
+  updateTopbarBatt(b.soc);
   recordHistory(b);
   if (!$('battOverlay').classList.contains('hidden')) renderCharts();
+}
+
+function updateTopbarBatt(soc) {
+  const fill = $('topbarBattFill');
+  const pct  = $('topbarBattPct');
+  const wrap = $('topbarBatt');
+  if (!fill) return;
+  if (soc == null) {
+    fill.setAttribute('width', '0');
+    if (pct)  pct.textContent = '--%';
+    if (wrap) wrap.style.color = 'var(--text3)';
+    return;
+  }
+  const v = Math.max(0, Math.min(100, soc));
+  fill.setAttribute('width', String((v / 100 * 15).toFixed(1)));
+  const color = v >= 50 ? 'var(--green)' : v >= 20 ? 'var(--yellow)' : 'var(--red)';
+  if (wrap) wrap.style.color = color;
+  if (pct)  pct.textContent = Math.round(v) + '%';
 }
 
 // ── Tanks ──────────────────────────────────────────────────────────────────
@@ -1674,19 +1760,20 @@ function closeNetwork() {
 async function fetchNetwork() {
   try {
     const data = await fetch('/api/network').then(r => r.json());
-    renderNetwork(data);
+    renderNetworkInto($('netContent'), data);
   } catch(_) {
-    $('netContent').innerHTML = '<div class="net-empty">Keine Verbindung</div>';
+    const el = $('netContent');
+    if (el) el.innerHTML = '<div class="net-empty">Keine Verbindung</div>';
   }
 }
 
-function renderNetwork(entries) {
+function renderNetworkInto(el, entries) {
+  if (!el) return;
   if (!entries.length) {
-    $('netContent').innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
+    el.innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
     return;
   }
 
-  // Group by src
   const bySource = {};
   entries.forEach(e => {
     if (!bySource[e.src]) bySource[e.src] = [];
@@ -1724,7 +1811,7 @@ function renderNetwork(entries) {
     </div>`;
   }).join('');
 
-  $('netContent').innerHTML = `<div class="net-grid">${cards}</div>`;
+  el.innerHTML = `<div class="net-grid">${cards}</div>`;
 }
 
 // ── Alarme ─────────────────────────────────────────────────────────────────
@@ -2004,7 +2091,35 @@ async function saveRules() {
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
-function _showSettingsPanel() {
+let _settingsNetTimer = null;
+
+function switchSettingsTab(name) {
+  ['Einstell', 'Netz'].forEach(t => {
+    const pane = $(`stTab${t}`);
+    const btn  = $(`stTab${t}Btn`);
+    const active = (t === 'Einstell' ? 'einstell' : 'netz') === name;
+    pane?.classList.toggle('active', active);
+    btn?.classList.toggle('active', active);
+  });
+  if (name === 'netz') {
+    fetchSettingsNetwork();
+    if (!_settingsNetTimer) _settingsNetTimer = setInterval(fetchSettingsNetwork, 5000);
+  } else {
+    clearInterval(_settingsNetTimer); _settingsNetTimer = null;
+  }
+}
+
+async function fetchSettingsNetwork() {
+  try {
+    const data = await fetch('/api/network').then(r => r.json());
+    renderNetworkInto($('settingsNetContent'), data);
+  } catch(_) {
+    const el = $('settingsNetContent');
+    if (el) el.innerHTML = '<div class="net-empty">Keine Verbindung</div>';
+  }
+}
+
+function _showSettingsPanel(tab) {
   $('sTank1Name').value   = tanksConfig.tank1?.name ?? '';
   $('sTank1Cap').value    = tanksConfig.tank1?.capacity_l ?? '';
   $('sTank1Color').value  = tanksConfig.tank1?.color ?? '#22c55e';
@@ -2015,15 +2130,17 @@ function _showSettingsPanel() {
   $('sBattStarter').value = batteriesConfig.starter_instance ?? 1;
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
+  switchSettingsTab(tab || 'einstell');
   $('settingsOverlay').classList.remove('hidden');
 }
 
-function openSettings() {
+function openSettings(tab) {
   history.pushState({ overlay: 'settings' }, '', '#settings');
-  _showSettingsPanel();
+  _showSettingsPanel(tab);
 }
 
 function closeSettings() {
+  clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   $('settingsOverlay').classList.add('hidden');
   if (location.hash === '#settings') history.back();
 }
@@ -2266,6 +2383,125 @@ function setConnState(state) {
   else                { dot.className='conn-dot';       lbl.textContent='Getrennt'; }
 }
 
+// ── Ladeströme ─────────────────────────────────────────────────────────────
+
+const CHARGE_SOURCES = [
+  { key: 'charger',    label: 'Ladegerät',     color: '#3b82f6', get: d => d.charger?.power },
+  { key: 'solar1',     label: 'Solar 1',       color: '#eab308', get: d => d.solar?.power },
+  { key: 'solar2',     label: 'Solar 2',       color: '#f97316', get: d => d.solar2?.power },
+  { key: 'solar3',     label: 'Solar 3',       color: '#f59e0b', get: d => d.solar3?.power },
+  { key: 'alternator', label: 'Lichtmaschine', color: '#06b6d4', get: d => d.alternator?.power },
+  { key: 'wind',       label: 'Wind / Hydro',  color: '#22c55e', get: d => d.wind?.power },
+];
+
+const chargeHist = [];   // [{ts, charger, solar1, solar2, solar3, alternator, wind}, ...]
+const CHARGE_HIST_MAX = 25000;
+let chargeRange    = 'live';
+let _lastChargeActive = [];
+
+function setChargeRange(range) {
+  chargeRange = range;
+  ['Live','24h','7d'].forEach(r => {
+    const key = r === 'Live' ? 'live' : r === '24h' ? '24h' : '7d';
+    $(`cpBtn${r}`)?.classList.toggle('active', key === range);
+  });
+  reRenderChargePie();
+}
+
+function reRenderChargePie() {
+  if (chargeRange === 'live') {
+    renderChargePie(_lastChargeActive, false);
+    return;
+  }
+  const cutoffSec = chargeRange === '24h' ? 86400 : 604800;
+  const cutoff    = Date.now() / 1000 - cutoffSec;
+  const window    = chargeHist.filter(e => e.ts >= cutoff);
+
+  if (!window.length) { renderChargePie([], false); return; }
+
+  // Durchschnitt nur über Einträge mit Wert > 0 je Quelle
+  const sums = {}, counts = {};
+  window.forEach(e => {
+    CHARGE_SOURCES.forEach(s => {
+      if (e[s.key] > 0) {
+        sums[s.key]   = (sums[s.key]   || 0) + e[s.key];
+        counts[s.key] = (counts[s.key] || 0) + 1;
+      }
+    });
+  });
+  const active = CHARGE_SOURCES
+    .map(s => ({ label: s.label, color: s.color, watts: counts[s.key] ? sums[s.key] / counts[s.key] : 0 }))
+    .filter(s => s.watts > 0);
+  renderChargePie(active, true);
+}
+
+function renderChargePie(active, isAvg) {
+  const card = $('chargeSourceCard');
+  if (!card) return;
+  if (!active.length) {
+    if (chargeRange === 'live') card.style.display = 'none';
+    return;
+  }
+  card.style.display = '';
+
+  const canvas = $('chargeSourceChart');
+  const dpr = window.devicePixelRatio || 1;
+  const S = 88;
+  canvas.width  = S * dpr;
+  canvas.height = S * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const total = active.reduce((s, x) => s + x.watts, 0);
+  const cx = S / 2, cy = S / 2, R = 38, r = 22;
+  let angle = -Math.PI / 2;
+
+  ctx.clearRect(0, 0, S, S);
+
+  active.forEach(src => {
+    const sweep = (src.watts / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, angle, angle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = src.color;
+    ctx.fill();
+    angle += sweep;
+  });
+
+  // Loch
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#263348';
+  ctx.fill();
+
+  // Mitte: Gesamtleistung (mit Ø-Zeichen bei Durchschnitt)
+  const totalStr = total >= 1000 ? (total / 1000).toFixed(1) + ' kW' : Math.round(total) + ' W';
+  ctx.fillStyle = '#f1f5f9';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (isAvg) {
+    ctx.font = '700 9px -apple-system,sans-serif';
+    ctx.fillText('Ø', cx, cy - 7);
+    ctx.font = `700 ${total >= 1000 ? 9 : 11}px -apple-system,sans-serif`;
+    ctx.fillText(totalStr, cx, cy + 5);
+  } else {
+    ctx.font = `700 ${total >= 1000 ? 10 : 12}px -apple-system,sans-serif`;
+    ctx.fillText(totalStr, cx, cy);
+  }
+
+  // Legende
+  $('chargeSourceLegend').innerHTML = active.map(s => {
+    const pct = Math.round(s.watts / total * 100);
+    return `<div class="charge-src-row">
+      <div class="charge-src-dot" style="background:${s.color}"></div>
+      <span class="charge-src-label">${s.label}</span>
+      <span class="charge-src-val">${isAvg ? 'Ø ' : ''}${Math.round(s.watts)} W</span>
+      <span class="charge-src-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
 function updatePowerSources(data) {
   let anyVisible = false;
 
@@ -2282,6 +2518,18 @@ function updatePowerSources(data) {
   if (data.alternator?.power != null) showSource('srcAlt',   'altW',   data.alternator.power);
 
   $('srcRow').classList.toggle('hidden', !anyVisible);
+
+  // History aufzeichnen
+  const entry = { ts: Date.now() / 1000 };
+  CHARGE_SOURCES.forEach(s => { entry[s.key] = s.get(data) ?? 0; });
+  chargeHist.push(entry);
+  if (chargeHist.length > CHARGE_HIST_MAX) chargeHist.shift();
+
+  _lastChargeActive = CHARGE_SOURCES
+    .map(s => ({ label: s.label, color: s.color, watts: s.get(data) ?? 0 }))
+    .filter(s => s.watts > 0);
+
+  reRenderChargePie();
 }
 
 function handleData(data) {
