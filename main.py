@@ -16,7 +16,7 @@ from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 from connectivity import ConnectivityMonitor
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 
 logging.basicConfig(
     level=logging.INFO,

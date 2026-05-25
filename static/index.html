@@ -1406,10 +1406,11 @@ function renderChartLegend(pts, scrubTs) {
 
 function fmtAxisTime(ts, nowTs) {
   const d = nowTs - ts;
-  if (d < 90)    return 'jetzt';
-  if (d < 3600)  return `-${Math.round(d/60)}m`;
-  if (d < 86400) return `-${Math.round(d/3600)}h`;
-  return `-${Math.round(d/86400)}T`;
+  if (d < 30) return 'jetzt';
+  const date = new Date(ts * 1000);
+  if (d < 86400)
+    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
 function fmtYVal(v, key) {
