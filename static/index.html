@@ -603,6 +603,42 @@
     }
     .bms-pack-val { font-size: 17px; font-weight: 600; margin-top: 3px; }
 
+    /* ── Connectivity icon dot ── */
+    .conn-inet-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+    .conn-inet-dot {
+      position: absolute; bottom: -1px; right: -1px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text3); border: 1.5px solid var(--surface);
+      transition: background .4s;
+    }
+
+    /* ── Connectivity overlay ── */
+    .conn-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3);
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .conn-active-banner {
+      background: var(--surface2); border-radius: var(--radius);
+      padding: 16px 18px; margin-bottom: 16px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .conn-active-type {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .conn-active-icon { font-size: 22px; line-height: 1; }
+    .conn-active-label { font-size: 20px; font-weight: 700; }
+    .conn-fallback { font-size: 13px; color: var(--text2); }
+    .conn-signal-bar-wrap {
+      height: 6px; background: var(--surface2); border-radius: 3px;
+      overflow: hidden; margin-bottom: 3px;
+    }
+    .conn-signal-bar-fill {
+      height: 100%; border-radius: 3px;
+      transition: width .6s ease, background .5s;
+    }
+
     /* SOC progress bar */
     .soc-bar-wrap {
       height: 7px; background: var(--surface2); border-radius: 4px;
@@ -624,6 +660,17 @@
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
+    </button>
+    <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
+      <div class="conn-inet-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M1.5 8.5a12 12 0 0 1 21 0"/>
+          <path d="M5 12.5a7 7 0 0 1 14 0"/>
+          <path d="M8.5 16.5a3 3 0 0 1 7 0"/>
+          <circle cx="12" cy="20" r="1" fill="currentColor"/>
+        </svg>
+        <div class="conn-inet-dot" id="connInetDot"></div>
+      </div>
     </button>
     <button class="icon-btn" onclick="openNetwork()" title="Netzwerk">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1007,6 +1054,25 @@
   </div>
   <div class="ov-body" id="netContent">
     <div class="net-empty">Lade…</div>
+  </div>
+</div>
+
+<!-- ── Internet-Verbindung Overlay ───────────────────────────────────────── -->
+<div id="connInetOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M1.5 8.5a12 12 0 0 1 21 0"/>
+        <path d="M5 12.5a7 7 0 0 1 14 0"/>
+        <path d="M8.5 16.5a3 3 0 0 1 7 0"/>
+        <circle cx="12" cy="20" r="1" fill="currentColor"/>
+      </svg>
+      Internet-Verbindung
+    </div>
+    <button class="ov-close" onclick="closeConnectivity()">✕</button>
+  </div>
+  <div class="ov-body" id="connInetBody" style="max-width:600px">
+    <div style="color:var(--text3);text-align:center;padding:60px 20px">Lade…</div>
   </div>
 </div>
 
@@ -1995,6 +2061,189 @@ async function saveSettings() {
   btn.disabled = false;
 }
 
+// ── Connectivity ───────────────────────────────────────────────────────────
+
+let _connData = {};
+let _connOverlayTimer = null;
+
+function fmtUptime(s) {
+  if (!s) return '--';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h > 24) return `${Math.floor(h/24)} T ${h % 24} h`;
+  if (h > 0)  return `${h} h ${m} min`;
+  return `${m} min`;
+}
+function fmtBps(bps) {
+  if (bps == null || bps <= 0) return '0 bps';
+  if (bps >= 1e6) return (bps/1e6).toFixed(1) + ' Mbps';
+  if (bps >= 1e3) return (bps/1e3).toFixed(0) + ' kbps';
+  return Math.round(bps) + ' bps';
+}
+
+async function fetchConnectivity() {
+  try {
+    _connData = await fetch('/api/connectivity').then(r => r.json());
+    updateConnectivityIcon(_connData);
+    if (!$('connInetOverlay').classList.contains('hidden')) renderConnectivity(_connData);
+  } catch(_) {}
+}
+
+function openConnectivity() {
+  history.pushState({ overlay: 'connectivity' }, '', '#connectivity');
+  $('connInetOverlay').classList.remove('hidden');
+  renderConnectivity(_connData);
+  fetchConnectivity();
+  _connOverlayTimer = setInterval(fetchConnectivity, 20000);
+}
+function closeConnectivity() {
+  $('connInetOverlay').classList.add('hidden');
+  clearInterval(_connOverlayTimer); _connOverlayTimer = null;
+  if (location.hash === '#connectivity') history.back();
+}
+
+function updateConnectivityIcon(d) {
+  const dot = $('connInetDot');
+  if (!dot) return;
+  if (!d.router) { dot.style.background = 'var(--text3)'; return; }
+  const r  = d.router;
+  const sl = d.starlink ?? {};
+  let color;
+  if (r.active_type === 'wired') {
+    color = sl.state === 'CONNECTED' ? 'var(--green)' : 'var(--yellow)';
+  } else if (r.mobile_up) {
+    const sig = r.mobile?.signal_pct ?? 0;
+    color = sig >= 60 ? 'var(--green)' : sig >= 30 ? 'var(--yellow)' : 'var(--red)';
+  } else {
+    color = 'var(--red)';
+  }
+  dot.style.background = color;
+}
+
+function renderConnectivity(d) {
+  const body = $('connInetBody');
+  if (!d.router) {
+    body.innerHTML = '<div style="color:var(--text3);text-align:center;padding:60px 20px">Warte auf ersten Poll…</div>';
+    return;
+  }
+  const r   = d.router;
+  const sl  = d.starlink ?? {};
+  const mob = r.mobile ?? {};
+
+  const isWan     = r.active_type === 'wired';
+  const slOk      = sl.state === 'CONNECTED';
+  const slColor   = slOk ? 'var(--green)' : 'var(--yellow)';
+  const pingColor = sl.ping_ms < 30 ? 'var(--green)' : sl.ping_ms < 80 ? 'var(--yellow)' : 'var(--red)';
+  const sigPct    = mob.signal_pct ?? 0;
+  const sigColor  = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
+
+  const activeLabel = isWan ? 'Starlink (WAN)' : `Mobilfunk (${mob.operator})`;
+  const activeIcon  = isWan ? '🛰' : '📶';
+  const fallback    = isWan && r.mobile_up
+    ? `Fallback bereit: Mobilfunk — ${mob.operator} ${mob.ntype}`
+    : !isWan && r.wired_up
+    ? 'Failover bereit: Starlink (WAN)'
+    : '';
+
+  const slObs   = sl.obstructed ? `${((sl.fraction_obstructed ?? 0) * 100).toFixed(1)} %` : 'keine';
+  const slDrop  = sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--';
+  const alertEntries = Object.keys(sl.alerts ?? {});
+  const alertHtml = alertEntries.length
+    ? alertEntries.map(k => `<div class="bms-flag warn">! ${k.replace(/_/g,' ')}</div>`).join('')
+    : '<div class="bms-flag ok">✓ Keine Alarme</div>';
+
+  const swShort = (sl.software || '').split('.').pop() || sl.software || '--';
+
+  body.innerHTML = `
+    <div class="conn-active-banner">
+      <div style="font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase">Aktiver Uplink</div>
+      <div class="conn-active-type">
+        <span class="conn-active-icon">${activeIcon}</span>
+        <span class="conn-active-label" style="color:${isWan ? slColor : sigColor}">${activeLabel}</span>
+      </div>
+      ${fallback ? `<div class="conn-fallback">${fallback}</div>` : ''}
+    </div>
+
+    <div class="conn-section-title">Starlink Mini</div>
+    <div class="bd-sec-grid" style="margin-bottom:12px">
+      <div class="bd-sec-item">
+        <div class="bd-label">Status</div>
+        <div class="bd-sec-val" style="color:${slColor}">${sl.state ?? '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Latenz</div>
+        <div class="bd-sec-val" style="color:${pingColor}">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Paketverlust</div>
+        <div class="bd-sec-val">${slDrop}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Download</div>
+        <div class="bd-sec-val">${fmtBps(sl.downlink_bps)}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Upload</div>
+        <div class="bd-sec-val">${fmtBps(sl.uplink_bps)}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Obstruktion</div>
+        <div class="bd-sec-val">${slObs}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Uptime</div>
+        <div class="bd-sec-val">${fmtUptime(sl.uptime_s)}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Software</div>
+        <div class="bd-sec-val" style="font-size:12px;color:var(--text2)">${swShort}</div>
+      </div>
+    </div>
+    <div class="bms-flags-row" style="margin-bottom:20px">${alertHtml}</div>
+
+    <div class="conn-section-title">Mobilfunk — SIM 1</div>
+    <div class="bd-sec-grid" style="margin-bottom:10px">
+      <div class="bd-sec-item">
+        <div class="bd-label">Anbieter</div>
+        <div class="bd-sec-val">${mob.operator || '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Typ</div>
+        <div class="bd-sec-val" style="font-size:13px">${mob.conntype || '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Band</div>
+        <div class="bd-sec-val" style="font-size:13px">${mob.band || '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Qualität</div>
+        <div class="bd-sec-val" style="color:${sigColor}">${sigPct} %</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">RSSI / RSRP</div>
+        <div class="bd-sec-val" style="font-size:13px">${mob.rssi ?? '--'} / ${mob.rsrp ?? '--'} dBm</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">RSRQ / SINR</div>
+        <div class="bd-sec-val" style="font-size:13px">${mob.rsrq ?? '--'} / ${mob.sinr ?? '--'} dB</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Temperatur</div>
+        <div class="bd-sec-val">${mob.temperature != null ? mob.temperature + ' °C' : '--'}</div>
+      </div>
+      <div class="bd-sec-item">
+        <div class="bd-label">Status</div>
+        <div class="bd-sec-val" style="font-size:13px;color:var(--green)">${mob.state || '--'}</div>
+      </div>
+    </div>
+    <div class="conn-signal-bar-wrap">
+      <div class="conn-signal-bar-fill" style="width:${sigPct}%;background:${sigColor}"></div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);text-align:right;margin-bottom:20px">${sigPct} % Signalqualität</div>
+    <div style="font-size:11px;color:var(--text3);text-align:right">
+      Aktualisiert: ${d.ts ? new Date(d.ts * 1000).toLocaleTimeString('de-DE') : '--'}
+    </div>`;
+}
+
 // ── WebSocket ──────────────────────────────────────────────────────────────
 
 let ws = null, reconnectTimer = null;
@@ -2262,7 +2511,13 @@ window.addEventListener('popstate', () => {
       lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },
       network:  () => { $('networkOverlay').classList.remove('hidden'); fetchNetwork(); netTimer = setInterval(fetchNetwork, 5000); },
-      settings: () => _showSettingsPanel(),
+      settings:     () => _showSettingsPanel(),
+      connectivity: () => {
+        $('connInetOverlay').classList.remove('hidden');
+        renderConnectivity(_connData);
+        fetchConnectivity();
+        _connOverlayTimer = setInterval(fetchConnectivity, 20000);
+      },
     };
     if (map[hash]) map[hash]();
   }
@@ -2272,6 +2527,8 @@ window.addEventListener('popstate', () => {
 
 loadPresets();
 connect();
+fetchConnectivity();
+setInterval(fetchConnectivity, 25000);
 </script>
 </body>
 </html>

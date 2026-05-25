@@ -14,8 +14,9 @@ from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
+from connectivity import ConnectivityMonitor
 
-VERSION = '1.4.1'
+VERSION = '1.5.0'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +31,19 @@ STATIC_DIR   = BASE_DIR / 'static'
 state   = BoatState()
 can_if  = CanInterface(channel='can0', state=state)
 alarms  = AlarmEngine()
+
+_CONN_FILE = BASE_DIR / 'connectivity.json'
+if _CONN_FILE.exists():
+    _conn_cfg  = json.loads(_CONN_FILE.read_text())
+    conn_mon   = ConnectivityMonitor(
+        router_host  = _conn_cfg.get('router_host',   'https://192.168.1.1'),
+        router_user  = _conn_cfg.get('router_user',   'admin'),
+        router_pass  = _conn_cfg.get('router_pass',   ''),
+        starlink_host= _conn_cfg.get('starlink_host', '192.168.100.1:9200'),
+    )
+else:
+    conn_mon = None
+    log.warning('connectivity.json nicht gefunden — Connectivity-Monitor deaktiviert')
 
 def _apply_presets_config():
     data = json.loads(PRESETS_FILE.read_text())
@@ -77,6 +91,9 @@ async def lifespan(_app: FastAPI):
     t = threading.Thread(target=can_if.run, daemon=True, name='can-reader')
     t.start()
     log.info("CAN-Reader gestartet")
+    if conn_mon:
+        conn_mon.start()
+        log.info("Connectivity-Monitor gestartet")
     yield
     can_if.stop()
     log.info("CAN-Reader gestoppt")
@@ -194,6 +211,13 @@ async def delete_alarm(alarm_id: str):
     if not alarms.delete(alarm_id):
         raise HTTPException(404)
     return {'ok': True}
+
+@app.get('/api/connectivity')
+async def get_connectivity():
+    if not conn_mon:
+        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
+    return conn_mon.get_status()
+
 
 @app.get('/api/alarms/rules')
 async def get_alarm_rules():
