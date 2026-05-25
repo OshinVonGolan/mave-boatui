@@ -415,54 +415,71 @@
 
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
 
-    /* ── Light detail ── */
-    .light-ch-grid {
-      display: grid; grid-template-columns: 1fr; gap: 0;
+    /* ── Light detail — channel cards ── */
+    .ch-card {
+      background: var(--surface2); border-radius: 14px; padding: 16px 18px;
+      margin-bottom: 10px;
     }
-    @media (min-width: 500px) {
-      .light-ch-grid { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+    .ch-card-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
     }
-    .ch-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 7px 0; border-bottom: 1px solid var(--surface2);
-    }
-    .ch-row:last-child { border-bottom: none; }
-    .ch-num {
+    .ch-card-num {
       font-size: 10px; font-weight: 700; color: var(--text3);
-      background: var(--surface2); border-radius: 4px;
-      padding: 2px 5px; flex-shrink: 0; min-width: 22px; text-align: center;
+      background: var(--border); border-radius: 4px; padding: 2px 7px; flex-shrink: 0;
     }
-    .ch-slider {
-      flex: 1; -webkit-appearance: none; appearance: none;
-      height: 6px; border-radius: 3px; outline: none; cursor: pointer;
-      background: linear-gradient(to right, var(--accent) 0%, var(--surface2) 0%);
+    .ch-card-name { flex: 1; font-size: 15px; font-weight: 600; color: var(--text); }
+    .ch-card-val {
+      font-size: 22px; font-weight: 700; color: var(--accent);
+      font-variant-numeric: tabular-nums; min-width: 48px; text-align: right;
     }
-    .ch-slider::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%;
-      background: var(--accent); border: 2px solid #fff;
-      box-shadow: 0 1px 6px rgba(0,0,0,.55); cursor: pointer;
+    .ch-slider-big {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      height: 10px; border-radius: 5px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--accent) 0%, var(--border) 0%);
     }
-    .ch-slider::-moz-range-thumb {
-      width: 24px; height: 24px; border-radius: 50%;
-      background: var(--accent); border: 2px solid #fff; cursor: pointer; border: none;
+    .ch-slider-big::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,.5); cursor: pointer;
     }
-    .ch-val {
-      font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums;
-      width: 26px; text-align: right; flex-shrink: 0;
+    .ch-slider-big::-moz-range-thumb {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); border: 3px solid #fff; cursor: pointer;
     }
-    .relay-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 0;
+    .relay-card {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--surface2); border-radius: 14px; padding: 18px;
     }
-    .relay-row-label { font-size: 13px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
-    .relay-status { font-size: 11px; color: var(--text3); }
+    .relay-card-info { flex: 1; }
+    .relay-card-name { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .relay-status { font-size: 12px; color: var(--text3); }
     .relay-btn {
-      padding: 11px 36px; border-radius: 10px; font-size: 15px; font-weight: 700;
+      padding: 12px 32px; border-radius: 10px; font-size: 15px; font-weight: 700;
       cursor: pointer; font-family: inherit; border: 1px solid var(--border);
-      transition: all .15s; letter-spacing: .04em;
+      transition: all .15s; letter-spacing: .04em; flex-shrink: 0;
     }
     .relay-btn.on  { background: var(--orange); border-color: var(--orange); color: #fff; box-shadow: 0 0 0 3px rgba(249,115,22,.2); }
-    .relay-btn.off { background: var(--surface2); color: var(--text3); }
+    .relay-btn.off { background: var(--surface); color: var(--text3); }
+
+    /* ── Preset save sheet ── */
+    .preset-sheet-bg {
+      position: fixed; inset: 0; z-index: 199; background: rgba(0,0,0,.45);
+      display: none;
+    }
+    .preset-sheet {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+      background: var(--surface); border-top: 1px solid var(--border);
+      border-radius: 18px 18px 0 0; padding: 20px;
+      max-height: 75vh; overflow-y: auto; display: none;
+    }
+    .preset-sheet-handle {
+      width: 36px; height: 4px; background: var(--border);
+      border-radius: 2px; margin: 0 auto 16px;
+    }
+    .preset-sheet-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3); margin-bottom: 16px;
+    }
     .preset-save-grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
     }
@@ -562,7 +579,7 @@
     }
     .bd-soc-box {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 20px; border-right: 1px solid var(--border); min-width: 90px;
+      padding: 20px; border-right: 1px solid var(--border); flex-shrink: 0;
     }
     .bd-soc-num { font-size: 48px; font-weight: 700; line-height: 1; }
     .bd-metrics { flex: 1; display: grid; grid-template-columns: repeat(3,1fr); }
@@ -990,31 +1007,38 @@
       </svg>
       Beleuchtung
     </div>
-    <button class="ov-close" onclick="closeLightDetail()">✕</button>
-  </div>
-  <div class="ov-body" style="max-width:640px">
-
-    <div style="margin-bottom:20px">
-      <div class="light-section-title">PWM — Kanäle 1–4</div>
-      <div class="light-ch-grid" id="chSlidersWrap"></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" onclick="openPresetSave()" style="font-size:12px;padding:6px 12px;gap:5px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        Preset
+      </button>
+      <button class="ov-close" onclick="closeLightDetail()">✕</button>
     </div>
+  </div>
+  <div class="ov-body" style="max-width:540px">
 
-    <div style="margin-bottom:20px">
-      <div class="light-section-title">Lichterkette — Relais</div>
-      <div class="relay-row">
-        <div class="relay-row-label">
-          <span id="relayHint" class="relay-status">Relais offen</span>
-        </div>
-        <button class="relay-btn off" id="relayBtn" onclick="toggleRelay()">AUS</button>
+    <div id="chSlidersWrap"></div>
+
+    <div class="relay-card">
+      <div class="relay-card-info">
+        <div class="relay-card-name">Lichterkette</div>
+        <div class="relay-status" id="relayHint">Relais offen</div>
       </div>
-    </div>
-
-    <div>
-      <div class="light-section-title">Als Preset speichern</div>
-      <div class="preset-save-grid" id="presetEditList"></div>
+      <button class="relay-btn off" id="relayBtn" onclick="toggleRelay()">AUS</button>
     </div>
 
   </div>
+</div>
+
+<!-- ── Preset Save Sheet ───────────────────────────────────────────────────── -->
+<div class="preset-sheet-bg" id="presetSheetBg" onclick="closePresetSave()"></div>
+<div class="preset-sheet" id="presetSheet">
+  <div class="preset-sheet-handle"></div>
+  <div class="preset-sheet-title">Als Preset speichern</div>
+  <div class="preset-save-grid" id="presetEditList"></div>
 </div>
 
 <script>
@@ -1383,23 +1407,22 @@ function renderCharts() {
     ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
   }
 
-  // Y-axis labels (primary = first active series)
-  const primaryEntry = Object.entries(seriesYOf)[0];
-  if (primaryEntry) {
-    const [primaryKey, { lo, hi, def: pDef }] = primaryEntry;
-    ctx.fillStyle = pDef.color + 'cc';
-    ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'right';
+  // Y-axis: left = primary series, right = secondary series
+  ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+  const yAxisEntries = Object.entries(seriesYOf);
+  [[yAxisEntries[0], 'right', PAD_L - 4], [yAxisEntries[1], 'left', PAD_L + CW + 4]].forEach(([entry, align, x]) => {
+    if (!entry) return;
+    const [key, { lo, hi, def: eDef }] = entry;
+    ctx.fillStyle = eDef.color + 'bb';
+    ctx.textAlign = align;
     for (let i = 1; i <= 3; i++) {
       const v = lo + (0.95 - i / 4) / 0.9 * (hi - lo);
-      const y = PAD_T + CH * i / 4;
       ctx.textBaseline = 'middle';
-      ctx.fillText(fmtYVal(v, primaryKey), PAD_L - 4, y);
+      ctx.fillText(fmtYVal(v, key), x, PAD_T + CH * i / 4);
     }
-    // Top value
     ctx.textBaseline = 'top';
-    ctx.fillText(fmtYVal(lo + (0.95 / 0.9) * (hi - lo), primaryKey), PAD_L - 4, PAD_T);
-  }
+    ctx.fillText(fmtYVal(lo + (0.95 / 0.9) * (hi - lo), key), x, PAD_T);
+  });
 
   // Draw each series
   Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
@@ -1433,13 +1456,6 @@ function renderCharts() {
     if (!first && lastVal != null && scrubTs === null) {
       ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
-
-      ctx.fillStyle = def.color;
-      ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      const clampY = Math.max(PAD_T + 8, Math.min(H - PAD_B - 4, lastY));
-      ctx.fillText(def.fmt(lastVal), PAD_L + CW + 5, clampY);
     }
   });
 
@@ -2017,7 +2033,15 @@ function connect() {
   setConnState('warn');
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onopen    = () => { setConnState('ok'); clearTimeout(reconnectTimer); };
+  ws.onopen    = () => {
+    setConnState('ok'); clearTimeout(reconnectTimer);
+    if (histData.length === 0) {
+      fetch('/api/history').then(r => r.json()).then(hist => {
+        hist.forEach(e => histData.push(e));
+        if (!$('battOverlay').classList.contains('hidden')) renderCharts();
+      }).catch(() => {});
+    }
+  };
   ws.onmessage = ev => { try { handleData(JSON.parse(ev.data)); } catch(_) {} };
   ws.onclose = ws.onerror = () => {
     setConnState('off');
@@ -2038,21 +2062,32 @@ function openLightDetail() {
   liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))];
   lightDetailOpen = true;
   buildLightSliders();
-  renderPresetEditList();
   history.pushState({ overlay: 'lights' }, '', '#lights');
   $('lightOverlay').classList.remove('hidden');
 }
 
 function closeLightDetail() {
+  closePresetSave();
   lightDetailOpen = false;
   $('lightOverlay').classList.add('hidden');
   if (location.hash === '#lights') history.back();
 }
 
+function openPresetSave() {
+  renderPresetEditList();
+  $('presetSheet').style.display = 'block';
+  $('presetSheetBg').style.display = 'block';
+}
+
+function closePresetSave() {
+  $('presetSheet').style.display = 'none';
+  $('presetSheetBg').style.display = 'none';
+}
+
 function sliderFill(slider, v) {
   const pct = (v / 255 * 100).toFixed(1);
   slider.style.background =
-    `linear-gradient(to right, var(--accent) 0%, var(--accent) ${pct}%, var(--border) ${pct}%, var(--border) 100%)`;
+    `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
 }
 
 function buildLightSliders() {
@@ -2060,14 +2095,16 @@ function buildLightSliders() {
   wrap.innerHTML = '';
   for (let i = 0; i < 4; i++) {
     const v = liveChannels[i] ?? 0;
-    const row = document.createElement('div');
-    row.className = 'ch-row';
-    row.innerHTML = `
-      <span class="ch-num" style="min-width:18px">${i + 1}</span>
-      <span style="font-size:12px;color:var(--text2);min-width:130px;flex-shrink:0">${CH_NAMES[i]}</span>
-      <input class="ch-slider" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">
-      <span class="ch-val" id="chv${i}">${v}</span>`;
-    wrap.appendChild(row);
+    const card = document.createElement('div');
+    card.className = 'ch-card';
+    card.innerHTML = `
+      <div class="ch-card-header">
+        <span class="ch-card-num">${i + 1}</span>
+        <span class="ch-card-name">${CH_NAMES[i]}</span>
+        <span class="ch-card-val" id="chv${i}">${Math.round(v / 255 * 100)}%</span>
+      </div>
+      <input class="ch-slider-big" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">`;
+    wrap.appendChild(card);
     const slider = $(`chs${i}`);
     sliderFill(slider, v);
     slider.addEventListener('pointerdown', () => { _dragging = true; });
@@ -2075,7 +2112,7 @@ function buildLightSliders() {
     slider.addEventListener('input', () => {
       const val = parseInt(slider.value);
       liveChannels[i] = val;
-      $(`chv${i}`).textContent = val;
+      $(`chv${i}`).textContent = Math.round(val / 255 * 100) + '%';
       sliderFill(slider, val);
       throttleSend();
     });
@@ -2124,7 +2161,7 @@ function syncLightOverlay(channels) {
     const v = channels[i] ?? 0;
     s.value = v;
     sliderFill(s, v);
-    $(`chv${i}`).textContent = v;
+    $(`chv${i}`).textContent = Math.round(v / 255 * 100) + '%';
   }
   updateRelayBtn();
 }
@@ -2206,7 +2243,7 @@ window.addEventListener('popstate', () => {
   if (hash) {
     const map = {
       battery:  () => { $('battOverlay').classList.remove('hidden'); if (_lastBms) updateBms(_lastBms); setTimeout(renderCharts, 50); },
-      lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); renderPresetEditList(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
+      lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },
       network:  () => { $('networkOverlay').classList.remove('hidden'); fetchNetwork(); netTimer = setInterval(fetchNetwork, 5000); },
       settings: () => _showSettingsPanel(),

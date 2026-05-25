@@ -3,6 +3,8 @@ import asyncio
 import json
 import logging
 import threading
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 
-VERSION = '1.3.3'
+VERSION = '1.4.0'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,11 +42,20 @@ def _apply_presets_config():
 _apply_presets_config()
 
 ws_clients: set[WebSocket] = set()
+history: deque[dict] = deque(maxlen=50000)
 
 
 async def broadcast(data: dict):
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
     alarms.check(check_data)
+    batt = data.get('battery', {})
+    entry: dict = {'ts': time.time()}
+    for key in ('soc', 'voltage', 'current'):
+        v = batt.get(key)
+        if v is not None:
+            entry[key] = v
+    if len(entry) > 1:
+        history.append(entry)
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
     dead = set()
     for ws in list(ws_clients):
@@ -146,6 +157,11 @@ async def update_preset(preset_id: int, body: dict):
     PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
     log.info("Preset %d aktualisiert: '%s'", preset_id, presets[preset_id]['name'])
     return data
+
+
+@app.get('/api/history')
+async def get_history():
+    return list(history)
 
 
 @app.get('/api/status')
