@@ -2110,13 +2110,131 @@ function switchSettingsTab(name) {
 }
 
 async function fetchSettingsNetwork() {
+  const el = $('settingsNetContent');
+  if (!el) return;
   try {
-    const data = await fetch('/api/network').then(r => r.json());
-    renderNetworkInto($('settingsNetContent'), data);
+    const [netData, connData] = await Promise.all([
+      fetch('/api/network').then(r => r.json()).catch(() => []),
+      fetch('/api/connectivity').then(r => r.json()).catch(() => null),
+    ]);
+    renderSettingsNetwork(el, netData, connData);
   } catch(_) {
-    const el = $('settingsNetContent');
-    if (el) el.innerHTML = '<div class="net-empty">Keine Verbindung</div>';
+    el.innerHTML = '<div class="net-empty">Keine Verbindung</div>';
   }
+}
+
+function renderSettingsNetwork(el, netData, connData) {
+  let html = '';
+
+  // ── Internet-Sektion ──────────────────────────────────────────────────────
+  if (connData?.router) {
+    const r   = connData.router;
+    const sl  = connData.starlink ?? {};
+    const mob = r.mobile ?? {};
+
+    const isWan   = r.active_type === 'wired';
+    const slOk    = sl.state === 'CONNECTED';
+    const sigPct  = mob.signal_pct ?? 0;
+
+    const routerDot  = r.wired_up  ? 'ok'  : 'old';
+    const starlinkDot = sl.reachable ? (slOk ? 'ok' : 'warn') : 'old';
+    const mobileDot  = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old';
+
+    const slColor  = slOk ? 'var(--green)' : 'var(--yellow)';
+    const sigColor = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
+
+    html += `
+    <div class="settings-section-title" style="margin-bottom:12px">Internet</div>
+    <div class="net-grid" style="margin-bottom:20px">
+
+      <div class="net-device-card">
+        <div class="net-device-header">
+          <div class="net-device-dot ${routerDot}"></div>
+          <div class="net-device-name">RUTX50 Router</div>
+          <div class="net-device-src">${isWan ? 'WAN aktiv' : 'Mobile aktiv'}</div>
+        </div>
+        <div class="net-pgn-list">
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Aktiver Uplink</div>
+            <div class="net-pgn-iv">${isWan ? '🛰 Starlink' : '📶 Mobilfunk'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">WAN (Starlink)</div>
+            <div class="net-pgn-iv">${r.wired_up ? 'verbunden' : 'getrennt'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Mobilfunk</div>
+            <div class="net-pgn-iv">${r.mobile_up ? 'verbunden' : 'getrennt'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Uptime</div>
+            <div class="net-pgn-iv">${fmtUptime(r.active_uptime)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="net-device-card">
+        <div class="net-device-header">
+          <div class="net-device-dot ${starlinkDot}"></div>
+          <div class="net-device-name">Starlink Mini</div>
+          <div class="net-device-src" style="color:${slColor}">${sl.state ?? '--'}</div>
+        </div>
+        <div class="net-pgn-list">
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Latenz</div>
+            <div class="net-pgn-iv">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Download</div>
+            <div class="net-pgn-iv">${fmtBps(sl.downlink_bps)}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Upload</div>
+            <div class="net-pgn-iv">${fmtBps(sl.uplink_bps)}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Paketverlust</div>
+            <div class="net-pgn-iv">${sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--'}</div>
+          </div>
+          ${sl.error ? `<div class="net-pgn-row"><div class="net-pgn-desc" style="color:var(--red)">${sl.error}</div></div>` : ''}
+        </div>
+      </div>
+
+      <div class="net-device-card">
+        <div class="net-device-header">
+          <div class="net-device-dot ${mobileDot}"></div>
+          <div class="net-device-name">Mobilfunk — ${mob.operator || 'SIM 1'}</div>
+          <div class="net-device-src">${mob.ntype || ''}</div>
+        </div>
+        <div class="net-pgn-list">
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Verbindungstyp</div>
+            <div class="net-pgn-iv">${mob.conntype || '--'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Signalqualität</div>
+            <div class="net-pgn-iv" style="color:${sigColor}">${sigPct} %</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">Band</div>
+            <div class="net-pgn-iv">${mob.band || '--'}</div>
+          </div>
+          <div class="net-pgn-row">
+            <div class="net-pgn-desc">RSRP / SINR</div>
+            <div class="net-pgn-iv">${mob.rsrp ?? '--'} / ${mob.sinr ?? '--'} dB</div>
+          </div>
+        </div>
+      </div>
+
+    </div>`;
+  }
+
+  // ── CAN-Bus Geräte ────────────────────────────────────────────────────────
+  html += `<div class="settings-section-title" style="margin-bottom:12px">CAN-Bus Geräte</div>`;
+  el.innerHTML = html;
+  const canWrap = document.createElement('div');
+  el.appendChild(canWrap);
+  renderNetworkInto(canWrap, netData);
 }
 
 function _showSettingsPanel(tab) {
