@@ -544,31 +544,34 @@
     .bms-cell .cell-temp { font-size: 13px; color: var(--text2); margin-top: 6px; }
 
     /* ── Battery detail layout ── */
+    .bd-layout {
+      display: grid; grid-template-columns: 1fr; gap: 16px;
+      max-width: 1400px; margin: 0 auto;
+    }
+    @media (min-width: 860px) {
+      .bd-layout { grid-template-columns: 280px 1fr; align-items: start; }
+    }
     .bd-hero {
       display: flex; gap: 0; background: var(--surface2);
       border-radius: var(--radius); overflow: hidden; margin-bottom: 12px;
     }
     .bd-soc-box {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 20px 20px; border-right: 1px solid var(--border); min-width: 100px;
+      padding: 20px; border-right: 1px solid var(--border); min-width: 90px;
     }
-    .bd-soc-num { font-size: 52px; font-weight: 700; line-height: 1; }
+    .bd-soc-num { font-size: 48px; font-weight: 700; line-height: 1; }
     .bd-metrics { flex: 1; display: grid; grid-template-columns: repeat(3,1fr); }
-    .bd-metric {
-      padding: 16px; border-right: 1px solid var(--border);
-    }
+    .bd-metric { padding: 14px 12px; border-right: 1px solid var(--border); }
     .bd-metric:last-child { border-right: none; }
     .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
-    .bd-val { font-size: 24px; font-weight: 700; line-height: 1.1; }
+    .bd-val { font-size: 22px; font-weight: 700; line-height: 1.1; }
     .bd-unit { font-size: 12px; color: var(--text2); margin-left: 2px; font-weight: 400; }
     .bd-sec-grid {
-      display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 16px;
+      display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 0;
     }
-    @media (max-width:440px) { .bd-metrics { grid-template-columns: repeat(2,1fr); } .bd-sec-grid { grid-template-columns: repeat(2,1fr); } }
-    .bd-sec-item {
-      background: var(--surface2); border-radius: 8px; padding: 10px 12px;
-    }
-    .bd-sec-val { font-size: 17px; font-weight: 600; margin-top: 3px; }
+    @media (min-width: 860px) { .bd-sec-grid { grid-template-columns: repeat(2,1fr); } }
+    .bd-sec-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
+    .bd-sec-val { font-size: 16px; font-weight: 600; margin-top: 3px; }
 
     /* BMS pack row */
     .bms-pack-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
@@ -753,7 +756,9 @@
     </div>
     <button class="ov-close" onclick="closeBattDetail()">✕</button>
   </div>
-  <div class="ov-body" style="max-width:700px">
+  <div class="ov-body">
+  <div class="bd-layout">
+  <div class="bd-left">
 
     <!-- Hero: SOC + main metrics -->
     <div class="bd-hero">
@@ -804,6 +809,8 @@
         <div class="bd-sec-val"><span id="dMaxV">--</span><span class="bd-unit">V</span></div>
       </div>
     </div>
+  </div><!-- bd-left -->
+  <div class="bd-right">
 
     <!-- Combined chart -->
     <div class="chart-card" style="margin-top:16px">
@@ -822,7 +829,7 @@
         </div>
       </div>
       <div class="chart-legend" id="chartLegend"></div>
-      <canvas class="chart" id="chartMain" style="height:160px"></canvas>
+      <canvas class="chart" id="chartMain" style="height:220px"></canvas>
     </div>
 
     <!-- BMS section -->
@@ -836,7 +843,9 @@
       </div>
     </div>
 
-  </div>
+  </div><!-- bd-right -->
+  </div><!-- bd-layout -->
+  </div><!-- ov-body -->
 </div>
 
 <!-- ── Alarm Overlay ──────────────────────────────────────────────────────── -->
@@ -1303,21 +1312,20 @@ function renderCharts() {
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
 
+  const tMin0 = now - chartRangeSec;
+  const xOf = ts => Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
+
   // X-axis time labels
   ctx.fillStyle = '#64748b';
   ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textAlign = 'center';
-  const tMin0 = now - chartRangeSec, tMax0 = now;
   for (let i = 0; i <= 4; i++) {
-    const ts = tMin0 + (tMax0 - tMin0) * i / 4;
-    ctx.fillText(fmtAxisTime(ts, now), CW * i / 4, H - 4);
+    const ts = tMin0 + chartRangeSec * i / 4;
+    const x  = CW * i / 4;
+    ctx.textAlign = i === 0 ? 'left' : i === 4 ? 'right' : 'center';
+    ctx.fillText(fmtAxisTime(ts, now), x, H - 4);
   }
 
   if (pts.length < 2) return;
-
-  const tMin = pts[0].ts, tMax = pts[pts.length - 1].ts;
-  const tRange = tMax - tMin || 1;
-  const xOf = ts => ((ts - tMin) / tRange) * CW;
 
   // grid lines
   ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
