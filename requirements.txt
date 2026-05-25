@@ -2,4 +2,5 @@ fastapi>=0.115.0
 uvicorn==0.29.0
 python-can==4.3.1
 grpcio>=1.60.0
+protobuf>=4.21.0
 yagrc>=1.0.2
