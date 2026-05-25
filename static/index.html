@@ -602,6 +602,16 @@
       border-radius: 8px; padding: 10px 12px;
     }
     .bms-pack-val { font-size: 17px; font-weight: 600; margin-top: 3px; }
+
+    /* SOC progress bar */
+    .soc-bar-wrap {
+      height: 7px; background: var(--surface2); border-radius: 4px;
+      overflow: hidden; margin-bottom: 12px;
+    }
+    .soc-bar-fill {
+      height: 100%; border-radius: 4px; background: var(--green);
+      transition: width .7s ease, background .5s;
+    }
   </style>
 </head>
 <body>
@@ -804,6 +814,9 @@
       </div>
     </div>
 
+    <!-- SOC progress bar -->
+    <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
+
     <!-- Secondary metrics -->
     <div class="bd-sec-grid">
       <div class="bd-sec-item">
@@ -835,7 +848,7 @@
   <div class="bd-right">
 
     <!-- Combined chart -->
-    <div class="chart-card" style="margin-top:16px">
+    <div class="chart-card">
       <div class="chart-controls">
         <div class="chart-tog-group">
           <button id="tog-soc"     class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
@@ -1129,6 +1142,9 @@ function updateBattery(b) {
 
   // Detail-Overlay-Felder
   $('dSoc').textContent     = b.soc     != null ? Math.round(b.soc)  : '--';
+  const _socPct = b.soc != null ? Math.max(0, Math.min(100, b.soc)) : 0;
+  $('dSocBar').style.width = _socPct + '%';
+  $('dSocBar').style.background = _socPct >= 50 ? 'var(--green)' : _socPct >= 20 ? 'var(--yellow)' : 'var(--red)';
   $('dV').textContent       = fmtV(b.voltage);
   $('dI').textContent       = fmt(b.current);
   $('dP').textContent       = fmt(b.power, 0);

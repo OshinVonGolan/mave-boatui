@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 
 logging.basicConfig(
     level=logging.INFO,
