@@ -514,23 +514,6 @@
     .chart-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .chart-legend-val { font-size: 14px; font-weight: 700; }
 
-    /* ── Chart scrubber ── */
-    .chart-scrub-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-    .chart-scrub {
-      flex: 1; -webkit-appearance: none; appearance: none;
-      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
-      background: linear-gradient(to right, var(--accent) 100%, var(--border) 100%);
-    }
-    .chart-scrub::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
-      background: var(--accent); border: 2px solid #fff;
-      box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: pointer;
-    }
-    .chart-scrub::-moz-range-thumb {
-      width: 14px; height: 14px; border-radius: 50%;
-      background: var(--accent); border: 2px solid #fff; cursor: pointer; border: none;
-    }
-    .chart-scrub-label { font-size: 11px; color: var(--accent); min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
 
     /* ── BMS section ── */
     .bms-section-title {
@@ -847,11 +830,7 @@
         </div>
       </div>
       <div class="chart-legend" id="chartLegend"></div>
-      <canvas class="chart" id="chartMain" style="height:220px"></canvas>
-      <div class="chart-scrub-wrap">
-        <input type="range" id="chartScrub" class="chart-scrub" min="0" max="1000" value="1000">
-        <span class="chart-scrub-label" id="chartScrubLabel">Live</span>
-      </div>
+      <canvas class="chart" id="chartMain" style="height:220px;cursor:crosshair"></canvas>
     </div>
 
     <!-- BMS section -->
@@ -1269,7 +1248,7 @@ const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
 let chartSeries   = { soc: true, voltage: true, current: false };
 let chartRangeSec = 1800;
-let chartScrubPos = null; // null=live, 0.0–1.0=scrub fraction
+let chartHoverPos = null; // null=live, 0.0–1.0=scrub fraction
 
 function recordHistory(b) {
   const entry = { ts: Date.now() / 1000 };
@@ -1288,10 +1267,7 @@ function toggleSeries(key) {
 
 function setChartRange(btn, secs) {
   chartRangeSec = secs;
-  chartScrubPos = null;
-  const scrub = $('chartScrub');
-  if (scrub) { scrub.value = 1000; scrub.style.background = 'linear-gradient(to right, var(--accent) 100%, var(--border) 100%)'; }
-  const lbl = $('chartScrubLabel'); if (lbl) lbl.textContent = 'Live';
+  chartHoverPos = null;
   document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderCharts();
@@ -1326,6 +1302,15 @@ function fmtAxisTime(ts, nowTs) {
   return `-${Math.round(d/86400)}T`;
 }
 
+function fmtYVal(v, key) {
+  if (key === 'soc')     return Math.round(v) + '%';
+  if (key === 'voltage') return v.toFixed(1) + 'V';
+  if (key === 'current') return v.toFixed(0) + 'A';
+  return String(Math.round(v));
+}
+
+const CHART_PAD_L = 36, CHART_PAD_R = 54;
+
 function renderCharts() {
   const canvas = $('chartMain');
   if (!canvas) return;
@@ -1343,44 +1328,37 @@ function renderCharts() {
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
 
-  const PAD_R = 54, PAD_B = 20, PAD_T = 4;
-  const CW = W - PAD_R, CH = H - PAD_B - PAD_T;
+  const PAD_L = CHART_PAD_L, PAD_R = CHART_PAD_R, PAD_B = 20, PAD_T = 8;
+  const CW = W - PAD_L - PAD_R, CH = H - PAD_B - PAD_T;
 
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
 
   const tMin0 = now - chartRangeSec;
-  const xOf = ts => Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
-  const scrubTs = chartScrubPos !== null ? tMin0 + chartScrubPos * chartRangeSec : null;
+  const xOf = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
+  const scrubTs = chartHoverPos !== null ? tMin0 + chartHoverPos * chartRangeSec : null;
 
   renderChartLegend(pts, scrubTs);
 
   // X-axis time labels
   ctx.fillStyle = '#64748b';
   ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textBaseline = 'alphabetic';
   for (let i = 0; i <= 4; i++) {
     const ts = tMin0 + chartRangeSec * i / 4;
-    const x  = CW * i / 4;
+    const x  = PAD_L + CW * i / 4;
     ctx.textAlign = i === 0 ? 'left' : i === 4 ? 'right' : 'center';
     ctx.fillText(fmtAxisTime(ts, now), x, H - 4);
   }
 
   if (pts.length < 2) return;
 
-  // grid lines
-  ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const y = PAD_T + Math.round(CH * i / 4) + 0.5;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
-  }
-
+  // Compute Y scale per active series
   const seriesYOf = {};
-
   Object.entries(SERIES_DEF).forEach(([key, def]) => {
     if (!chartSeries[key]) return;
     const vals = pts.map(d => d[key]).filter(v => v != null);
     if (vals.length < 2) return;
-
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (def.minRange && (hi - lo) < def.minRange) {
       const mid = (hi + lo) / 2;
@@ -1391,8 +1369,36 @@ function renderCharts() {
     lo -= pad; hi += pad;
     const yRange = hi - lo;
     const yOf = v => PAD_T + CH - ((v - lo) / yRange) * CH * 0.9 - CH * 0.05;
-    seriesYOf[key] = { yOf, def };
+    seriesYOf[key] = { yOf, def, lo, hi };
+  });
 
+  // Grid lines
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    const y = PAD_T + Math.round(CH * i / 4) + 0.5;
+    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
+  }
+
+  // Y-axis labels (primary = first active series)
+  const primaryEntry = Object.entries(seriesYOf)[0];
+  if (primaryEntry) {
+    const [primaryKey, { lo, hi, def: pDef }] = primaryEntry;
+    ctx.fillStyle = pDef.color + 'cc';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right';
+    for (let i = 1; i <= 3; i++) {
+      const v = lo + (0.95 - i / 4) / 0.9 * (hi - lo);
+      const y = PAD_T + CH * i / 4;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(fmtYVal(v, primaryKey), PAD_L - 4, y);
+    }
+    // Top value
+    ctx.textBaseline = 'top';
+    ctx.fillText(fmtYVal(lo + (0.95 / 0.9) * (hi - lo), primaryKey), PAD_L - 4, PAD_T);
+  }
+
+  // Draw each series
+  Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
     const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
     grad.addColorStop(0, def.color + '44');
     grad.addColorStop(1, def.color + '00');
@@ -1406,7 +1412,7 @@ function renderCharts() {
       lastX = x; lastY = y; lastVal = v;
     });
     if (!first) {
-      ctx.lineTo(lastX, PAD_T + CH); ctx.lineTo(0, PAD_T + CH);
+      ctx.lineTo(lastX, PAD_T + CH); ctx.lineTo(PAD_L, PAD_T + CH);
       ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
     }
 
@@ -1427,12 +1433,13 @@ function renderCharts() {
       ctx.fillStyle = def.color;
       ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'left';
-      const clampY = Math.max(PAD_T + 8, Math.min(H - PAD_B - 4, lastY + 4));
-      ctx.fillText(def.fmt(lastVal), CW + 5, clampY);
+      ctx.textBaseline = 'middle';
+      const clampY = Math.max(PAD_T + 8, Math.min(H - PAD_B - 4, lastY));
+      ctx.fillText(def.fmt(lastVal), PAD_L + CW + 5, clampY);
     }
   });
 
-  // Crosshair at scrub position
+  // Crosshair + dots at hover position
   if (scrubTs !== null) {
     const x = xOf(scrubTs);
     ctx.save();
@@ -2149,24 +2156,38 @@ async function saveCurrentAsPreset(idx) {
   } catch(e) { console.error('Preset speichern fehlgeschlagen', e); }
 }
 
-// ── Chart scrubber events ──────────────────────────────────────────────────
+// ── Chart canvas — hover / touch crosshair ─────────────────────────────────
 
 (function() {
-  const scrub = $('chartScrub');
-  if (!scrub) return;
-  scrub.addEventListener('input', function() {
-    const v = parseInt(this.value);
-    const pct = (v / 10).toFixed(1);
-    this.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
-    if (v >= 1000) {
-      chartScrubPos = null;
-      $('chartScrubLabel').textContent = 'Live';
-    } else {
-      chartScrubPos = v / 1000;
-      const now2 = Date.now() / 1000;
-      const ts   = (now2 - chartRangeSec) + chartScrubPos * chartRangeSec;
-      $('chartScrubLabel').textContent = fmtAxisTime(ts, now2);
-    }
+  const canvas = $('chartMain');
+  if (!canvas) return;
+
+  function posFrom(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    const CW = rect.width - CHART_PAD_L - CHART_PAD_R;
+    return Math.max(0, Math.min(1, (clientX - rect.left - CHART_PAD_L) / CW));
+  }
+
+  canvas.addEventListener('mousemove', e => {
+    chartHoverPos = posFrom(e.clientX);
+    renderCharts();
+  });
+  canvas.addEventListener('mouseleave', () => {
+    chartHoverPos = null;
+    renderCharts();
+  });
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    chartHoverPos = posFrom(e.touches[0].clientX);
+    renderCharts();
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    chartHoverPos = posFrom(e.touches[0].clientX);
+    renderCharts();
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => {
+    chartHoverPos = null;
     renderCharts();
   });
 })();
