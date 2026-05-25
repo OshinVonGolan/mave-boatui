@@ -1464,13 +1464,16 @@ function renderCharts() {
 
   if (pts.length < 2) return;
 
-  // Compute Y scale per active series
+  // Compute Y scale per active series (percentile-based to ignore outlier spikes)
   const seriesYOf = {};
   Object.entries(SERIES_DEF).forEach(([key, def]) => {
     if (!chartSeries[key]) return;
     const vals = pts.map(d => d[key]).filter(v => v != null);
     if (vals.length < 2) return;
-    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const sorted = [...vals].sort((a, b) => a - b);
+    const n   = sorted.length;
+    let lo = sorted[Math.max(0, Math.floor(n * 0.02))];
+    let hi = sorted[Math.min(n - 1, Math.ceil(n * 0.98) - 1)];
     if (def.minRange && (hi - lo) < def.minRange) {
       const mid = (hi + lo) / 2;
       lo = mid - def.minRange / 2;
@@ -1507,7 +1510,12 @@ function renderCharts() {
     ctx.fillText(fmtYVal(lo + (0.95 / 0.9) * (hi - lo), key), x, PAD_T);
   });
 
-  // Draw each series
+  // Draw each series — clipped to chart area so outliers don't render outside
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PAD_L, PAD_T, CW, CH);
+  ctx.clip();
+
   Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
     const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
     grad.addColorStop(0, def.color + '44');
@@ -1541,6 +1549,8 @@ function renderCharts() {
       ctx.fillStyle = def.color; ctx.fill();
     }
   });
+
+  ctx.restore();
 
   // Crosshair + dots at hover position
   if (scrubTs !== null) {
