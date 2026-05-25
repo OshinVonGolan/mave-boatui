@@ -150,6 +150,6 @@ class ConnectivityMonitor:
                 'software':            info.get('software_version', ''),
             }
         except Exception as e:
-            log.debug('Starlink gRPC: %s', e)
+            log.warning('Starlink gRPC: %s', e)
             self._grpc_stub = None
             return {'reachable': False, 'error': str(e)}
