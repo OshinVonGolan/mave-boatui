@@ -1,6 +1,7 @@
 [Unit]
 Description=Mave Boat Monitor UI
-After=network.target
+After=network.target can0.service
+Requires=can0.service
 
 [Service]
 Type=simple
