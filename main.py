@@ -68,6 +68,12 @@ async def broadcast(data: dict):
         v = batt.get(key)
         if v is not None:
             entry[key] = v
+    for src_key, field in (('solar', 'solar1'), ('alternator', 'alternator'),
+                            ('solar2', 'solar2'), ('solar3', 'solar3'),
+                            ('charger', 'charger'), ('wind', 'wind')):
+        p = data.get(src_key, {}).get('power')
+        if p is not None:
+            entry[field] = p
     if len(entry) > 1:
         history.append(entry)
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}

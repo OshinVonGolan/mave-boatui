@@ -2561,8 +2561,16 @@ function connect() {
     setConnState('ok'); clearTimeout(reconnectTimer);
     if (histData.length === 0) {
       fetch('/api/history').then(r => r.json()).then(hist => {
-        hist.forEach(e => histData.push(e));
+        hist.forEach(e => {
+          histData.push(e);
+          const ce = { ts: e.ts };
+          ['solar1','solar2','solar3','charger','alternator','wind'].forEach(k => {
+            if (e[k] != null) ce[k] = e[k];
+          });
+          if (Object.keys(ce).length > 1) chargeHist.push(ce);
+        });
         if (!$('battOverlay').classList.contains('hidden')) renderCharts();
+        reRenderChargePie();
       }).catch(() => {});
     }
   };
