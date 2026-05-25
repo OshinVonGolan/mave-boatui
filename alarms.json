@@ -1,13 +1,17 @@
 {
   "rules": {
-    "bat_soc_warn":      {"name": "SOC niedrig",           "field": "battery.soc",             "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
-    "bat_soc_crit":      {"name": "SOC kritisch",          "field": "battery.soc",             "op": "<",     "threshold": 10,   "severity": "critical", "enabled": true},
-    "bat_voltage":       {"name": "Batterie Spannung",     "field": "battery.voltage",          "op": "range", "min": 11.8, "max": 14.6, "step": 0.1,  "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
-    "starter_voltage":   {"name": "Starterbatterie",       "field": "battery.starter_voltage",  "op": "range", "min": 11.5, "max": 14.6, "step": 0.1,  "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
-    "bat_cell_voltage":  {"name": "Zellspannung",          "field": "battery.cell_voltage_min", "op": "range", "min": 2.80, "max": 3.65, "step": 0.01, "bounds": [2.0,  4.2],  "unit": "V", "severity": "critical", "enabled": true},
-    "bat_temp_high":     {"name": "Batterietemperatur",    "field": "battery.temperature",      "op": ">",     "threshold": 45,   "severity": "warning",  "enabled": true},
-    "tank1_low":         {"name": "Tank 1 niedrig",        "field": "tanks.tank1",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
-    "tank2_low":         {"name": "Tank 2 niedrig",        "field": "tanks.tank2",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
-    "network_error":     {"name": "CAN-Bus Fehler",        "field": "_network_age",             "op": ">",     "threshold": 30,   "severity": "critical", "enabled": true}
+    "bat_soc_warn":    {"name": "SOC niedrig",             "field": "battery.soc",             "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "bat_soc_crit":    {"name": "SOC kritisch",            "field": "battery.soc",             "op": "<",     "threshold": 10,   "severity": "critical", "enabled": true},
+    "bat_voltage":     {"name": "Batterie Spannung",       "field": "battery.voltage",          "op": "range", "min": 11.8, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
+    "starter_voltage": {"name": "Starterbatterie",         "field": "battery.starter_voltage",  "op": "range", "min": 11.5, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning",  "enabled": true},
+    "bat_temp_high":   {"name": "Batterietemperatur",      "field": "battery.temperature",      "op": ">",     "threshold": 45,   "severity": "warning",  "enabled": true},
+    "bms_comm_err":    {"name": "BMS Kommunikationsfehler","field": "bms.comm_error",           "op": ">",     "threshold": 0,    "severity": "critical", "enabled": true},
+    "bms_min_v":       {"name": "BMS Zellspannung min",    "field": "bms.alarm_min_volt",       "op": ">",     "threshold": 0,    "severity": "critical", "enabled": true},
+    "bms_max_v":       {"name": "BMS Zellspannung max",    "field": "bms.alarm_max_volt",       "op": ">",     "threshold": 0,    "severity": "critical", "enabled": true},
+    "bms_min_t":       {"name": "BMS Temperatur min",      "field": "bms.alarm_min_temp",       "op": ">",     "threshold": 0,    "severity": "warning",  "enabled": true},
+    "bms_max_t":       {"name": "BMS Temperatur max",      "field": "bms.alarm_max_temp",       "op": ">",     "threshold": 0,    "severity": "warning",  "enabled": true},
+    "tank1_low":       {"name": "Tank 1 niedrig",          "field": "tanks.tank1",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "tank2_low":       {"name": "Tank 2 niedrig",          "field": "tanks.tank2",              "op": "<",     "threshold": 20,   "severity": "warning",  "enabled": true},
+    "network_error":   {"name": "CAN-Bus Fehler",          "field": "_network_age",             "op": ">",     "threshold": 30,   "severity": "critical", "enabled": true}
   }
 }

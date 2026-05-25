@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 130900}
+FAST_PACKET_PGNS = {126720, 130900, 130901, 130902}
 
 
 class FastPacketReassembler:
@@ -119,6 +119,88 @@ def parse_battery_stats(data: bytes):
     }
 
 
+def parse_bms_pack(data: bytes):
+    """PGN 130901 – 123SmartBMS Pack-Daten (Fast Packet, 45 Byte).
+
+    Layout (Teensy Battery Bord):
+      0  float packVoltage
+      4  float currentTotal
+      8  float currentCharge
+     12  float currentDischarge
+     16  uint8 SOC %
+     17  float capacity_Ah
+     21  float remainingEnergy_kWh
+     25  float lowestCellVoltage
+     29  uint8 lowestCellNumber
+     30  float highestCellVoltage
+     34  uint8 highestCellNumber
+     35  float lowestCellTemp
+     39  float highestCellTemp
+     43  uint8 cellCount
+     44  uint8 statusFlags
+    """
+    if len(data) < 45:
+        return None
+
+    def _f(off):
+        v = struct.unpack_from('<f', data, off)[0]
+        return None if (math.isnan(v) or math.isinf(v)) else v
+
+    pack_v = _f(0);  curr_t = _f(4);  curr_c = _f(8);  curr_d = _f(12)
+    cap    = _f(17); rem    = _f(21); lo_v   = _f(25); hi_v   = _f(30)
+    lo_t   = _f(35); hi_t   = _f(39)
+    flags  = data[44]
+
+    return {
+        'voltage':           round(pack_v, 2) if pack_v is not None else None,
+        'current_total':     round(curr_t, 2) if curr_t is not None else None,
+        'current_charge':    round(curr_c, 2) if curr_c is not None else None,
+        'current_discharge': round(curr_d, 2) if curr_d is not None else None,
+        'soc':               int(data[16]),
+        'capacity_ah':       round(cap,  1)   if cap    is not None else None,
+        'remaining_kwh':     round(rem,  3)   if rem    is not None else None,
+        'lowest_cell_v':     round(lo_v, 3)   if lo_v   is not None else None,
+        'lowest_cell_nr':    int(data[29]),
+        'highest_cell_v':    round(hi_v, 3)   if hi_v   is not None else None,
+        'highest_cell_nr':   int(data[34]),
+        'lowest_temp':       round(lo_t, 1)   if lo_t   is not None else None,
+        'highest_temp':      round(hi_t, 1)   if hi_t   is not None else None,
+        'cell_count':        int(data[43]),
+        'allow_charge':      bool(flags & 0x01),
+        'allow_discharge':   bool(flags & 0x02),
+        'comm_error':        bool(flags & 0x04),
+        'alarm_min_volt':    bool(flags & 0x08),
+        'alarm_max_volt':    bool(flags & 0x10),
+        'alarm_min_temp':    bool(flags & 0x20),
+        'alarm_max_temp':    bool(flags & 0x40),
+    }
+
+
+def parse_bms_cells(data: bytes):
+    """PGN 130902 – 123SmartBMS Einzelzellen (Fast Packet).
+
+    Layout:
+      0         uint8  cellCount
+      1 + i*4   uint16 voltage_mV  (0xFFFF = N/A)
+      3 + i*4   int16  temp × 0.1°C (0x7FFF = N/A)
+    """
+    if len(data) < 1:
+        return None
+    cell_count = data[0]
+    if cell_count == 0 or len(data) < 1 + cell_count * 4:
+        return None
+    cells = []
+    for i in range(cell_count):
+        off   = 1 + i * 4
+        v_raw = struct.unpack_from('<H', data, off)[0]
+        t_raw = struct.unpack_from('<h', data, off + 2)[0]
+        cells.append({
+            'voltage': round(v_raw * 0.001, 3) if v_raw != 0xFFFF else None,
+            'temp':    round(t_raw * 0.1,   1) if t_raw != 0x7FFF else None,
+        })
+    return {'cell_count': cell_count, 'cells': cells}
+
+
 DC_TYPE_ALTERNATOR = 1
 DC_TYPE_SOLAR      = 4
 
@@ -183,6 +265,8 @@ PGN_NAMES: dict[int, str] = {
     130311: 'Environmental Parameters 2',
     130312: 'Temperature',
     130900: 'Battery Stats (Custom)',
+    130901: 'BMS Pack Data (Custom)',
+    130902: 'BMS Cell Data (Custom)',
 }
 
 

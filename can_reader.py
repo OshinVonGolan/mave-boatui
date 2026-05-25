@@ -9,7 +9,7 @@ from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
     build_brightness_frames, make_can_id,
-    parse_battery_stats, parse_brightness,
+    parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_temperature,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
@@ -32,6 +32,20 @@ class BoatState:
         self.lights = {'channels': [0] * 9}
         self.solar      = {'power': None, 'current': None, 'voltage': None}
         self.alternator = {'power': None, 'current': None, 'voltage': None}
+        self.bms = {
+            'voltage': None, 'current_total': None,
+            'current_charge': None, 'current_discharge': None,
+            'soc': None, 'capacity_ah': None, 'remaining_kwh': None,
+            'lowest_cell_v': None, 'lowest_cell_nr': None,
+            'highest_cell_v': None, 'highest_cell_nr': None,
+            'lowest_temp': None, 'highest_temp': None,
+            'cell_count': None,
+            'allow_charge': None, 'allow_discharge': None,
+            'comm_error': None,
+            'alarm_min_volt': None, 'alarm_max_volt': None,
+            'alarm_min_temp': None, 'alarm_max_temp': None,
+            'cells': [],
+        }
 
     def to_dict(self) -> dict:
         return {
@@ -40,6 +54,7 @@ class BoatState:
             'lights':     dict(self.lights),
             'solar':      dict(self.solar),
             'alternator': dict(self.alternator),
+            'bms':        dict(self.bms),
         }
 
 
@@ -101,37 +116,6 @@ class CanInterface:
                 e['intervals'] = e['intervals'][-20:]
             e['last_seen'] = now
             e['count'] += 1
-
-    def seed_demo_network(self):
-        """Füllt _network mit realistischen Fake-Einträgen für den Demo-Modus."""
-        import random
-        now = time.monotonic()
-        entries = [
-            (127508, 22, 1.0),   # Victron BMS — Battery Status
-            (130900, 22, 1.0),   # Victron BMS — Battery Stats Custom
-            (127505, 22, 1.5),   # Victron BMS — Fluid Level
-            (127501, 22, 1.0),   # Victron BMS — Switch Bank Status
-            (129029, 35, 1.0),   # B&G Zeus — GNSS Position
-            (129026, 35, 0.1),   # B&G Zeus — COG & SOG Rapid
-            (127250, 35, 0.1),   # B&G Zeus — Vessel Heading
-            (129283, 35, 1.0),   # B&G Zeus — Cross Track Error
-            (130306, 48, 0.1),   # B&G Triton — Wind Data
-            (127257, 48, 0.1),   # B&G Triton — Attitude
-            (126720, 100, 0.5),  # RPi — Proprietary (Helligkeit)
-            (60928,  22, 60.0),  # ISO Address Claim
-            (60928,  35, 60.0),
-            (60928,  48, 60.0),
-        ]
-        for pgn, src, interval_s in entries:
-            n = random.randint(60, 3600)
-            ivs = [interval_s + random.uniform(-interval_s * 0.05, interval_s * 0.05)
-                   for _ in range(min(n, 20))]
-            self._network[(pgn, src)] = {
-                'count':      n,
-                'first_seen': now - n * interval_s,
-                'last_seen':  now - random.uniform(0, interval_s * 1.5),
-                'intervals':  ivs,
-            }
 
     def get_network_stats(self) -> list[dict]:
         now = time.monotonic()
@@ -227,6 +211,20 @@ class CanInterface:
             p = parse_temperature(payload)
             if p and self.state.battery['temperature'] != p['temperature_c']:
                 self.state.battery['temperature'] = p['temperature_c']
+                changed = True
+
+        elif pgn == 130901:
+            p = parse_bms_pack(payload)
+            if p:
+                for k, v in p.items():
+                    if self.state.bms.get(k) != v:
+                        self.state.bms[k] = v
+                        changed = True
+
+        elif pgn == 130902:
+            p = parse_bms_cells(payload)
+            if p and self.state.bms.get('cells') != p['cells']:
+                self.state.bms['cells'] = p['cells']
                 changed = True
 
         elif pgn == 126720:

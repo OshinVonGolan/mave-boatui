@@ -490,6 +490,58 @@
       padding-bottom: 8px; margin-bottom: 4px;
       border-bottom: 1px solid var(--border);
     }
+
+    /* ── Chart controls ── */
+    .chart-controls {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+    }
+    .chart-tog-group, .chart-range-group { display: flex; gap: 4px; flex-wrap: wrap; }
+    .chart-tog {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600;
+      cursor: pointer; color: var(--text3); transition: all .15s; font-family: inherit;
+    }
+    .chart-tog.active { color: var(--text); border-color: var(--accent2); background: rgba(6,182,212,.1); }
+    .chart-range {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px; font-size: 11px;
+      cursor: pointer; color: var(--text3); transition: all .15s; font-family: inherit;
+    }
+    .chart-range.active { color: var(--accent); border-color: var(--accent); background: rgba(6,182,212,.08); }
+    .chart-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+    .chart-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text2); }
+    .chart-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .chart-legend-val { font-size: 14px; font-weight: 700; }
+
+    /* ── BMS section ── */
+    .bms-section-title {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3);
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .bms-flags-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+    .bms-flag {
+      display: flex; align-items: center; gap: 5px; padding: 4px 10px;
+      border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid;
+    }
+    .bms-flag.ok   { background: rgba(34,197,94,.1);  border-color: rgba(34,197,94,.4);  color: var(--green); }
+    .bms-flag.warn { background: rgba(234,179,8,.1);  border-color: rgba(234,179,8,.4);  color: var(--yellow); }
+    .bms-flag.err  { background: rgba(239,68,68,.1);  border-color: rgba(239,68,68,.4);  color: var(--red); }
+    .bms-flag.off  { background: var(--surface2); border-color: var(--border); color: var(--text3); }
+    .bms-cell-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 8px; margin-top: 12px;
+    }
+    .bms-cell {
+      background: var(--surface); border: 2px solid var(--border);
+      border-radius: 10px; padding: 12px; text-align: center;
+      transition: border-color .4s;
+    }
+    .bms-cell .cell-num  { font-size: 10px; color: var(--text3); margin-bottom: 4px; letter-spacing: .06em; text-transform: uppercase; }
+    .bms-cell .cell-volt { font-size: 19px; font-weight: 700; line-height: 1; }
+    .bms-cell .cell-temp { font-size: 12px; color: var(--text2); margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -540,7 +592,7 @@
       <svg class="gauge-svg" viewBox="0 0 160 112">
         <path class="gauge-track" id="gaugeTrack"/>
         <path class="gauge-value" id="gaugeValue"/>
-        <text class="gauge-center" x="80" y="66">
+        <text class="gauge-center" x="80" y="58">
           <tspan class="gauge-pct" id="gaugePct">--</tspan>
           <tspan class="gauge-label" x="80" dy="18">SOC</tspan>
           <tspan id="gaugeArrow" x="80" dy="15" font-size="13" fill="var(--text3)"></tspan>
@@ -710,29 +762,34 @@
       </div>
     </div>
 
-    <div class="chart-section">
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Ladezustand</span>
-          <span><span class="chart-current" id="cSoc">--</span><span class="chart-unit">%</span></span>
+    <!-- Combined chart -->
+    <div class="chart-card" style="margin-top:16px">
+      <div class="chart-controls">
+        <div class="chart-tog-group">
+          <button id="tog-soc"     class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
+          <button id="tog-voltage" class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
+          <button id="tog-current" class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
         </div>
-        <canvas class="chart" id="chartSoc"></canvas>
-      </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Spannung</span>
-          <span><span class="chart-current" id="cV">--</span><span class="chart-unit">V</span></span>
+        <div class="chart-range-group">
+          <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
+          <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
+          <button class="chart-range"        data-secs="43200"  onclick="setChartRange(this,43200)">12 Std</button>
+          <button class="chart-range"        data-secs="86400"  onclick="setChartRange(this,86400)">24 Std</button>
+          <button class="chart-range"        data-secs="604800" onclick="setChartRange(this,604800)">7 T</button>
         </div>
-        <canvas class="chart" id="chartV"></canvas>
       </div>
-      <div class="chart-card">
-        <div class="chart-header">
-          <span class="chart-title">Strom</span>
-          <span><span class="chart-current" id="cI">--</span><span class="chart-unit">A</span></span>
-        </div>
-        <canvas class="chart" id="chartI"></canvas>
-      </div>
+      <div class="chart-legend" id="chartLegend"></div>
+      <canvas class="chart" id="chartMain" style="height:160px"></canvas>
     </div>
+
+    <!-- BMS section -->
+    <div id="bmsSection" style="display:none; margin-top:24px">
+      <div class="bms-section-title">BMS — 123SmartBMS</div>
+      <div class="batt-detail-grid" id="bmsPackGrid"></div>
+      <div class="bms-flags-row" id="bmsFlags"></div>
+      <div class="bms-cell-grid" id="bmsCellGrid"></div>
+    </div>
+
   </div>
 </div>
 
@@ -929,7 +986,7 @@ let state = { lights: { channels: Array(9).fill(0) } };
 
 // ── SOC-Gauge ──────────────────────────────────────────────────────────────
 
-const GAUGE_CX = 80, GAUGE_CY = 76, GAUGE_R = 58;
+const GAUGE_CX = 80, GAUGE_CY = 68, GAUGE_R = 58;
 const GAUGE_START = 225, GAUGE_SWEEP = 270;
 
 function polarXY(cx, cy, r, deg) {
@@ -993,7 +1050,7 @@ function updateBattery(b) {
   $('dP').textContent       = fmt(b.power, 0);
   $('dAh').textContent      = fmt(b.consumed_ah);
   $('dStarter').textContent = fmtV(b.starter_voltage);
-  $('dCycles').textContent  = b.cycles ?? '--';
+  $('dCycles').textContent  = b.cycles   ?? '--';
   $('dMinV').textContent    = fmtV(b.min_voltage);
   $('dMaxV').textContent    = fmtV(b.max_voltage);
   $('dFull').textContent    = timeSince(b.time_since_full);
@@ -1119,116 +1176,209 @@ async function applyPreset(id) {
 
 // ── Battery detail + charts ────────────────────────────────────────────────
 
-const MAX_PTS = 120;
-const hist = { soc: [], voltage: [], current: [] };
+const HIST_MAX = 10000;
+const histData = [];  // [{ts, soc, voltage, current}, ...]
+
+const SERIES_DEF = {
+  soc:     { color: '#22c55e', unit: '%',  label: 'SOC',      fmt: v => Math.round(v) + ' %' },
+  voltage: { color: '#06b6d4', unit: 'V',  label: 'Spannung', fmt: v => v.toFixed(2) + ' V' },
+  current: { color: '#f97316', unit: 'A',  label: 'Strom',    fmt: v => v.toFixed(1) + ' A' },
+};
+
+let chartSeries   = { soc: true, voltage: true, current: false };
+let chartRangeSec = 1800;
 
 function recordHistory(b) {
-  const push = (arr, v) => { arr.push(v ?? null); if (arr.length > MAX_PTS) arr.shift(); };
-  push(hist.soc,     b.soc);
-  push(hist.voltage, b.voltage);
-  push(hist.current, b.current);
+  const entry = { ts: Date.now() / 1000 };
+  if (b.soc     != null) entry.soc     = b.soc;
+  if (b.voltage  != null) entry.voltage  = b.voltage;
+  if (b.current  != null) entry.current  = b.current;
+  histData.push(entry);
+  if (histData.length > HIST_MAX) histData.shift();
 }
 
-function drawChart(canvasId, data, color, fixedMin, fixedMax) {
-  const canvas = $(canvasId);
+function toggleSeries(key) {
+  chartSeries[key] = !chartSeries[key];
+  $(`tog-${key}`).classList.toggle('active', chartSeries[key]);
+  renderCharts();
+}
+
+function setChartRange(btn, secs) {
+  chartRangeSec = secs;
+  document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCharts();
+}
+
+function renderChartLegend(pts) {
+  const leg = $('chartLegend');
+  if (!leg) return;
+  leg.innerHTML = Object.entries(SERIES_DEF).filter(([k]) => chartSeries[k]).map(([key, def]) => {
+    const vals = pts.map(d => d[key]).filter(v => v != null);
+    const last = vals.at(-1);
+    return `<div class="chart-legend-item">
+      <div class="chart-legend-dot" style="background:${def.color}"></div>
+      <span>${def.label}</span>
+      <span class="chart-legend-val" style="color:${def.color}">${last != null ? def.fmt(last) : '--'}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderCharts() {
+  const canvas = $('chartMain');
   if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
+
+  const now    = Date.now() / 1000;
+  const cutoff = now - chartRangeSec;
+  const pts    = histData.filter(d => d.ts >= cutoff);
+
+  renderChartLegend(pts);
+
+  const dpr  = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  if (rect.width === 0) return;
+  if (!rect.width) return;
   canvas.width  = rect.width  * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
 
-  const pts = data.filter(v => v != null);
-  if (pts.length < 2) { ctx.fillStyle = '#1e293b'; ctx.fillRect(0,0,W,H); return; }
-
-  const lo = fixedMin ?? Math.min(...pts);
-  const hi = fixedMax ?? Math.max(...pts);
-  const range = hi - lo || 1;
-
-  // background
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
 
-  // subtle grid lines (3 lines)
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1;
+  if (pts.length < 2) return;
+
+  const tMin = pts[0].ts, tMax = pts[pts.length - 1].ts;
+  const tRange = tMax - tMin || 1;
+  const xOf = ts => ((ts - tMin) / tRange) * W;
+
+  // grid lines
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
   for (let i = 1; i <= 3; i++) {
     const y = Math.round(H * i / 4) + 0.5;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // gradient fill
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, color + '55');
-  grad.addColorStop(1, color + '00');
+  Object.entries(SERIES_DEF).forEach(([key, def]) => {
+    if (!chartSeries[key]) return;
+    const vals = pts.map(d => d[key]).filter(v => v != null);
+    if (vals.length < 2) return;
 
-  // build point list (skip nulls)
-  const xOf = i => (i / (MAX_PTS - 1)) * W;
-  const yOf = v => H - ((v - lo) / range) * H * 0.88 - H * 0.06;
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.12 || 0.5;
+    lo -= pad; hi += pad;
+    const yRange = hi - lo;
+    const yOf = v => H - ((v - lo) / yRange) * H * 0.9 - H * 0.05;
 
-  ctx.beginPath();
-  let first = true;
-  data.forEach((v, i) => {
-    if (v == null) { first = true; return; }
-    const x = xOf(i), y = yOf(v);
-    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, def.color + '44');
+    grad.addColorStop(1, def.color + '00');
+
+    let first = true, lastX = 0, lastY = 0;
+    ctx.beginPath();
+    pts.forEach(d => {
+      const v = d[key]; if (v == null) { first = true; return; }
+      const x = xOf(d.ts), y = yOf(v);
+      if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+      lastX = x; lastY = y;
+    });
+    if (!first) {
+      ctx.lineTo(lastX, H); ctx.lineTo(xOf(tMin), H);
+      ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    }
+
+    first = true;
+    ctx.beginPath();
+    pts.forEach(d => {
+      const v = d[key]; if (v == null) { first = true; return; }
+      const x = xOf(d.ts), y = yOf(v);
+      if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = def.color; ctx.lineWidth = 2;
+    ctx.lineJoin = 'round'; ctx.stroke();
+
+    if (!first) {
+      ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = def.color; ctx.fill();
+    }
   });
-  // fill area
-  const lastIdx = data.length - 1;
-  let lastNonNull = null;
-  for (let i = lastIdx; i >= 0; i--) { if (data[i] != null) { lastNonNull = i; break; } }
-  if (lastNonNull != null) {
-    ctx.lineTo(xOf(lastNonNull), H);
-    ctx.lineTo(xOf(0), H);
-    ctx.closePath();
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
-
-  // line
-  ctx.beginPath(); first = true;
-  data.forEach((v, i) => {
-    if (v == null) { first = true; return; }
-    const x = xOf(i), y = yOf(v);
-    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-
-  // current value dot
-  if (lastNonNull != null && data[lastNonNull] != null) {
-    const x = xOf(lastNonNull), y = yOf(data[lastNonNull]);
-    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2);
-    ctx.fillStyle = color; ctx.fill();
-  }
-}
-
-function renderCharts() {
-  const lastSoc = hist.soc.filter(v=>v!=null).at(-1);
-  const lastV   = hist.voltage.filter(v=>v!=null).at(-1);
-  const lastI   = hist.current.filter(v=>v!=null).at(-1);
-  $('cSoc').textContent = lastSoc != null ? Math.round(lastSoc) : '--';
-  $('cV').textContent   = lastV   != null ? lastV.toFixed(2)   : '--';
-  $('cI').textContent   = lastI   != null ? lastI.toFixed(1)   : '--';
-  $('cSoc').className   = colorClass(lastSoc, 50, 20);
-  $('cV').className     = colorClass(lastV, 12.6, 12.0);
-  $('cI').className     = lastI == null ? '' : lastI >= 0 ? 'val-green' : 'val-orange';
-
-  drawChart('chartSoc', hist.soc,     '#22c55e', 0,    100);
-  drawChart('chartV',   hist.voltage, '#06b6d4', 11.5, 14.5);
-  drawChart('chartI',   hist.current, '#f97316', null, null);
 }
 
 function openBattDetail() {
   $('battOverlay').classList.remove('hidden');
+  if (_lastBms) updateBms(_lastBms);
   setTimeout(renderCharts, 50);
 }
 function closeBattDetail() { $('battOverlay').classList.add('hidden'); }
+
+// ── BMS update ─────────────────────────────────────────────────────────────
+
+let _lastBms = null;
+
+function cellColor(v, isLowest, isHighest, alarmMin, alarmMax) {
+  if (v == null) return 'var(--border)';
+  if ((alarmMin && isLowest) || v < 2.9)  return 'var(--red)';
+  if ((alarmMax && isHighest) || v > 3.65) return 'var(--red)';
+  if (v < 3.1 || v > 3.6) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function updateBms(bms) {
+  if (!bms) return;
+  _lastBms = bms;
+  const hasBms = bms.voltage != null;
+  $('bmsSection').style.display = hasBms ? '' : 'none';
+  if (!hasBms) return;
+
+  // Pack data grid
+  const packItems = [
+    { label: 'Pack SOC',     val: bms.soc     != null ? bms.soc + ' %'        : '--' },
+    { label: 'Pack Spannung',val: bms.voltage  != null ? bms.voltage.toFixed(2) + ' V' : '--' },
+    { label: 'Strom',        val: bms.current_total != null ? bms.current_total.toFixed(1) + ' A' : '--' },
+    { label: 'Kapazität',    val: bms.capacity_ah != null ? bms.capacity_ah.toFixed(0) + ' Ah' : '--' },
+    { label: 'Verbleibend',  val: bms.remaining_kwh != null ? bms.remaining_kwh.toFixed(2) + ' kWh' : '--' },
+    { label: 'Zellen',       val: bms.cell_count ?? '--' },
+    { label: 'Min-Zelle',    val: bms.lowest_cell_v  != null ? `Z${bms.lowest_cell_nr} · ${bms.lowest_cell_v.toFixed(3)} V` : '--' },
+    { label: 'Max-Zelle',    val: bms.highest_cell_v != null ? `Z${bms.highest_cell_nr} · ${bms.highest_cell_v.toFixed(3)} V` : '--' },
+    { label: 'Temp min',     val: bms.lowest_temp  != null ? bms.lowest_temp.toFixed(1)  + ' °C' : '--' },
+    { label: 'Temp max',     val: bms.highest_temp != null ? bms.highest_temp.toFixed(1) + ' °C' : '--' },
+  ];
+  $('bmsPackGrid').innerHTML = packItems.map(it =>
+    `<div class="batt-detail-item">
+      <div class="label">${it.label}</div>
+      <div class="value" style="font-size:17px">${it.val}</div>
+    </div>`
+  ).join('');
+
+  // Status flags
+  const flags = [
+    { label: 'Laden OK',   cls: bms.allow_charge    ? 'ok'  : 'err', icon: bms.allow_charge    ? '✓' : '✕' },
+    { label: 'Entladen OK',cls: bms.allow_discharge ? 'ok'  : 'err', icon: bms.allow_discharge ? '✓' : '✕' },
+    { label: 'Komm.',      cls: bms.comm_error      ? 'err' : 'ok',  icon: bms.comm_error      ? '!' : '✓' },
+    { label: 'V min',      cls: bms.alarm_min_volt  ? 'err' : 'ok',  icon: bms.alarm_min_volt  ? '!' : '✓' },
+    { label: 'V max',      cls: bms.alarm_max_volt  ? 'err' : 'ok',  icon: bms.alarm_max_volt  ? '!' : '✓' },
+    { label: 'T min',      cls: bms.alarm_min_temp  ? 'warn': 'ok',  icon: bms.alarm_min_temp  ? '!' : '✓' },
+    { label: 'T max',      cls: bms.alarm_max_temp  ? 'warn': 'ok',  icon: bms.alarm_max_temp  ? '!' : '✓' },
+  ];
+  $('bmsFlags').innerHTML = flags.map(f =>
+    `<div class="bms-flag ${f.cls}">${f.icon} ${f.label}</div>`
+  ).join('');
+
+  // Cell grid
+  const cells = bms.cells ?? [];
+  $('bmsCellGrid').innerHTML = cells.map((c, i) => {
+    const isLo = i === (bms.lowest_cell_nr  - 1);
+    const isHi = i === (bms.highest_cell_nr - 1);
+    const color = cellColor(c.voltage, isLo, isHi, bms.alarm_min_volt, bms.alarm_max_volt);
+    const vStr  = c.voltage != null ? c.voltage.toFixed(3) + ' V' : '--';
+    const tStr  = c.temp    != null ? c.temp.toFixed(1)    + ' °C' : '--';
+    return `<div class="bms-cell" style="border-color:${color}">
+      <div class="cell-num">Zelle ${i + 1}</div>
+      <div class="cell-volt" style="color:${color}">${vStr}</div>
+      <div class="cell-temp">${tStr}</div>
+    </div>`;
+  }).join('');
+}
 
 // ── Network overlay ────────────────────────────────────────────────────────
 
@@ -1673,6 +1823,7 @@ function handleData(data) {
     syncLightOverlay(data.lights.channels ?? []);
   }
   updatePowerSources(data);
+  if (data.bms) updateBms(data.bms);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
     if (!$('alarmOverlay').classList.contains('hidden') &&
