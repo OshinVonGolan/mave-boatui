@@ -514,6 +514,24 @@
     .chart-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .chart-legend-val { font-size: 14px; font-weight: 700; }
 
+    /* ── Chart scrubber ── */
+    .chart-scrub-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .chart-scrub {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+      background: linear-gradient(to right, var(--accent) 100%, var(--border) 100%);
+    }
+    .chart-scrub::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.5); cursor: pointer;
+    }
+    .chart-scrub::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); border: 2px solid #fff; cursor: pointer; border: none;
+    }
+    .chart-scrub-label { font-size: 11px; color: var(--accent); min-width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+
     /* ── BMS section ── */
     .bms-section-title {
       font-size: 11px; font-weight: 600; letter-spacing: .1em;
@@ -830,6 +848,10 @@
       </div>
       <div class="chart-legend" id="chartLegend"></div>
       <canvas class="chart" id="chartMain" style="height:220px"></canvas>
+      <div class="chart-scrub-wrap">
+        <input type="range" id="chartScrub" class="chart-scrub" min="0" max="1000" value="1000">
+        <span class="chart-scrub-label" id="chartScrubLabel">Live</span>
+      </div>
     </div>
 
     <!-- BMS section -->
@@ -990,12 +1012,12 @@
   <div class="ov-body" style="max-width:640px">
 
     <div style="margin-bottom:20px">
-      <div class="light-section-title">PWM — Kanäle 1–8</div>
+      <div class="light-section-title">PWM — Kanäle 1–4</div>
       <div class="light-ch-grid" id="chSlidersWrap"></div>
     </div>
 
     <div style="margin-bottom:20px">
-      <div class="light-section-title">Relais — Kanal 9</div>
+      <div class="light-section-title">Lichterkette — Relais</div>
       <div class="relay-row">
         <div class="relay-row-label">
           <span id="relayHint" class="relay-status">Relais offen</span>
@@ -1171,26 +1193,29 @@ function updateTanks(tanks) {
 
 // ── Channel bars ───────────────────────────────────────────────────────────
 
+const VISIBLE_CH = [0, 1, 2, 3, 8]; // PWM 1–4 + relay
+
 function buildChannelBars() {
   const row = $('channelsRow'), lbl = $('channelsLabel');
   row.innerHTML = lbl.innerHTML = '';
-  for (let i = 0; i < 9; i++) {
+  VISIBLE_CH.forEach(i => {
     const wrap = document.createElement('div'); wrap.className = 'ch-bar-wrap';
     const bar  = document.createElement('div'); bar.className = 'ch-bar' + (i===8?' relay':'');
     bar.id = `chBar${i}`; bar.style.height = '0%';
     wrap.appendChild(bar); row.appendChild(wrap);
     const l = document.createElement('div'); l.className = 'ch-num';
     l.textContent = i < 8 ? (i+1) : 'R'; lbl.appendChild(l);
-  }
+  });
 }
 buildChannelBars();
 
 function updateChannels(channels) {
-  for (let i = 0; i < 9; i++) {
+  VISIBLE_CH.forEach(i => {
     const v = channels[i] ?? 0, bar = $(`chBar${i}`);
+    if (!bar) return;
     bar.style.height  = (i < 8 ? v/255*100 : v>0?100:0) + '%';
     bar.style.opacity = v > 0 ? '0.9' : '0.2';
-  }
+  });
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
@@ -1235,13 +1260,16 @@ const HIST_MAX = 10000;
 const histData = [];  // [{ts, soc, voltage, current}, ...]
 
 const SERIES_DEF = {
-  soc:     { color: '#22c55e', unit: '%',  label: 'SOC',      fmt: v => Math.round(v) + ' %' },
-  voltage: { color: '#06b6d4', unit: 'V',  label: 'Spannung', fmt: v => v.toFixed(2) + ' V' },
-  current: { color: '#f97316', unit: 'A',  label: 'Strom',    fmt: v => v.toFixed(1) + ' A' },
+  soc:     { color: '#22c55e', unit: '%', label: 'SOC',      fmt: v => Math.round(v) + ' %',    minRange: 10 },
+  voltage: { color: '#06b6d4', unit: 'V', label: 'Spannung', fmt: v => v.toFixed(2) + ' V',     minRange: 2.0 },
+  current: { color: '#f97316', unit: 'A', label: 'Strom',    fmt: v => v.toFixed(1) + ' A',     minRange: 3.0 },
 };
+
+const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
 let chartSeries   = { soc: true, voltage: true, current: false };
 let chartRangeSec = 1800;
+let chartScrubPos = null; // null=live, 0.0–1.0=scrub fraction
 
 function recordHistory(b) {
   const entry = { ts: Date.now() / 1000 };
@@ -1260,21 +1288,32 @@ function toggleSeries(key) {
 
 function setChartRange(btn, secs) {
   chartRangeSec = secs;
+  chartScrubPos = null;
+  const scrub = $('chartScrub');
+  if (scrub) { scrub.value = 1000; scrub.style.background = 'linear-gradient(to right, var(--accent) 100%, var(--border) 100%)'; }
+  const lbl = $('chartScrubLabel'); if (lbl) lbl.textContent = 'Live';
   document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderCharts();
 }
 
-function renderChartLegend(pts) {
+function renderChartLegend(pts, scrubTs) {
   const leg = $('chartLegend');
   if (!leg) return;
   leg.innerHTML = Object.entries(SERIES_DEF).filter(([k]) => chartSeries[k]).map(([key, def]) => {
-    const vals = pts.map(d => d[key]).filter(v => v != null);
-    const last = vals.at(-1);
+    const ptsWithKey = pts.filter(d => d[key] != null);
+    let displayVal = null;
+    if (scrubTs != null && ptsWithKey.length) {
+      let closest = ptsWithKey[0], minDist = Math.abs(ptsWithKey[0].ts - scrubTs);
+      ptsWithKey.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < minDist) { minDist = dist; closest = d; } });
+      displayVal = closest[key];
+    } else {
+      displayVal = ptsWithKey.at(-1)?.[key] ?? null;
+    }
     return `<div class="chart-legend-item">
       <div class="chart-legend-dot" style="background:${def.color}"></div>
       <span>${def.label}</span>
-      <span class="chart-legend-val" style="color:${def.color}">${last != null ? def.fmt(last) : '--'}</span>
+      <span class="chart-legend-val" style="color:${def.color}">${displayVal != null ? def.fmt(displayVal) : '--'}</span>
     </div>`;
   }).join('');
 }
@@ -1295,8 +1334,6 @@ function renderCharts() {
   const cutoff = now - chartRangeSec;
   const pts    = histData.filter(d => d.ts >= cutoff);
 
-  renderChartLegend(pts);
-
   const dpr  = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   if (!rect.width) return;
@@ -1314,6 +1351,9 @@ function renderCharts() {
 
   const tMin0 = now - chartRangeSec;
   const xOf = ts => Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
+  const scrubTs = chartScrubPos !== null ? tMin0 + chartScrubPos * chartRangeSec : null;
+
+  renderChartLegend(pts, scrubTs);
 
   // X-axis time labels
   ctx.fillStyle = '#64748b';
@@ -1334,16 +1374,24 @@ function renderCharts() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
   }
 
+  const seriesYOf = {};
+
   Object.entries(SERIES_DEF).forEach(([key, def]) => {
     if (!chartSeries[key]) return;
     const vals = pts.map(d => d[key]).filter(v => v != null);
     if (vals.length < 2) return;
 
     let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (def.minRange && (hi - lo) < def.minRange) {
+      const mid = (hi + lo) / 2;
+      lo = mid - def.minRange / 2;
+      hi = mid + def.minRange / 2;
+    }
     const pad = (hi - lo) * 0.12 || 0.5;
     lo -= pad; hi += pad;
     const yRange = hi - lo;
     const yOf = v => PAD_T + CH - ((v - lo) / yRange) * CH * 0.9 - CH * 0.05;
+    seriesYOf[key] = { yOf, def };
 
     const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
     grad.addColorStop(0, def.color + '44');
@@ -1372,11 +1420,10 @@ function renderCharts() {
     ctx.strokeStyle = def.color; ctx.lineWidth = 2;
     ctx.lineJoin = 'round'; ctx.stroke();
 
-    if (!first && lastVal != null) {
+    if (!first && lastVal != null && scrubTs === null) {
       ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
 
-      // current value label on right
       ctx.fillStyle = def.color;
       ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textAlign = 'left';
@@ -1384,14 +1431,41 @@ function renderCharts() {
       ctx.fillText(def.fmt(lastVal), CW + 5, clampY);
     }
   });
+
+  // Crosshair at scrub position
+  if (scrubTs !== null) {
+    const x = xOf(scrubTs);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x, PAD_T); ctx.lineTo(x, PAD_T + CH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
+      const ptsWithKey = pts.filter(d => d[key] != null);
+      if (!ptsWithKey.length) return;
+      let closest = ptsWithKey[0], minDist = Math.abs(ptsWithKey[0].ts - scrubTs);
+      ptsWithKey.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < minDist) { minDist = dist; closest = d; } });
+      const y = yOf(closest[key]);
+      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = def.color; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+    });
+  }
 }
 
 function openBattDetail() {
+  history.pushState({ overlay: 'battery' }, '', '#battery');
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
   setTimeout(renderCharts, 50);
 }
-function closeBattDetail() { $('battOverlay').classList.add('hidden'); }
+function closeBattDetail() {
+  $('battOverlay').classList.add('hidden');
+  if (location.hash === '#battery') history.back();
+}
 
 // ── BMS update ─────────────────────────────────────────────────────────────
 
@@ -1466,6 +1540,7 @@ function updateBms(bms) {
 let netTimer = null;
 
 function openNetwork() {
+  history.pushState({ overlay: 'network' }, '', '#network');
   $('networkOverlay').classList.remove('hidden');
   fetchNetwork();
   netTimer = setInterval(fetchNetwork, 5000);
@@ -1473,6 +1548,7 @@ function openNetwork() {
 function closeNetwork() {
   $('networkOverlay').classList.add('hidden');
   clearInterval(netTimer); netTimer = null;
+  if (location.hash === '#network') history.back();
 }
 
 async function fetchNetwork() {
@@ -1536,10 +1612,14 @@ function renderNetwork(entries) {
 let _rulesCache = {};
 
 function openAlarms() {
+  history.pushState({ overlay: 'alarms' }, '', '#alarms');
   $('alarmOverlay').classList.remove('hidden');
   switchTab('aktiv');
 }
-function closeAlarms() { $('alarmOverlay').classList.add('hidden'); }
+function closeAlarms() {
+  $('alarmOverlay').classList.add('hidden');
+  if (location.hash === '#alarms') history.back();
+}
 
 function switchTab(name) {
   ['aktiv', 'regeln'].forEach(t => {
@@ -1804,7 +1884,7 @@ async function saveRules() {
 
 // ── Settings ───────────────────────────────────────────────────────────────
 
-function openSettings() {
+function _showSettingsPanel() {
   $('sTank1Name').value   = tanksConfig.tank1?.name ?? '';
   $('sTank1Cap').value    = tanksConfig.tank1?.capacity_l ?? '';
   $('sTank1Color').value  = tanksConfig.tank1?.color ?? '#22c55e';
@@ -1818,7 +1898,15 @@ function openSettings() {
   $('settingsOverlay').classList.remove('hidden');
 }
 
-function closeSettings() { $('settingsOverlay').classList.add('hidden'); }
+function openSettings() {
+  history.pushState({ overlay: 'settings' }, '', '#settings');
+  _showSettingsPanel();
+}
+
+function closeSettings() {
+  $('settingsOverlay').classList.add('hidden');
+  if (location.hash === '#settings') history.back();
+}
 
 async function saveSettings() {
   const btn = $('saveSettingsBtn');
@@ -1940,12 +2028,14 @@ function openLightDetail() {
   lightDetailOpen = true;
   buildLightSliders();
   renderPresetEditList();
+  history.pushState({ overlay: 'lights' }, '', '#lights');
   $('lightOverlay').classList.remove('hidden');
 }
 
 function closeLightDetail() {
   lightDetailOpen = false;
   $('lightOverlay').classList.add('hidden');
+  if (location.hash === '#lights') history.back();
 }
 
 function sliderFill(slider, v) {
@@ -1957,12 +2047,13 @@ function sliderFill(slider, v) {
 function buildLightSliders() {
   const wrap = $('chSlidersWrap');
   wrap.innerHTML = '';
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 4; i++) {
     const v = liveChannels[i] ?? 0;
     const row = document.createElement('div');
     row.className = 'ch-row';
     row.innerHTML = `
-      <span class="ch-num">${i + 1}</span>
+      <span class="ch-num" style="min-width:18px">${i + 1}</span>
+      <span style="font-size:12px;color:var(--text2);min-width:130px;flex-shrink:0">${CH_NAMES[i]}</span>
       <input class="ch-slider" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">
       <span class="ch-val" id="chv${i}">${v}</span>`;
     wrap.appendChild(row);
@@ -2016,7 +2107,7 @@ async function sendChannels() {
 function syncLightOverlay(channels) {
   if (!lightDetailOpen || _dragging) return;
   liveChannels = [...channels];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 4; i++) {
     const s = $(`chs${i}`);
     if (!s) continue;
     const v = channels[i] ?? 0;
@@ -2057,6 +2148,47 @@ async function saveCurrentAsPreset(idx) {
     setTimeout(() => { btn.textContent = 'Werte speichern'; btn.classList.remove('saved'); }, 2000);
   } catch(e) { console.error('Preset speichern fehlgeschlagen', e); }
 }
+
+// ── Chart scrubber events ──────────────────────────────────────────────────
+
+(function() {
+  const scrub = $('chartScrub');
+  if (!scrub) return;
+  scrub.addEventListener('input', function() {
+    const v = parseInt(this.value);
+    const pct = (v / 10).toFixed(1);
+    this.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
+    if (v >= 1000) {
+      chartScrubPos = null;
+      $('chartScrubLabel').textContent = 'Live';
+    } else {
+      chartScrubPos = v / 1000;
+      const now2 = Date.now() / 1000;
+      const ts   = (now2 - chartRangeSec) + chartScrubPos * chartRangeSec;
+      $('chartScrubLabel').textContent = fmtAxisTime(ts, now2);
+    }
+    renderCharts();
+  });
+})();
+
+// ── Hash routing (back-gesture support) ────────────────────────────────────
+
+window.addEventListener('popstate', () => {
+  document.querySelectorAll('.overlay:not(.hidden)').forEach(el => el.classList.add('hidden'));
+  if (netTimer) { clearInterval(netTimer); netTimer = null; }
+  lightDetailOpen = false;
+  const hash = location.hash.slice(1);
+  if (hash) {
+    const map = {
+      battery:  () => { $('battOverlay').classList.remove('hidden'); if (_lastBms) updateBms(_lastBms); setTimeout(renderCharts, 50); },
+      lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); renderPresetEditList(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
+      alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },
+      network:  () => { $('networkOverlay').classList.remove('hidden'); fetchNetwork(); netTimer = setInterval(fetchNetwork, 5000); },
+      settings: () => _showSettingsPanel(),
+    };
+    if (map[hash]) map[hash]();
+  }
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
