@@ -77,6 +77,11 @@ async def broadcast(data: dict):
         p = data.get(src_key, {}).get('power')
         if p is not None:
             entry[field] = p
+    bms = data.get('bms', {})
+    for bms_key in ('current_charge', 'current_discharge'):
+        v = bms.get(bms_key)
+        if v is not None:
+            entry[bms_key] = v
     if len(entry) > 1:
         history.append(entry)
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
@@ -235,6 +240,12 @@ async def get_alarm_rules():
 @app.patch('/api/alarms/rules')
 async def update_alarm_rules(body: dict):
     return alarms.update_rules(body)
+
+
+@app.post('/api/system/time-sync')
+async def system_time_sync():
+    can_if.send_time(time.time())
+    return {'ok': True}
 
 
 @app.post('/api/system/update')

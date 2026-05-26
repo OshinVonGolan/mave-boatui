@@ -8,7 +8,7 @@ import can
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
-    build_brightness_frames, make_can_id,
+    build_brightness_frames, build_time_frame, make_can_id,
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_temperature,
@@ -88,6 +88,17 @@ class CanInterface:
         self._on_change = coro_fn
 
     # ── Senden ──────────────────────────────────────────────────────────────
+
+    def send_time(self, ts: float):
+        if self._bus is None:
+            log.warning("CAN nicht verbunden – Senden nicht möglich")
+            return
+        can_id, data = build_time_frame(ts)
+        try:
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.info("Systemzeit gesendet (PGN 126992)")
+        except can.CanError as e:
+            log.error("CAN-Sendefehler Systemzeit: %s", e)
 
     def send_brightness(self, values: list[int]):
         if self._bus is None:

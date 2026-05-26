@@ -30,6 +30,7 @@
       --orange:   #f97316;
       --radius:   14px;
       --gap:      16px;
+      --header-h: 57px;
     }
 
     html, body { height: 100%; background: var(--bg); color: var(--text);
@@ -40,7 +41,7 @@
     header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
-      background: var(--surface); position: sticky; top: 0; z-index: 10;
+      background: var(--surface); position: sticky; top: 0; z-index: 101;
     }
     .logo { font-size: 20px; font-weight: 700; letter-spacing: .18em;
       color: var(--accent); text-transform: uppercase; }
@@ -178,8 +179,8 @@
     .divider { height: 1px; background: var(--border); margin: 0 -4px; }
 
     /* ── Full-screen overlay (shared base) ── */
-    .overlay { position: fixed; inset: 0; background: var(--bg); z-index: 100;
-      display: flex; flex-direction: column; }
+    .overlay { position: fixed; top: var(--header-h); left: 0; right: 0; bottom: 0;
+      background: var(--bg); z-index: 100; display: flex; flex-direction: column; }
     .overlay.hidden { display: none; }
     .ov-header { display: flex; align-items: center; justify-content: space-between;
       padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -676,12 +677,23 @@
 
     /* Mobile: compact topbar */
     @media (max-width: 500px) {
+      :root { --header-h: 51px; }
       .logo-sub, .logo-ver { display: none; }
       #connLabel { display: none; }
-      .topbar-batt-pct { display: none; }
+      .topbar-batt-pct, #topbarClock { display: none !important; }
       header { padding: 12px 14px 10px; }
       .header-right { gap: 8px; }
     }
+
+    /* Back-arrow close button */
+    .ov-close-arrow {
+      background: none; border: none; color: var(--text2);
+      font-size: 22px; cursor: pointer; padding: 4px 10px 4px 4px;
+      line-height: 1; display: flex; align-items: center; gap: 6px;
+      transition: color .15s;
+    }
+    .ov-close-arrow:hover { color: var(--text); }
+    .ov-close-arrow svg { flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -695,6 +707,7 @@
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
     </button>
+    <span id="topbarClock" style="font-size:12px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.03em">00:00</span>
     <div class="topbar-batt" id="topbarBatt" title="Ladestand Servicebatterie">
       <svg width="24" height="13" viewBox="0 0 24 13" fill="none">
         <rect x="0.75" y="0.75" width="19.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
@@ -869,7 +882,9 @@
       </svg>
       Batterie — Details
     </div>
-    <button class="ov-close" onclick="closeBattDetail()">✕</button>
+    <button class="ov-close-arrow" onclick="closeBattDetail()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
   </div>
   <div class="ov-body">
   <div class="bd-layout">
@@ -909,6 +924,9 @@
       <div class="bd-sec-item">
         <div class="bd-label">Starterbatterie</div>
         <div class="bd-sec-val"><span id="dStarter">--</span><span class="bd-unit">V</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">
+          Min <span id="dStarterMin">--</span> · Max <span id="dStarterMax">--</span> V
+        </div>
       </div>
       <div class="bd-sec-item">
         <div class="bd-label">Ladezyklen</div>
@@ -972,6 +990,26 @@
       <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:16px 0 8px">Kein Signal — warte auf Daten…</div>
       <div id="bmsDataWrap" style="display:none">
         <div class="bms-pack-row" id="bmsPackRow"></div>
+        <div id="bmsDailyStats" style="display:none;margin-bottom:12px">
+          <div class="bms-pack-row" style="margin-bottom:0">
+            <div class="bms-pack-item">
+              <div class="bd-label">Heute geladen</div>
+              <div class="bms-pack-val val-green" id="bmsTodayCharge">-- Ah</div>
+            </div>
+            <div class="bms-pack-item">
+              <div class="bd-label">Heute entladen</div>
+              <div class="bms-pack-val val-orange" id="bmsTodayDischarge">-- Ah</div>
+            </div>
+            <div class="bms-pack-item">
+              <div class="bd-label">Lade-A (live)</div>
+              <div class="bms-pack-val" id="bmsChargeA">-- A</div>
+            </div>
+            <div class="bms-pack-item">
+              <div class="bd-label">Entlade-A (live)</div>
+              <div class="bms-pack-val" id="bmsDischargeA">-- A</div>
+            </div>
+          </div>
+        </div>
         <div class="bms-flags-row" id="bmsFlags"></div>
         <div class="bms-cell-grid" id="bmsCellGrid"></div>
       </div>
@@ -991,7 +1029,9 @@
       </svg>
       Alarme
     </div>
-    <button class="ov-close" onclick="closeAlarms()">✕</button>
+    <button class="ov-close-arrow" onclick="closeAlarms()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
   </div>
   <div class="ov-body">
     <div class="tabs">
@@ -1030,7 +1070,9 @@
       </svg>
       Einstellungen
     </div>
-    <button class="ov-close" onclick="closeSettings()">✕</button>
+    <button class="ov-close-arrow" onclick="closeSettings()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
   </div>
   <div class="ov-body" style="padding:0">
 
@@ -1101,11 +1143,20 @@
         <div class="settings-section-title">System</div>
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
           <div style="font-size:13px;color:var(--text2)">Software auf aktuellen Stand bringen und neu starten.</div>
-          <div style="display:flex;align-items:center;gap:12px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <button class="btn-primary" id="updateBtn" onclick="runUpdate()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
               Software aktualisieren
             </button>
             <span id="updateFeedback" style="font-size:13px;color:var(--text2)"></span>
+          </div>
+        </div>
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="font-size:13px;color:var(--text2)">Aktuelle Uhrzeit des Pi an den CAN-Bus senden (PGN 126992).</div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn-primary" id="timeSyncBtn" onclick="syncTime()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
+              Uhrzeit synchronisieren
+            </button>
+            <span id="timeSyncFeedback" style="font-size:13px;color:var(--text2)"></span>
           </div>
         </div>
       </div>
@@ -1130,7 +1181,9 @@
       </svg>
       Netzwerk
     </div>
-    <button class="ov-close" onclick="closeNetwork()">✕</button>
+    <button class="ov-close-arrow" onclick="closeNetwork()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
   </div>
   <div class="ov-body" id="netContent">
     <div class="net-empty">Lade…</div>
@@ -1149,7 +1202,9 @@
       </svg>
       Internet-Verbindung
     </div>
-    <button class="ov-close" onclick="closeConnectivity()">✕</button>
+    <button class="ov-close-arrow" onclick="closeConnectivity()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
   </div>
   <div class="ov-body" id="connInetBody" style="max-width:600px">
     <div style="color:var(--text3);text-align:center;padding:60px 20px">Lade…</div>
@@ -1174,7 +1229,9 @@
         </svg>
         Preset
       </button>
-      <button class="ov-close" onclick="closeLightDetail()">✕</button>
+      <button class="ov-close-arrow" onclick="closeLightDetail()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
     </div>
   </div>
   <div class="ov-body" style="max-width:860px">
@@ -1227,6 +1284,17 @@ let devicesConfig  = {};
 let batteriesConfig = { service_instance: 0, starter_instance: 1 };
 let state = { lights: { channels: Array(9).fill(0) } };
 
+// ── Clock ──────────────────────────────────────────────────────────────────
+
+function updateClock() {
+  const el = $('topbarClock');
+  if (!el) return;
+  const d = new Date();
+  el.textContent = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+updateClock();
+setInterval(updateClock, 10000);
+
 // ── SOC-Gauge ──────────────────────────────────────────────────────────────
 
 const GAUGE_CX = 80, GAUGE_CY = 68, GAUGE_R = 58;
@@ -1270,6 +1338,39 @@ function updateChargeStatus(b) {
   }
 }
 
+// ── Starter battery min/max ────────────────────────────────────────────────
+
+let _starterMin = null, _starterMax = null;
+
+// ── Daily Ah accumulation ──────────────────────────────────────────────────
+
+let _todayChargeAh = 0, _todayDischargeAh = 0;
+let _lastBmsAhTs = null;
+
+function accumBmsAh(chargeA, dischargeA) {
+  const now = Date.now() / 1000;
+  const midnightTs = new Date().setHours(0,0,0,0) / 1000;
+  if (_lastBmsAhTs === null || _lastBmsAhTs < midnightTs) {
+    _todayChargeAh = 0; _todayDischargeAh = 0;
+    _lastBmsAhTs = now; return;
+  }
+  const dtH = (now - _lastBmsAhTs) / 3600;
+  _todayChargeAh    += (chargeA    ?? 0) * dtH;
+  _todayDischargeAh += (dischargeA ?? 0) * dtH;
+  _lastBmsAhTs = now;
+}
+
+function recomputeDailyAhFromHist() {
+  const midnightTs = new Date().setHours(0,0,0,0) / 1000;
+  _todayChargeAh = 0; _todayDischargeAh = 0;
+  const today = histData.filter(e => e.ts >= midnightTs && (e.current_charge != null || e.current_discharge != null));
+  for (let i = 1; i < today.length; i++) {
+    const dtH = (today[i].ts - today[i-1].ts) / 3600;
+    _todayChargeAh    += (today[i-1].current_charge    ?? 0) * dtH;
+    _todayDischargeAh += (today[i-1].current_discharge ?? 0) * dtH;
+  }
+}
+
 // ── Battery update ─────────────────────────────────────────────────────────
 
 function updateBattery(b) {
@@ -1296,6 +1397,12 @@ function updateBattery(b) {
   $('dP').textContent       = fmt(b.power, 0);
   $('dAh').textContent      = fmt(b.consumed_ah);
   $('dStarter').textContent = fmtV(b.starter_voltage);
+  if (b.starter_voltage != null) {
+    if (_starterMin === null || b.starter_voltage < _starterMin) _starterMin = b.starter_voltage;
+    if (_starterMax === null || b.starter_voltage > _starterMax) _starterMax = b.starter_voltage;
+    $('dStarterMin').textContent = fmtV(_starterMin);
+    $('dStarterMax').textContent = fmtV(_starterMax);
+  }
   $('dCycles').textContent  = b.cycles   ?? '--';
   $('dMinV').textContent    = fmtV(b.min_voltage);
   $('dMaxV').textContent    = fmtV(b.max_voltage);
@@ -1318,7 +1425,7 @@ function updateTopbarBatt(soc) {
     return;
   }
   const v = Math.max(0, Math.min(100, soc));
-  fill.setAttribute('width', String((v / 100 * 15).toFixed(1)));
+  fill.setAttribute('width', String((v / 100 * 16).toFixed(1)));
   const color = v >= 50 ? 'var(--green)' : v >= 20 ? 'var(--yellow)' : 'var(--red)';
   if (wrap) wrap.style.color = color;
   if (pct)  pct.textContent = Math.round(v) + '%';
@@ -1440,6 +1547,18 @@ async function applyPreset(id) {
   activePreset = id; renderPresets();
   try { await fetch(`/api/lights/preset/${id}`, { method: 'POST' }); }
   catch(e) { activePreset = null; renderPresets(); }
+}
+
+function checkPresetMatch() {
+  const match = presets.findIndex(p => {
+    if (!p.values) return false;
+    return p.values.every((v, i) => Math.abs(v - (liveChannels[i] ?? 0)) <= 2);
+  });
+  const newActive = match >= 0 ? match : null;
+  if (newActive !== activePreset) {
+    activePreset = newActive;
+    renderPresets();
+  }
 }
 
 // ── Battery detail + charts ────────────────────────────────────────────────
@@ -1706,6 +1825,17 @@ function updateBms(bms) {
   $('bmsDataWrap').style.display  = hasBms ? ''     : 'none';
   if (!hasBms) return;
 
+  // BMS daily Ah accumulation
+  if (bms.current_charge != null || bms.current_discharge != null) {
+    accumBmsAh(bms.current_charge, bms.current_discharge);
+    const dsEl = $('bmsDailyStats');
+    if (dsEl) dsEl.style.display = '';
+    const tcEl = $('bmsTodayCharge');    if (tcEl) tcEl.textContent = _todayChargeAh.toFixed(1) + ' Ah';
+    const tdEl = $('bmsTodayDischarge'); if (tdEl) tdEl.textContent = _todayDischargeAh.toFixed(1) + ' Ah';
+    const caEl = $('bmsChargeA');    if (caEl) caEl.textContent = (bms.current_charge ?? 0).toFixed(1) + ' A';
+    const daEl = $('bmsDischargeA'); if (daEl) daEl.textContent = (bms.current_discharge ?? 0).toFixed(1) + ' A';
+  }
+
   // Pack row
   const packItems = [
     { label: 'SOC',        val: bms.soc != null ? bms.soc + ' %' : '--' },
@@ -1736,10 +1866,13 @@ function updateBms(bms) {
     `<div class="bms-flag ${f.cls}">${f.icon} ${f.label}</div>`
   ).join('');
 
-  // Cell grid
+  // Cell grid (4-cell: 2×2 with bottom-left=1, top-left=2, top-right=3, bottom-right=4)
   const cells = bms.cells ?? [];
   const n     = cells.length || (bms.cell_count ?? 0);
-  $('bmsCellGrid').innerHTML = Array.from({length: n}, (_, i) => {
+  const renderOrder = n === 4 ? [1, 2, 0, 3] : Array.from({length: n}, (_, i) => i);
+  const grid = $('bmsCellGrid');
+  grid.style.gridTemplateColumns = n === 4 ? 'repeat(2, 1fr)' : '';
+  grid.innerHTML = renderOrder.map(i => {
     const c    = cells[i];
     const isLo = i === (bms.lowest_cell_nr  - 1);
     const isHi = i === (bms.highest_cell_nr - 1);
@@ -2139,106 +2272,47 @@ async function fetchSettingsNetwork() {
 function renderSettingsNetwork(el, netData, connData) {
   let html = '';
 
-  // ── Internet-Sektion ──────────────────────────────────────────────────────
+  // ── Internet-Sektion (kompakt — Details im Verbindungs-Overlay) ───────────
   if (connData?.router) {
     const r   = connData.router;
     const sl  = connData.starlink ?? {};
     const mob = r.mobile ?? {};
-
-    const isWan   = r.active_type === 'wired';
-    const slOk    = sl.state === 'CONNECTED';
-    const sigPct  = mob.signal_pct ?? 0;
-
-    const routerDot  = r.wired_up  ? 'ok'  : 'old';
-    const starlinkDot = sl.reachable ? (slOk ? 'ok' : 'warn') : 'old';
-    const mobileDot  = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old';
-
-    const slColor  = slOk ? 'var(--green)' : 'var(--yellow)';
+    const isWan  = r.active_type === 'wired';
+    const sigPct = mob.signal_pct ?? 0;
+    const slOk   = sl.state === 'CONNECTED';
+    const dotCls = isWan ? (slOk ? 'ok' : 'warn') : (r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old');
     const sigColor = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
 
     html += `
     <div class="settings-section-title" style="margin-bottom:12px">Internet</div>
-    <div class="net-grid" style="margin-bottom:20px">
-
-      <div class="net-device-card">
-        <div class="net-device-header">
-          <div class="net-device-dot ${routerDot}"></div>
-          <div class="net-device-name">RUTX50 Router</div>
-          <div class="net-device-src">${isWan ? 'WAN aktiv' : 'Mobile aktiv'}</div>
-        </div>
-        <div class="net-pgn-list">
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Aktiver Uplink</div>
-            <div class="net-pgn-iv">${isWan ? '🛰 Starlink' : '📶 Mobilfunk'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">WAN (Starlink)</div>
-            <div class="net-pgn-iv">${r.wired_up ? 'verbunden' : 'getrennt'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Mobilfunk</div>
-            <div class="net-pgn-iv">${r.mobile_up ? 'verbunden' : 'getrennt'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Uptime</div>
-            <div class="net-pgn-iv">${fmtUptime(r.active_uptime)}</div>
-          </div>
-        </div>
+    <div class="net-device-card" style="margin-bottom:20px">
+      <div class="net-device-header">
+        <div class="net-device-dot ${dotCls}"></div>
+        <div class="net-device-name">RUTX50 Router</div>
+        <div class="net-device-src">${isWan ? '🛰 Starlink' : `📶 ${mob.operator || 'Mobilfunk'}`}</div>
       </div>
-
-      <div class="net-device-card">
-        <div class="net-device-header">
-          <div class="net-device-dot ${starlinkDot}"></div>
-          <div class="net-device-name">Starlink Mini</div>
-          <div class="net-device-src" style="color:${slColor}">${sl.state ?? '--'}</div>
+      <div class="net-pgn-list">
+        <div class="net-pgn-row">
+          <div class="net-pgn-desc">Aktiver Uplink</div>
+          <div class="net-pgn-iv">${isWan ? 'WAN (Starlink)' : `Mobilfunk · ${mob.ntype || '?'}`}</div>
         </div>
-        <div class="net-pgn-list">
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Latenz</div>
-            <div class="net-pgn-iv">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Download</div>
-            <div class="net-pgn-iv">${fmtBps(sl.downlink_bps)}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Upload</div>
-            <div class="net-pgn-iv">${fmtBps(sl.uplink_bps)}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Paketverlust</div>
-            <div class="net-pgn-iv">${sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--'}</div>
-          </div>
-          ${sl.error ? `<div class="net-pgn-row"><div class="net-pgn-desc" style="color:var(--red)">${sl.error}</div></div>` : ''}
+        <div class="net-pgn-row">
+          <div class="net-pgn-desc">WAN / Mobilfunk</div>
+          <div class="net-pgn-iv">${r.wired_up ? '✓' : '–'} / ${r.mobile_up ? '✓' : '–'}</div>
         </div>
+        ${r.mobile_up ? `<div class="net-pgn-row">
+          <div class="net-pgn-desc">Signalqualität</div>
+          <div class="net-pgn-iv" style="color:${sigColor}">${sigPct} %</div>
+        </div>` : ''}
+        <div class="net-pgn-row">
+          <div class="net-pgn-desc">Uptime</div>
+          <div class="net-pgn-iv">${fmtUptime(r.active_uptime)}</div>
+        </div>
+        ${sl.ping_ms != null ? `<div class="net-pgn-row">
+          <div class="net-pgn-desc">Starlink Latenz</div>
+          <div class="net-pgn-iv">${sl.ping_ms.toFixed(0)} ms · ${fmtBps(sl.downlink_bps)} ↓</div>
+        </div>` : ''}
       </div>
-
-      <div class="net-device-card">
-        <div class="net-device-header">
-          <div class="net-device-dot ${mobileDot}"></div>
-          <div class="net-device-name">Mobilfunk — ${mob.operator || 'SIM 1'}</div>
-          <div class="net-device-src">${mob.ntype || ''}</div>
-        </div>
-        <div class="net-pgn-list">
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Verbindungstyp</div>
-            <div class="net-pgn-iv">${mob.conntype || '--'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Signalqualität</div>
-            <div class="net-pgn-iv" style="color:${sigColor}">${sigPct} %</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">Band</div>
-            <div class="net-pgn-iv">${mob.band || '--'}</div>
-          </div>
-          <div class="net-pgn-row">
-            <div class="net-pgn-desc">RSRP / SINR</div>
-            <div class="net-pgn-iv">${mob.rsrp ?? '--'} / ${mob.sinr ?? '--'} dB</div>
-          </div>
-        </div>
-      </div>
-
     </div>`;
   }
 
@@ -2706,6 +2780,7 @@ function connect() {
           });
           if (Object.keys(ce).length > 1) chargeHist.push(ce);
         });
+        recomputeDailyAhFromHist();
         if (!$('battOverlay').classList.contains('hidden')) renderCharts();
         reRenderChargePie();
       }).catch(() => {});
@@ -2783,6 +2858,7 @@ function buildLightSliders() {
       liveChannels[i] = val;
       $(`chv${i}`).textContent = Math.round(val / 255 * 100) + '%';
       sliderFill(slider, val);
+      checkPresetMatch();
       throttleSend();
     });
   }
@@ -2799,6 +2875,7 @@ function updateRelayBtn() {
 function toggleRelay() {
   liveChannels[8] = liveChannels[8] > 0 ? 0 : 1;
   updateRelayBtn();
+  checkPresetMatch();
   throttleSend();
 }
 
@@ -2833,6 +2910,7 @@ function syncLightOverlay(channels) {
     $(`chv${i}`).textContent = Math.round(v / 255 * 100) + '%';
   }
   updateRelayBtn();
+  checkPresetMatch();
 }
 
 function renderPresetEditList() {
@@ -2926,6 +3004,26 @@ window.addEventListener('popstate', () => {
     if (map[hash]) map[hash]();
   }
 });
+
+// ── Time sync ──────────────────────────────────────────────────────────────
+
+async function syncTime() {
+  const btn = $('timeSyncBtn');
+  const fb  = $('timeSyncFeedback');
+  btn.disabled = true;
+  fb.style.color = 'var(--text2)';
+  fb.textContent = 'Sende…';
+  try {
+    await fetch('/api/system/time-sync', { method: 'POST' });
+    fb.textContent = 'Gesendet ✓';
+    fb.style.color = 'var(--green)';
+    setTimeout(() => { fb.textContent = ''; btn.disabled = false; }, 3000);
+  } catch(e) {
+    fb.textContent = 'Fehler';
+    fb.style.color = 'var(--red)';
+    btn.disabled = false;
+  }
+}
 
 // ── Update ─────────────────────────────────────────────────────────────────
 

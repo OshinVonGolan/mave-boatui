@@ -270,6 +270,19 @@ PGN_NAMES: dict[int, str] = {
 }
 
 
+def build_time_frame(ts: float) -> tuple[int, bytes]:
+    """Erstellt NMEA2000 PGN 126992 (System Time) Frame.
+
+    ts: Unix-Timestamp (Sekunden seit 1970-01-01 UTC)
+    """
+    days     = int(ts // 86400)
+    secs     = ts - days * 86400
+    time_raw = round(secs * 10000)           # 0.0001s units
+    payload  = struct.pack('<BBHI', 0xFF, 0x03, days, time_raw)
+    can_id   = make_can_id(126992, RPI_SOURCE_ADDRESS, priority=3)
+    return can_id, payload
+
+
 def build_brightness_frames(values: list[int], seq_id: int = 0) -> list[tuple]:
     """Erstellt Fast-Packet CAN-Frames für PGN 126720 Typ 0xA1 (11 Byte Payload)."""
     payload = bytes([0xA1, LIGHT_BANK_INSTANCE] + [int(v) for v in values[:9]])
