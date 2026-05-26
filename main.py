@@ -248,8 +248,23 @@ async def system_time_sync():
     return {'ok': True}
 
 
+@app.get('/api/system/version')
+async def system_version():
+    return {'version': VERSION, 'git': _git_version()}
+
+
+def _git_version() -> str:
+    try:
+        r = subprocess.run(['git', 'describe', '--tags', '--always', '--dirty'],
+                           cwd=BASE_DIR, capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() if r.returncode == 0 else ''
+    except Exception:
+        return ''
+
+
 @app.post('/api/system/update')
 async def system_update():
+    before = _git_version()
     result = subprocess.run(
         ['git', 'pull'],
         cwd=BASE_DIR, capture_output=True, text=True, timeout=30,
@@ -257,10 +272,12 @@ async def system_update():
     if result.returncode != 0:
         raise HTTPException(500, detail=result.stderr.strip())
     changed = 'Already up to date.' not in result.stdout
+    after = _git_version()
     log.info("git pull: %s", result.stdout.strip())
     if changed:
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
-    return {'ok': True, 'changed': changed, 'output': result.stdout.strip()}
+    return {'ok': True, 'changed': changed, 'output': result.stdout.strip(),
+            'version_before': before, 'version_after': after}
 
 
 @app.patch('/api/settings')

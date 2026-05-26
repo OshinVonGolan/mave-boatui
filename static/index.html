@@ -39,15 +39,16 @@
 
     /* ── Header ── */
     header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 14px 20px 12px; border-bottom: 1px solid var(--border);
       background: var(--surface); position: sticky; top: 0; z-index: 101;
     }
     .logo { font-size: 20px; font-weight: 700; letter-spacing: .18em;
       color: var(--accent); text-transform: uppercase; }
     .logo span { color: var(--text2); font-weight: 400; font-size: 13px;
       letter-spacing: .04em; margin-left: 10px; }
-    .header-right { display: flex; align-items: center; gap: 12px; }
+    .header-right { display: flex; align-items: center; gap: 10px; justify-self: end; }
     .conn-badge { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); }
     .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); transition: background .4s; }
     .conn-dot.ok   { background: var(--green); }
@@ -106,9 +107,9 @@
 
     /* ── Battery grid ── */
     .batt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .batt-item { background: var(--surface2); border-radius: 10px; padding: 10px 12px; }
-    .batt-item .label { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
-    .batt-item .value { font-size: 18px; font-weight: 600; line-height: 1; }
+    .batt-item { background: var(--surface2); border-radius: 10px; padding: 10px 12px; text-align: center; }
+    .batt-item .label { font-size: 10px; color: var(--text3); margin-bottom: 3px; letter-spacing: .06em; text-transform: uppercase; }
+    .batt-item .value { font-size: 20px; font-weight: 700; line-height: 1; }
     .batt-item .unit  { font-size: 11px; color: var(--text2); margin-left: 2px; }
     .batt-sub { display: flex; justify-content: space-between; padding-top: 4px;
       border-top: 1px solid var(--border); flex-wrap: wrap; gap: 4px; }
@@ -182,27 +183,30 @@
     .overlay { position: fixed; top: var(--header-h); left: 0; right: 0; bottom: 0;
       background: var(--bg); z-index: 100; display: flex; flex-direction: column; }
     .overlay.hidden { display: none; }
-    .ov-header { display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px; border-bottom: 1px solid var(--border);
-      background: var(--surface); flex-shrink: 0; }
-    .ov-title { font-size: 13px; font-weight: 600; letter-spacing: .1em;
-      text-transform: uppercase; color: var(--text2);
-      display: flex; align-items: center; gap: 8px; }
-    .ov-close { background: none; border: 1px solid var(--border); border-radius: 8px;
-      color: var(--text2); font-size: 16px; cursor: pointer; padding: 4px 10px;
-      line-height: 1.4; transition: all .15s; }
-    .ov-close:hover { background: var(--surface2); color: var(--text); }
+    .ov-header { display: flex; align-items: center;
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0; gap: 8px; }
+    .ov-title { flex: 1; text-align: center; font-size: 13px; font-weight: 600;
+      letter-spacing: .1em; text-transform: uppercase; color: var(--text2);
+      display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .ov-header-spacer { width: 44px; flex-shrink: 0; }
     .ov-body { flex: 1; overflow-y: auto; padding: 16px; }
 
-    /* ── Battery detail ── */
-    .batt-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-      margin-bottom: 20px; }
-    @media (min-width: 500px) { .batt-detail-grid { grid-template-columns: repeat(3,1fr); } }
-    .batt-detail-item { background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px; }
-    .batt-detail-item .label { font-size: 11px; color: var(--text3); margin-bottom: 4px; letter-spacing: .05em; }
-    .batt-detail-item .value { font-size: 22px; font-weight: 700; line-height: 1; }
-    .batt-detail-item .unit  { font-size: 12px; color: var(--text2); margin-left: 2px; }
+    /* ── Battery detail tiles ── */
+    .bd-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    @media (min-width: 480px) { .bd-tiles { grid-template-columns: repeat(3, 1fr); } }
+    .bd-tile {
+      background: var(--surface2); border-radius: 12px; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 4px; min-height: 88px;
+    }
+    .bd-tile-full { grid-column: 1 / -1; min-height: 72px; }
+    .bd-tile-label { font-size: 10px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3); }
+    .bd-tile-val { font-size: 26px; font-weight: 700; line-height: 1; flex: 1;
+      display: flex; align-items: flex-start; gap: 2px; margin-top: 4px; }
+    .bd-tile-unit { font-size: 12px; color: var(--text2); font-weight: 400;
+      align-self: flex-end; margin-bottom: 3px; }
+    .bd-tile-sub { font-size: 11px; color: var(--text3); text-align: right; margin-top: auto; }
 
     /* ── Charts ── */
     .chart-section { display: flex; flex-direction: column; gap: 14px; }
@@ -572,34 +576,14 @@
     .bms-cell .cell-temp { font-size: 13px; color: var(--text2); margin-top: 6px; }
 
     /* ── Battery detail layout ── */
-    .bd-layout {
-      display: grid; grid-template-columns: 1fr; gap: 16px;
-      max-width: 1400px; margin: 0 auto;
-    }
+    .bd-layout { display: grid; grid-template-columns: 1fr; gap: 14px;
+      max-width: 1200px; margin: 0 auto; }
     @media (min-width: 860px) {
-      .bd-layout { grid-template-columns: 280px 1fr; align-items: start; }
+      .bd-layout { grid-template-columns: 340px 1fr; align-items: start; }
     }
-    .bd-hero {
-      display: flex; gap: 0; background: var(--surface2);
-      border-radius: var(--radius); overflow: hidden; margin-bottom: 12px;
-    }
-    .bd-soc-box {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 20px; border-right: 1px solid var(--border); flex-shrink: 0;
-    }
-    .bd-soc-num { font-size: 48px; font-weight: 700; line-height: 1; }
-    .bd-metrics { flex: 1; display: grid; grid-template-columns: repeat(3,1fr); }
-    .bd-metric { padding: 14px 12px; border-right: 1px solid var(--border); }
-    .bd-metric:last-child { border-right: none; }
-    .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
-    .bd-val { font-size: 22px; font-weight: 700; line-height: 1.1; }
+    .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em;
+      text-transform: uppercase; margin-bottom: 4px; }
     .bd-unit { font-size: 12px; color: var(--text2); margin-left: 2px; font-weight: 400; }
-    .bd-sec-grid {
-      display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin-bottom: 0;
-    }
-    @media (min-width: 860px) { .bd-sec-grid { grid-template-columns: repeat(2,1fr); } }
-    .bd-sec-item { background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
-    .bd-sec-val { font-size: 16px; font-weight: 600; margin-top: 3px; }
 
     /* ── Charge source donut ── */
     .charge-src-wrap {
@@ -681,8 +665,8 @@
       .logo-sub, .logo-ver { display: none; }
       #connLabel { display: none; }
       .topbar-batt-pct, #topbarClock { display: none !important; }
-      header { padding: 12px 14px 10px; }
-      .header-right { gap: 8px; }
+      header { padding: 10px 12px 9px; }
+      .header-right { gap: 6px; }
     }
 
     /* Back-arrow close button */
@@ -700,14 +684,15 @@
 
 <header>
   <div class="logo">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
+
+  <!-- Clock — centered via grid -->
+  <span id="topbarClock" style="font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.04em;text-align:center">00:00</span>
+
   <div class="header-right">
-    <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-      </svg>
-      <span class="alarm-badge hidden" id="alarmBadge">0</span>
-    </button>
-    <span id="topbarClock" style="font-size:12px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.03em">00:00</span>
+    <div class="conn-badge">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">Verbinde…</span>
+    </div>
     <div class="topbar-batt" id="topbarBatt" title="Ladestand Servicebatterie">
       <svg width="24" height="13" viewBox="0 0 24 13" fill="none">
         <rect x="0.75" y="0.75" width="19.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
@@ -727,16 +712,18 @@
         <div class="conn-inet-dot" id="connInetDot"></div>
       </div>
     </button>
+    <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      <span class="alarm-badge hidden" id="alarmBadge">0</span>
+    </button>
     <button class="icon-btn" onclick="openSettings()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
     </button>
-    <div class="conn-badge">
-      <div class="conn-dot" id="connDot"></div>
-      <span id="connLabel">Verbinde…</span>
-    </div>
   </div>
 </header>
 
@@ -876,77 +863,65 @@
 <!-- ── Batterie Detail ────────────────────────────────────────────────────── -->
 <div id="battOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeBattDetail()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/>
       </svg>
       Batterie — Details
     </div>
-    <button class="ov-close-arrow" onclick="closeBattDetail()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
+    <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body">
   <div class="bd-layout">
   <div class="bd-left">
 
-    <!-- Hero: SOC + main metrics -->
-    <div class="bd-hero">
-      <div class="bd-soc-box">
-        <div class="bd-label">SOC</div>
-        <div class="bd-soc-num"><span id="dSoc">--</span><span class="bd-unit" style="font-size:20px">%</span></div>
+    <!-- Kacheln -->
+    <div class="bd-tiles">
+      <!-- SOC — volle Breite -->
+      <div class="bd-tile bd-tile-full">
+        <div class="bd-tile-label">SOC</div>
+        <div style="display:flex;align-items:flex-end;gap:10px;flex:1">
+          <div class="bd-tile-val" style="font-size:36px"><span id="dSoc">--</span><span class="bd-tile-unit" style="font-size:16px">%</span></div>
+          <div style="font-size:14px;color:var(--text2);padding-bottom:5px" id="dChargeDir"></div>
+        </div>
+        <div class="soc-bar-wrap" style="margin-top:6px"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
       </div>
-      <div class="bd-metrics">
-        <div class="bd-metric">
-          <div class="bd-label">Spannung</div>
-          <div class="bd-val"><span id="dV">--</span><span class="bd-unit">V</span></div>
-        </div>
-        <div class="bd-metric">
-          <div class="bd-label">Strom</div>
-          <div class="bd-val"><span id="dI">--</span><span class="bd-unit">A</span></div>
-        </div>
-        <div class="bd-metric">
-          <div class="bd-label">Leistung</div>
-          <div class="bd-val"><span id="dP">--</span><span class="bd-unit">W</span></div>
-        </div>
+      <!-- Spannung -->
+      <div class="bd-tile">
+        <div class="bd-tile-label">Spannung</div>
+        <div class="bd-tile-val"><span id="dV">--</span><span class="bd-tile-unit">V</span></div>
+        <div class="bd-tile-sub">↓ <span id="dMinV">--</span> · ↑ <span id="dMaxV">--</span> V</div>
+      </div>
+      <!-- Strom -->
+      <div class="bd-tile">
+        <div class="bd-tile-label">Strom</div>
+        <div class="bd-tile-val"><span id="dI">--</span><span class="bd-tile-unit">A</span></div>
+        <div class="bd-tile-sub"><span id="dP">--</span> W</div>
+      </div>
+      <!-- Verbraucht -->
+      <div class="bd-tile">
+        <div class="bd-tile-label">Verbraucht</div>
+        <div class="bd-tile-val"><span id="dAh">--</span><span class="bd-tile-unit">Ah</span></div>
+        <div class="bd-tile-sub">Voll vor <span id="dFull">--</span></div>
+      </div>
+      <!-- Starterbatterie -->
+      <div class="bd-tile">
+        <div class="bd-tile-label">Starterbatterie</div>
+        <div class="bd-tile-val"><span id="dStarter">--</span><span class="bd-tile-unit">V</span></div>
+        <div class="bd-tile-sub">↓ <span id="dStarterMin">--</span> · ↑ <span id="dStarterMax">--</span> V</div>
+      </div>
+      <!-- Zyklen -->
+      <div class="bd-tile">
+        <div class="bd-tile-label">Ladezyklen</div>
+        <div class="bd-tile-val"><span id="dCycles">--</span></div>
       </div>
     </div>
 
-    <!-- SOC progress bar -->
-    <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
-
-    <!-- Secondary metrics -->
-    <div class="bd-sec-grid">
-      <div class="bd-sec-item">
-        <div class="bd-label">Verbraucht</div>
-        <div class="bd-sec-val"><span id="dAh">--</span><span class="bd-unit">Ah</span></div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Starterbatterie</div>
-        <div class="bd-sec-val"><span id="dStarter">--</span><span class="bd-unit">V</span></div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">
-          Min <span id="dStarterMin">--</span> · Max <span id="dStarterMax">--</span> V
-        </div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Ladezyklen</div>
-        <div class="bd-sec-val"><span id="dCycles">--</span></div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Voll vor</div>
-        <div class="bd-sec-val"><span id="dFull">--</span></div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Min. Spannung</div>
-        <div class="bd-sec-val"><span id="dMinV">--</span><span class="bd-unit">V</span></div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Max. Spannung</div>
-        <div class="bd-sec-val"><span id="dMaxV">--</span><span class="bd-unit">V</span></div>
-      </div>
-    </div>
     <!-- Ladeströme Donut -->
-    <div id="chargeSourceCard" style="display:none;margin-top:12px">
+    <div id="chargeSourceCard" style="display:none;margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="bd-label">Ladeströme</div>
         <div style="display:flex;gap:3px">
@@ -1023,15 +998,16 @@
 <!-- ── Alarm Overlay ──────────────────────────────────────────────────────── -->
 <div id="alarmOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeAlarms()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
       Alarme
     </div>
-    <button class="ov-close-arrow" onclick="closeAlarms()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
+    <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body">
     <div class="tabs">
@@ -1063,6 +1039,9 @@
 <!-- ── Einstellungen Overlay ─────────────────────────────────────────────── -->
 <div id="settingsOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeSettings()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
@@ -1070,9 +1049,7 @@
       </svg>
       Einstellungen
     </div>
-    <button class="ov-close-arrow" onclick="closeSettings()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
+    <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body" style="padding:0">
 
@@ -1143,9 +1120,10 @@
         <div class="settings-section-title">System</div>
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
           <div style="font-size:13px;color:var(--text2)">Software auf aktuellen Stand bringen und neu starten.</div>
+          <div style="font-size:12px;color:var(--text3)" id="updateVersionInfo"></div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <button class="btn-primary" id="updateBtn" onclick="runUpdate()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
-              Software aktualisieren
+              Aktualisieren
             </button>
             <span id="updateFeedback" style="font-size:13px;color:var(--text2)"></span>
           </div>
@@ -1174,6 +1152,9 @@
 <!-- ── Netzwerk Overlay ────────────────────────────────────────────────────── -->
 <div id="networkOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeNetwork()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
@@ -1181,9 +1162,7 @@
       </svg>
       Netzwerk
     </div>
-    <button class="ov-close-arrow" onclick="closeNetwork()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
+    <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body" id="netContent">
     <div class="net-empty">Lade…</div>
@@ -1193,6 +1172,9 @@
 <!-- ── Internet-Verbindung Overlay ───────────────────────────────────────── -->
 <div id="connInetOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeConnectivity()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M1.5 8.5a12 12 0 0 1 21 0"/>
@@ -1202,9 +1184,7 @@
       </svg>
       Internet-Verbindung
     </div>
-    <button class="ov-close-arrow" onclick="closeConnectivity()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
+    <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body" id="connInetBody" style="max-width:600px">
     <div style="color:var(--text3);text-align:center;padding:60px 20px">Lade…</div>
@@ -1214,6 +1194,9 @@
 <!-- ── Licht Detail Overlay ──────────────────────────────────────────────── -->
 <div id="lightOverlay" class="overlay hidden">
   <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeLightDetail()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <circle cx="12" cy="12" r="5"/>
@@ -1221,18 +1204,13 @@
       </svg>
       Beleuchtung
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="icon-btn" onclick="openPresetSave()" style="font-size:12px;padding:6px 12px;gap:5px">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-        </svg>
-        Preset
-      </button>
-      <button class="ov-close-arrow" onclick="closeLightDetail()">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-      </button>
-    </div>
+    <button class="icon-btn" onclick="openPresetSave()" style="font-size:12px;padding:6px 10px;gap:4px;flex-shrink:0">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+      </svg>
+      Preset
+    </button>
   </div>
   <div class="ov-body" style="max-width:860px">
 
@@ -1326,15 +1304,17 @@ updateGauge(null);
 
 function updateChargeStatus(b) {
   const arrow = $('gaugeArrow');
+  const dir   = $('dChargeDir');
   const i = b.current;
   if (i == null || Math.abs(i) <= 0.3) {
-    arrow.textContent = '';
+    if (arrow) { arrow.textContent = ''; }
+    if (dir) dir.textContent = '';
   } else if (i > 0.3) {
-    arrow.textContent = '▲';
-    arrow.setAttribute('fill', '#22c55e');
+    if (arrow) { arrow.textContent = '▲'; arrow.setAttribute('fill', '#22c55e'); }
+    if (dir) { dir.textContent = '▲ Lädt'; dir.style.color = 'var(--green)'; }
   } else {
-    arrow.textContent = '▼';
-    arrow.setAttribute('fill', '#f97316');
+    if (arrow) { arrow.textContent = '▼'; arrow.setAttribute('fill', '#f97316'); }
+    if (dir) { dir.textContent = '▼ Entlädt'; dir.style.color = 'var(--orange)'; }
   }
 }
 
@@ -2335,6 +2315,12 @@ function _showSettingsPanel(tab) {
   $('sBattStarter').value = batteriesConfig.starter_instance ?? 1;
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
+  $('updateFeedback').textContent = '';
+  $('updateBtn').disabled = false;
+  fetch('/api/system/version').then(r => r.json()).then(d => {
+    const vi = $('updateVersionInfo');
+    if (vi) vi.textContent = `Aktuell: ${d.version}${d.git ? ' (' + d.git + ')' : ''}`;
+  }).catch(() => {});
   switchSettingsTab(tab || 'einstell');
   $('settingsOverlay').classList.remove('hidden');
 }
@@ -3030,6 +3016,7 @@ async function syncTime() {
 async function runUpdate() {
   const btn = $('updateBtn');
   const fb  = $('updateFeedback');
+  const vi  = $('updateVersionInfo');
   btn.disabled = true;
   fb.style.color = 'var(--text2)';
   fb.textContent = 'Lade…';
@@ -3043,6 +3030,8 @@ async function runUpdate() {
       return;
     }
     if (data.changed) {
+      if (vi && data.version_before && data.version_after)
+        vi.textContent = `${data.version_before} → ${data.version_after}`;
       fb.textContent = 'Aktualisiert — Server startet neu…';
       fb.style.color = 'var(--green)';
     } else {
