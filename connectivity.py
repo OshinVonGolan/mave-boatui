@@ -128,10 +128,10 @@ class ConnectivityMonitor:
 
             state = dish.get('state', 0)
             if isinstance(state, str):
-                state = state.replace('DISH_STATE_', '')
+                state = state.replace('DISH_STATE_', '') or 'CONNECTED'
             else:
-                state = {1: 'CONNECTED', 2: 'SEARCHING', 3: 'BOOTING',
-                         5: 'SLEEPING'}.get(state, str(state))
+                state = {0: 'CONNECTED', 1: 'SEARCHING', 2: 'BOOTING',
+                         3: 'SLEEPING', 5: 'SLEEPING'}.get(state, str(state))
 
             obs    = dish.get('obstruction_stats', {})
             alerts = {k: v for k, v in dish.get('alerts', {}).items() if v is True}
