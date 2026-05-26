@@ -19,7 +19,17 @@ from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 from connectivity import ConnectivityMonitor
 
-VERSION = '1.5.2'
+def _git_version() -> str:
+    try:
+        r = subprocess.run(
+            ['git', 'describe', '--tags', '--always', '--dirty'],
+            cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip() if r.returncode == 0 else ''
+    except Exception:
+        return ''
+
+VERSION = _git_version() or '1.5.2'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -251,15 +261,6 @@ async def system_time_sync():
 @app.get('/api/system/version')
 async def system_version():
     return {'version': VERSION, 'git': _git_version()}
-
-
-def _git_version() -> str:
-    try:
-        r = subprocess.run(['git', 'describe', '--tags', '--always', '--dirty'],
-                           cwd=BASE_DIR, capture_output=True, text=True, timeout=5)
-        return r.stdout.strip() if r.returncode == 0 else ''
-    except Exception:
-        return ''
 
 
 @app.post('/api/system/update')

@@ -193,24 +193,52 @@
     .ov-header-spacer { width: 44px; flex-shrink: 0; }
     .ov-body { flex: 1; overflow-y: auto; padding: 16px; }
 
-    /* ── Battery detail tiles ── */
-    .bd-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-    @media (min-width: 480px) { .bd-tiles { grid-template-columns: repeat(3, 1fr); } }
-    .bd-tile {
-      background: var(--surface2); border-radius: 12px; padding: 12px 14px;
-      display: flex; flex-direction: column; gap: 4px; min-height: 88px;
+    /* ── Battery detail — card layout ── */
+    .bd-page { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+    .bd-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+      display: flex; flex-direction: column; gap: 14px;
     }
-    .bd-tile-full { grid-column: 1 / -1; min-height: 72px; }
-    .bd-tile-label { font-size: 10px; font-weight: 600; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--text3); }
-    .bd-tile-val { font-size: 26px; font-weight: 700; line-height: 1; flex: 1;
-      display: flex; align-items: flex-start; gap: 2px; margin-top: 4px; }
-    .bd-tile-unit { font-size: 12px; color: var(--text2); font-weight: 400;
-      align-self: flex-end; margin-bottom: 3px; }
-    .bd-tile-sub { font-size: 11px; color: var(--text3); text-align: right; margin-top: auto; }
-    .bd-tile-foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: auto; gap: 4px; }
-    .bd-tile-foot-left { font-size: 11px; color: var(--text3); }
-    .bd-tile-foot-right { font-size: 11px; color: var(--text2); text-align: right; flex-shrink: 0; }
+    .bd-card-hd {
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3);
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    }
+    .bd-card-hd-row {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+      font-size: 11px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3);
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    }
+    .bd-ov-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+    .bd-soc-block { display: flex; flex-direction: column; gap: 8px; min-width: 130px; flex-shrink: 0; }
+    .bd-soc-head  { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .bd-soc-num   { font-size: 58px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .bd-soc-pct-unit { font-size: 22px; color: var(--text2); font-weight: 400; }
+    .bd-soc-dir   { font-size: 14px; color: var(--text2); align-self: center; }
+    .bd-soc-sec   { font-size: 12px; color: var(--text3); }
+    .bd-kv-grid   { flex: 1; min-width: 200px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .bd-kv-item   { background: var(--surface2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }
+    .bd-kv-label  { font-size: 10px; color: var(--text3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+    .bd-kv-line   { display: flex; align-items: baseline; gap: 3px; }
+    .bd-kv-val    { font-size: 22px; font-weight: 700; line-height: 1; }
+    .bd-kv-unit   { font-size: 12px; color: var(--text2); font-weight: 400; }
+    .bd-kv-sec    { font-size: 11px; color: var(--text3); margin-top: 4px; }
+    .bd-stat-row  { display: flex; flex-wrap: wrap; gap: 8px; }
+    .bd-stat      { flex: 1; min-width: 100px; background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
+    .bd-stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .bd-stat-val  { font-size: 15px; font-weight: 600; }
+    .bd-stat-unit { font-size: 11px; color: var(--text2); margin-left: 2px; }
+    .bd-3col      { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .bd-3col-item { background: var(--surface2); border-radius: 10px; padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .bd-3col-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+    .bd-3col-val  { font-size: 26px; font-weight: 700; display: flex; align-items: baseline; gap: 3px; }
+
+    /* ── Battery detail layout (legacy — kept for ov-body compat) ── */
+    .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em;
+      text-transform: uppercase; margin-bottom: 4px; }
+    .bd-unit { font-size: 12px; color: var(--text2); margin-left: 2px; font-weight: 400; }
 
     /* ── bd-sec (connectivity detail grid) ── */
     .bd-sec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -651,6 +679,11 @@
       transition: width .6s ease, background .5s;
     }
 
+    /* ── Connectivity card grid ── */
+    .conn-cards-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 620px) { .conn-cards-grid { grid-template-columns: 1fr 1fr; } }
+    .conn-card-body { padding: 12px 14px; }
+
     /* SOC progress bar */
     .soc-bar-wrap {
       height: 7px; background: var(--surface2); border-radius: 4px;
@@ -692,7 +725,7 @@
 <body>
 
 <header>
-  <div class="logo">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
+  <div class="logo" onclick="_closeAllOverlays();history.replaceState(null,'',location.pathname);" style="cursor:pointer">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
 
   <!-- Clock — centered via grid -->
   <span id="topbarClock" style="font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.04em;text-align:center">00:00</span>
@@ -884,86 +917,87 @@
     <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body">
-  <div class="bd-layout">
-  <div class="bd-left">
+  <div class="bd-page">
 
-    <!-- Kacheln -->
-    <div class="bd-tiles">
-      <!-- SOC — volle Breite -->
-      <div class="bd-tile bd-tile-full">
-        <div class="bd-tile-label">SOC</div>
-        <div style="display:flex;align-items:flex-end;gap:10px;flex:1">
-          <div class="bd-tile-val" style="font-size:36px"><span id="dSoc">--</span><span class="bd-tile-unit" style="font-size:16px">%</span></div>
-          <div style="font-size:14px;color:var(--text2);padding-bottom:5px" id="dChargeDir"></div>
-        </div>
-        <div class="soc-bar-wrap" style="margin-top:6px"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
-        <div class="bd-tile-foot" style="margin-top:4px">
-          <div class="bd-tile-foot-left"></div>
-          <div class="bd-tile-foot-right" id="dSocSec" style="display:none"></div>
-        </div>
-      </div>
-      <!-- Spannung -->
-      <div class="bd-tile">
-        <div class="bd-tile-label">Spannung</div>
-        <div class="bd-tile-val"><span id="dV">--</span><span class="bd-tile-unit">V</span></div>
-        <div class="bd-tile-foot">
-          <div class="bd-tile-foot-left">↓ <span id="dMinV">--</span> · ↑ <span id="dMaxV">--</span> V</div>
-          <div class="bd-tile-foot-right" id="dVSec" style="display:none"></div>
-        </div>
-      </div>
-      <!-- Strom -->
-      <div class="bd-tile">
-        <div class="bd-tile-label">Strom</div>
-        <div class="bd-tile-val"><span id="dI">--</span><span class="bd-tile-unit">A</span></div>
-        <div class="bd-tile-foot">
-          <div class="bd-tile-foot-left"><span id="dP">--</span> W</div>
-          <div class="bd-tile-foot-right" id="dISec" style="display:none"></div>
-        </div>
-      </div>
-      <!-- Verbraucht -->
-      <div class="bd-tile">
-        <div class="bd-tile-label">Verbraucht</div>
-        <div class="bd-tile-val"><span id="dAh">--</span><span class="bd-tile-unit">Ah</span></div>
-        <div class="bd-tile-sub">Voll vor <span id="dFull">--</span></div>
-      </div>
-      <!-- Starterbatterie — volle Breite, 3 Felder -->
-      <div class="bd-tile bd-tile-full">
-        <div class="bd-tile-label">Starterbatterie</div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1;margin-top:8px">
-          <div>
-            <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Aktuell</div>
-            <div style="display:flex;align-items:baseline;gap:2px">
-              <span style="font-size:22px;font-weight:700;line-height:1" id="dStarter">--</span>
-              <span style="font-size:11px;color:var(--text2)">V</span>
-            </div>
+    <!-- ── Karte 1: Servicebatterie Übersicht ── -->
+    <div class="bd-card">
+      <div class="bd-card-hd">Servicebatterie</div>
+      <div class="bd-ov-row">
+        <!-- SOC — linke Spalte -->
+        <div class="bd-soc-block">
+          <div class="bd-soc-head">
+            <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
           </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">↓ Min</div>
-            <div style="display:flex;align-items:baseline;gap:2px">
-              <span style="font-size:22px;font-weight:700;line-height:1" id="dStarterMin">--</span>
-              <span style="font-size:11px;color:var(--text2)">V</span>
-            </div>
+          <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
+          <div class="bd-soc-dir" id="dChargeDir"></div>
+          <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
+        </div>
+        <!-- Kerndaten — rechte Spalte -->
+        <div class="bd-kv-grid">
+          <div class="bd-kv-item">
+            <div class="bd-kv-label">Spannung</div>
+            <div class="bd-kv-line"><span id="dV" class="bd-kv-val">--</span><span class="bd-kv-unit">V</span></div>
+            <div class="bd-kv-sec" id="dVSec" style="display:none"></div>
           </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">↑ Max</div>
-            <div style="display:flex;align-items:baseline;gap:2px">
-              <span style="font-size:22px;font-weight:700;line-height:1" id="dStarterMax">--</span>
-              <span style="font-size:11px;color:var(--text2)">V</span>
-            </div>
+          <div class="bd-kv-item">
+            <div class="bd-kv-label">Strom</div>
+            <div class="bd-kv-line"><span id="dI" class="bd-kv-val">--</span><span class="bd-kv-unit">A</span></div>
+            <div class="bd-kv-sec" id="dISec" style="display:none"></div>
+          </div>
+          <div class="bd-kv-item">
+            <div class="bd-kv-label">Leistung</div>
+            <div class="bd-kv-line"><span id="dP" class="bd-kv-val">--</span><span class="bd-kv-unit">W</span></div>
+          </div>
+          <div class="bd-kv-item">
+            <div class="bd-kv-label">Verbraucht</div>
+            <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
           </div>
         </div>
       </div>
-      <!-- Zyklen -->
-      <div class="bd-tile">
-        <div class="bd-tile-label">Ladezyklen</div>
-        <div class="bd-tile-val"><span id="dCycles">--</span></div>
+      <!-- Statistikzeile -->
+      <div class="bd-stat-row">
+        <div class="bd-stat">
+          <div class="bd-stat-label">Min. Spannung</div>
+          <div class="bd-stat-val"><span id="dMinV">--</span><span class="bd-stat-unit">V</span></div>
+        </div>
+        <div class="bd-stat">
+          <div class="bd-stat-label">Max. Spannung</div>
+          <div class="bd-stat-val"><span id="dMaxV">--</span><span class="bd-stat-unit">V</span></div>
+        </div>
+        <div class="bd-stat">
+          <div class="bd-stat-label">Voll vor</div>
+          <div class="bd-stat-val"><span id="dFull">--</span></div>
+        </div>
+        <div class="bd-stat">
+          <div class="bd-stat-label">Zyklen</div>
+          <div class="bd-stat-val"><span id="dCycles">--</span></div>
+        </div>
       </div>
     </div>
 
-    <!-- Ladeströme Donut -->
-    <div id="chargeSourceCard" style="display:none;margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="bd-label">Ladeströme</div>
+    <!-- ── Karte 2: Starterbatterie ── -->
+    <div class="bd-card">
+      <div class="bd-card-hd">Starterbatterie</div>
+      <div class="bd-3col">
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">Aktuell</div>
+          <div class="bd-3col-val"><span id="dStarter">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↓ Min</div>
+          <div class="bd-3col-val"><span id="dStarterMin">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↑ Max</div>
+          <div class="bd-3col-val"><span id="dStarterMax">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Karte 3: Ladeströme (conditional) ── -->
+    <div id="chargeSourceCard" class="bd-card" style="display:none">
+      <div class="bd-card-hd-row">
+        <span>Ladeströme</span>
         <div style="display:flex;gap:3px">
           <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
           <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
@@ -976,17 +1010,10 @@
       </div>
     </div>
 
-  </div><!-- bd-left -->
-  <div class="bd-right">
-
-    <!-- Combined chart -->
-    <div class="chart-card">
-      <div class="chart-controls">
-        <div class="chart-tog-group">
-          <button id="tog-soc"     class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
-          <button id="tog-voltage" class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
-          <button id="tog-current" class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
-        </div>
+    <!-- ── Karte 4: Verlauf ── -->
+    <div class="bd-card">
+      <div class="bd-card-hd-row">
+        <span>Verlauf</span>
         <div class="chart-range-group">
           <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
           <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
@@ -995,14 +1022,19 @@
           <button class="chart-range"        data-secs="604800" onclick="setChartRange(this,604800)">7 T</button>
         </div>
       </div>
+      <div class="chart-tog-group">
+        <button id="tog-soc"     class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
+        <button id="tog-voltage" class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
+        <button id="tog-current" class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
+      </div>
       <div class="chart-legend" id="chartLegend"></div>
       <canvas class="chart" id="chartMain" style="height:220px;cursor:crosshair"></canvas>
     </div>
 
-    <!-- BMS section -->
-    <div id="bmsSection" style="margin-top:24px">
-      <div class="bms-section-title">BMS — 123SmartBMS</div>
-      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:16px 0 8px">Kein Signal — warte auf Daten…</div>
+    <!-- ── Karte 5: BMS ── -->
+    <div class="bd-card" id="bmsSection">
+      <div class="bd-card-hd">BMS — 123SmartBMS</div>
+      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:4px 0">Kein Signal — warte auf Daten…</div>
       <div id="bmsDataWrap" style="display:none">
         <div class="bms-pack-row" id="bmsPackRow"></div>
         <div id="bmsDailyStats" style="display:none;margin-bottom:12px">
@@ -1030,8 +1062,7 @@
       </div>
     </div>
 
-  </div><!-- bd-right -->
-  </div><!-- bd-layout -->
+  </div><!-- bd-page -->
   </div><!-- ov-body -->
 </div>
 
@@ -1621,10 +1652,11 @@ async function applyPreset(id) {
   catch(e) { activePreset = null; renderPresets(); }
 }
 
-function checkPresetMatch() {
+function checkPresetMatch(channels) {
+  const ch = channels ?? liveChannels;
   const match = presets.findIndex(p => {
     if (!p.values) return false;
-    return p.values.every((v, i) => Math.abs(v - (liveChannels[i] ?? 0)) <= 2);
+    return p.values.every((v, i) => Math.abs(v - (ch[i] ?? 0)) <= 2);
   });
   const newActive = match >= 0 ? match : null;
   if (newActive !== activePreset) {
@@ -2531,22 +2563,40 @@ function closeConnectivity() {
   history.replaceState(null, '', location.pathname);
 }
 
+const _SVG_SATELLITE = `<path d="M3.5 18.5l-2-2L13 5l2 2L3.5 18.5z" stroke-width="1.5"/><path d="M8 20l4-4"/><path d="M20 8l-4 4"/><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M15 5a4 4 0 0 1 4 4" stroke-width="1.5"/>`;
+const _SVG_MOBILE    = `<rect x="2" y="15" width="3.5" height="6" rx=".7" fill="currentColor" stroke="none"/><rect x="8" y="10" width="3.5" height="11" rx=".7" fill="currentColor" stroke="none"/><rect x="14" y="5" width="3.5" height="16" rx=".7" fill="currentColor" stroke="none"/><rect x="20" y="1" width="3.5" height="20" rx=".7" fill="currentColor" stroke="none" opacity=".3"/>`;
+const _SVG_WIFI      = `<path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>`;
+
 function updateConnectivityIcon(d) {
-  const dot = $('connInetDot');
-  if (!dot) return;
-  if (!d.router) { dot.style.background = 'var(--text3)'; return; }
+  const dot   = $('connInetDot');
+  const svgEl = document.querySelector('#connInetBtn svg');
+  if (!dot || !svgEl) return;
+
+  if (!d.router) {
+    svgEl.innerHTML = _SVG_WIFI;
+    svgEl.style.color = '';
+    dot.style.background = 'var(--text3)';
+    return;
+  }
   const r  = d.router;
   const sl = d.starlink ?? {};
-  let color;
+
   if (r.active_type === 'wired') {
-    color = sl.state === 'CONNECTED' ? 'var(--green)' : 'var(--yellow)';
+    const color = sl.state === 'CONNECTED' ? 'var(--green)' : 'var(--yellow)';
+    svgEl.innerHTML = _SVG_SATELLITE;
+    svgEl.style.color = color;
+    dot.style.background = color;
   } else if (r.mobile_up) {
-    const sig = r.mobile?.signal_pct ?? 0;
-    color = sig >= 60 ? 'var(--green)' : sig >= 30 ? 'var(--yellow)' : 'var(--red)';
+    const sig   = r.mobile?.signal_pct ?? 0;
+    const color = sig >= 60 ? 'var(--green)' : sig >= 30 ? 'var(--yellow)' : 'var(--red)';
+    svgEl.innerHTML = _SVG_MOBILE;
+    svgEl.style.color = color;
+    dot.style.background = color;
   } else {
-    color = 'var(--red)';
+    svgEl.innerHTML = _SVG_WIFI;
+    svgEl.style.color = 'var(--red)';
+    dot.style.background = 'var(--red)';
   }
-  dot.style.background = color;
 }
 
 function renderConnectivity(d) {
@@ -2559,123 +2609,130 @@ function renderConnectivity(d) {
   const sl  = d.starlink ?? {};
   const mob = r.mobile ?? {};
 
-  const isWan     = r.active_type === 'wired';
-  const slOk      = sl.state === 'CONNECTED';
-  const slColor   = slOk ? 'var(--green)' : 'var(--yellow)';
-  const pingColor = sl.ping_ms < 30 ? 'var(--green)' : sl.ping_ms < 80 ? 'var(--yellow)' : 'var(--red)';
-  const sigPct    = mob.signal_pct ?? 0;
-  const sigColor  = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
+  const isWan    = r.active_type === 'wired';
+  const slOk     = sl.state === 'CONNECTED';
+  const slColor  = slOk ? 'var(--green)' : (sl.reachable === false ? 'var(--red)' : 'var(--yellow)');
+  const slDotCls = slOk ? 'ok' : (sl.reachable === false ? '' : 'warn');
+  const pingColor = !sl.ping_ms ? 'var(--text2)' : sl.ping_ms < 30 ? 'var(--green)' : sl.ping_ms < 80 ? 'var(--yellow)' : 'var(--red)';
+  const sigPct   = mob.signal_pct ?? 0;
+  const sigColor = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
+  const mobDotCls = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : '';
 
-  const activeLabel = isWan ? 'Starlink (WAN)' : `Mobilfunk (${mob.operator})`;
-  const activeIcon  = isWan ? '🛰' : '📶';
+  const activeLabel = isWan ? 'Starlink (WAN)' : (r.mobile_up ? `Mobilfunk — ${mob.operator || ''}` : 'Kein aktiver Uplink');
+  const activeIcon  = isWan ? '🛰' : (r.mobile_up ? '📶' : '⚠');
+  const activeColor = isWan ? slColor : (r.mobile_up ? sigColor : 'var(--red)');
   const fallback    = isWan && r.mobile_up
-    ? `Fallback bereit: Mobilfunk — ${mob.operator} ${mob.ntype}`
-    : !isWan && r.wired_up
-    ? 'Failover bereit: Starlink (WAN)'
-    : '';
+    ? `Fallback verfügbar: Mobilfunk — ${mob.operator || ''} ${mob.ntype || ''}`
+    : (!isWan && r.wired_up ? 'Failover verfügbar: Starlink (WAN)' : '');
 
-  const slObs      = sl.obstructed ? `${((sl.fraction_obstructed ?? 0) * 100).toFixed(1)} %` : 'keine';
-  const slDrop     = sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--';
+  const slObs  = sl.obstructed ? `${((sl.fraction_obstructed ?? 0) * 100).toFixed(1)} %` : 'keine';
+  const slDrop = sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--';
   const alertEntries = Object.keys(sl.alerts ?? {});
-  const alertHtml  = alertEntries.length
+  const alertHtml = alertEntries.length
     ? alertEntries.map(k => `<div class="bms-flag warn">! ${k.replace(/_/g,' ')}</div>`).join('')
     : '<div class="bms-flag ok">✓ Keine Alarme</div>';
 
   body.innerHTML = `
     <div class="conn-active-banner">
-      <div style="font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase">Aktiver Uplink</div>
+      <div style="font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Aktiver Uplink</div>
       <div class="conn-active-type">
         <span class="conn-active-icon">${activeIcon}</span>
-        <span class="conn-active-label" style="color:${isWan ? slColor : sigColor}">${activeLabel}</span>
+        <span class="conn-active-label" style="color:${activeColor}">${activeLabel}</span>
       </div>
       ${fallback ? `<div class="conn-fallback">${fallback}</div>` : ''}
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+    <div class="conn-cards-grid">
 
-      <div>
-        <div class="conn-section-title">Starlink Mini</div>
-        <div class="bd-sec-grid" style="margin-bottom:10px">
-          <div class="bd-sec-item">
-            <div class="bd-label">Status</div>
-            <div class="bd-sec-val" style="color:${slColor}">${sl.state ?? '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Latenz</div>
-            <div class="bd-sec-val" style="color:${pingColor}">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Download</div>
-            <div class="bd-sec-val">${fmtBps(sl.downlink_bps)}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Upload</div>
-            <div class="bd-sec-val">${fmtBps(sl.uplink_bps)}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Paketverlust</div>
-            <div class="bd-sec-val">${slDrop}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Obstruktion</div>
-            <div class="bd-sec-val">${slObs}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Uptime</div>
-            <div class="bd-sec-val">${fmtUptime(sl.uptime_s)}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">API Version</div>
-            <div class="bd-sec-val" style="font-size:13px;color:var(--text2)">${sl.api_version || '--'}</div>
-          </div>
+      <!-- Starlink -->
+      <div class="net-device-card">
+        <div class="net-device-header">
+          <div class="net-device-dot ${slDotCls}"></div>
+          <div class="net-device-name">Starlink Mini</div>
+          <div class="net-device-src" style="color:${slColor}">${sl.state ?? '--'}</div>
         </div>
-        <div class="bms-flags-row">${alertHtml}</div>
+        <div class="conn-card-body">
+          <div class="bd-sec-grid" style="margin-bottom:10px">
+            <div class="bd-sec-item">
+              <div class="bd-label">Latenz</div>
+              <div class="bd-sec-val" style="color:${pingColor}">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Paketverlust</div>
+              <div class="bd-sec-val">${slDrop}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Download</div>
+              <div class="bd-sec-val">${fmtBps(sl.downlink_bps)}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Upload</div>
+              <div class="bd-sec-val">${fmtBps(sl.uplink_bps)}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Obstruktion</div>
+              <div class="bd-sec-val">${slObs}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Uptime</div>
+              <div class="bd-sec-val">${fmtUptime(sl.uptime_s)}</div>
+            </div>
+          </div>
+          <div class="bms-flags-row">${alertHtml}</div>
+        </div>
       </div>
 
-      <div>
-        <div class="conn-section-title">Mobilfunk — SIM 1</div>
-        <div class="bd-sec-grid" style="margin-bottom:10px">
-          <div class="bd-sec-item">
-            <div class="bd-label">Anbieter</div>
-            <div class="bd-sec-val">${mob.operator || '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Typ</div>
-            <div class="bd-sec-val" style="font-size:13px">${mob.conntype || '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Qualität</div>
-            <div class="bd-sec-val" style="color:${sigColor}">${sigPct} %</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Band</div>
-            <div class="bd-sec-val" style="font-size:13px">${mob.band || '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">RSSI / RSRP</div>
-            <div class="bd-sec-val" style="font-size:13px">${mob.rssi ?? '--'} / ${mob.rsrp ?? '--'} dBm</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">RSRQ / SINR</div>
-            <div class="bd-sec-val" style="font-size:13px">${mob.rsrq ?? '--'} / ${mob.sinr ?? '--'} dB</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Temperatur</div>
-            <div class="bd-sec-val">${mob.temperature != null ? mob.temperature + ' °C' : '--'}</div>
-          </div>
-          <div class="bd-sec-item">
-            <div class="bd-label">Status</div>
-            <div class="bd-sec-val" style="color:var(--green)">${mob.state || '--'}</div>
-          </div>
+      <!-- Mobilfunk -->
+      <div class="net-device-card">
+        <div class="net-device-header">
+          <div class="net-device-dot ${mobDotCls}"></div>
+          <div class="net-device-name">Mobilfunk</div>
+          <div class="net-device-src">${mob.operator || '--'} ${mob.ntype || ''}</div>
         </div>
-        <div class="conn-signal-bar-wrap">
-          <div class="conn-signal-bar-fill" style="width:${sigPct}%;background:${sigColor}"></div>
+        <div class="conn-card-body">
+          <div class="bd-sec-grid" style="margin-bottom:10px">
+            <div class="bd-sec-item">
+              <div class="bd-label">Qualität</div>
+              <div class="bd-sec-val" style="color:${sigColor}">${sigPct} %</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Verbindung</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.conntype || '--'}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">RSSI</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.rssi ?? '--'} dBm</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">RSRP</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.rsrp ?? '--'} dBm</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">RSRQ</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.rsrq ?? '--'} dB</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">SINR</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.sinr ?? '--'} dB</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Band</div>
+              <div class="bd-sec-val" style="font-size:13px">${mob.band || '--'}</div>
+            </div>
+            <div class="bd-sec-item">
+              <div class="bd-label">Temperatur</div>
+              <div class="bd-sec-val">${mob.temperature != null ? mob.temperature + ' °C' : '--'}</div>
+            </div>
+          </div>
+          <div class="conn-signal-bar-wrap">
+            <div class="conn-signal-bar-fill" style="width:${sigPct}%;background:${sigColor}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:4px">${sigPct} % Signalqualität</div>
         </div>
-        <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:4px">${sigPct} % Signalqualität</div>
       </div>
 
     </div>
-    <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:16px">
+    <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:8px">
       Aktualisiert: ${d.ts ? new Date(d.ts * 1000).toLocaleTimeString('de-DE') : '--'}
     </div>`;
 }
@@ -2998,8 +3055,8 @@ async function sendChannels() {
 
 function syncLightOverlay(channels) {
   if (_dragging) return;
-  liveChannels = [...channels];
   if (lightDetailOpen) {
+    liveChannels = [...channels];
     for (let i = 0; i < 4; i++) {
       const s = $(`chs${i}`);
       if (!s) continue;
@@ -3009,8 +3066,10 @@ function syncLightOverlay(channels) {
       $(`chv${i}`).textContent = Math.round(v / 255 * 100) + '%';
     }
     updateRelayBtn();
+    checkPresetMatch();
+  } else {
+    checkPresetMatch(channels);
   }
-  checkPresetMatch();
 }
 
 function renderPresetEditList() {
@@ -3083,9 +3142,7 @@ async function saveCurrentAsPreset(idx) {
 // ── Hash routing (back-gesture support) ────────────────────────────────────
 
 window.addEventListener('popstate', () => {
-  document.querySelectorAll('.overlay:not(.hidden)').forEach(el => el.classList.add('hidden'));
-  if (netTimer) { clearInterval(netTimer); netTimer = null; }
-  lightDetailOpen = false;
+  _closeAllOverlays();
   const hash = location.hash.slice(1);
   if (hash) {
     const map = {
@@ -3093,7 +3150,7 @@ window.addEventListener('popstate', () => {
       lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },
       network:  () => { $('networkOverlay').classList.remove('hidden'); fetchNetwork(); netTimer = setInterval(fetchNetwork, 5000); },
-      settings:     () => _showSettingsPanel(),
+      settings: () => { _showSettingsPanel(); },
       connectivity: () => {
         $('connInetOverlay').classList.remove('hidden');
         renderConnectivity(_connData);
