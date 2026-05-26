@@ -115,10 +115,12 @@ class ConnectivityMonitor:
                 ch  = grpc.insecure_channel(self._starlink_host)
                 ref = yr.GrpcReflectionClient()
                 ref.load_protocols(ch, symbols=['SpaceX.API.Device.Device'])
-                Req          = ref.message_class('SpaceX.API.Device.Request')
-                DishReq      = ref.message_class('SpaceX.API.Device.DishGetStatusRequest')
-                self._grpc_stub    = ref.service_stub_class('SpaceX.API.Device.Device')(ch)
-                self._grpc_req     = Req(get_status=DishReq())
+                Req      = ref.message_class('SpaceX.API.Device.Request')
+                # Typ des get_status-Feldes dynamisch ermitteln (firmware-unabhängig)
+                status_type = Req.DESCRIPTOR.fields_by_name['get_status'].message_type.full_name
+                StatusReq   = ref.message_class(status_type)
+                self._grpc_stub = ref.service_stub_class('SpaceX.API.Device.Device')(ch)
+                self._grpc_req  = Req(get_status=StatusReq())
 
             resp = self._grpc_stub.Handle(self._grpc_req, timeout=8)
             d    = MessageToDict(resp, preserving_proto_field_name=True)
