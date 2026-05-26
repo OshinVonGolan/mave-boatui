@@ -2,6 +2,9 @@
 import asyncio
 import json
 import logging
+import os
+import signal
+import subprocess
 import threading
 import time
 from collections import deque
@@ -232,6 +235,21 @@ async def get_alarm_rules():
 @app.patch('/api/alarms/rules')
 async def update_alarm_rules(body: dict):
     return alarms.update_rules(body)
+
+
+@app.post('/api/system/update')
+async def system_update():
+    result = subprocess.run(
+        ['git', 'pull'],
+        cwd=BASE_DIR, capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise HTTPException(500, detail=result.stderr.strip())
+    changed = 'Already up to date.' not in result.stdout
+    log.info("git pull: %s", result.stdout.strip())
+    if changed:
+        asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    return {'ok': True, 'changed': changed, 'output': result.stdout.strip()}
 
 
 @app.patch('/api/settings')

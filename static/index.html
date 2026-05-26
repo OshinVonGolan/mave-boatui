@@ -1097,6 +1097,19 @@
         <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
       </div>
 
+      <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
+        <div class="settings-section-title">System</div>
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
+          <div style="font-size:13px;color:var(--text2)">Software auf aktuellen Stand bringen und neu starten.</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="btn-primary" id="updateBtn" onclick="runUpdate()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
+              Software aktualisieren
+            </button>
+            <span id="updateFeedback" style="font-size:13px;color:var(--text2)"></span>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Tab: Netzwerk (CAN-Bus) -->
@@ -2913,6 +2926,38 @@ window.addEventListener('popstate', () => {
     if (map[hash]) map[hash]();
   }
 });
+
+// ── Update ─────────────────────────────────────────────────────────────────
+
+async function runUpdate() {
+  const btn = $('updateBtn');
+  const fb  = $('updateFeedback');
+  btn.disabled = true;
+  fb.style.color = 'var(--text2)';
+  fb.textContent = 'Lade…';
+  try {
+    const r    = await fetch('/api/system/update', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) {
+      fb.textContent = 'Fehler: ' + (data.detail || r.status);
+      fb.style.color = 'var(--red)';
+      btn.disabled = false;
+      return;
+    }
+    if (data.changed) {
+      fb.textContent = 'Aktualisiert — Server startet neu…';
+      fb.style.color = 'var(--green)';
+    } else {
+      fb.textContent = 'Bereits aktuell ✓';
+      fb.style.color = 'var(--green)';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    fb.textContent = 'Fehler: ' + (e.message || 'Unbekannt');
+    fb.style.color = 'var(--red)';
+    btn.disabled = false;
+  }
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
