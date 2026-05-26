@@ -2390,14 +2390,12 @@ function renderConnectivity(d) {
     ? 'Failover bereit: Starlink (WAN)'
     : '';
 
-  const slObs   = sl.obstructed ? `${((sl.fraction_obstructed ?? 0) * 100).toFixed(1)} %` : 'keine';
-  const slDrop  = sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--';
+  const slObs      = sl.obstructed ? `${((sl.fraction_obstructed ?? 0) * 100).toFixed(1)} %` : 'keine';
+  const slDrop     = sl.drop_rate != null ? (sl.drop_rate * 100).toFixed(2) + ' %' : '--';
   const alertEntries = Object.keys(sl.alerts ?? {});
-  const alertHtml = alertEntries.length
+  const alertHtml  = alertEntries.length
     ? alertEntries.map(k => `<div class="bms-flag warn">! ${k.replace(/_/g,' ')}</div>`).join('')
     : '<div class="bms-flag ok">✓ Keine Alarme</div>';
-
-  const swShort = (sl.software || '').split('.').pop() || sl.software || '--';
 
   body.innerHTML = `
     <div class="conn-active-banner">
@@ -2409,83 +2407,91 @@ function renderConnectivity(d) {
       ${fallback ? `<div class="conn-fallback">${fallback}</div>` : ''}
     </div>
 
-    <div class="conn-section-title">Starlink Mini</div>
-    <div class="bd-sec-grid" style="margin-bottom:12px">
-      <div class="bd-sec-item">
-        <div class="bd-label">Status</div>
-        <div class="bd-sec-val" style="color:${slColor}">${sl.state ?? '--'}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Latenz</div>
-        <div class="bd-sec-val" style="color:${pingColor}">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Paketverlust</div>
-        <div class="bd-sec-val">${slDrop}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Download</div>
-        <div class="bd-sec-val">${fmtBps(sl.downlink_bps)}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Upload</div>
-        <div class="bd-sec-val">${fmtBps(sl.uplink_bps)}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Obstruktion</div>
-        <div class="bd-sec-val">${slObs}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Uptime</div>
-        <div class="bd-sec-val">${fmtUptime(sl.uptime_s)}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Software</div>
-        <div class="bd-sec-val" style="font-size:12px;color:var(--text2)">${swShort}</div>
-      </div>
-    </div>
-    <div class="bms-flags-row" style="margin-bottom:20px">${alertHtml}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
 
-    <div class="conn-section-title">Mobilfunk — SIM 1</div>
-    <div class="bd-sec-grid" style="margin-bottom:10px">
-      <div class="bd-sec-item">
-        <div class="bd-label">Anbieter</div>
-        <div class="bd-sec-val">${mob.operator || '--'}</div>
+      <div>
+        <div class="conn-section-title">Starlink Mini</div>
+        <div class="bd-sec-grid" style="margin-bottom:10px">
+          <div class="bd-sec-item">
+            <div class="bd-label">Status</div>
+            <div class="bd-sec-val" style="color:${slColor}">${sl.state ?? '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Latenz</div>
+            <div class="bd-sec-val" style="color:${pingColor}">${sl.ping_ms != null ? sl.ping_ms.toFixed(0) + ' ms' : '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Download</div>
+            <div class="bd-sec-val">${fmtBps(sl.downlink_bps)}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Upload</div>
+            <div class="bd-sec-val">${fmtBps(sl.uplink_bps)}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Paketverlust</div>
+            <div class="bd-sec-val">${slDrop}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Obstruktion</div>
+            <div class="bd-sec-val">${slObs}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Uptime</div>
+            <div class="bd-sec-val">${fmtUptime(sl.uptime_s)}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">API Version</div>
+            <div class="bd-sec-val" style="font-size:13px;color:var(--text2)">${sl.api_version || '--'}</div>
+          </div>
+        </div>
+        <div class="bms-flags-row">${alertHtml}</div>
       </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Typ</div>
-        <div class="bd-sec-val" style="font-size:13px">${mob.conntype || '--'}</div>
+
+      <div>
+        <div class="conn-section-title">Mobilfunk — SIM 1</div>
+        <div class="bd-sec-grid" style="margin-bottom:10px">
+          <div class="bd-sec-item">
+            <div class="bd-label">Anbieter</div>
+            <div class="bd-sec-val">${mob.operator || '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Typ</div>
+            <div class="bd-sec-val" style="font-size:13px">${mob.conntype || '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Qualität</div>
+            <div class="bd-sec-val" style="color:${sigColor}">${sigPct} %</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Band</div>
+            <div class="bd-sec-val" style="font-size:13px">${mob.band || '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">RSSI / RSRP</div>
+            <div class="bd-sec-val" style="font-size:13px">${mob.rssi ?? '--'} / ${mob.rsrp ?? '--'} dBm</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">RSRQ / SINR</div>
+            <div class="bd-sec-val" style="font-size:13px">${mob.rsrq ?? '--'} / ${mob.sinr ?? '--'} dB</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Temperatur</div>
+            <div class="bd-sec-val">${mob.temperature != null ? mob.temperature + ' °C' : '--'}</div>
+          </div>
+          <div class="bd-sec-item">
+            <div class="bd-label">Status</div>
+            <div class="bd-sec-val" style="color:var(--green)">${mob.state || '--'}</div>
+          </div>
+        </div>
+        <div class="conn-signal-bar-wrap">
+          <div class="conn-signal-bar-fill" style="width:${sigPct}%;background:${sigColor}"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:4px">${sigPct} % Signalqualität</div>
       </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Band</div>
-        <div class="bd-sec-val" style="font-size:13px">${mob.band || '--'}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Qualität</div>
-        <div class="bd-sec-val" style="color:${sigColor}">${sigPct} %</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">RSSI / RSRP</div>
-        <div class="bd-sec-val" style="font-size:13px">${mob.rssi ?? '--'} / ${mob.rsrp ?? '--'} dBm</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">RSRQ / SINR</div>
-        <div class="bd-sec-val" style="font-size:13px">${mob.rsrq ?? '--'} / ${mob.sinr ?? '--'} dB</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Temperatur</div>
-        <div class="bd-sec-val">${mob.temperature != null ? mob.temperature + ' °C' : '--'}</div>
-      </div>
-      <div class="bd-sec-item">
-        <div class="bd-label">Status</div>
-        <div class="bd-sec-val" style="font-size:13px;color:var(--green)">${mob.state || '--'}</div>
-      </div>
+
     </div>
-    <div class="conn-signal-bar-wrap">
-      <div class="conn-signal-bar-fill" style="width:${sigPct}%;background:${sigColor}"></div>
-    </div>
-    <div style="font-size:11px;color:var(--text3);text-align:right;margin-bottom:20px">${sigPct} % Signalqualität</div>
-    <div style="font-size:11px;color:var(--text3);text-align:right">
+    <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:16px">
       Aktualisiert: ${d.ts ? new Date(d.ts * 1000).toLocaleTimeString('de-DE') : '--'}
     </div>`;
 }

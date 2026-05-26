@@ -140,6 +140,7 @@ class ConnectivityMonitor:
             return {
                 'reachable':           True,
                 'state':               state,
+                'api_version':         str(d.get('api_version', '')),
                 'uptime_s':            dish.get('device_state', {}).get('uptime_s', 0),
                 'downlink_bps':        dish.get('downlink_throughput_bps', 0),
                 'uplink_bps':          dish.get('uplink_throughput_bps', 0),
@@ -148,8 +149,6 @@ class ConnectivityMonitor:
                 'obstructed':          obs.get('currently_obstructed', False),
                 'fraction_obstructed': obs.get('fraction_obstructed', 0),
                 'alerts':              alerts,
-                'hardware':            str(info.get('hardware_version', '')),
-                'software':            str(info.get('software_version', '')),
             }
         except Exception as e:
             log.warning('Starlink gRPC: %s', e)
