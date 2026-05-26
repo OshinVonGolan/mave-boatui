@@ -1866,7 +1866,17 @@ function renderCharts() {
   }
 }
 
+function _closeAllOverlays() {
+  document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+  clearInterval(netTimer);           netTimer = null;
+  clearInterval(_settingsNetTimer);  _settingsNetTimer = null;
+  clearInterval(_connOverlayTimer);  _connOverlayTimer = null;
+  lightDetailOpen = false;
+  closePresetSave();
+}
+
 function openBattDetail() {
+  _closeAllOverlays();
   history.pushState({ overlay: 'battery' }, '', '#battery');
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
@@ -1966,6 +1976,7 @@ function updateBms(bms) {
 let netTimer = null;
 
 function openNetwork() {
+  _closeAllOverlays();
   history.pushState({ overlay: 'network' }, '', '#network');
   $('networkOverlay').classList.remove('hidden');
   fetchNetwork();
@@ -2039,6 +2050,7 @@ function renderNetworkInto(el, entries) {
 let _rulesCache = {};
 
 function openAlarms() {
+  _closeAllOverlays();
   history.pushState({ overlay: 'alarms' }, '', '#alarms');
   $('alarmOverlay').classList.remove('hidden');
   switchTab('aktiv');
@@ -2421,6 +2433,7 @@ function _showSettingsPanel(tab) {
 }
 
 function openSettings(tab) {
+  _closeAllOverlays();
   history.pushState({ overlay: 'settings' }, '', '#settings');
   _showSettingsPanel(tab);
 }
@@ -2505,6 +2518,7 @@ async function fetchConnectivity() {
 }
 
 function openConnectivity() {
+  _closeAllOverlays();
   history.pushState({ overlay: 'connectivity' }, '', '#connectivity');
   $('connInetOverlay').classList.remove('hidden');
   renderConnectivity(_connData);
@@ -2886,6 +2900,7 @@ let _throttleTimer = null;
 let _throttlePending = false;
 
 function openLightDetail() {
+  _closeAllOverlays();
   liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))];
   lightDetailOpen = true;
   buildLightSliders();
