@@ -148,8 +148,8 @@ class ConnectivityMonitor:
                 'obstructed':          obs.get('currently_obstructed', False),
                 'fraction_obstructed': obs.get('fraction_obstructed', 0),
                 'alerts':              alerts,
-                'hardware':            info.get('hardware_version', ''),
-                'software':            info.get('software_version', ''),
+                'hardware':            str(info.get('hardware_version', '')),
+                'software':            str(info.get('software_version', '')),
             }
         except Exception as e:
             log.warning('Starlink gRPC: %s', e)
