@@ -193,6 +193,38 @@
     .ov-header-spacer { width: 44px; flex-shrink: 0; }
     .ov-body { flex: 1; overflow-y: auto; padding: 16px; }
 
+    /* ── Battery detail — 3-column page grid ── */
+    .bd-pg {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      grid-template-areas:
+        "batt  chart  solar"
+        "start pie    inv  ";
+      gap: 14px; max-width: 1400px; margin: 0 auto; align-items: start;
+    }
+    .bd-pg-batt    { grid-area: batt; }
+    .bd-pg-chart   { grid-area: chart; }
+    .bd-pg-solar   { grid-area: solar; }
+    .bd-pg-starter { grid-area: start; }
+    .bd-pg-pie     { grid-area: pie; }
+    .bd-pg-inv     { grid-area: inv; }
+    @media (max-width: 1023px) {
+      .bd-pg {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+          "batt  chart"
+          "solar solar"
+          "start pie  "
+          "inv   inv  ";
+      }
+    }
+    @media (max-width: 639px) {
+      .bd-pg {
+        grid-template-columns: 1fr;
+        grid-template-areas: "batt" "chart" "solar" "start" "pie" "inv";
+      }
+    }
+
     /* ── Battery detail — card layout ── */
     .bd-page { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
     .bd-card {
@@ -234,6 +266,45 @@
     .bd-3col-item { background: var(--surface2); border-radius: 10px; padding: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; }
     .bd-3col-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
     .bd-3col-val  { font-size: 26px; font-weight: 700; display: flex; align-items: baseline; gap: 3px; }
+
+    /* ── Cell mini grid (inside service battery card) ── */
+    .bd-cell-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .bd-cell-mini-item { background: var(--surface); border: 2px solid var(--border);
+      border-radius: 9px; padding: 8px 10px; transition: border-color .4s; }
+    .bd-cell-mini-nr { font-size: 9px; color: var(--text3); letter-spacing:.06em;
+      text-transform: uppercase; margin-bottom: 4px; }
+    .bd-cell-mini-v  { font-size: 17px; font-weight: 700; line-height: 1; }
+    .bd-cell-mini-t  { font-size: 11px; color: var(--text2); margin-top: 3px; }
+
+    /* ── Mini stats row (restkapazität, zyklen, letzte Ladung) ── */
+    .bd-mini-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .bd-mini-item { flex: 1; min-width: 68px; background: var(--surface2);
+      border-radius: 8px; padding: 8px 10px; }
+    .bd-mini-val  { font-size: 14px; font-weight: 600; margin-top: 2px; }
+
+    /* ── Min/Max footer row in battery card ── */
+    .bd-minmax-row { display: flex; align-items: center; gap: 8px; font-size: 12px;
+      color: var(--text3); padding-top: 10px; border-top: 1px solid var(--surface2);
+      margin-top: auto; flex-wrap: wrap; }
+
+    /* ── Solar column ── */
+    .bd-solar-list { display: flex; flex-direction: column; gap: 7px; }
+    .bd-solar-item { display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface2); border-radius: 8px; padding: 9px 12px; }
+    .bd-solar-name { font-size: 13px; color: var(--text2); }
+    .bd-solar-vals { display: flex; align-items: baseline; gap: 8px; }
+    .bd-solar-w    { font-size: 16px; font-weight: 700; color: var(--yellow); }
+    .bd-solar-v    { font-size: 12px; color: var(--text3); }
+    .bd-solar-total { background: var(--surface2); border-radius: 8px; padding: 10px 12px; }
+    .bd-solar-total-val { font-size: 22px; font-weight: 700; color: var(--yellow); margin-top: 2px; }
+
+    /* ── Placeholder card (dashed border) ── */
+    .bd-card-ph { border-style: dashed; opacity: .55; }
+    .bd-ph-body { flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      padding: 28px 0; color: var(--text3); }
+    .bd-ph-icon { font-size: 26px; }
+    .bd-ph-text { font-size: 13px; }
 
     /* ── Battery detail layout (legacy — kept for ov-body compat) ── */
     .bd-label { font-size: 10px; color: var(--text3); letter-spacing: .06em;
@@ -917,101 +988,70 @@
     <div class="ov-header-spacer"></div>
   </div>
   <div class="ov-body">
-  <div class="bd-page">
+  <div class="bd-pg">
 
-    <!-- ── Karte 1: Servicebatterie Übersicht ── -->
-    <div class="bd-card">
+    <!-- ── Top-left: Servicebatterie ── -->
+    <div class="bd-card bd-pg-batt" style="display:flex;flex-direction:column">
       <div class="bd-card-hd">Servicebatterie</div>
-      <div class="bd-ov-row">
-        <!-- SOC — linke Spalte -->
-        <div class="bd-soc-block">
-          <div class="bd-soc-head">
-            <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
-          </div>
-          <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
-          <div class="bd-soc-dir" id="dChargeDir"></div>
-          <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
+      <!-- SOC block -->
+      <div class="bd-soc-block" style="margin-bottom:10px">
+        <div class="bd-soc-head">
+          <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
         </div>
-        <!-- Kerndaten — rechte Spalte -->
-        <div class="bd-kv-grid">
-          <div class="bd-kv-item">
-            <div class="bd-kv-label">Spannung</div>
-            <div class="bd-kv-line"><span id="dV" class="bd-kv-val">--</span><span class="bd-kv-unit">V</span></div>
-            <div class="bd-kv-sec" id="dVSec" style="display:none"></div>
-          </div>
-          <div class="bd-kv-item">
-            <div class="bd-kv-label">Strom</div>
-            <div class="bd-kv-line"><span id="dI" class="bd-kv-val">--</span><span class="bd-kv-unit">A</span></div>
-            <div class="bd-kv-sec" id="dISec" style="display:none"></div>
-          </div>
-          <div class="bd-kv-item">
-            <div class="bd-kv-label">Leistung</div>
-            <div class="bd-kv-line"><span id="dP" class="bd-kv-val">--</span><span class="bd-kv-unit">W</span></div>
-          </div>
-          <div class="bd-kv-item">
-            <div class="bd-kv-label">Verbraucht</div>
-            <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
-          </div>
+        <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
+        <div class="bd-soc-dir" id="dChargeDir"></div>
+        <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
+      </div>
+      <!-- V / I / W / Ah -->
+      <div class="bd-kv-grid">
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Spannung</div>
+          <div class="bd-kv-line"><span id="dV" class="bd-kv-val">--</span><span class="bd-kv-unit">V</span></div>
+          <div class="bd-kv-sec" id="dVSec" style="display:none"></div>
+        </div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Strom</div>
+          <div class="bd-kv-line"><span id="dI" class="bd-kv-val">--</span><span class="bd-kv-unit">A</span></div>
+          <div class="bd-kv-sec" id="dISec" style="display:none"></div>
+        </div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Leistung</div>
+          <div class="bd-kv-line"><span id="dP" class="bd-kv-val">--</span><span class="bd-kv-unit">W</span></div>
+        </div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Verbraucht</div>
+          <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
         </div>
       </div>
-      <!-- Statistikzeile -->
-      <div class="bd-stat-row">
-        <div class="bd-stat">
-          <div class="bd-stat-label">Min. Spannung</div>
-          <div class="bd-stat-val"><span id="dMinV">--</span><span class="bd-stat-unit">V</span></div>
+      <!-- Mini stats: Restkapazität / Voll vor / Zyklen -->
+      <div class="bd-mini-row" style="margin-top:10px">
+        <div class="bd-mini-item">
+          <div class="bd-label">Restkapazität</div>
+          <div class="bd-mini-val"><span id="dRemKwh">--</span> <span style="font-size:11px;color:var(--text3)">kWh</span></div>
         </div>
-        <div class="bd-stat">
-          <div class="bd-stat-label">Max. Spannung</div>
-          <div class="bd-stat-val"><span id="dMaxV">--</span><span class="bd-stat-unit">V</span></div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Voll vor</div>
+          <div class="bd-mini-val"><span id="dFull">--</span></div>
         </div>
-        <div class="bd-stat">
-          <div class="bd-stat-label">Voll vor</div>
-          <div class="bd-stat-val"><span id="dFull">--</span></div>
-        </div>
-        <div class="bd-stat">
-          <div class="bd-stat-label">Zyklen</div>
-          <div class="bd-stat-val"><span id="dCycles">--</span></div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Zyklen</div>
+          <div class="bd-mini-val"><span id="dCycles">--</span></div>
         </div>
       </div>
-    </div>
-
-    <!-- ── Karte 2: Starterbatterie ── -->
-    <div class="bd-card">
-      <div class="bd-card-hd">Starterbatterie</div>
-      <div class="bd-3col">
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">Aktuell</div>
-          <div class="bd-3col-val"><span id="dStarter">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
-        </div>
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">↓ Min</div>
-          <div class="bd-3col-val"><span id="dStarterMin">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
-        </div>
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">↑ Max</div>
-          <div class="bd-3col-val"><span id="dStarterMax">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
-        </div>
+      <!-- 4-cell mini grid (from BMS) -->
+      <div id="bdCellMini" style="margin-top:10px;display:none">
+        <div class="bd-label" style="margin-bottom:6px">Zellspannungen</div>
+        <div class="bd-cell-mini-grid" id="bdCellMiniGrid"></div>
+      </div>
+      <!-- Min / Max row -->
+      <div class="bd-minmax-row">
+        <span>↓ Min: <strong id="dMinV">--</strong> V</span>
+        <span>↑ Max: <strong id="dMaxV">--</strong> V</span>
       </div>
     </div>
 
-    <!-- ── Karte 3: Ladeströme (conditional) ── -->
-    <div id="chargeSourceCard" class="bd-card" style="display:none">
-      <div class="bd-card-hd-row">
-        <span>Ladeströme</span>
-        <div style="display:flex;gap:3px">
-          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
-          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
-          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
-        </div>
-      </div>
-      <div class="charge-src-wrap">
-        <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
-        <div class="charge-src-legend" id="chargeSourceLegend"></div>
-      </div>
-    </div>
-
-    <!-- ── Karte 4: Verlauf ── -->
-    <div class="bd-card">
+    <!-- ── Top-middle: Verlauf chart ── -->
+    <div class="bd-card bd-pg-chart">
       <div class="bd-card-hd-row">
         <span>Verlauf</span>
         <div class="chart-range-group">
@@ -1031,38 +1071,119 @@
       <canvas class="chart" id="chartMain" style="height:220px;cursor:crosshair"></canvas>
     </div>
 
-    <!-- ── Karte 5: BMS ── -->
-    <div class="bd-card" id="bmsSection">
-      <div class="bd-card-hd">BMS — 123SmartBMS</div>
-      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:4px 0">Kein Signal — warte auf Daten…</div>
-      <div id="bmsDataWrap" style="display:none">
-        <div class="bms-pack-row" id="bmsPackRow"></div>
-        <div id="bmsDailyStats" style="display:none;margin-bottom:12px">
-          <div class="bms-pack-row" style="margin-bottom:0">
-            <div class="bms-pack-item">
-              <div class="bd-label">Heute geladen</div>
-              <div class="bms-pack-val val-green" id="bmsTodayCharge">-- Ah</div>
-            </div>
-            <div class="bms-pack-item">
-              <div class="bd-label">Heute entladen</div>
-              <div class="bms-pack-val val-orange" id="bmsTodayDischarge">-- Ah</div>
-            </div>
-            <div class="bms-pack-item">
-              <div class="bd-label">Lade-A (live)</div>
-              <div class="bms-pack-val" id="bmsChargeA">-- A</div>
-            </div>
-            <div class="bms-pack-item">
-              <div class="bd-label">Entlade-A (live)</div>
-              <div class="bms-pack-val" id="bmsDischargeA">-- A</div>
-            </div>
+    <!-- ── Top-right: Solar Erträge ── -->
+    <div class="bd-card bd-pg-solar">
+      <div class="bd-card-hd">Solar Erträge</div>
+      <div class="bd-solar-list">
+        <div class="bd-solar-item">
+          <span class="bd-solar-name">Solar 1</span>
+          <div class="bd-solar-vals">
+            <span class="bd-solar-w" id="bdS1W">-- W</span>
+            <span class="bd-solar-v" id="bdS1V"></span>
           </div>
         </div>
-        <div class="bms-flags-row" id="bmsFlags"></div>
-        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+        <div class="bd-solar-item">
+          <span class="bd-solar-name">Solar 2</span>
+          <div class="bd-solar-vals">
+            <span class="bd-solar-w" id="bdS2W">-- W</span>
+            <span class="bd-solar-v" id="bdS2V"></span>
+          </div>
+        </div>
+        <div class="bd-solar-item">
+          <span class="bd-solar-name">Solar 3</span>
+          <div class="bd-solar-vals">
+            <span class="bd-solar-w" id="bdS3W">-- W</span>
+            <span class="bd-solar-v" id="bdS3V"></span>
+          </div>
+        </div>
+      </div>
+      <div class="bd-solar-total" style="margin-top:10px">
+        <div class="bd-label">Gesamt Systemleistung</div>
+        <div class="bd-solar-total-val" id="bdSolarTotal">-- W</div>
+      </div>
+      <div class="bd-mini-row" style="margin-top:10px">
+        <div class="bd-mini-item">
+          <div class="bd-label">Tagesertrag</div>
+          <div class="bd-mini-val"><span id="bdYieldDay">--</span> <span style="font-size:11px;color:var(--text3)">Wh</span></div>
+        </div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Ø Tag</div>
+          <div class="bd-mini-val"><span id="bdYieldDayAvg">--</span> <span style="font-size:11px;color:var(--text3)">Wh</span></div>
+        </div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Ø Woche</div>
+          <div class="bd-mini-val"><span id="bdYieldWeekAvg">--</span> <span style="font-size:11px;color:var(--text3)">kWh</span></div>
+        </div>
       </div>
     </div>
 
-  </div><!-- bd-page -->
+    <!-- ── Bottom-left: Starterbatterie ── -->
+    <div class="bd-card bd-pg-starter">
+      <div class="bd-card-hd">Starterbatterie</div>
+      <div class="bd-3col">
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">Aktuell</div>
+          <div class="bd-3col-val"><span id="dStarter">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↓ Min</div>
+          <div class="bd-3col-val"><span id="dStarterMin">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↑ Max</div>
+          <div class="bd-3col-val"><span id="dStarterMax">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Bottom-middle: Ladeströme Kuchendiagramm ── -->
+    <div id="chargeSourceCard" class="bd-card bd-pg-pie">
+      <div class="bd-card-hd-row">
+        <span>Ladeströme</span>
+        <div style="display:flex;gap:3px">
+          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
+          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
+          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
+        </div>
+      </div>
+      <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Warte auf Ladedaten…</div>
+      <div id="chargeSourceHasData" style="display:none">
+        <div class="charge-src-wrap">
+          <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
+          <div class="charge-src-legend" id="chargeSourceLegend"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Bottom-right: Inverter (placeholder) ── -->
+    <div class="bd-card bd-pg-inv bd-card-ph">
+      <div class="bd-card-hd">Inverter</div>
+      <div class="bd-ph-body">
+        <div class="bd-ph-icon">⚡</div>
+        <div class="bd-ph-text">Daten folgen</div>
+      </div>
+    </div>
+
+  </div><!-- bd-pg -->
+
+  <!-- Legacy BMS IDs — used by updateBms(), kept hidden -->
+  <div style="display:none" aria-hidden="true">
+    <div id="bmsSection">
+      <div id="bmsNoSignal"></div>
+      <div id="bmsDataWrap">
+        <div id="bmsPackRow"></div>
+        <div id="bmsDailyStats">
+          <div id="bmsTodayCharge"></div>
+          <div id="bmsTodayDischarge"></div>
+          <div id="bmsChargeA"></div>
+          <div id="bmsDischargeA"></div>
+        </div>
+        <div id="bmsFlags"></div>
+        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+      </div>
+    </div>
+  </div>
+
   </div><!-- ov-body -->
 </div>
 
@@ -2001,6 +2122,69 @@ function updateBms(bms) {
   }).join('');
 
   updateDualTiles();
+  _updateCellMini(bms);
+  const remEl = $('dRemKwh');
+  if (remEl && bms.remaining_kwh != null) remEl.textContent = bms.remaining_kwh.toFixed(2);
+}
+
+function _updateCellMini(bms) {
+  const wrap = $('bdCellMini');
+  const grid = $('bdCellMiniGrid');
+  if (!wrap || !grid) return;
+  const cells = bms.cells ?? [];
+  const n = cells.length || (bms.cell_count ?? 0);
+  if (!n) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const renderOrder = n === 4 ? [1, 2, 0, 3] : Array.from({length: n}, (_, i) => i);
+  grid.innerHTML = renderOrder.map(i => {
+    const c     = cells[i];
+    const isLo  = i === (bms.lowest_cell_nr  - 1);
+    const isHi  = i === (bms.highest_cell_nr - 1);
+    const color = c ? cellColor(c.voltage, isLo, isHi, bms.alarm_min_volt, bms.alarm_max_volt) : 'var(--border)';
+    const vStr  = c?.voltage != null ? c.voltage.toFixed(3) : '--';
+    const tStr  = c?.temp    != null ? c.temp.toFixed(1) + ' °C' : '';
+    return `<div class="bd-cell-mini-item" style="border-color:${color}">
+      <div class="bd-cell-mini-nr">Zelle ${i + 1}</div>
+      <div class="bd-cell-mini-v" style="color:${color}">${vStr} <span style="font-size:11px;font-weight:400;color:var(--text3)">V</span></div>
+      ${tStr ? `<div class="bd-cell-mini-t">${tStr}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function updateSolarCard(data) {
+  function setPower(wId, w) {
+    const el = $(wId);
+    if (!el) return;
+    el.textContent = w != null ? Math.round(w) + ' W' : '-- W';
+    el.style.color = w != null && w > 0 ? 'var(--yellow)' : 'var(--text3)';
+  }
+  const s1 = data.solar?.power;
+  const s2 = data.solar2?.power;
+  const s3 = data.solar3?.power;
+  setPower('bdS1W', s1);
+  setPower('bdS2W', s2);
+  setPower('bdS3W', s3);
+  const total = (s1 ?? 0) + (s2 ?? 0) + (s3 ?? 0);
+  const totalEl = $('bdSolarTotal');
+  if (totalEl) {
+    totalEl.textContent = Math.round(total) + ' W';
+    totalEl.style.color = total > 0 ? 'var(--yellow)' : 'var(--text3)';
+  }
+  // Tagesertrag from chargeHist (solar sources summed, today only)
+  const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+  const dayStartSec = dayStart.getTime() / 1000;
+  const todayEntries = chargeHist.filter(e => e.ts >= dayStartSec);
+  if (todayEntries.length > 1) {
+    let wh = 0;
+    for (let i = 1; i < todayEntries.length; i++) {
+      const dt = todayEntries[i].ts - todayEntries[i-1].ts;
+      const avgW = ((todayEntries[i].solar1 ?? 0) + (todayEntries[i].solar2 ?? 0) + (todayEntries[i].solar3 ?? 0) +
+                   (todayEntries[i-1].solar1 ?? 0) + (todayEntries[i-1].solar2 ?? 0) + (todayEntries[i-1].solar3 ?? 0)) / 2;
+      wh += avgW * dt / 3600;
+    }
+    const ydEl = $('bdYieldDay');
+    if (ydEl) ydEl.textContent = Math.round(wh);
+  }
 }
 
 // ── Network overlay ────────────────────────────────────────────────────────
@@ -2801,13 +2985,16 @@ function reRenderChargePie() {
 }
 
 function renderChargePie(active, isAvg) {
-  const card = $('chargeSourceCard');
-  if (!card) return;
+  const noData  = $('chargeSourceNoData');
+  const hasData = $('chargeSourceHasData');
+  if (!hasData) return;
   if (!active.length) {
-    if (chargeRange === 'live') card.style.display = 'none';
+    if (noData)  noData.style.display  = '';
+    hasData.style.display = 'none';
     return;
   }
-  card.style.display = '';
+  if (noData)  noData.style.display  = 'none';
+  hasData.style.display = '';
 
   const canvas = $('chargeSourceChart');
   const dpr = window.devicePixelRatio || 1;
@@ -2908,6 +3095,7 @@ function handleData(data) {
     syncLightOverlay(data.lights.channels ?? []);
   }
   updatePowerSources(data);
+  updateSolarCard(data);
   if (data.bms) updateBms(data.bms);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
