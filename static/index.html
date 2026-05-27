@@ -200,8 +200,9 @@
       grid-template-areas:
         "batt  chart  solar"
         "start pie    inv  ";
-      gap: 14px; max-width: 1400px; margin: 0 auto; align-items: start;
+      gap: 14px; max-width: 1400px; margin: 0 auto;
     }
+    .bd-pg-chart canvas.chart { flex: 1; min-height: 200px; }
     .bd-pg-batt    { grid-area: batt; }
     .bd-pg-chart   { grid-area: chart; }
     .bd-pg-solar   { grid-area: solar; }
@@ -1063,12 +1064,13 @@
         </div>
       </div>
       <div class="chart-tog-group">
-        <button id="tog-soc"     class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
-        <button id="tog-voltage" class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
-        <button id="tog-current" class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
+        <button id="tog-soc"      class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
+        <button id="tog-voltage"  class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
+        <button id="tog-current"  class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
+        <button id="tog-zelldiff" class="chart-tog"        onclick="toggleSeries('zelldiff')">Zelldiff.</button>
       </div>
       <div class="chart-legend" id="chartLegend"></div>
-      <canvas class="chart" id="chartMain" style="height:220px;cursor:crosshair"></canvas>
+      <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
     </div>
 
     <!-- ── Top-right: Solar Erträge ── -->
@@ -1520,6 +1522,8 @@ function updateChargeStatus(b) {
 // ── Starter battery min/max ────────────────────────────────────────────────
 
 let _starterMin = null, _starterMax = null;
+let _serviceMin = null, _serviceMax = null;
+let _lastZelldiff = null;
 let _lastBattery = null;
 
 // ── Dual-source tile update ────────────────────────────────────────────────
@@ -1628,8 +1632,13 @@ function updateBattery(b) {
     $('dStarterMax').textContent = fmtV(_starterMax);
   }
   $('dCycles').textContent  = b.cycles   ?? '--';
-  $('dMinV').textContent    = fmtV(b.min_voltage);
-  $('dMaxV').textContent    = fmtV(b.max_voltage);
+  // min/max: prefer shunt PGN-130900 values; fall back to JS-tracked session extremes
+  if (b.voltage != null) {
+    if (_serviceMin === null || b.voltage < _serviceMin) _serviceMin = b.voltage;
+    if (_serviceMax === null || b.voltage > _serviceMax) _serviceMax = b.voltage;
+  }
+  $('dMinV').textContent = fmtV(b.min_voltage ?? _serviceMin);
+  $('dMaxV').textContent = fmtV(b.max_voltage ?? _serviceMax);
   $('dFull').textContent    = timeSince(b.time_since_full);
 
   updateDualTiles();
@@ -1792,22 +1801,24 @@ const HIST_MAX = 10000;
 const histData = [];  // [{ts, soc, voltage, current}, ...]
 
 const SERIES_DEF = {
-  soc:     { color: '#22c55e', unit: '%', label: 'SOC',      fmt: v => Math.round(v) + ' %',    minRange: 10 },
-  voltage: { color: '#06b6d4', unit: 'V', label: 'Spannung', fmt: v => v.toFixed(2) + ' V',     minRange: 2.0 },
-  current: { color: '#f97316', unit: 'A', label: 'Strom',    fmt: v => v.toFixed(1) + ' A',     minRange: 3.0 },
+  soc:      { color: '#22c55e', unit: '%',  label: 'SOC',       fmt: v => Math.round(v) + ' %',         minRange: 10 },
+  voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minRange: 2.0 },
+  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minRange: 3.0 },
+  zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minRange: 0.015 },
 };
 
 const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
-let chartSeries   = { soc: true, voltage: true, current: false };
+let chartSeries   = { soc: true, voltage: true, current: false, zelldiff: false };
 let chartRangeSec = 1800;
 let chartHoverPos = null; // null=live, 0.0–1.0=scrub fraction
 
 function recordHistory(b) {
   const entry = { ts: Date.now() / 1000 };
-  if (b.soc     != null) entry.soc     = b.soc;
+  if (b.soc      != null) entry.soc      = b.soc;
   if (b.voltage  != null) entry.voltage  = b.voltage;
   if (b.current  != null) entry.current  = b.current;
+  if (_lastZelldiff != null) entry.zelldiff = _lastZelldiff;
   histData.push(entry);
   if (histData.length > HIST_MAX) histData.shift();
 }
@@ -1857,9 +1868,10 @@ function fmtAxisTime(ts, nowTs) {
 }
 
 function fmtYVal(v, key) {
-  if (key === 'soc')     return Math.round(v) + '%';
-  if (key === 'voltage') return v.toFixed(1) + 'V';
-  if (key === 'current') return v.toFixed(0) + 'A';
+  if (key === 'soc')      return Math.round(v) + '%';
+  if (key === 'voltage')  return v.toFixed(1) + 'V';
+  if (key === 'current')  return v.toFixed(0) + 'A';
+  if (key === 'zelldiff') return Math.round(v * 1000) + 'mV';
   return String(Math.round(v));
 }
 
@@ -2121,6 +2133,10 @@ function updateBms(bms) {
     </div>`;
   }).join('');
 
+  // Track cell diff for Verlauf chart
+  if (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+    _lastZelldiff = bms.highest_cell_v - bms.lowest_cell_v;
+
   updateDualTiles();
   _updateCellMini(bms);
   const remEl = $('dRemKwh');
@@ -2164,6 +2180,12 @@ function updateSolarCard(data) {
   setPower('bdS1W', s1);
   setPower('bdS2W', s2);
   setPower('bdS3W', s3);
+  // Solar 1 panel voltage (available from shunt PGN)
+  const v1El = $('bdS1V');
+  if (v1El) {
+    const v1 = data.solar?.voltage;
+    v1El.textContent = v1 != null ? v1.toFixed(1) + ' V' : '';
+  }
   const total = (s1 ?? 0) + (s2 ?? 0) + (s3 ?? 0);
   const totalEl = $('bdSolarTotal');
   if (totalEl) {
