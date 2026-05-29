@@ -127,8 +127,8 @@ async def set_status(token: str, board_id: str, item_id: str, column_id: str, la
 
 
 _CREATE_MUTATION = """
-mutation CreateItem($boardId: ID!, $groupId: String!, $name: String!) {
-  create_item(board_id: $boardId, group_id: $groupId, item_name: $name) {
+mutation CreateItem($boardId: ID!, $groupId: String!, $name: String!, $colVals: JSON) {
+  create_item(board_id: $boardId, group_id: $groupId, item_name: $name, column_values: $colVals) {
     id
     name
     group { id }
@@ -138,10 +138,13 @@ mutation CreateItem($boardId: ID!, $groupId: String!, $name: String!) {
 """
 
 
-async def create_item(token: str, board_id: str, group_id: str, name: str) -> dict:
+async def create_item(token: str, board_id: str, group_id: str, name: str,
+                      column_values: dict | None = None) -> dict:
+    col_vals = json.dumps(column_values) if column_values else "{}"
     data = await _gql(token, _CREATE_MUTATION, {
         "boardId":  board_id,
         "groupId":  group_id,
         "name":     name,
+        "colVals":  col_vals,
     })
     return data.get("create_item") or {}

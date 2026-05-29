@@ -817,6 +817,7 @@
     .stauplan-tbl th { text-align: left; padding: 7px 10px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border); }
     .stauplan-tbl td { padding: 10px; border-bottom: 1px solid var(--surface2); }
     .stauplan-tbl tr:last-child td { border-bottom: none; }
+    .stauplan-tbl tbody tr:hover td { background: var(--surface2); }
     .stauplan-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 2px 8px; border-radius: 20px; color: #fff; font-weight: 600; white-space: nowrap; }
     /* ── Monday overlay ── */
     .monday-body { max-width: 860px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 0; }
@@ -1800,14 +1801,22 @@
   <div class="ov-body" style="padding:0">
     <!-- Neue Aufgabe Form -->
     <div id="mondayNewForm" style="display:none;max-width:860px;margin:0 auto;padding:12px 16px 0">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <input type="text" id="mondayNewName" placeholder="Aufgabe eingeben…"
-               style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text1);font-size:13px;outline:none"
-               onkeydown="if(event.key==='Enter')createMondayItem()">
-        <select id="mondayNewGroup"
-                style="background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"></select>
-        <button class="monday-refresh" onclick="createMondayItem()" id="mondayCreateBtn">Anlegen</button>
-        <button class="monday-refresh" onclick="toggleMondayNewForm()" style="color:var(--text3)">Abbrechen</button>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <!-- Zeile 1: Name + Gruppe -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input type="text" id="mondayNewName" placeholder="Aufgabe eingeben…"
+                 style="flex:2;min-width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text1);font-size:13px;outline:none"
+                 onkeydown="if(event.key==='Enter')createMondayItem()">
+          <select id="mondayNewGroup"
+                  style="flex:1;min-width:120px;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"></select>
+        </div>
+        <!-- Zeile 2: Status-Spalten (dynamisch) -->
+        <div id="mondayNewStatusRow" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        <!-- Zeile 3: Buttons -->
+        <div style="display:flex;gap:8px">
+          <button class="monday-refresh" onclick="createMondayItem()" id="mondayCreateBtn">Anlegen</button>
+          <button class="monday-refresh" onclick="toggleMondayNewForm()" style="color:var(--text3)">Abbrechen</button>
+        </div>
       </div>
     </div>
     <!-- Suche -->
@@ -3957,7 +3966,10 @@ function renderStauTable(query) {
   $('stauTableBody').innerHTML = rows.length
     ? rows.map(i => {
         const f = STAU_FAECHER[i.fach];
-        return `<tr>
+        return `<tr style="cursor:pointer"
+          onmouseenter="hoverFach('${i.fach}')"
+          onmouseleave="unhoverFach('${i.fach}')"
+          onclick="selectFach('${i.fach}')">
           <td>${i.name}</td>
           <td><span class="stauplan-badge" style="background:${f?.color||'#888'}">${f?.name||i.fach}</span></td>
           <td>${i.menge}</td>
@@ -3965,6 +3977,17 @@ function renderStauTable(query) {
         </tr>`;
       }).join('')
     : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px">${_stauFachFilter ? 'Nichts in diesem Fach' : 'Keine Ergebnisse'}</td></tr>`;
+}
+
+function hoverFach(id) {
+  if (_stauFachFilter === id) return;
+  const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
+  if (el) el.setAttribute('fill', (STAU_FAECHER[id]?.color || '#fff') + '28');
+}
+function unhoverFach(id) {
+  if (_stauFachFilter === id) return;
+  const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
+  if (el) el.setAttribute('fill', 'transparent');
 }
 
 // ── Monday ─────────────────────────────────────────────────────────────────
@@ -4009,9 +4032,15 @@ async function loadMondayBoard() {
 }
 
 function filterMonday(q) {
-  _mondayFilter = q.trim().toLowerCase();
+  _mondayFilter = (q ?? '').trim().toLowerCase();
   if (_mondayData) renderMondayBoard(_mondayData);
 }
+
+// Robuster Event-Listener als Fallback (falls oninput-Inline nicht greift)
+document.addEventListener('DOMContentLoaded', () => {
+  const el = $('mondaySearchInput');
+  if (el) el.addEventListener('input', e => filterMonday(e.target.value));
+});
 
 function toggleMondayNewForm() {
   const form = $('mondayNewForm');
@@ -4021,6 +4050,17 @@ function toggleMondayNewForm() {
       `<option value="${g.id}">${_esc(g.title)}</option>`
     ).join('');
     $('mondayNewName').value = '';
+    // Populate status column selects dynamically
+    const statusRow = $('mondayNewStatusRow');
+    statusRow.innerHTML = (_mondayData.status_columns || []).map(col => `
+      <select id="mondayNewCol_${col.id}"
+              style="flex:1;min-width:130px;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"
+              title="${_esc(col.title)}">
+        <option value="">— ${_esc(col.title)} —</option>
+        ${col.options.map(o =>
+          `<option value="${_esc(o.label)}">${_esc(o.label)}</option>`
+        ).join('')}
+      </select>`).join('');
     setTimeout(() => $('mondayNewName').focus(), 50);
   }
   form.style.display = open ? 'none' : '';
@@ -4030,13 +4070,25 @@ async function createMondayItem() {
   const name = $('mondayNewName').value.trim();
   const groupId = $('mondayNewGroup').value;
   if (!name) { $('mondayNewName').focus(); return; }
+
+  // Collect status column values
+  const columnValues = {};
+  (_mondayData?.status_columns || []).forEach(col => {
+    const sel = $(`mondayNewCol_${col.id}`);
+    if (sel?.value) columnValues[col.id] = { label: sel.value };
+  });
+
   const btn = $('mondayCreateBtn');
   btn.disabled = true; btn.textContent = '…';
   try {
     const r = await fetch('/api/monday/item', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ group_id: groupId, name }),
+      body: JSON.stringify({
+        group_id: groupId,
+        name,
+        column_values: Object.keys(columnValues).length ? columnValues : null,
+      }),
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));

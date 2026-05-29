@@ -339,9 +339,10 @@ async def create_monday_item(body: dict):
     name     = body.get('name',     '').strip()
     if not group_id or not name:
         raise HTTPException(400, detail='group_id und name erforderlich')
+    column_values = body.get('column_values') or None
     from monday import create_item
     try:
-        return await create_item(token, board_id, group_id, name)
+        return await create_item(token, board_id, group_id, name, column_values)
     except Exception as e:
         raise HTTPException(502, detail=str(e))
 
