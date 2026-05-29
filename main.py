@@ -372,14 +372,12 @@ async def debug_router_clients():
         raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
     results = {}
     candidates = [
-        # Runde 1 — schon getestet
         '/api/wireless/stations',
         '/api/wireless/interfaces',
         '/api/hosts',
         '/api/dhcp/leases',
         '/api/arp',
         '/api/wireless/status',
-        # Runde 2 — RUTX50-spezifisch
         '/api/overview',
         '/api/clients',
         '/api/network/clients',
@@ -390,14 +388,21 @@ async def debug_router_clients():
         '/api/dhcp/config',
         '/api/interfaces/wireless',
     ]
+    hdrs = conn_mon._token_headers()
     for path in candidates:
         try:
-            hdrs = conn_mon._token_headers()
             url  = conn_mon._router_host + path
             data = conn_mon._http(url, headers=hdrs)
             results[path] = {'ok': True, 'data': data}
         except Exception as e:
             results[path] = {'ok': False, 'error': str(e)}
+    # Zeige auch die bereits genutzten Endpunkte mit vollem Inhalt
+    for path in ('/api/interfaces/status', '/api/modems/status'):
+        try:
+            data = conn_mon._http(conn_mon._router_host + path, headers=hdrs)
+            results[f'(existing){path}'] = {'ok': True, 'data': data}
+        except Exception as e:
+            results[f'(existing){path}'] = {'ok': False, 'error': str(e)}
     return results
 
 
