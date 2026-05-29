@@ -41,7 +41,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.7.3'
+VERSION  = _git_semver() or '1.7.4'
 GIT_HASH = _git_hash()
 
 logging.basicConfig(
@@ -151,7 +151,11 @@ app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
 
 @app.get('/', include_in_schema=False)
 async def root():
-    return FileResponse(STATIC_DIR / 'index.html')
+    return FileResponse(
+        STATIC_DIR / 'index.html',
+        headers={'Cache-Control': 'no-cache, no-store, must-revalidate',
+                 'Pragma': 'no-cache', 'Expires': '0'},
+    )
 
 
 @app.websocket('/ws')
