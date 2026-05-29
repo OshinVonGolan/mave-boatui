@@ -878,35 +878,21 @@
     .status-picker-dot { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
   
 
-    /* ── Energiefluss (Victron-Stil) ── */
-    .flow-wrap { position: relative; width: 100%; max-width: 920px; margin: 0 auto;
-      aspect-ratio: 16 / 11; }
-    .flow-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .flow-line { fill: none; stroke: #2f4256; stroke-width: 1.4; }
-    .flow-line.flow-active { stroke-width: 2.2; stroke-dasharray: 4 5;
-      animation: flowdash 0.7s linear infinite; }
-    .flow-line.flow-rev { animation-direction: reverse; }
-    @keyframes flowdash { to { stroke-dashoffset: -18; } }
-    .flow-node { position: absolute; transform: translate(-50%, -50%);
-      width: 116px; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 9px 10px; text-align: center;
-      transition: opacity .3s, border-color .3s; }
-    .flow-node.dim { opacity: .38; }
-    .flow-node-ico { font-size: 17px; line-height: 1; }
-    .flow-node-name { font-size: 10px; color: var(--text3); letter-spacing: .04em;
-      text-transform: uppercase; margin: 3px 0 2px; }
-    .flow-node-val { font-size: 17px; font-weight: 700; line-height: 1.1; }
-    .flow-node-sub { font-size: 11px; color: var(--text2); margin-top: 1px; min-height: 13px; }
-    .flow-hub { position: absolute; transform: translate(-50%, -50%);
-      width: 132px; background: var(--surface2); border: 2px solid var(--accent2);
-      border-radius: 14px; padding: 12px; text-align: center; }
-    .flow-hub-name { font-size: 10px; color: var(--text3); letter-spacing: .08em; text-transform: uppercase; }
-    .flow-hub-val { font-size: 22px; font-weight: 800; margin-top: 3px; }
-    @media (max-width: 560px) {
-      .flow-node { width: 84px; padding: 6px 6px; }
-      .flow-node-val { font-size: 14px; } .flow-node-ico { font-size: 14px; }
-      .flow-hub { width: 104px; } .flow-hub-val { font-size: 18px; }
-    }
+    /* ── Energiefluss (Schema im Victron-Stil) ── */
+    .flow-schema { width: 100%; max-width: 1000px; margin: 0 auto; display: block; }
+    .flow-edge { fill: none; stroke: #334155; stroke-width: 1.4; }          /* dünne Basislinie */
+    .flow-edge-dot { fill: none; stroke-width: 3; stroke-linecap: round;
+      stroke-dasharray: 0.1 11; opacity: 0; transition: opacity .3s; }       /* gepunkteter Fluss */
+    .flow-edge-dot.on { opacity: 1; animation: flowdots 1s linear infinite; }
+    .flow-edge-dot.flow-rev { animation-direction: reverse; }
+    @keyframes flowdots { to { stroke-dashoffset: -22; } }                   /* 2× Periode → nahtlos */
+    .flow-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; rx: 10; }
+    .flow-box-main { fill: var(--surface2); stroke: var(--accent2); stroke-width: 2; }
+    .flow-g.dim { opacity: .4; }
+    .flow-name { fill: var(--text3); font-size: 12px; font-weight: 600; letter-spacing: .03em;
+      text-anchor: middle; text-transform: uppercase; }
+    .flow-val  { fill: var(--text); font-size: 18px; font-weight: 700; text-anchor: middle; }
+    .flow-sub  { fill: var(--text2); font-size: 12px; text-anchor: middle; }
 
     /* ── Settings: Kategorie-Navigation + Unterseiten ── */
     .set-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 16px 0; }

@@ -1,16 +1,37 @@
-// ── Energiefluss (Victron-Stil Flussdiagramm) ──────────────────────────────
+// ── Energiefluss (Schema im Victron-Stil) ──────────────────────────────────
+// Verbindungslinien sind als Quelle→Ziel gezeichnet. Fließt Leistung in
+// Pfadrichtung, animieren die Punkte vorwärts; bei Gegenrichtung rückwärts.
+// Punkt-Geschwindigkeit ∝ Leistung (mehr Watt = schnellere Punkte).
 
-// dir: 'in' = Quelle (Fluss zum Bus wenn W>0), 'out' = Verbraucher (Fluss vom Bus),
-//      'batt' = Batterie (W>0 laden → vom Bus, W<0 entladen → zum Bus), 'none' = nur Wert
+// Knoten: Wert-Anzeige + ob aktiv (Daten vorhanden)
 const FLOW_NODES = [
-  { id: 'solar1',  dir: 'in',   color: '#eab308', get: d => d.solar?.power,      sub: d => d.solar?.voltage != null ? d.solar.voltage.toFixed(1) + ' V' : '' },
-  { id: 'solar2',  dir: 'in',   color: '#f59e0b', get: d => d.solar2?.power },
-  { id: 'solar3',  dir: 'in',   color: '#fb923c', get: d => d.solar3?.power },
-  { id: 'alt',     dir: 'in',   color: '#06b6d4', get: d => d.alternator?.power },
-  { id: 'shore',   dir: 'in',   color: '#3b82f6', get: d => d.shore?.power },
-  { id: 'inv',     dir: 'out',  color: '#a78bfa', get: d => d.inverter?.power },
-  { id: 'service', dir: 'batt', color: '#22c55e', get: d => d.battery?.power,     sub: d => d.battery?.soc != null ? d.battery.soc + ' %' : '' },
-  { id: 'starter', dir: 'none', color: '#94a3b8', get: d => null,                 sub: d => d.battery?.starter_voltage != null ? d.battery.starter_voltage.toFixed(1) + ' V' : '' },
+  { id: 'grid',    get: d => null },                         // Landstrom (noch keine Messung)
+  { id: 'bord',    get: d => null },                         // 230V Bordnetz
+  { id: 'inv',     get: d => d.inverter?.power,   unit: 'W' },
+  { id: 'charger', get: d => d.charger?.power,    unit: 'W' },
+  { id: 'solar1',  get: d => d.solar?.power,      unit: 'W' },
+  { id: 'solar2',  get: d => d.solar2?.power,     unit: 'W' },
+  { id: 'solar3',  get: d => d.solar3?.power,     unit: 'W' },
+  { id: 'orion',   get: d => d.orion?.power,      unit: 'W' },
+  { id: 'dcgrid',  get: d => d.dc_grid?.power,    unit: 'W' },
+  { id: 'alt',     get: d => d.alternator?.power, unit: 'W' },
+  { id: 'starter', get: d => d.battery?.starter_voltage, unit: 'V' },
+];
+
+// Kanten: Leistungsquelle + Farbe. Positiv = Fluss in Pfadrichtung.
+const FLOW_EDGES = [
+  { id: 'fe-solar1',       get: d => d.solar?.power,      color: '#eab308' },
+  { id: 'fe-solar2',       get: d => d.solar2?.power,     color: '#f59e0b' },
+  { id: 'fe-solar3',       get: d => d.solar3?.power,     color: '#fb923c' },
+  { id: 'fe-charger',      get: d => d.charger?.power,    color: '#3b82f6' },
+  { id: 'fe-gridcharger',  get: d => d.charger?.power,    color: '#3b82f6' },
+  { id: 'fe-gridbord',     get: d => d.shore?.power,      color: '#3b82f6' },
+  { id: 'fe-inv',          get: d => d.inverter?.power,   color: '#a78bfa' },
+  { id: 'fe-invbord',      get: d => d.inverter?.power,   color: '#a78bfa' },
+  { id: 'fe-altstarter',   get: d => d.alternator?.power, color: '#06b6d4' },
+  { id: 'fe-starterorion', get: d => d.orion?.power,      color: '#22d3ee' },
+  { id: 'fe-orion',        get: d => d.orion?.power,      color: '#22d3ee' },
+  { id: 'fe-dcgrid',       get: d => d.dc_grid?.power,    color: '#f87171' },
 ];
 
 function openFlow() {
@@ -26,51 +47,55 @@ function closeFlow() {
 }
 
 function _flowFmtW(w) {
+  if (w == null) return '--';
   return Math.abs(w) >= 1000 ? (w / 1000).toFixed(2) + ' kW' : Math.round(w) + ' W';
+}
+
+// Punkt-Dauer aus Leistung: viel Leistung → kurze Dauer → schnelle Punkte
+function _flowDur(w) {
+  const a = Math.abs(w);
+  return Math.max(0.35, Math.min(2.4, 400 / Math.max(20, a))).toFixed(2);
 }
 
 function updateFlow(data) {
   if ($('flowOverlay').classList.contains('hidden')) return;
-  let hubIn = 0, hubOut = 0;
 
+  // Knoten
   FLOW_NODES.forEach(n => {
-    const w      = n.get(data);
-    const valEl  = $('fv-' + n.id), subEl = $('fs-' + n.id);
-    const nodeEl = $('fn-' + n.id), lineEl = $('fl-' + n.id);
-    const sub    = n.sub ? n.sub(data) : '';
-    if (subEl) subEl.textContent = sub || '';
-
-    const hasData = w != null || (n.dir === 'none' && sub);
-    nodeEl.classList.toggle('dim', !hasData);
-
-    if (w == null) {
-      valEl.textContent = n.dir === 'none' ? '—' : '--';
-      valEl.style.color = '';
-      lineEl.classList.remove('flow-active', 'flow-rev');
-      lineEl.style.stroke = '';
-      return;
-    }
-
-    valEl.textContent = _flowFmtW(w);
-    valEl.style.color = n.color;
-
-    const active = Math.abs(w) > 1;
-    lineEl.classList.toggle('flow-active', active);
-    lineEl.style.stroke = active ? n.color : '';
-
-    // Flussrichtung: Linien sind als "Knoten → Hub" gezeichnet.
-    let towardHub = true;
-    if (n.dir === 'in')   towardHub = w > 0;
-    if (n.dir === 'out')  towardHub = false;
-    if (n.dir === 'batt') towardHub = w < 0;   // entladen speist den Bus
-    lineEl.classList.toggle('flow-rev', !towardHub);
-
-    if (active) {
-      if (n.dir === 'in'  && w > 0) hubIn  += w;
-      if (n.dir === 'out' && w > 0) hubOut += w;
-      if (n.dir === 'batt') { if (w < 0) hubIn += -w; else hubOut += w; }
-    }
+    const valEl = $('fv-' + n.id), g = $('fg-' + n.id);
+    const w = n.get(data);
+    if (n.id === 'batt') return;                       // Batterie separat
+    const active = w != null;
+    if (g) g.classList.toggle('dim', !active);
+    if (!valEl) return;
+    if (!active) { valEl.textContent = (n.id === 'grid' || n.id === 'bord') ? '—' : '--'; return; }
+    valEl.textContent = n.unit === 'V' ? w.toFixed(1) + ' V' : _flowFmtW(w);
   });
 
-  $('flowHubVal').textContent = _flowFmtW(Math.max(hubIn, hubOut));
+  // Batterie (immer aktiv): Netto-Leistung + SOC/Spannung
+  const bp = data.battery?.power;
+  const bv = $('fv-batt'), bs = $('fs-batt'), bg = $('fg-batt');
+  if (bv) {
+    bv.textContent = bp != null ? _flowFmtW(bp) : '--';
+    bv.style.fill  = bp == null ? '' : bp > 0 ? 'var(--green)' : bp < 0 ? 'var(--orange)' : '';
+  }
+  if (bs) {
+    const soc = data.battery?.soc, volt = data.battery?.voltage;
+    bs.textContent = [soc != null ? soc + ' %' : null, volt != null ? volt.toFixed(2) + ' V' : null]
+      .filter(Boolean).join('  ·  ');
+  }
+  if (bg) bg.classList.remove('dim');
+
+  // Kanten
+  FLOW_EDGES.forEach(e => {
+    const el = $(e.id);
+    if (!el) return;
+    const w = e.get(data);
+    const active = w != null && Math.abs(w) > 1;
+    el.classList.toggle('on', active);
+    if (!active) { el.style.stroke = ''; el.style.animationDuration = ''; el.classList.remove('flow-rev'); return; }
+    el.style.stroke = e.color;
+    el.style.animationDuration = _flowDur(w) + 's';
+    el.classList.toggle('flow-rev', w < 0);
+  });
 }
