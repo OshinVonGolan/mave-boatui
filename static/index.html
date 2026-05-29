@@ -4128,8 +4128,8 @@ async function runUpdate() {
         vi.textContent = `${data.version_before} → ${data.version_after}`;
       fb.textContent = 'Aktualisiert — Server startet neu…';
       fb.style.color = 'var(--green)';
-      // Nach Neustart automatisch neu laden
-      setTimeout(() => location.reload(), 4000);
+      // Nach Neustart auf Startseite neu laden (ohne #settings)
+      setTimeout(() => { location.href = location.pathname; }, 4000);
     } else {
       fb.textContent = 'Bereits aktuell ✓';
       fb.style.color = 'var(--green)';
@@ -4139,7 +4139,7 @@ async function runUpdate() {
     // Verbindungsabbruch durch Neustart ist hier wahrscheinlich = Erfolg
     fb.textContent = 'Server startet neu…';
     fb.style.color = 'var(--green)';
-    setTimeout(() => location.reload(), 5000);
+    setTimeout(() => { location.href = location.pathname; }, 5000);
   }
 }
 

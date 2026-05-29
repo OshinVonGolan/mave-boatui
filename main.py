@@ -41,7 +41,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.7.2'
+VERSION  = _git_semver() or '1.7.3'
 GIT_HASH = _git_hash()
 
 logging.basicConfig(
