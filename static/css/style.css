@@ -879,20 +879,26 @@
   
 
     /* ── Energiefluss (Schema im Victron-Stil) ── */
-    .flow-schema { width: 100%; max-width: 1000px; margin: 0 auto; display: block; }
-    .flow-edge { fill: none; stroke: #334155; stroke-width: 1.4; }          /* dünne Basislinie */
-    .flow-edge-dot { fill: none; stroke-width: 3; stroke-linecap: round;
-      stroke-dasharray: 0.1 11; opacity: 0; transition: opacity .3s; }       /* gepunkteter Fluss */
+    .flow-card { max-width: 1060px; margin: 0 auto; padding: 22px 26px;
+      background: radial-gradient(120% 120% at 50% 0%, #16263f 0%, #0e1a2e 100%);
+      border: 1px solid var(--border); border-radius: 18px; }
+    .flow-schema { width: 100%; display: block; }
+    .flow-edge { fill: none; stroke: #3c5269; stroke-width: 1.6; }
+    .flow-edge-dot { fill: none; stroke-width: 4; stroke-linecap: round;
+      stroke-dasharray: 0.1 13; opacity: 0; transition: opacity .3s; }
     .flow-edge-dot.on { opacity: 1; animation: flowdots 1s linear infinite; }
     .flow-edge-dot.flow-rev { animation-direction: reverse; }
-    @keyframes flowdots { to { stroke-dashoffset: -22; } }                   /* 2× Periode → nahtlos */
-    .flow-box { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; rx: 10; }
-    .flow-box-main { fill: var(--surface2); stroke: var(--accent2); stroke-width: 2; }
-    .flow-g.dim { opacity: .4; }
-    .flow-name { fill: var(--text3); font-size: 12px; font-weight: 600; letter-spacing: .03em;
+    @keyframes flowdots { to { stroke-dashoffset: -26; } }
+    .flow-box { fill: #1b2c45; stroke: #3a4f6e; stroke-width: 1.5; }
+    .flow-box-main { fill: #20354f; stroke: var(--accent); stroke-width: 2.5;
+      filter: drop-shadow(0 0 10px rgba(6,182,212,.35)); }
+    .flow-g.dim { opacity: .6; }
+    .flow-g.dim .flow-box { fill: #16243a; stroke: #2b3c54; }
+    .flow-ico  { font-size: 19px; text-anchor: middle; }
+    .flow-name { fill: #93a7be; font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
       text-anchor: middle; text-transform: uppercase; }
-    .flow-val  { fill: var(--text); font-size: 18px; font-weight: 700; text-anchor: middle; }
-    .flow-sub  { fill: var(--text2); font-size: 12px; text-anchor: middle; }
+    .flow-val  { fill: #eef4fb; font-size: 20px; font-weight: 800; text-anchor: middle; }
+    .flow-sub  { fill: #93a7be; font-size: 13px; text-anchor: middle; }
 
     /* ── Settings: Kategorie-Navigation + Unterseiten ── */
     .set-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 16px 0; }
