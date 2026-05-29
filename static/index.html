@@ -204,8 +204,8 @@
     .divider { height: 1px; background: var(--border); margin: 0 -4px; }
 
     /* ── Full-screen overlay (shared base) ── */
-    .overlay { position: fixed; top: var(--header-h); left: 0; right: 0; bottom: 0;
-      background: var(--bg); z-index: 100; display: flex; flex-direction: column; }
+    .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--bg); z-index: 120; display: flex; flex-direction: column; }
     .overlay.hidden { display: none; }
     .ov-header { display: flex; align-items: center;
       padding: 12px 16px; border-bottom: 1px solid var(--border);
@@ -215,6 +215,26 @@
       display: flex; align-items: center; justify-content: center; gap: 8px; }
     .ov-header-spacer { width: 44px; flex-shrink: 0; }
     .ov-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+    /* ── Zentrierte Modals (statt Bottom-Sheets) ── */
+    .center-modal-bg { display: none; position: fixed; inset: 0; z-index: 199;
+      background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
+    .center-modal { display: none; position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); z-index: 200;
+      width: calc(100% - 32px); max-width: 560px; max-height: 88vh; overflow-y: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      box-shadow: 0 24px 64px rgba(0,0,0,.55); }
+    .center-modal-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .center-modal-close { margin-left: auto; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); width: 32px; height: 32px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .center-modal-close:hover { background: var(--border); color: var(--text1); }
+
+    /* ── Zahleneingaben: Spinner-Pfeile ausblenden ── */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 
     /* ── Battery detail — 3-column page grid ── */
     .bd-pg {
@@ -413,6 +433,12 @@
     .ack-all-row { display: flex; justify-content: flex-end; margin-bottom: 12px; }
 
     /* ── Alarm rules ── */
+    .rule-cat-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+    .rule-cat-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2);
+      padding: 7px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; font-weight: 500; }
+    .rule-cat-btn:hover { background: var(--border); }
+    .rule-cat-btn.active { background: var(--accent2, #3b82f6); color: #fff; border-color: transparent; }
+    .rule-cat-btn .rc-count { font-size: 11px; opacity: .7; margin-left: 4px; }
     .rule-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 20px; }
     .rule-row {
       display: flex; flex-direction: column; gap: 6px;
@@ -1319,6 +1345,7 @@
 
     <!-- Tab: Alarmregeln -->
     <div class="tab-pane" id="tabRegeln">
+      <div class="rule-cat-nav" id="ruleCatNav"></div>
       <div class="rule-list" id="ruleList">Lade…</div>
       <div class="settings-actions">
         <span class="settings-feedback" id="rulesFeedback"></span>
@@ -1830,7 +1857,14 @@
       </svg>
       Wartungsplan
     </div>
-    <div class="ov-header-spacer"></div>
+    <button class="monday-refresh" onclick="exportWartungCsv()" title="Als CSV exportieren">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      CSV
+    </button>
+    <button class="monday-refresh" onclick="openWartungNew()" style="margin-left:8px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Neue Aufgabe
+    </button>
   </div>
   <div class="ov-body">
     <div id="wartungBody" style="max-width:860px;margin:0 auto"></div>
@@ -1838,19 +1872,19 @@
 </div>
 
 <!-- ── Wartungsplan Task Edit Sheet ────────────────────────────────────────── -->
-<div id="wartungEditBg" style="display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.45)" onclick="closeWartungEdit()"></div>
-<div id="wartungEditSheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
-     background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;
-     padding:20px 20px 32px;max-width:600px;margin:0 auto;box-shadow:0 -8px 32px rgba(0,0,0,.3)">
-  <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<div id="wartungEditBg" class="center-modal-bg" onclick="closeWartungEdit()"></div>
+<div id="wartungEditSheet" class="center-modal">
+  <div class="center-modal-hd">
     <span class="w-dot" id="wEditDot"></span>
     <span style="font-size:15px;font-weight:700" id="wEditTitle">Aufgabe</span>
-    <span style="font-size:11px;color:var(--text3);margin-left:auto" id="wEditInterval"></span>
+    <span style="font-size:11px;color:var(--text3)" id="wEditInterval"></span>
+    <button class="center-modal-close" onclick="closeWartungEdit()" title="Schließen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
   </div>
 
   <!-- Als erledigt markieren -->
-  <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
+  <div id="wEditDoneBlock" style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Als erledigt markieren</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
@@ -1868,11 +1902,15 @@
   </div>
 
   <!-- Aufgabe bearbeiten -->
-  <details style="margin-bottom:0">
+  <details id="wEditDetails" style="margin-bottom:0">
     <summary style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:4px 0;list-style:none">
       ▸ Aufgabe bearbeiten
     </summary>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <div>
+        <label style="font-size:11px;color:var(--text3)">Kategorie</label>
+        <select id="wEditCat" style="margin-top:3px;width:100%;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"></select>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <label style="font-size:11px;color:var(--text3)">Name</label>
@@ -1895,7 +1933,7 @@
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="saveWartungTask()" style="flex:1;background:#3b82f6;color:#fff;border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer">Speichern</button>
-        <button onclick="deleteWartungTask()" style="background:var(--surface2);color:var(--red,#ef4444);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;cursor:pointer">
+        <button id="wDeleteBtn" onclick="deleteWartungTask()" style="background:var(--surface2);color:var(--red,#ef4444);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;cursor:pointer">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
         </button>
       </div>
@@ -1907,12 +1945,14 @@
 </div>
 
 <!-- ── Stauplan Edit Sheet ─────────────────────────────────────────────────── -->
-<div id="stauEditBg" style="display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.45)" onclick="closeStauEdit()"></div>
-<div id="stauEditSheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
-     background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;
-     padding:20px 20px 32px;max-width:600px;margin:0 auto;box-shadow:0 -8px 32px rgba(0,0,0,.3)">
-  <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px"></div>
-  <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px" id="stauEditTitle">Eintrag bearbeiten</div>
+<div id="stauEditBg" class="center-modal-bg" onclick="closeStauEdit()"></div>
+<div id="stauEditSheet" class="center-modal">
+  <div class="center-modal-hd">
+    <span style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)" id="stauEditTitle">Eintrag bearbeiten</span>
+    <button class="center-modal-close" onclick="closeStauEdit()" title="Schließen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
   <div style="display:flex;flex-direction:column;gap:10px">
     <div>
       <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Artikel</label>
@@ -1988,10 +2028,11 @@
         </div>
       </div>
     </div>
-    <!-- Suche -->
+    <!-- Suche + Label-Filter -->
     <div style="max-width:860px;margin:0 auto;padding:10px 16px 0">
       <input class="stauplan-search" type="search" id="mondaySearchInput" placeholder="Aufgaben suchen…"
-             oninput="filterMonday(this.value)" style="margin:0">
+             oninput="filterMonday(this.value)" style="margin:0 0 8px">
+      <div id="mondayLabelFilters" style="display:flex;gap:8px;flex-wrap:wrap"></div>
     </div>
     <div class="monday-body" id="mondayBody">
       <div class="monday-empty">Lade Aufgaben…</div>
@@ -2956,10 +2997,63 @@ async function loadRules() {
   } catch(_) { $('ruleList').textContent = 'Fehler beim Laden'; }
 }
 
+let _ruleCat = null;
+
+function _ruleCategory(key, r) {
+  const f = r.field || '';
+  if (key.startsWith('bms')     || f.startsWith('bms'))     return 'BMS';
+  if (key.startsWith('tank')    || f.startsWith('tanks'))   return 'Tank';
+  if (key.startsWith('network') || f.includes('network') || f.includes('can')) return 'System';
+  if (key.startsWith('bat') || key.startsWith('starter') || f.startsWith('battery')) return 'Batterie';
+  return 'Sonstige';
+}
+
+const _RULE_CAT_ORDER = ['Batterie', 'BMS', 'Tank', 'System', 'Sonstige'];
+
+// Sichtbare Regel-Edits ins Cache übernehmen (vor Kategoriewechsel)
+function _commitVisibleRules() {
+  Object.keys(_rulesCache).forEach(key => {
+    const r = _rulesCache[key];
+    const en = $(`r_${key}_en`);
+    if (en) r.enabled = en.checked;
+    if (r.op === 'range') {
+      const track = $(`dr_${key}`);
+      if (track) { r.min = parseFloat(track.dataset.min); r.max = parseFloat(track.dataset.max); }
+    } else {
+      const thr = $(`r_${key}_thr`);
+      if (thr && thr.value !== '') r.threshold = parseFloat(thr.value);
+    }
+  });
+}
+
+function switchRuleCat(cat) {
+  _commitVisibleRules();
+  _ruleCat = cat;
+  renderRules(_rulesCache);
+}
+
 function renderRules(rules) {
   const entries = Object.entries(rules);
-  const available   = entries.filter(([, r]) =>  r.data_available);
-  const unavailable = entries.filter(([, r]) => !r.data_available);
+  const availableAll = entries.filter(([, r]) =>  r.data_available);
+  const unavailable  = entries.filter(([, r]) => !r.data_available);
+
+  // Kategorien aus verfügbaren Regeln bestimmen
+  const catCounts = {};
+  availableAll.forEach(([key, r]) => {
+    const c = _ruleCategory(key, r);
+    catCounts[c] = (catCounts[c] || 0) + 1;
+  });
+  const cats = _RULE_CAT_ORDER.filter(c => catCounts[c]);
+  if (!_ruleCat || !catCounts[_ruleCat]) _ruleCat = cats[0] || null;
+
+  // Kategorie-Navigation
+  $('ruleCatNav').innerHTML = cats.map(c =>
+    `<button class="rule-cat-btn ${c === _ruleCat ? 'active' : ''}" onclick="switchRuleCat('${c}')">
+      ${c}<span class="rc-count">${catCounts[c]}</span>
+    </button>`
+  ).join('');
+
+  const available = availableAll.filter(([key, r]) => _ruleCategory(key, r) === _ruleCat);
 
   $('ruleList').innerHTML = available.map(([key, r]) => {
     const noData   = !r.data_available;
@@ -3100,21 +3194,14 @@ function initDualRange(key, r) {
 
 async function saveRules() {
   const fb = $('rulesFeedback');
+  _commitVisibleRules();  // sichtbare Eingaben übernehmen (auch aus anderen Kategorien bereits committet)
   const updates = {};
   Object.keys(_rulesCache).forEach(key => {
     const r = _rulesCache[key];
     if (r.op === 'range') {
-      const track = $(`dr_${key}`);
-      updates[key] = {
-        enabled: $(`r_${key}_en`)?.checked ?? r.enabled,
-        min: track ? parseFloat(track.dataset.min) : r.min,
-        max: track ? parseFloat(track.dataset.max) : r.max,
-      };
+      updates[key] = { enabled: r.enabled, min: r.min, max: r.max };
     } else {
-      updates[key] = {
-        enabled:   $(`r_${key}_en`)?.checked ?? r.enabled,
-        threshold: parseFloat($(`r_${key}_thr`)?.value) ?? r.threshold,
-      };
+      updates[key] = { enabled: r.enabled, threshold: r.threshold };
     }
   });
   try {
@@ -4142,34 +4229,37 @@ function updateWartungTopbar() {
 function updateWartungHomeTile() {
   const body = $('wartungHomeBody');
   if (!body) return;
-  const allTasks = WARTUNG_DATA.flatMap(c => {
-    const cat = WARTUNG_DATA.find(cc => cc.tasks.includes(c)) || {};
-    return c.tasks ? c.tasks.map(t => ({ ...t, catColor: c.color, catName: c.name })) : [];
-  }).flatMap(c => c); // flatten correctly
 
-  // Correct flattening
   const tasks = [];
   WARTUNG_DATA.forEach(cat => {
     cat.tasks.forEach(t => tasks.push({ ...t, catColor: cat.color, catName: cat.name }));
   });
 
-  const overdue  = tasks.filter(t => getWartungStatus(t).status === 'overdue').length;
-  const dueSoon  = tasks.filter(t => getWartungStatus(t).status === 'due_soon').length;
-
-  // Sort by urgency (overdue first, then by days)
-  const sorted = tasks
-    .filter(t => t.interval_days > 0)
+  // Nur anstehende: überfällig + bald fällig, nach Dringlichkeit sortiert
+  const pending = tasks
     .map(t => ({ t, s: getWartungStatus(t) }))
-    .sort((a, b) => (a.s.days ?? Infinity) - (b.s.days ?? Infinity))
-    .slice(0, 4);
+    .filter(x => x.s.status === 'overdue' || x.s.status === 'due_soon')
+    .sort((a, b) => (a.s.days ?? Infinity) - (b.s.days ?? Infinity));
+
+  const overdue = pending.filter(x => x.s.status === 'overdue').length;
+  const dueSoon = pending.filter(x => x.s.status === 'due_soon').length;
+  const card = $('wartungCard');
+
+  if (!pending.length) {
+    if (card) card.style.borderColor = '';
+    body.innerHTML = `<div style="display:flex;align-items:center;gap:8px;color:#22c55e;font-size:13px;font-weight:600">
+      <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span>
+      Alle Wartungen aktuell
+    </div>`;
+    return;
+  }
 
   let html = '<div class="w-home-badge">';
-  if (overdue > 0)  html += `<span class="w-badge-pill" style="background:#ef44441a;color:#ef4444">${overdue} überfällig</span>`;
-  if (dueSoon > 0)  html += `<span class="w-badge-pill" style="background:#f59e0b1a;color:#f59e0b">${dueSoon} demnächst</span>`;
-  if (!overdue && !dueSoon) html += `<span class="w-badge-pill" style="background:#22c55e1a;color:#22c55e">Alles erledigt ✓</span>`;
+  if (overdue > 0) html += `<span class="w-badge-pill" style="background:#ef44441a;color:#ef4444">${overdue} überfällig</span>`;
+  if (dueSoon > 0) html += `<span class="w-badge-pill" style="background:#f59e0b1a;color:#f59e0b">${dueSoon} demnächst</span>`;
   html += '</div>';
 
-  sorted.forEach(({ t, s }) => {
+  pending.slice(0, 5).forEach(({ t, s }) => {
     html += `<div class="w-home-row">
       <span style="display:flex;align-items:center;gap:6px">
         <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
@@ -4178,12 +4268,10 @@ function updateWartungHomeTile() {
       <span style="color:${s.color};font-size:12px;font-weight:600">${s.label}</span>
     </div>`;
   });
+  if (pending.length > 5)
+    html += `<div style="font-size:11px;color:var(--text3);padding-top:6px">+${pending.length - 5} weitere</div>`;
 
-  // Color the card border
-  const card = $('wartungCard');
-  if (card) {
-    card.style.borderColor = overdue > 0 ? '#ef4444' : dueSoon > 0 ? '#f59e0b' : '';
-  }
+  if (card) card.style.borderColor = overdue > 0 ? '#ef4444' : '#f59e0b';
   body.innerHTML = html;
 }
 
@@ -4223,6 +4311,43 @@ function renderWartung() {
   body.innerHTML = html;
 }
 
+function exportWartungCsv() {
+  const sep = ';';
+  const esc = v => {
+    const s = String(v ?? '');
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const rows = [['Kategorie','Aufgabe','Intervall','Intervall (Tage)','Material','Zuletzt erledigt','Nächste Fälligkeit','Status','Notiz (letzte)']];
+  WARTUNG_DATA.forEach(cat => {
+    cat.tasks.forEach(t => {
+      const s = getWartungStatus(t);
+      let next = '';
+      if (t.interval_days > 0 && t.last_done) {
+        const d = new Date(t.last_done); d.setDate(d.getDate() + t.interval_days);
+        next = d.toISOString().slice(0,10);
+      }
+      const statusTxt = { overdue:'überfällig', due_soon:'bald fällig', ok:'ok', manual:'manuell' }[s.status] || s.status;
+      const lastNote = (t.history && t.history.length) ? t.history[t.history.length-1].notes : '';
+      rows.push([cat.name, t.name, t.interval_label, t.interval_days || '', t.material || '',
+                 t.last_done || '', next, statusTxt, lastNote]);
+    });
+  });
+  const csv = '﻿' + rows.map(r => r.map(esc).join(sep)).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `wartungsplan_${todayISO()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function _wEditPopulateCats(selectedId) {
+  $('wEditCat').innerHTML = WARTUNG_DATA.map(c =>
+    `<option value="${c.id}"${c.id === selectedId ? ' selected' : ''}>${c.name}</option>`
+  ).join('');
+}
+
 function openWartungTask(catId, taskId) {
   const cat  = WARTUNG_DATA.find(c => c.id === catId);
   const task = cat?.tasks.find(t => t.id === taskId);
@@ -4235,10 +4360,14 @@ function openWartungTask(catId, taskId) {
   $('wEditInterval').textContent  = task.interval_label + (task.material ? ` · ${task.material}` : '');
   $('wEditDate').value   = todayISO();
   $('wEditNotes').value  = '';
+  _wEditPopulateCats(catId);
   $('wEditName').value   = task.name;
   $('wEditMaterial').value       = task.material || '';
   $('wEditDays').value           = task.interval_days;
   $('wEditIntervalLabel').value  = task.interval_label;
+  $('wEditDoneBlock').style.display = '';
+  $('wEditDetails').open = false;
+  $('wDeleteBtn') && ($('wDeleteBtn').style.display = '');
 
   // History
   const hist = (task.history || []).slice(-5).reverse();
@@ -4250,8 +4379,28 @@ function openWartungTask(catId, taskId) {
       </div>`).join('')
     : '<div style="color:var(--text3);font-size:12px">Noch kein Verlauf</div>';
 
-  $('wartungEditBg').style.display    = '';
-  $('wartungEditSheet').style.display = '';
+  $('wartungEditBg').style.display    = 'block';
+  $('wartungEditSheet').style.display = 'block';
+}
+
+function openWartungNew() {
+  _wEditCatId  = WARTUNG_DATA[0]?.id || null;
+  _wEditTaskId = null;
+  $('wEditDot').style.background = WARTUNG_DATA[0]?.color || '#888';
+  $('wEditTitle').textContent    = 'Neue Aufgabe';
+  $('wEditInterval').textContent = '';
+  _wEditPopulateCats(_wEditCatId);
+  $('wEditName').value          = '';
+  $('wEditMaterial').value      = '';
+  $('wEditDays').value          = 365;
+  $('wEditIntervalLabel').value = 'jährlich';
+  $('wEditDoneBlock').style.display = 'none';  // erst nach Anlegen erledigbar
+  $('wEditDetails').open = true;
+  $('wDeleteBtn') && ($('wDeleteBtn').style.display = 'none');
+  $('wEditHistory').innerHTML = '';
+  $('wartungEditBg').style.display    = 'block';
+  $('wartungEditSheet').style.display = 'block';
+  setTimeout(() => $('wEditName').focus(), 80);
 }
 
 function closeWartungEdit() {
@@ -4273,20 +4422,49 @@ function saveWartungDone() {
   renderWartung();
 }
 
+function _slugify(s) {
+  return s.toLowerCase().replace(/[äöü]/g, m => ({'ä':'ae','ö':'oe','ü':'ue'}[m]))
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'task';
+}
+
 function saveWartungTask() {
-  const cat  = WARTUNG_DATA.find(c => c.id === _wEditCatId);
-  const task = cat?.tasks.find(t => t.id === _wEditTaskId);
-  if (!task) return;
-  task.name           = $('wEditName').value.trim()          || task.name;
-  task.material       = $('wEditMaterial').value.trim();
-  task.interval_days  = parseInt($('wEditDays').value) || 0;
-  task.interval_label = $('wEditIntervalLabel').value.trim() || task.interval_label;
+  const name = $('wEditName').value.trim();
+  if (!name) { $('wEditName').focus(); return; }
+  const targetCatId   = $('wEditCat').value;
+  const targetCat     = WARTUNG_DATA.find(c => c.id === targetCatId);
+  if (!targetCat) return;
+  const material      = $('wEditMaterial').value.trim();
+  const intervalDays  = parseInt($('wEditDays').value) || 0;
+  const intervalLabel = $('wEditIntervalLabel').value.trim() || 'manuell';
+
+  if (_wEditTaskId === null) {
+    // Neue Aufgabe
+    let id = _slugify(name);
+    const existing = new Set(WARTUNG_DATA.flatMap(c => c.tasks.map(t => t.id)));
+    while (existing.has(id)) id += '-2';
+    targetCat.tasks.push({
+      id, name, interval_days: intervalDays, interval_label: intervalLabel,
+      material, last_done: null, history: [],
+    });
+  } else {
+    // Bestehende Aufgabe bearbeiten (ggf. Kategorie wechseln)
+    const srcCat = WARTUNG_DATA.find(c => c.id === _wEditCatId);
+    const task   = srcCat?.tasks.find(t => t.id === _wEditTaskId);
+    if (!task) return;
+    task.name = name; task.material = material;
+    task.interval_days = intervalDays; task.interval_label = intervalLabel;
+    if (targetCatId !== _wEditCatId) {
+      srcCat.tasks = srcCat.tasks.filter(t => t.id !== _wEditTaskId);
+      targetCat.tasks.push(task);
+    }
+  }
   closeWartungEdit();
   _wartungSave();
   renderWartung();
 }
 
 function deleteWartungTask() {
+  if (_wEditTaskId === null) { closeWartungEdit(); return; }
   const cat = WARTUNG_DATA.find(c => c.id === _wEditCatId);
   if (!cat) return;
   const task = cat.tasks.find(t => t.id === _wEditTaskId);
@@ -4452,8 +4630,8 @@ function openStauEdit(idx) {
     `<option value="${k}"${k === item.fach ? ' selected' : ''}>${f.name}</option>`
   ).join('');
   $('stauDeleteBtn').style.display = '';
-  $('stauEditBg').style.display    = '';
-  $('stauEditSheet').style.display = '';
+  $('stauEditBg').style.display    = 'block';
+  $('stauEditSheet').style.display = 'block';
   setTimeout(() => $('stauEditName').focus(), 80);
 }
 
@@ -4494,8 +4672,8 @@ function openStauNew() {
     `<option value="${k}"${k === defaultFach ? ' selected' : ''}>${f.name}</option>`
   ).join('');
   $('stauDeleteBtn').style.display = 'none';
-  $('stauEditBg').style.display    = '';
-  $('stauEditSheet').style.display = '';
+  $('stauEditBg').style.display    = 'block';
+  $('stauEditSheet').style.display = 'block';
   setTimeout(() => $('stauEditName').focus(), 80);
 }
 
@@ -4522,8 +4700,9 @@ function saveStauEdit() {
 
 // ── Monday ─────────────────────────────────────────────────────────────────
 
-let _mondayData   = null;
-let _mondayFilter = '';
+let _mondayData        = null;
+let _mondayFilter      = '';
+let _mondayLabelFilter = {};   // { columnId: index }
 
 function openMonday() {
   _closeAllOverlays();
@@ -4551,6 +4730,7 @@ async function loadMondayBoard() {
       return;
     }
     _mondayData = await r.json();
+    renderMondayLabelFilters();
     renderMondayBoard(_mondayData);
     const titleEl = $('mondayBoardTitle');
     if (titleEl && _mondayData.name) titleEl.childNodes[titleEl.childNodes.length - 1].textContent = ' ' + _mondayData.name;
@@ -4563,6 +4743,25 @@ async function loadMondayBoard() {
 
 function filterMonday(q) {
   _mondayFilter = (q ?? '').trim().toLowerCase();
+  if (_mondayData) renderMondayBoard(_mondayData);
+}
+
+function renderMondayLabelFilters() {
+  const wrap = $('mondayLabelFilters');
+  if (!wrap) return;
+  const cols = _mondayData?.status_columns || [];
+  _mondayLabelFilter = {};
+  wrap.innerHTML = cols.map(col => `
+    <select onchange="setMondayLabelFilter('${col.id}', this.value)"
+            style="background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px">
+      <option value="">${_esc(col.title)}: Alle</option>
+      ${col.options.map(o => `<option value="${o.index}">${_esc(col.title)}: ${_esc(o.label)}</option>`).join('')}
+    </select>`).join('');
+}
+
+function setMondayLabelFilter(colId, index) {
+  if (index === '') delete _mondayLabelFilter[colId];
+  else _mondayLabelFilter[colId] = index;
   if (_mondayData) renderMondayBoard(_mondayData);
 }
 
@@ -4660,11 +4859,18 @@ function renderMondayBoard(data) {
   const primaryColId = data.status_columns?.[0]?.id;
   const fq = _mondayFilter;
 
+  const labelFilters = Object.entries(_mondayLabelFilter);
+
   let html = '';
   data.groups.forEach(group => {
-    const visible = (group.items || []).filter(i =>
-      !fq || i.name.toLowerCase().includes(fq)
-    );
+    const visible = (group.items || []).filter(i => {
+      if (fq && !i.name.toLowerCase().includes(fq)) return false;
+      // Label-Filter: alle gesetzten Spalten müssen passen
+      for (const [colId, idx] of labelFilters) {
+        if ((i.columns?.[colId]?.index ?? '') !== idx) return false;
+      }
+      return true;
+    });
     if (!visible.length) return;
     const dot = group.color ? `<span class="monday-group-dot" style="background:${group.color}"></span>` : '';
     html += `<div class="monday-group-hd">${dot}${_esc(group.title)} <span style="color:var(--text3);font-weight:400;margin-left:4px">${visible.length}</span></div>`;
