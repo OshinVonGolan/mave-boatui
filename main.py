@@ -365,6 +365,31 @@ async def set_monday_status(item_id: str, body: dict):
         raise HTTPException(502, detail=str(e))
 
 
+@app.get('/api/debug/router-clients')
+async def debug_router_clients():
+    """Probe multiple RUTX50 endpoints to find WiFi client data."""
+    if not conn_mon:
+        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
+    results = {}
+    candidates = [
+        '/api/wireless/stations',
+        '/api/wireless/interfaces',
+        '/api/hosts',
+        '/api/dhcp/leases',
+        '/api/arp',
+        '/api/wireless/status',
+    ]
+    for path in candidates:
+        try:
+            hdrs = conn_mon._token_headers()
+            url  = conn_mon._router_host + path
+            data = conn_mon._http(url, headers=hdrs)
+            results[path] = {'ok': True, 'data': data}
+        except Exception as e:
+            results[path] = {'ok': False, 'error': str(e)}
+    return results
+
+
 @app.patch('/api/settings')
 async def update_settings(body: dict):
     data = json.loads(PRESETS_FILE.read_text())

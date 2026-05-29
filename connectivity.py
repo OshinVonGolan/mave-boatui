@@ -96,7 +96,7 @@ class ConnectivityMonitor:
                     'network':  sta.get('network', ''),
                 })
         except Exception as e:
-            log.debug('WiFi stations: %s', e)
+            log.warning('WiFi stations (%s/api/wireless/stations): %s', self._router_host, e)
 
         return {
             'active_type':   primary.get('network_type', 'unknown'),
