@@ -1498,7 +1498,10 @@
       </svg>
       Stauplan — MAVE
     </div>
-    <div class="ov-header-spacer"></div>
+    <button class="monday-refresh" onclick="openStauNew()" style="margin-left:auto">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Neuer Artikel
+    </button>
   </div>
   <div class="ov-body" style="padding:0">
 
@@ -1804,8 +1807,11 @@
       <input id="stauEditNotiz" type="text" style="margin-top:4px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text1);font-size:14px;outline:none">
     </div>
     <div style="display:flex;gap:10px;margin-top:4px">
-      <button onclick="saveStauEdit()" style="flex:1;background:var(--accent,#3b82f6);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">Speichern</button>
+      <button onclick="saveStauEdit()" style="flex:1;background:#3b82f6;color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">Speichern</button>
       <button onclick="closeStauEdit()" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:14px;cursor:pointer">Abbrechen</button>
+      <button id="stauDeleteBtn" onclick="deleteStauItem()" style="background:var(--surface2);color:var(--red,#ef4444);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;cursor:pointer" title="Löschen">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -3925,7 +3931,8 @@ const STAU_FAECHER = {
 };
 
 // Beispieldaten — werden später über ein Formular befüllt
-const STAU_ITEMS = [
+// Startwerte — werden beim ersten Laden mit Server-Daten überschrieben
+let STAU_ITEMS = [
   { name: 'Rettungswesten',    fach: 'salon',    menge: '4×',     notiz: '' },
   { name: 'Erste-Hilfe-Set',   fach: 'karten',   menge: '1×',     notiz: 'Ablaufdatum prüfen' },
   { name: 'Signalraketen',     fach: 'karten',   menge: '1 Set',  notiz: '' },
@@ -3940,10 +3947,31 @@ const STAU_ITEMS = [
   { name: 'Kartenmaterial',    fach: 'karten',   menge: '1 Set',  notiz: 'Nordsee / Ostsee' },
 ];
 
-function openStauplan() {
+async function _stauSave() {
+  try {
+    await fetch('/api/stauplan', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(STAU_ITEMS),
+    });
+  } catch(e) { console.error('Stauplan speichern:', e); }
+}
+
+async function _stauLoad() {
+  try {
+    const r = await fetch('/api/stauplan');
+    if (r.ok) {
+      const data = await r.json();
+      if (Array.isArray(data) && data.length) STAU_ITEMS = data;
+    }
+  } catch(_) {}
+}
+
+async function openStauplan() {
   _closeAllOverlays();
   history.pushState({ overlay: 'stauplan' }, '', '#stauplan');
   $('stauplanOverlay').classList.remove('hidden');
+  await _stauLoad();
   renderStauTable('');
 }
 
@@ -4040,6 +4068,7 @@ function openStauEdit(idx) {
   $('stauEditFach').innerHTML = Object.entries(STAU_FAECHER).map(([k, f]) =>
     `<option value="${k}"${k === item.fach ? ' selected' : ''}>${f.name}</option>`
   ).join('');
+  $('stauDeleteBtn').style.display = '';
   $('stauEditBg').style.display    = '';
   $('stauEditSheet').style.display = '';
   setTimeout(() => $('stauEditName').focus(), 80);
@@ -4058,7 +4087,54 @@ function saveStauEdit() {
   item.menge = $('stauEditMenge').value.trim();
   item.notiz = $('stauEditNotiz').value.trim();
   closeStauEdit();
+  _stauSave();
   renderStauTable($('stauSearchInput')?.value || '');
+}
+
+function deleteStauItem() {
+  if (_stauEditIdx < 0) return;
+  if (!confirm(`"${STAU_ITEMS[_stauEditIdx]?.name}" löschen?`)) return;
+  STAU_ITEMS.splice(_stauEditIdx, 1);
+  closeStauEdit();
+  _stauSave();
+  renderStauTable($('stauSearchInput')?.value || '');
+}
+
+function openStauNew() {
+  _stauEditIdx = -1;
+  $('stauEditTitle').textContent = 'Neuer Artikel';
+  $('stauEditName').value  = '';
+  $('stauEditMenge').value = '';
+  $('stauEditNotiz').value = '';
+  const defaultFach = _stauFachFilter || 'salon';
+  $('stauEditFach').innerHTML = Object.entries(STAU_FAECHER).map(([k, f]) =>
+    `<option value="${k}"${k === defaultFach ? ' selected' : ''}>${f.name}</option>`
+  ).join('');
+  $('stauDeleteBtn').style.display = 'none';
+  $('stauEditBg').style.display    = '';
+  $('stauEditSheet').style.display = '';
+  setTimeout(() => $('stauEditName').focus(), 80);
+}
+
+// Override saveStauEdit to handle both new + edit
+const _origSaveStauEdit = saveStauEdit;
+function saveStauEdit() {
+  if (_stauEditIdx === -1) {
+    // New item
+    const name = $('stauEditName').value.trim();
+    if (!name) { $('stauEditName').focus(); return; }
+    STAU_ITEMS.push({
+      name,
+      fach:  $('stauEditFach').value,
+      menge: $('stauEditMenge').value.trim(),
+      notiz: $('stauEditNotiz').value.trim(),
+    });
+    closeStauEdit();
+    _stauSave();
+    renderStauTable($('stauSearchInput')?.value || '');
+  } else {
+    _origSaveStauEdit();
+  }
 }
 
 // ── Monday ─────────────────────────────────────────────────────────────────

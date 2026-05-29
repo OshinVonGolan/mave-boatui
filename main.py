@@ -50,9 +50,10 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-BASE_DIR     = Path(__file__).parent
-PRESETS_FILE = BASE_DIR / 'presets.json'
-STATIC_DIR   = BASE_DIR / 'static'
+BASE_DIR      = Path(__file__).parent
+PRESETS_FILE  = BASE_DIR / 'presets.json'
+STATIC_DIR    = BASE_DIR / 'static'
+STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 
 state   = BoatState()
 can_if  = CanInterface(channel='can0', state=state)
@@ -365,45 +366,16 @@ async def set_monday_status(item_id: str, body: dict):
         raise HTTPException(502, detail=str(e))
 
 
-@app.get('/api/debug/router-clients')
-async def debug_router_clients():
-    """Probe multiple RUTX50 endpoints to find WiFi client data."""
-    if not conn_mon:
-        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
-    results = {}
-    candidates = [
-        '/api/wireless/stations',
-        '/api/wireless/interfaces',
-        '/api/hosts',
-        '/api/dhcp/leases',
-        '/api/arp',
-        '/api/wireless/status',
-        '/api/overview',
-        '/api/clients',
-        '/api/network/clients',
-        '/api/router/wireless/stations',
-        '/api/overview/wireless/sta',
-        '/api/wireless/AP/stations',
-        '/api/dhcp',
-        '/api/dhcp/config',
-        '/api/interfaces/wireless',
-    ]
-    hdrs = conn_mon._token_headers()
-    for path in candidates:
-        try:
-            url  = conn_mon._router_host + path
-            data = conn_mon._http(url, headers=hdrs)
-            results[path] = {'ok': True, 'data': data}
-        except Exception as e:
-            results[path] = {'ok': False, 'error': str(e)}
-    # Zeige auch die bereits genutzten Endpunkte mit vollem Inhalt
-    for path in ('/api/interfaces/status', '/api/modems/status'):
-        try:
-            data = conn_mon._http(conn_mon._router_host + path, headers=hdrs)
-            results[f'(existing){path}'] = {'ok': True, 'data': data}
-        except Exception as e:
-            results[f'(existing){path}'] = {'ok': False, 'error': str(e)}
-    return results
+@app.get('/api/stauplan')
+async def get_stauplan():
+    if STAUPLAN_FILE.exists():
+        return json.loads(STAUPLAN_FILE.read_text())
+    return []
+
+@app.put('/api/stauplan')
+async def save_stauplan(body: list):
+    STAUPLAN_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
+    return body
 
 
 @app.patch('/api/settings')
