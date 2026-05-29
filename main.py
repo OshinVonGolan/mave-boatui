@@ -58,6 +58,13 @@ else:
     conn_mon = None
     log.warning('connectivity.json nicht gefunden — Connectivity-Monitor deaktiviert')
 
+_MONDAY_FILE = BASE_DIR / 'monday.json'
+if _MONDAY_FILE.exists():
+    _monday_cfg = json.loads(_MONDAY_FILE.read_text())
+else:
+    _monday_cfg = {}
+    log.warning('monday.json nicht gefunden — Monday-Integration deaktiviert')
+
 def _apply_presets_config():
     data = json.loads(PRESETS_FILE.read_text())
     batt = data.get('batteries', {})
@@ -279,6 +286,37 @@ async def system_update():
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     return {'ok': True, 'changed': changed, 'output': result.stdout.strip(),
             'version_before': before, 'version_after': after}
+
+
+@app.get('/api/monday/board')
+async def get_monday_board():
+    token    = _monday_cfg.get('api_token', '')
+    board_id = str(_monday_cfg.get('board_id', ''))
+    if not token or not board_id or token.startswith('DEIN_'):
+        raise HTTPException(503, detail='Monday nicht konfiguriert')
+    from monday import get_board
+    try:
+        return await get_board(token, board_id)
+    except Exception as e:
+        raise HTTPException(502, detail=str(e))
+
+
+@app.patch('/api/monday/item/{item_id}/status')
+async def set_monday_status(item_id: str, body: dict):
+    token    = _monday_cfg.get('api_token', '')
+    board_id = str(_monday_cfg.get('board_id', ''))
+    if not token or not board_id or token.startswith('DEIN_'):
+        raise HTTPException(503, detail='Monday nicht konfiguriert')
+    column_id = body.get('column_id', '')
+    label     = body.get('label', '')
+    if not column_id or not label:
+        raise HTTPException(400, detail='column_id und label erforderlich')
+    from monday import set_status
+    try:
+        await set_status(token, board_id, item_id, column_id, label)
+        return {'ok': True}
+    except Exception as e:
+        raise HTTPException(502, detail=str(e))
 
 
 @app.patch('/api/settings')
