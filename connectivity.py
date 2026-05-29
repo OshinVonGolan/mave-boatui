@@ -83,11 +83,27 @@ class ConnectivityMonitor:
         wired   = next((i for i in wan if i.get('network_type') == 'wired'),  None)
         modem   = modems[0] if modems else {}
 
+        # Connected WiFi clients (graceful fallback if endpoint absent)
+        wifi_clients = []
+        try:
+            stations = self._http(f'{self._router_host}/api/wireless/stations', headers=hdrs)
+            for sta in (stations.get('data') or []):
+                wifi_clients.append({
+                    'hostname': sta.get('hostname') or sta.get('host') or '',
+                    'mac':      sta.get('mac', ''),
+                    'ip':       sta.get('ip') or sta.get('ipaddr', ''),
+                    'signal':   sta.get('signal'),
+                    'network':  sta.get('network', ''),
+                })
+        except Exception as e:
+            log.debug('WiFi stations: %s', e)
+
         return {
             'active_type':   primary.get('network_type', 'unknown'),
             'active_uptime': primary.get('uptime', 0),
             'wired_up':      wired  is not None,
             'mobile_up':     mobile is not None,
+            'wifi_clients':  wifi_clients,
             'mobile': {
                 'operator':    modem.get('operator', ''),
                 'conntype':    modem.get('conntype', ''),

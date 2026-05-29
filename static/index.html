@@ -751,6 +751,13 @@
       transition: width .6s ease, background .5s;
     }
 
+    /* ── WiFi clients list ── */
+    .wifi-client-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--surface2); font-size: 13px; }
+    .wifi-client-row:last-child { border-bottom: none; }
+    .wifi-client-name { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wifi-client-ip   { font-size: 11px; color: var(--text3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .wifi-client-sig  { font-size: 11px; color: var(--text3); min-width: 55px; text-align: right; }
+    .wifi-client-mac  { font-size: 10px; color: var(--text3); opacity: .6; white-space: nowrap; }
     /* ── Connectivity card grid ── */
     .conn-cards-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
     @media (min-width: 620px) { .conn-cards-grid { grid-template-columns: 1fr 1fr; } }
@@ -3053,7 +3060,14 @@ function _showSettingsPanel(tab) {
   $('updateBtn').disabled = false;
   fetch('/api/system/version').then(r => r.json()).then(d => {
     const vi = $('updateVersionInfo');
-    if (vi) vi.textContent = `Aktuell: ${d.version}${d.git ? ' (' + d.git + ')' : ''}`;
+    if (!vi) return;
+    let html = `Installiert: <strong>v${d.version}</strong>`;
+    if (d.git) html += ` <span style="color:var(--text3)">(${d.git})</span>`;
+    if (d.remote_git && d.up_to_date === false)
+      html += `&nbsp; → &nbsp;<span style="color:var(--yellow)">Verfügbar: ${d.remote_git}</span>`;
+    else if (d.up_to_date)
+      html += `&nbsp; <span style="color:var(--green)">✓ aktuell</span>`;
+    vi.innerHTML = html;
   }).catch(() => {});
   switchSettingsTab(tab || 'einstell');
   $('settingsOverlay').classList.remove('hidden');
@@ -3327,6 +3341,34 @@ function renderConnectivity(d) {
       </div>
 
     </div>
+
+    <!-- WLAN-Geräte -->
+    ${(() => {
+      const clients = r.wifi_clients ?? [];
+      if (!clients.length) return '';
+      const rows = clients.map(c => {
+        const sigColor = !c.signal ? 'var(--text3)' : c.signal > -60 ? 'var(--green)' : c.signal > -75 ? 'var(--yellow)' : 'var(--red)';
+        const name = c.hostname || c.mac || '?';
+        return `<div class="wifi-client-row">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${sigColor}" stroke-width="2" stroke-linecap="round" style="flex-shrink:0">
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="${sigColor}" stroke="none"/>
+          </svg>
+          <span class="wifi-client-name" title="${c.hostname ? c.mac : ''}">${_esc(name)}</span>
+          <span class="wifi-client-ip">${c.ip || ''}</span>
+          <span class="wifi-client-sig">${c.signal != null ? c.signal + ' dBm' : ''}</span>
+        </div>`;
+      }).join('');
+      return `<div class="net-device-card" style="margin-top:14px">
+        <div class="net-device-header">
+          <div class="net-device-dot ok"></div>
+          <div class="net-device-name">WLAN — verbundene Geräte</div>
+          <div class="net-device-src">${clients.length} online</div>
+        </div>
+        <div class="conn-card-body">${rows}</div>
+      </div>`;
+    })()}
+
     <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:8px">
       Aktualisiert: ${d.ts ? new Date(d.ts * 1000).toLocaleTimeString('de-DE') : '--'}
     </div>`;

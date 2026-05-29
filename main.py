@@ -19,17 +19,30 @@ from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 from connectivity import ConnectivityMonitor
 
-def _git_version() -> str:
+def _git_semver() -> str:
+    """Returns semver tag (e.g. '1.5.3') if HEAD is exactly on a tag, else ''."""
     try:
         r = subprocess.run(
-            ['git', 'describe', '--tags', '--always', '--dirty'],
+            ['git', 'describe', '--tags', '--exact-match', 'HEAD'],
+            cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip().lstrip('v') if r.returncode == 0 else ''
+    except Exception:
+        return ''
+
+def _git_hash() -> str:
+    """Returns short commit hash, e.g. 'e1354d6'."""
+    try:
+        r = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
             cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5,
         )
         return r.stdout.strip() if r.returncode == 0 else ''
     except Exception:
         return ''
 
-VERSION = _git_version() or '1.5.2'
+VERSION  = _git_semver() or '1.5.2'
+GIT_HASH = _git_hash()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -267,7 +280,22 @@ async def system_time_sync():
 
 @app.get('/api/system/version')
 async def system_version():
-    return {'version': VERSION, 'git': _git_version()}
+    remote_hash = ''
+    try:
+        r = subprocess.run(
+            ['git', 'ls-remote', 'origin', 'HEAD'],
+            cwd=BASE_DIR, capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            remote_hash = r.stdout.split()[0][:7]
+    except Exception:
+        pass
+    return {
+        'version':    VERSION,
+        'git':        GIT_HASH,
+        'remote_git': remote_hash,
+        'up_to_date': (remote_hash == GIT_HASH) if remote_hash else None,
+    }
 
 
 @app.post('/api/system/update')
