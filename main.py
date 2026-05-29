@@ -374,7 +374,8 @@ async def get_wartung():
     return []
 
 @app.put('/api/wartung')
-async def save_wartung(body: list):
+async def save_wartung(request: Request):
+    body = await request.json()
     WARTUNG_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
     return body
 
@@ -386,7 +387,8 @@ async def get_stauplan():
     return []
 
 @app.put('/api/stauplan')
-async def save_stauplan(body: list):
+async def save_stauplan(request: Request):
+    body = await request.json()
     STAUPLAN_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
     return body
 
