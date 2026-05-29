@@ -41,7 +41,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.9.0'
+VERSION  = _git_semver() or '1.9.1'
 GIT_HASH = _git_hash()
 
 
@@ -390,6 +390,30 @@ async def set_monday_status(item_id: str, body: dict):
         return {'ok': True}
     except Exception as e:
         raise HTTPException(502, detail=str(e))
+
+
+@app.get('/api/debug/router-clients')
+async def debug_router_clients():
+    """Probiert RutOS-7-Pfade (enden auf /status) für verbundene Geräte."""
+    if not conn_mon:
+        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
+    candidates = [
+        '/api/dhcp/leases/ipv4/status',
+        '/api/dhcp/leases/status',
+        '/api/wireless/devices/status',
+        '/api/wireless/interfaces/status',
+        '/api/wireless/stations/status',
+        '/api/hosts/status',
+        '/api/network/clients/status',
+    ]
+    results = {}
+    hdrs = conn_mon._token_headers()
+    for path in candidates:
+        try:
+            results[path] = {'ok': True, 'data': conn_mon._http(conn_mon._router_host + path, headers=hdrs)}
+        except Exception as e:
+            results[path] = {'ok': False, 'error': str(e)}
+    return results
 
 
 @app.get('/api/wartung')
