@@ -73,46 +73,57 @@ function updateFlow(data) {
   const shuntI = bat.current;        // A, Shunt-Messung
   const shuntW = bat.power;          // W, direkt vom Shunt
 
-  // ── BMS-Ströme ────────────────────────────────────────────────────────
-  // bms.current_charge    = Strom der gerade in die Batterie fließt (A, positiv)
-  // bms.current_discharge = Strom der aus der Batterie ins DC-Netz fließt (A, positiv)
-  // Erwartung: charge - discharge ≈ -shuntI (mit Vorzeichen-Konvention des Shunts)
-  const bmsCharge    = bms.current_charge;     // A ins Netz / Laden
-  const bmsDischarge = bms.current_discharge;  // A aus Batterie heraus
+  // Vorzeichen-Konvention (wie in battery.js bestätigt):
+  // bat.power / bat.current > 0  →  Laden (grün)
+  // bat.power / bat.current < 0  →  Entladen (orange)
 
-  // BMS-Summe und Abweichung zum Shunt berechnen
-  let dcNetW = null;   // berechneter DC-Verbrauch in Watt
-  if (shuntW != null) {
-    // Solar + Ladegerät + Orion → Quellen die ins DC-Netz einspeisen
-    const sourcesIn = num(data.solar?.power)
-                    + num(data.solar2?.power)
-                    + num(data.solar3?.power)
-                    + num(data.charger?.power)
-                    + num(data.orion?.power);
+  // BMS misst:
+  //   current_charge    = Strom INS Batterie rein (A, immer positiv)
+  //   current_discharge = Strom AUS Batterie raus ins DC-Netz (A, immer positiv)
+  // Erwartung: bmsCharge - bmsDischarge ≈ shuntI (gleiche Vorzeichen-Konvention)
+  const bmsCharge    = bms.current_charge;
+  const bmsDischarge = bms.current_discharge;
+  const bmsHasData   = bmsCharge != null && bmsDischarge != null;
 
-    // Wenn BMS-Werte vorhanden: benutze sie für die Aufteilung
-    if (bmsCharge != null && bmsDischarge != null) {
-      const bmsSum = bmsCharge - bmsDischarge;  // netto in Batterie (A)
-      // Shunt validieren: wenn Abweichung > 20 % → Shunt-Wert bevorzugen
-      const shuntBmsA = -num(shuntI);           // ins Batterie positiv
-      const diff = Math.abs(bmsSum - shuntBmsA);
-      const scale = diff > Math.abs(shuntBmsA) * 0.2 && Math.abs(shuntBmsA) > 1
-        ? shuntBmsA / (bmsSum || 1) : 1;
+  // Bekannte externe Quellen (Solar, Ladegerät, Orion)
+  const s1w = data.solar?.power, s2w = data.solar2?.power, s3w = data.solar3?.power;
+  const chargerW = data.charger?.power;
+  const orionW   = data.orion?.power;
+  const hasSourceData = s1w != null || s2w != null || s3w != null
+                     || chargerW != null || orionW != null;
+  const sourcesIn = num(s1w) + num(s2w) + num(s3w) + num(chargerW) + num(orionW);
+  const invW  = data.inverter?.power;
 
-      const batteryW = shuntW;                         // Shunt ist Referenz
-      dcNetW = Math.max(0, sourcesIn - batteryW);      // was ins DC-Netz geht
-    } else {
-      // Kein BMS → Herleitung aus Quellen und Shunt-Leistung
-      dcNetW = Math.max(0, sourcesIn - num(shuntW));
+  let dcNetW = null;
+
+  if (bmsHasData && bat.voltage != null) {
+    // BMS-Pfad: battery_discharge ist gemessen → direkt DC-Last berechnen
+    const volt = bat.voltage;
+    // Shunt-Kalibrierung: wenn BMS-Nettostrom zu weit vom Shunt abweicht → skalieren
+    let discA = bmsDischarge;
+    if (shuntI != null && Math.abs(shuntI) > 0.5) {
+      const bmsNet = bmsCharge - bmsDischarge;  // BMS-Nettostrom (+ = laden)
+      const diff   = Math.abs(bmsNet - num(shuntI));
+      if (diff > Math.abs(shuntI) * 0.25) {
+        const scale = num(shuntI) / (bmsNet || 0.001);
+        discA = bmsDischarge * Math.abs(scale);
+      }
     }
+    // DC-Last = Quellen + Batterie-Entladung - Inverter
+    dcNetW = Math.max(0, sourcesIn + discA * bat.voltage - num(invW));
+
+  } else if (hasSourceData && shuntW != null) {
+    // Kein BMS, aber Quellen bekannt:
+    // Energiebilanz: sourcesIn - shuntW (pos=laden) - invW = DC-Last
+    dcNetW = Math.max(0, sourcesIn - shuntW - num(invW));
+
   }
+  // Wenn weder BMS noch Quelldaten: kein Wert anzeigen (würde nur Shunt wiedergeben)
 
   // ── Landstrom-Präsenz aus Ladegerät ableiten ──────────────────────────
-  const chargerW   = data.charger?.power;
-  const hasGrid    = chargerW != null && chargerW > 5;
+  const hasGrid = chargerW != null && chargerW > 5;
 
   // ── Solar ─────────────────────────────────────────────────────────────
-  const s1w = data.solar?.power, s2w = data.solar2?.power, s3w = data.solar3?.power;
   _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null);
   _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null);
   _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null);
@@ -122,7 +133,6 @@ function updateFlow(data) {
   _setNode('grid', hasGrid ? 'aktiv' : '—');
 
   // ── Orion XS (Lichtmaschine → Batterie) ──────────────────────────────
-  const orionW = data.orion?.power;
   _setNode('orion', orionW != null ? _W(orionW) : '--', orionW > 0 ? '#22d3ee' : null);
   const altW = data.alternator?.power;
   _setNode('alt', altW != null ? _W(altW) : '--');
@@ -131,7 +141,6 @@ function updateFlow(data) {
   _setNode('starter', startV != null ? startV.toFixed(1) + ' V' : '--');
 
   // ── Inverter ──────────────────────────────────────────────────────────
-  const invW = data.inverter?.power;
   _setNode('inv', invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null);
 
   // ── Bordnetz (230V) ───────────────────────────────────────────────────
