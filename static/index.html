@@ -793,17 +793,17 @@
     .ov-close-arrow:hover { color: var(--text); }
     .ov-close-arrow svg { flex-shrink: 0; }
     /* ── Stauplan ── */
-    .stauplan-layout { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(180px, 340px) 1fr; gap: 20px; align-items: start; }
+    .stauplan-layout { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(180px, 320px) 1fr; gap: 20px; align-items: start; }
     @media (max-width: 700px) { .stauplan-layout { grid-template-columns: 1fr; } }
     .stauplan-fach { cursor: pointer; transition: fill .18s, stroke .18s; }
     .stauplan-fach:hover:not(.sp-sel) { fill: rgba(255,255,255,0.07) !important; }
     .stauplan-fach.sp-sel { stroke-width: 2.5 !important; }
-    .stauplan-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-height: 160px; }
-    .stauplan-panel-hd { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
     .sp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-    .stauplan-item-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--surface2); font-size: 13px; }
-    .stauplan-item-row:last-child { border-bottom: none; }
-    .stauplan-search-wrap { max-width: 1000px; margin: 0 auto; padding: 0 16px 24px; }
+    .stauplan-right { display: flex; flex-direction: column; gap: 10px; }
+    .stauplan-filter-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; }
+    .stauplan-filter-label { font-weight: 600; flex: 1; }
+    .stauplan-clear-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 6px; }
+    .stauplan-clear-btn:hover { background: var(--surface2); color: var(--text1); }
     .stauplan-search { width: 100%; box-sizing: border-box; padding: 9px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: var(--text1); font-size: 14px; margin-bottom: 12px; outline: none; }
     .stauplan-search:focus { border-color: var(--accent); }
     .stauplan-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1504,32 +1504,46 @@
           <pattern id="hatch" x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="5" stroke="#2d3f57" stroke-width="1.2"/>
           </pattern>
+          <!-- Hull shape: pointed bow (top), flat transom stern (bottom) -->
+          <!-- LOA 12.80m · Beam 3.60m · Max beam ~42% from bow -->
           <clipPath id="hc">
-            <path d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
-                     C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
-                     L186,482 C183,518 175,548 165,572
-                     C152,602 134,632 100,650
-                     C66,632 48,602 35,572
-                     C25,548 17,518 14,482
-                     L12.5,360 C12.5,334 13,308 14,282
-                     C15,230 19,186 25,165
-                     C28,160 38,144 46,115
-                     C50,70 73,26 100,14 Z"/>
+            <path d="M100,14
+                     C122,26 144,68 150,114
+                     C157,143 169,160 173,168
+                     C180,190 185,232 186,274
+                     L186,360
+                     C185,412 181,452 174,487
+                     C163,524 148,556 138,578
+                     C134,598 132,622 132,644
+                     L68,644
+                     C68,622 66,598 62,578
+                     C52,556 37,524 26,487
+                     C19,452 15,412 14,360
+                     L14,274
+                     C15,232 20,190 27,168
+                     C31,160 43,143 50,114
+                     C56,68 78,26 100,14 Z"/>
           </clipPath>
         </defs>
 
         <!-- ── Rumpf-Füllfarbe ── -->
         <path fill="#0f1e30"
-              d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
-                 C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
-                 L186,482 C183,518 175,548 165,572
-                 C152,602 134,632 100,650
-                 C66,632 48,602 35,572
-                 C25,548 17,518 14,482
-                 L12.5,360 C12.5,334 13,308 14,282
-                 C15,230 19,186 25,165
-                 C28,160 38,144 46,115
-                 C50,70 73,26 100,14 Z"/>
+              d="M100,14
+                 C122,26 144,68 150,114
+                 C157,143 169,160 173,168
+                 C180,190 185,232 186,274
+                 L186,360
+                 C185,412 181,452 174,487
+                 C163,524 148,556 138,578
+                 C134,598 132,622 132,644
+                 L68,644
+                 C68,622 66,598 62,578
+                 C52,556 37,524 26,487
+                 C19,452 15,412 14,360
+                 L14,274
+                 C15,232 20,190 27,168
+                 C31,160 43,143 50,114
+                 C56,68 78,26 100,14 Z"/>
 
         <g clip-path="url(#hc)">
 
@@ -1712,16 +1726,22 @@
 
         <!-- ── Rumpfkontur (ganz oben) ── -->
         <path fill="none" stroke="#8aafc8" stroke-width="2"
-              d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
-                 C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
-                 L186,482 C183,518 175,548 165,572
-                 C152,602 134,632 100,650
-                 C66,632 48,602 35,572
-                 C25,548 17,518 14,482
-                 L12.5,360 C12.5,334 13,308 14,282
-                 C15,230 19,186 25,165
-                 C28,160 38,144 46,115
-                 C50,70 73,26 100,14 Z"/>
+              d="M100,14
+                 C122,26 144,68 150,114
+                 C157,143 169,160 173,168
+                 C180,190 185,232 186,274
+                 L186,360
+                 C185,412 181,452 174,487
+                 C163,524 148,556 138,578
+                 C134,598 132,622 132,644
+                 L68,644
+                 C68,622 66,598 62,578
+                 C52,556 37,524 26,487
+                 C19,452 15,412 14,360
+                 L14,274
+                 C15,232 20,190 27,168
+                 C31,160 43,143 50,114
+                 C56,68 78,26 100,14 Z"/>
 
         <!-- Richtungs-Labels -->
         <text x="100" y="9"   fill="#4a6070" font-size="6" text-anchor="middle"
@@ -1730,30 +1750,18 @@
               font-family="-apple-system,sans-serif" font-weight="600">HECK ▼</text>
       </svg>
 
-      <!-- Info panel (right of map) -->
-      <div class="stauplan-panel" id="stauplanPanel">
-        <div class="stauplan-panel-hd" style="color:var(--text3)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-          Fach auswählen
+      <!-- Right column: filter bar + search + table -->
+      <div class="stauplan-right">
+        <div class="stauplan-filter-bar">
+          <span class="stauplan-filter-label" id="stauFilterLabel" style="color:var(--text3)">Alle Fächer</span>
+          <button class="stauplan-clear-btn" id="stauClearBtn" onclick="clearStauFilter()" style="display:none">✕ Aufheben</button>
         </div>
-        <div style="color:var(--text3);font-size:13px">Tippe auf ein Fach in der Übersicht</div>
+        <input class="stauplan-search" type="search" placeholder="Artikel suchen…" oninput="renderStauTable(this.value)" id="stauSearchInput" style="margin:0">
+        <table class="stauplan-tbl">
+          <thead><tr><th>Artikel</th><th>Fach</th><th>Menge</th><th>Notiz</th></tr></thead>
+          <tbody id="stauTableBody"></tbody>
+        </table>
       </div>
-    </div>
-
-    <!-- Search + table -->
-    <div class="stauplan-search-wrap">
-      <input class="stauplan-search" type="search" placeholder="Artikel suchen… (Name, Fach)" oninput="renderStauTable(this.value)" id="stauSearchInput">
-      <table class="stauplan-tbl">
-        <thead>
-          <tr>
-            <th>Artikel</th>
-            <th>Fach</th>
-            <th>Menge</th>
-            <th>Notiz</th>
-          </tr>
-        </thead>
-        <tbody id="stauTableBody"></tbody>
-      </table>
     </div>
 
   </div>
@@ -1771,6 +1779,10 @@
       </svg>
       Boot-Aufgaben
     </div>
+    <button class="monday-refresh" onclick="toggleMondayNewForm()" id="mondayNewBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Neue Aufgabe
+    </button>
     <button class="monday-refresh" id="mondayRefreshBtn" onclick="loadMondayBoard()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
         <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -1779,6 +1791,23 @@
     </button>
   </div>
   <div class="ov-body" style="padding:0">
+    <!-- Neue Aufgabe Form -->
+    <div id="mondayNewForm" style="display:none;max-width:860px;margin:0 auto;padding:12px 16px 0">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="mondayNewName" placeholder="Aufgabe eingeben…"
+               style="flex:1;min-width:160px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text1);font-size:13px;outline:none"
+               onkeydown="if(event.key==='Enter')createMondayItem()">
+        <select id="mondayNewGroup"
+                style="background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"></select>
+        <button class="monday-refresh" onclick="createMondayItem()" id="mondayCreateBtn">Anlegen</button>
+        <button class="monday-refresh" onclick="toggleMondayNewForm()" style="color:var(--text3)">Abbrechen</button>
+      </div>
+    </div>
+    <!-- Suche -->
+    <div style="max-width:860px;margin:0 auto;padding:10px 16px 0">
+      <input class="stauplan-search" type="search" id="mondaySearchInput" placeholder="Aufgaben suchen…"
+             oninput="filterMonday(this.value)" style="margin:0">
+    </div>
     <div class="monday-body" id="mondayBody">
       <div class="monday-empty">Lade Aufgaben…</div>
     </div>
@@ -3837,7 +3866,11 @@ function closeStauplan() {
   history.replaceState(null, '', location.pathname);
 }
 
+let _stauFachFilter = null;
+
 function selectFach(id) {
+  if (_stauFachFilter === id) { clearStauFilter(); return; }
+  _stauFachFilter = id;
   document.querySelectorAll('.stauplan-fach').forEach(el => {
     el.classList.remove('sp-sel');
     el.setAttribute('fill', 'transparent');
@@ -3847,33 +3880,38 @@ function selectFach(id) {
   const fach = STAU_FAECHER[id];
   if (el) {
     el.classList.add('sp-sel');
-    el.setAttribute('fill',   fach.color + '30');  // semi-transparent fill over drawing
+    el.setAttribute('fill', fach.color + '30');
     el.setAttribute('stroke', fach.color);
   }
-  const items = STAU_ITEMS.filter(i => i.fach === id);
-  $('stauplanPanel').innerHTML = `
-    <div class="stauplan-panel-hd" style="color:${fach.color}">
-      <span class="sp-dot" style="background:${fach.color}"></span>${fach.name}
-      <span style="margin-left:auto;font-size:10px;color:var(--text3);font-weight:400">${items.length} Artikel</span>
-    </div>
-    ${items.length
-      ? items.map(i => `<div class="stauplan-item-row">
-          <span>${i.name}</span>
-          <span style="color:var(--text3)">${i.menge}</span>
-        </div>`).join('')
-      : '<div style="color:var(--text3);font-size:13px;padding:12px 0">Noch nichts eingetragen</div>'
-    }`;
+  const lbl = $('stauFilterLabel');
+  lbl.textContent = fach.name;
+  lbl.style.color  = fach.color;
+  $('stauClearBtn').style.display = '';
+  renderStauTable($('stauSearchInput')?.value || '');
+}
+
+function clearStauFilter() {
+  _stauFachFilter = null;
+  document.querySelectorAll('.stauplan-fach').forEach(el => {
+    el.classList.remove('sp-sel');
+    el.setAttribute('fill', 'transparent');
+    el.setAttribute('stroke', 'none');
+  });
+  const lbl = $('stauFilterLabel');
+  lbl.textContent = 'Alle Fächer';
+  lbl.style.color  = 'var(--text3)';
+  $('stauClearBtn').style.display = 'none';
+  renderStauTable($('stauSearchInput')?.value || '');
 }
 
 function renderStauTable(query) {
   const q = query.trim().toLowerCase();
-  const rows = q
-    ? STAU_ITEMS.filter(i =>
-        i.name.toLowerCase().includes(q) ||
-        (STAU_FAECHER[i.fach]?.name || '').toLowerCase().includes(q) ||
-        i.notiz.toLowerCase().includes(q)
-      )
-    : STAU_ITEMS;
+  let rows = _stauFachFilter ? STAU_ITEMS.filter(i => i.fach === _stauFachFilter) : STAU_ITEMS;
+  if (q) rows = rows.filter(i =>
+    i.name.toLowerCase().includes(q) ||
+    (STAU_FAECHER[i.fach]?.name || '').toLowerCase().includes(q) ||
+    i.notiz.toLowerCase().includes(q)
+  );
   $('stauTableBody').innerHTML = rows.length
     ? rows.map(i => {
         const f = STAU_FAECHER[i.fach];
@@ -3884,12 +3922,13 @@ function renderStauTable(query) {
           <td style="color:var(--text3)">${i.notiz||'—'}</td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px">Keine Ergebnisse</td></tr>`;
+    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px">${_stauFachFilter ? 'Nichts in diesem Fach' : 'Keine Ergebnisse'}</td></tr>`;
 }
 
 // ── Monday ─────────────────────────────────────────────────────────────────
 
-let _mondayData = null;  // cached board data
+let _mondayData   = null;
+let _mondayFilter = '';
 
 function openMonday() {
   _closeAllOverlays();
@@ -3927,49 +3966,97 @@ async function loadMondayBoard() {
   }
 }
 
+function filterMonday(q) {
+  _mondayFilter = q.trim().toLowerCase();
+  if (_mondayData) renderMondayBoard(_mondayData);
+}
+
+function toggleMondayNewForm() {
+  const form = $('mondayNewForm');
+  const open = form.style.display !== 'none';
+  if (!open && _mondayData?.groups?.length) {
+    $('mondayNewGroup').innerHTML = _mondayData.groups.map(g =>
+      `<option value="${g.id}">${_esc(g.title)}</option>`
+    ).join('');
+    $('mondayNewName').value = '';
+    setTimeout(() => $('mondayNewName').focus(), 50);
+  }
+  form.style.display = open ? 'none' : '';
+}
+
+async function createMondayItem() {
+  const name = $('mondayNewName').value.trim();
+  const groupId = $('mondayNewGroup').value;
+  if (!name) { $('mondayNewName').focus(); return; }
+  const btn = $('mondayCreateBtn');
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const r = await fetch('/api/monday/item', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_id: groupId, name }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert('Fehler: ' + (e.detail || r.statusText));
+      return;
+    }
+    const newItem = await r.json();
+    const group = _mondayData?.groups?.find(g => g.id === groupId);
+    if (group && newItem.id) {
+      group.items.unshift({ id: newItem.id, name: newItem.name || name, columns: {} });
+    }
+    toggleMondayNewForm();
+    renderMondayBoard(_mondayData);
+  } catch (e) {
+    alert('Verbindungsfehler');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Anlegen';
+  }
+}
+
 function renderMondayBoard(data) {
   const body = $('mondayBody');
   if (!data || !data.groups?.length) {
     body.innerHTML = '<div class="monday-empty">Keine Aufgaben gefunden</div>';
     return;
   }
-  // Build status column lookup: id → options[]
-  const statusCols = {};
+  const statusCols  = {};
   (data.status_columns || []).forEach(col => { statusCols[col.id] = col; });
-  // Pick first status column as primary (most boards just have one "Status")
   const primaryColId = data.status_columns?.[0]?.id;
+  const fq = _mondayFilter;
 
   let html = '';
   data.groups.forEach(group => {
-    if (!group.items?.length) return;
+    const visible = (group.items || []).filter(i =>
+      !fq || i.name.toLowerCase().includes(fq)
+    );
+    if (!visible.length) return;
     const dot = group.color ? `<span class="monday-group-dot" style="background:${group.color}"></span>` : '';
-    html += `<div class="monday-group-hd">${dot}${_esc(group.title)} <span style="color:var(--text3);font-weight:400;margin-left:4px">${group.items.length}</span></div>`;
-    group.items.forEach(item => {
+    html += `<div class="monday-group-hd">${dot}${_esc(group.title)} <span style="color:var(--text3);font-weight:400;margin-left:4px">${visible.length}</span></div>`;
+    visible.forEach(item => {
       let pillsHtml = '';
       Object.entries(item.columns || {}).forEach(([colId, cv]) => {
-        const col = statusCols[colId];
-        if (!col) return;
+        const col = statusCols[colId]; if (!col) return;
         const opt   = col.options.find(o => o.index === cv.index);
         const color = opt?.color || '#c4c4c4';
-        const label = cv.text || '–';
         const empty = !cv.text;
         pillsHtml += `<span class="monday-status-pill${empty ? ' empty' : ''}"
           style="background:${empty ? '' : color}"
-          onclick="openStatusPicker(event,'${item.id}','${colId}',${JSON.stringify(col.options).replace(/"/g, '&quot;')},'${cv.index}')"
-          >${_esc(label)}</span>`;
+          onclick="openStatusPicker(event,'${item.id}','${colId}',${JSON.stringify(col.options).replace(/"/g,'&quot;')},'${cv.index}')"
+          >${_esc(cv.text || '–')}</span>`;
       });
       if (!pillsHtml && primaryColId) {
         pillsHtml = `<span class="monday-status-pill empty"
-          onclick="openStatusPicker(event,'${item.id}','${primaryColId}',${JSON.stringify(statusCols[primaryColId]?.options||[]).replace(/"/g, '&quot;')},'')"
+          onclick="openStatusPicker(event,'${item.id}','${primaryColId}',${JSON.stringify(statusCols[primaryColId]?.options||[]).replace(/"/g,'&quot;')},'')"
           >–</span>`;
       }
       html += `<div class="monday-item" data-item-id="${item.id}">
-        <span class="monday-item-name">${_esc(item.name)}</span>
-        ${pillsHtml}
+        <span class="monday-item-name">${_esc(item.name)}</span>${pillsHtml}
       </div>`;
     });
   });
-  body.innerHTML = html || '<div class="monday-empty">Keine Aufgaben gefunden</div>';
+  body.innerHTML = html || `<div class="monday-empty">${fq ? 'Keine Treffer' : 'Keine Aufgaben'}</div>`;
 }
 
 function _esc(s) {

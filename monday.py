@@ -124,3 +124,24 @@ async def set_status(token: str, board_id: str, item_id: str, column_id: str, la
         "columnId": column_id,
         "value":    label,
     })
+
+
+_CREATE_MUTATION = """
+mutation CreateItem($boardId: ID!, $groupId: String!, $name: String!) {
+  create_item(board_id: $boardId, group_id: $groupId, item_name: $name) {
+    id
+    name
+    group { id }
+    column_values { id text value }
+  }
+}
+"""
+
+
+async def create_item(token: str, board_id: str, group_id: str, name: str) -> dict:
+    data = await _gql(token, _CREATE_MUTATION, {
+        "boardId":  board_id,
+        "groupId":  group_id,
+        "name":     name,
+    })
+    return data.get("create_item") or {}

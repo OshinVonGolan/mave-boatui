@@ -301,6 +301,23 @@ async def get_monday_board():
         raise HTTPException(502, detail=str(e))
 
 
+@app.post('/api/monday/item')
+async def create_monday_item(body: dict):
+    token    = _monday_cfg.get('api_token', '')
+    board_id = str(_monday_cfg.get('board_id', ''))
+    if not token or not board_id or token.startswith('DEIN_'):
+        raise HTTPException(503, detail='Monday nicht konfiguriert')
+    group_id = body.get('group_id', '').strip()
+    name     = body.get('name',     '').strip()
+    if not group_id or not name:
+        raise HTTPException(400, detail='group_id und name erforderlich')
+    from monday import create_item
+    try:
+        return await create_item(token, board_id, group_id, name)
+    except Exception as e:
+        raise HTTPException(502, detail=str(e))
+
+
 @app.patch('/api/monday/item/{item_id}/status')
 async def set_monday_status(item_id: str, body: dict):
     token    = _monday_cfg.get('api_token', '')
