@@ -66,7 +66,7 @@ Meldet den Ladezustand der Lader und DC-DC-Lader.
 
 | Feld         | Inhalt                           |
 |--------------|----------------------------------|
-| deviceInstance | 0 = Orion-XS, 1 = Smart IP43, 2 = Ladegerät P5 |
+| deviceInstance | 0 = Orion-XS, 1 = Smart IP43 |
 | batteryInstance | 0 = Hausbatterie               |
 | Charge State | siehe CS-Mapping-Tabelle unten   |
 | Charger Mode | `Standalone`                     |
@@ -239,10 +239,9 @@ Gerätetyp nicht verfügbar.
 
 | Instanz | Gerät                     | Typ    |
 |---------|---------------------------|--------|
-| 0 (Typ 1) | Orion-XS DC-DC           | DC-DC  |
-| 1 (Typ 0) | Phoenix Smart IP43       | Lader  |
+| 0 (Typ 1) | Orion-XS DC-DC           | DC-DC    |
+| 1 (Typ 0) | Phoenix Smart IP43       | Lader    |
 | 0 (Typ 2) | Phoenix Inverter 2000 VA | Inverter |
-| 2 (Typ 0) | Ladegerät P5 (0xA340)    | Lader  |
 
 ---
 
