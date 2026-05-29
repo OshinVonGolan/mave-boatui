@@ -86,11 +86,23 @@ function updateFlow(data) {
   }
   if (bg) bg.classList.remove('dim');
 
+  // DC-Verbraucher aus Energiebilanz herleiten:
+  //   Quellen in den Bus − Inverter − Batterie-Laden = DC-Last
+  const num = v => (v == null ? 0 : v);
+  const sourcesIn = num(data.solar?.power) + num(data.solar2?.power) + num(data.solar3?.power)
+                  + num(data.charger?.power) + num(data.orion?.power);
+  const invW = num(data.inverter?.power);
+  let dcLoad = null;
+  if (bp != null) dcLoad = Math.max(0, sourcesIn - bp - invW);
+  const dcValEl = $('fv-dcgrid'), dcG = $('fg-dcgrid');
+  if (dcValEl) dcValEl.textContent = dcLoad != null ? _flowFmtW(dcLoad) : '--';
+  if (dcG) dcG.classList.toggle('dim', dcLoad == null);
+
   // Kanten
   FLOW_EDGES.forEach(e => {
     const el = $(e.id);
     if (!el) return;
-    const w = e.get(data);
+    const w = e.id === 'fe-dcgrid' ? dcLoad : e.get(data);
     const active = w != null && Math.abs(w) > 1;
     el.classList.toggle('on', active);
     if (!active) { el.style.stroke = ''; el.style.animationDuration = ''; el.classList.remove('flow-rev'); return; }
