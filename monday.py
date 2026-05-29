@@ -52,7 +52,7 @@ async def _gql(token: str, query: str, variables: dict) -> dict:
         return data.get("data", {})
 
 
-def _parse_status_options(settings_str: str) -> list[dict]:
+def _parse_status_options(settings_str: str) -> list:
     try:
         s = json.loads(settings_str or "{}")
         labels    = s.get("labels", {})
