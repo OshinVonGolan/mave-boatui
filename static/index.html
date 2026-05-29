@@ -793,15 +793,11 @@
     .ov-close-arrow:hover { color: var(--text); }
     .ov-close-arrow svg { flex-shrink: 0; }
     /* ── Stauplan ── */
-    .stauplan-layout { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(200px, 360px) 1fr; gap: 20px; align-items: start; }
+    .stauplan-layout { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(180px, 340px) 1fr; gap: 20px; align-items: start; }
     @media (max-width: 700px) { .stauplan-layout { grid-template-columns: 1fr; } }
-    .grundriss-wrap { position: relative; display: block; border-radius: 10px; overflow: hidden; background: var(--surface2); }
-    .grundriss-wrap img { display: block; width: 100%; height: auto; }
-    .grundriss-wrap svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    .grundriss-missing { padding: 40px 20px; text-align: center; color: var(--text3); font-size: 12px; line-height: 1.6; }
-    .stauplan-fach { cursor: pointer; transition: fill .18s; fill: transparent; }
-    .stauplan-fach:hover:not(.sp-sel) { fill: rgba(255,255,255,0.09); }
-    .stauplan-fach.sp-sel { stroke-width: 12; }
+    .stauplan-fach { cursor: pointer; transition: fill .18s, stroke .18s; }
+    .stauplan-fach:hover:not(.sp-sel) { fill: rgba(255,255,255,0.07) !important; }
+    .stauplan-fach.sp-sel { stroke-width: 2.5 !important; }
     .stauplan-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-height: 160px; }
     .stauplan-panel-hd { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
     .sp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
@@ -1500,43 +1496,239 @@
 
     <!-- Boat map + info panel -->
     <div class="stauplan-layout">
-      <!-- Grundriss-Bild mit klickbarem SVG-Overlay -->
-      <div class="grundriss-wrap" id="grundrissWrap">
-        <img id="grundrissImg" src="/static/grundriss.jpg" alt="MAVE Grundriss"
-             onerror="document.getElementById('grundrissWrap').innerHTML='<div class=\'grundriss-missing\'>📐 Grundriss-Bild fehlt<br><small>Bild als <code>static/grundriss.jpg</code> speichern</small></div>'">
-        <!-- SVG-Overlay: Koordinaten im Original-Bildraum 5100×7008 px -->
-        <!-- preserveAspectRatio=none → Overlay deckt Bild pixel-genau ab -->
-        <svg viewBox="0 0 5100 7008" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <!-- Grobe Rumpfkontur — Koordinaten anpassbar -->
-            <clipPath id="hullClip2">
-              <polygon points="
-                3476,400  3780,460  4150,630  4520,950
-                4870,1450 5010,2050 5025,2750 4960,3350
-                4810,4050 4620,4830 4380,5450 4080,6030
-                3720,6320 3476,6440
-                3232,6320 2872,6030 2572,5450 2332,4830
-                2142,4050 1992,3350 1927,2750 1942,2050
-                2083,1450 2432,950  2802,630  3172,460"/>
-            </clipPath>
-          </defs>
+      <!-- Maßgetreuer SVG-Grundriss (1:50, Maße aus Blueprint extrahiert) -->
+      <!-- LOA 12.80m · Beam 3.60m · Bug oben · Heck unten -->
+      <svg id="grundrissSvg" viewBox="0 0 200 680" xmlns="http://www.w3.org/2000/svg"
+           style="display:block;width:100%;height:auto;max-height:80vh">
+        <defs>
+          <pattern id="hatch" x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" stroke="#2d3f57" stroke-width="1.2"/>
+          </pattern>
+          <clipPath id="hc">
+            <path d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
+                     C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
+                     L186,482 C183,518 175,548 165,572
+                     C152,602 134,632 100,650
+                     C66,632 48,602 35,572
+                     C25,548 17,518 14,482
+                     L12.5,360 C12.5,334 13,308 14,282
+                     C15,230 19,186 25,165
+                     C28,160 38,144 46,115
+                     C50,70 73,26 100,14 Z"/>
+          </clipPath>
+        </defs>
 
-          <!-- Fach-Overlays — transparent bis Klick/Hover -->
-          <g clip-path="url(#hullClip2)">
-            <rect class="stauplan-fach" data-fach="bug-sb"   x="3476" y="400"  width="1534" height="1000" onclick="selectFach('bug-sb')"/>
-            <rect class="stauplan-fach" data-fach="bug-bb"   x="1942" y="400"  width="1534" height="1000" onclick="selectFach('bug-bb')"/>
-            <rect class="stauplan-fach" data-fach="kab-bb"   x="1942" y="1400" width="1100" height="820"  onclick="selectFach('kab-bb')"/>
-            <rect class="stauplan-fach" data-fach="motor"    x="3042" y="1400" width="876"  height="820"  onclick="selectFach('motor')"/>
-            <rect class="stauplan-fach" data-fach="kab-sb"   x="3918" y="1400" width="1092" height="820"  onclick="selectFach('kab-sb')"/>
-            <rect class="stauplan-fach" data-fach="karten"   x="1942" y="2220" width="1534" height="913"  onclick="selectFach('karten')"/>
-            <rect class="stauplan-fach" data-fach="kombuese" x="3476" y="2220" width="1534" height="913"  onclick="selectFach('kombuese')"/>
-            <rect class="stauplan-fach" data-fach="salon"    x="1942" y="3133" width="3068" height="1120" onclick="selectFach('salon')"/>
-            <rect class="stauplan-fach" data-fach="werkbank" x="1942" y="4253" width="1534" height="1187" onclick="selectFach('werkbank')"/>
-            <rect class="stauplan-fach" data-fach="wc"       x="3476" y="4253" width="1534" height="1187" onclick="selectFach('wc')"/>
-            <rect class="stauplan-fach" data-fach="heck"     x="1942" y="5440" width="3068" height="1000" onclick="selectFach('heck')"/>
+        <!-- ── Rumpf-Füllfarbe ── -->
+        <path fill="#0f1e30"
+              d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
+                 C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
+                 L186,482 C183,518 175,548 165,572
+                 C152,602 134,632 100,650
+                 C66,632 48,602 35,572
+                 C25,548 17,518 14,482
+                 L12.5,360 C12.5,334 13,308 14,282
+                 C15,230 19,186 25,165
+                 C28,160 38,144 46,115
+                 C50,70 73,26 100,14 Z"/>
+
+        <g clip-path="url(#hc)">
+
+          <!-- ═══ ABSCHNITT 1: Bug-Stauraum (y 14–162) ═══ -->
+          <!-- Backbord Koje / Staubereich -->
+          <rect fill="url(#hatch)" x="20"  y="30"  width="76" height="130"/>
+          <rect fill="none" stroke="#3a5570" stroke-width="0.6" x="20" y="30" width="76" height="130"/>
+          <!-- Steuerbord Koje / Staubereich -->
+          <rect fill="url(#hatch)" x="104" y="30"  width="76" height="130"/>
+          <rect fill="none" stroke="#3a5570" stroke-width="0.6" x="104" y="30" width="76" height="130"/>
+
+          <!-- ═══ ABSCHNITT 2: Vorschiff-Kabinen (y 162–284) ═══ -->
+          <!-- BB Kabine – Koje entlang Schiffsseite -->
+          <rect fill="#1c2d42" x="15" y="165" width="74" height="117"/>
+          <rect fill="url(#hatch)" x="15" y="165" width="30" height="117"/>
+          <!-- SB Kabine – Koje entlang Schiffsseite -->
+          <rect fill="#1c2d42" x="111" y="165" width="74" height="117"/>
+          <rect fill="url(#hatch)" x="155" y="165" width="30" height="117"/>
+          <!-- Motor-/Gangbereich Mitte -->
+          <rect fill="#141f2e" x="89"  y="165" width="22" height="117"/>
+          <!-- Motorblock Symbol -->
+          <rect fill="#1e3040" stroke="#3a5570" stroke-width="0.8" rx="2"
+                x="91" y="195" width="18" height="52"/>
+          <line stroke="#3a5570" stroke-width="0.5" x1="95" y1="200" x2="95" y2="242"/>
+          <line stroke="#3a5570" stroke-width="0.5" x1="100" y1="200" x2="100" y2="242"/>
+          <line stroke="#3a5570" stroke-width="0.5" x1="105" y1="200" x2="105" y2="242"/>
+          <!-- Tür BB Kabine -->
+          <path fill="none" stroke="#4a6580" stroke-width="0.7"
+                d="M 89,165 Q 79,175 89,185" stroke-dasharray="0"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="89" y1="165" x2="89" y2="185"/>
+          <!-- Tür SB Kabine -->
+          <path fill="none" stroke="#4a6580" stroke-width="0.7"
+                d="M 111,165 Q 121,175 111,185"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="111" y1="165" x2="111" y2="185"/>
+
+          <!-- ═══ ABSCHNITT 3: Kartenraum + Kombüse (y 284–363) ═══ -->
+          <!-- Kartenraum BB: Kartentisch und Sitzbank -->
+          <rect fill="#1a2b3e" x="14"  y="287" width="84" height="74"/>
+          <!-- Kartentisch -->
+          <rect fill="#1e3248" stroke="#3a5570" stroke-width="0.7" rx="1"
+                x="16" y="298" width="50" height="22"/>
+          <!-- Sitzbank unter Tisch -->
+          <rect fill="url(#hatch)" x="16" y="323" width="48" height="14"/>
+          <!-- Kombüse SB: Arbeitsfläche + Herd -->
+          <rect fill="#1a2b3e" x="102" y="287" width="84" height="74"/>
+          <!-- Arbeitsplatte SB-Seite -->
+          <rect fill="#1e3248" stroke="#3a5570" stroke-width="0.7" rx="1"
+                x="140" y="290" width="44" height="68"/>
+          <!-- Herd (4 Kochplatten) -->
+          <rect fill="#141f2e" stroke="#3a5570" stroke-width="0.6" rx="1"
+                x="143" y="293" width="20" height="18"/>
+          <circle fill="#243650" stroke="#4a6580" stroke-width="0.5" cx="148" cy="297" r="3"/>
+          <circle fill="#243650" stroke="#4a6580" stroke-width="0.5" cx="158" cy="297" r="3"/>
+          <circle fill="#243650" stroke="#4a6580" stroke-width="0.5" cx="148" cy="307" r="3"/>
+          <circle fill="#243650" stroke="#4a6580" stroke-width="0.5" cx="158" cy="307" r="3"/>
+          <!-- Spüle -->
+          <rect fill="#141f2e" stroke="#4a6580" stroke-width="0.6" rx="2"
+                x="143" y="315" width="16" height="12"/>
+          <!-- Tür Kartenraum -->
+          <path fill="none" stroke="#4a6580" stroke-width="0.7" d="M 98,363 Q 88,353 98,343"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="98" y1="363" x2="98" y2="343"/>
+
+          <!-- ═══ ABSCHNITT 4: Salon (y 363–484) ═══ -->
+          <rect fill="#1b2c40" x="13"  y="366" width="174" height="116"/>
+          <!-- BB Sitzbank / Sofa -->
+          <rect fill="url(#hatch)" x="14"  y="368" width="30" height="112"/>
+          <!-- SB Sitzbank / Sofa -->
+          <rect fill="url(#hatch)" x="156" y="368" width="29" height="112"/>
+          <!-- Salon-Tisch -->
+          <rect fill="#1e3248" stroke="#4a6580" stroke-width="0.8" rx="3"
+                x="66" y="390" width="68" height="62"/>
+          <!-- Tischbeine andeuten -->
+          <circle fill="#243650" cx="70"  cy="394" r="2.5"/>
+          <circle fill="#243650" cx="130" cy="394" r="2.5"/>
+          <circle fill="#243650" cx="70"  cy="448" r="2.5"/>
+          <circle fill="#243650" cx="130" cy="448" r="2.5"/>
+
+          <!-- ═══ ABSCHNITT 5: WC / Werkbank (y 484–566) ═══ -->
+          <!-- BB Werkbank-Koje -->
+          <rect fill="#1a2b3e" x="14"  y="487" width="84" height="77"/>
+          <rect fill="url(#hatch)" x="14" y="487" width="84" height="30"/>
+          <!-- Werkbank-Oberfläche -->
+          <rect fill="#1e3248" stroke="#3a5570" stroke-width="0.7" rx="1"
+                x="16" y="520" width="80" height="18"/>
+          <!-- SB WC / Bad -->
+          <rect fill="#1a2b3e" x="102" y="487" width="84" height="77"/>
+          <!-- Toilette -->
+          <rect fill="#1e3248" stroke="#3a5570" stroke-width="0.7" rx="2"
+                x="130" y="492" width="26" height="20"/>
+          <ellipse fill="#141f2e" stroke="#4a6580" stroke-width="0.6"
+                   cx="143" cy="502" rx="10" ry="8"/>
+          <!-- Waschbecken -->
+          <rect fill="#141f2e" stroke="#4a6580" stroke-width="0.6" rx="3"
+                x="155" y="518" width="22" height="18"/>
+          <circle fill="#243650" stroke="#4a6580" stroke-width="0.5" cx="166" cy="527" r="3.5"/>
+          <!-- Tür WC -->
+          <path fill="none" stroke="#4a6580" stroke-width="0.7" d="M 102,566 Q 112,556 102,546"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="102" y1="566" x2="102" y2="546"/>
+
+          <!-- ═══ ABSCHNITT 6: Heckstauraum (y 566–650) ═══ -->
+          <rect fill="#151e2d" x="24" y="569" width="152" height="72"/>
+          <!-- Staukästen -->
+          <rect fill="#1c2d3e" stroke="#2d3f57" stroke-width="0.7" rx="1"
+                x="26" y="572" width="62" height="55"/>
+          <rect fill="#1c2d3e" stroke="#2d3f57" stroke-width="0.7" rx="1"
+                x="112" y="572" width="62" height="55"/>
+          <!-- Niedergang (Leiter zum Cockpit) -->
+          <rect fill="#141f2e" stroke="#4a6580" stroke-width="0.8" rx="1"
+                x="86" y="572" width="28" height="22"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="86" y1="578" x2="114" y2="578"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="86" y1="584" x2="114" y2="584"/>
+          <line stroke="#4a6580" stroke-width="0.7" x1="86" y1="590" x2="114" y2="590"/>
+
+          <!-- ════ SCHOTTE / WÄNDE ════ -->
+          <!-- Schott 1: Bug-Stauraum / Kabinen -->
+          <line stroke="#7090a8" stroke-width="1.4" x1="20"  y1="162" x2="180" y2="162"/>
+          <!-- Mittelgang Bug -->
+          <line stroke="#4a6070" stroke-width="0.8" x1="100" y1="14"  x2="100" y2="162"/>
+          <!-- Schott 2: Kabinen / Kartenraum+Kombüse -->
+          <line stroke="#7090a8" stroke-width="1.4" x1="14"  y1="284" x2="186" y2="284"/>
+          <!-- Motorraum-Wände -->
+          <line stroke="#4a6070" stroke-width="0.9" x1="89"  y1="162" x2="89"  y2="284"/>
+          <line stroke="#4a6070" stroke-width="0.9" x1="111" y1="162" x2="111" y2="284"/>
+          <!-- Schott 3: Kartenraum+Kombüse / Salon -->
+          <line stroke="#7090a8" stroke-width="1.4" x1="13"  y1="363" x2="187" y2="363"/>
+          <!-- Mittellängsschott Kartenraum/Kombüse -->
+          <line stroke="#4a6070" stroke-width="0.9" x1="98"  y1="284" x2="98"  y2="363"/>
+          <!-- Schott 4: Salon / WC+Werkbank -->
+          <line stroke="#7090a8" stroke-width="1.4" x1="13"  y1="484" x2="187" y2="484"/>
+          <!-- Schott 5: WC+Werkbank / Heck -->
+          <line stroke="#7090a8" stroke-width="1.4" x1="18"  y1="566" x2="182" y2="566"/>
+          <!-- Mittelschott WC/Werkbank -->
+          <line stroke="#4a6070" stroke-width="0.9" x1="100" y1="484" x2="100" y2="566"/>
+
+          <!-- ════ BESCHRIFTUNGEN ════ -->
+          <g font-family="-apple-system,BlinkMacSystemFont,sans-serif" fill="#6888a0"
+             font-size="7" font-weight="600" letter-spacing="0.04em" text-anchor="middle">
+            <!-- Bug -->
+            <text x="57"  y="87">STOWAGE</text>
+            <text x="57"  y="96">BERTH BB</text>
+            <text x="143" y="87">STOWAGE</text>
+            <text x="143" y="96">BERTH SB</text>
+            <!-- Kabinen -->
+            <text x="48"  y="220">KABINE</text>
+            <text x="48"  y="229">BB</text>
+            <text x="100" y="211" font-size="5.5">MOTOR</text>
+            <text x="152" y="220">KABINE</text>
+            <text x="152" y="229">SB</text>
+            <!-- Kartenraum / Kombüse -->
+            <text x="46"  y="316">KARTEN-</text>
+            <text x="46"  y="325">RAUM</text>
+            <text x="118" y="312">KOM-</text>
+            <text x="118" y="321">BÜSE</text>
+            <!-- Salon -->
+            <text x="100" y="382">SALON</text>
+            <text x="100" y="426" font-size="6" fill="#4a6070">TISCH</text>
+            <!-- WC / Werkbank -->
+            <text x="47"  y="510">WERKBANK</text>
+            <text x="47"  y="519" font-size="5.5">/ KOJE</text>
+            <text x="107" y="502" font-size="5.5">WC</text>
+            <!-- Heck -->
+            <text x="55"  y="604" font-size="6">STAUKASTEN</text>
+            <text x="145" y="604" font-size="6">STAUKASTEN</text>
+            <text x="100" y="590" font-size="5.5">NIEDERGANG</text>
           </g>
-        </svg>
-      </div>
+
+          <!-- ════ KLICKFLÄCHEN (transparent, oben) ════ -->
+          <rect class="stauplan-fach" data-fach="bug-bb"   x="14"  y="14"  width="86"  height="148" onclick="selectFach('bug-bb')"   fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="bug-sb"   x="100" y="14"  width="86"  height="148" onclick="selectFach('bug-sb')"   fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="kab-bb"   x="14"  y="162" width="75"  height="122" onclick="selectFach('kab-bb')"   fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="motor"    x="89"  y="162" width="22"  height="122" onclick="selectFach('motor')"    fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="kab-sb"   x="111" y="162" width="75"  height="122" onclick="selectFach('kab-sb')"   fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="karten"   x="14"  y="284" width="84"  height="79"  onclick="selectFach('karten')"   fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="kombuese" x="98"  y="284" width="90"  height="79"  onclick="selectFach('kombuese')" fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="salon"    x="13"  y="363" width="174" height="121" onclick="selectFach('salon')"    fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="werkbank" x="14"  y="484" width="86"  height="82"  onclick="selectFach('werkbank')" fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="wc"       x="100" y="484" width="87"  height="82"  onclick="selectFach('wc')"       fill="transparent"/>
+          <rect class="stauplan-fach" data-fach="heck"     x="24"  y="566" width="152" height="84"  onclick="selectFach('heck')"     fill="transparent"/>
+        </g>
+
+        <!-- ── Rumpfkontur (ganz oben) ── -->
+        <path fill="none" stroke="#8aafc8" stroke-width="2"
+              d="M100,14 C127,26 150,70 154,115 C162,144 172,160 175,165
+                 C181,186 185,230 186,282 C187,308 187.5,334 187.5,360
+                 L186,482 C183,518 175,548 165,572
+                 C152,602 134,632 100,650
+                 C66,632 48,602 35,572
+                 C25,548 17,518 14,482
+                 L12.5,360 C12.5,334 13,308 14,282
+                 C15,230 19,186 25,165
+                 C28,160 38,144 46,115
+                 C50,70 73,26 100,14 Z"/>
+
+        <!-- Richtungs-Labels -->
+        <text x="100" y="9"   fill="#4a6070" font-size="6" text-anchor="middle"
+              font-family="-apple-system,sans-serif" font-weight="600">▲ BUG</text>
+        <text x="100" y="663" fill="#4a6070" font-size="6" text-anchor="middle"
+              font-family="-apple-system,sans-serif" font-weight="600">HECK ▼</text>
+      </svg>
 
       <!-- Info panel (right of map) -->
       <div class="stauplan-panel" id="stauplanPanel">
@@ -3655,9 +3847,8 @@ function selectFach(id) {
   const fach = STAU_FAECHER[id];
   if (el) {
     el.classList.add('sp-sel');
-    el.setAttribute('fill', fach.color + '40');   // semi-transparent fill
+    el.setAttribute('fill',   fach.color + '30');  // semi-transparent fill over drawing
     el.setAttribute('stroke', fach.color);
-    el.setAttribute('stroke-width', '18');
   }
   const items = STAU_ITEMS.filter(i => i.fach === id);
   $('stauplanPanel').innerHTML = `
