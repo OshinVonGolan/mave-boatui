@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -41,8 +42,36 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.10.0'
+VERSION  = _git_semver() or '1.11.0'
 GIT_HASH = _git_hash()
+
+# Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
+# Wird periodisch in einem Thread aktualisiert, damit der Endpunkt nie blockiert.
+_remote_ver = {'ts': 0.0, 'version': '', 'hash': '', 'up_to_date': None}
+
+def _parse_version_fallback(text: str) -> str:
+    """Liest die lesbare Version aus  VERSION = _git_semver() or 'x.y.z'  ."""
+    m = re.search(r"_git_semver\(\)\s*or\s*'([^']+)'", text)
+    return m.group(1) if m else ''
+
+def _refresh_remote_version():
+    try:
+        subprocess.run(['git', 'fetch', '--quiet'], cwd=Path(__file__).parent, timeout=30)
+        h = subprocess.run(['git', 'rev-parse', '--short', '@{u}'],
+                           cwd=Path(__file__).parent, capture_output=True, text=True, timeout=10)
+        rhash = h.stdout.strip() if h.returncode == 0 else ''
+        show = subprocess.run(['git', 'show', '@{u}:main.py'],
+                              cwd=Path(__file__).parent, capture_output=True, text=True, timeout=10)
+        rver = _parse_version_fallback(show.stdout) if show.returncode == 0 else ''
+        _remote_ver.update(ts=time.time(), version=rver, hash=rhash,
+                           up_to_date=((rhash == GIT_HASH) if rhash else None))
+    except Exception as e:
+        logging.getLogger(__name__).debug('Remote-Version-Check: %s', e)
+
+def _remote_version_loop():
+    while True:
+        _refresh_remote_version()
+        time.sleep(300)
 
 
 def read_json(path: Path, default=None):
@@ -152,6 +181,7 @@ async def lifespan(_app: FastAPI):
     if conn_mon:
         conn_mon.start()
         log.info("Connectivity-Monitor gestartet")
+    threading.Thread(target=_remote_version_loop, daemon=True, name='version-check').start()
     yield
     can_if.stop()
     log.info("CAN-Reader gestoppt")
@@ -307,21 +337,12 @@ async def system_time_sync():
 
 @app.get('/api/system/version')
 async def system_version():
-    remote_hash = ''
-    try:
-        r = subprocess.run(
-            ['git', 'ls-remote', 'origin', 'HEAD'],
-            cwd=BASE_DIR, capture_output=True, text=True, timeout=10,
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            remote_hash = r.stdout.split()[0][:7]
-    except Exception:
-        pass
     return {
-        'version':    VERSION,
-        'git':        GIT_HASH,
-        'remote_git': remote_hash,
-        'up_to_date': (remote_hash == GIT_HASH) if remote_hash else None,
+        'version':        VERSION,
+        'git':            GIT_HASH,
+        'remote_version': _remote_ver['version'],
+        'remote_git':     _remote_ver['hash'],
+        'up_to_date':     _remote_ver['up_to_date'],
     }
 
 

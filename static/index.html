@@ -505,60 +505,69 @@
   </div>
   <div class="ov-body" style="padding:0">
 
-    <div class="tabs" style="padding:0 16px">
-      <button class="tab-btn active" id="stTabEinstellBtn" onclick="switchSettingsTab('einstell')">Einstellungen</button>
-      <button class="tab-btn" id="stTabNetzBtn" onclick="switchSettingsTab('netz')">Netzwerk</button>
+    <div class="set-nav" id="setNav">
+      <button class="set-nav-btn active" data-cat="tanks"  onclick="switchSettingsCat('tanks')">💧 Tanks</button>
+      <button class="set-nav-btn"        data-cat="batt"   onclick="switchSettingsCat('batt')">🔋 Batterien</button>
+      <button class="set-nav-btn"        data-cat="netz"   onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
+      <button class="set-nav-btn"        data-cat="system" onclick="switchSettingsCat('system')">⚙️ System</button>
     </div>
 
-    <!-- Tab: Einstellungen -->
-    <div class="tab-pane active" id="stTabEinstell" style="padding:16px;max-width:600px;margin:0 auto">
-
-      <!-- Tanks -->
-      <div class="settings-section">
-        <div class="settings-section-title">Tanks</div>
+    <!-- Kategorie: Tanks -->
+    <div class="set-pane active" id="setPane-tanks">
+      <div class="set-card">
+        <div class="set-card-hd">Tank 1</div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank1Name">Tank 1 — Name</label>
+          <label class="settings-label" for="sTank1Name">Name</label>
           <input class="settings-input" id="sTank1Name" type="text" placeholder="z.B. Frischwasser" maxlength="24" />
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank1Cap">Tank 1 — Kapazität</label>
+          <label class="settings-label" for="sTank1Cap">Kapazität</label>
           <input class="settings-input narrow" id="sTank1Cap" type="number" min="1" max="9999" step="1" />
           <span style="font-size:13px;color:var(--text2)">Liter</span>
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank1Color">Tank 1 — Farbe</label>
+          <label class="settings-label" for="sTank1Color">Farbe</label>
           <div class="settings-color-wrap">
             <input class="settings-color" id="sTank1Color" type="color" value="#22c55e" />
             <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
           </div>
         </div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-hd">Tank 2</div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank2Name">Tank 2 — Name</label>
+          <label class="settings-label" for="sTank2Name">Name</label>
           <input class="settings-input" id="sTank2Name" type="text" placeholder="z.B. Diesel" maxlength="24" />
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank2Cap">Tank 2 — Kapazität</label>
+          <label class="settings-label" for="sTank2Cap">Kapazität</label>
           <input class="settings-input narrow" id="sTank2Cap" type="number" min="1" max="9999" step="1" />
           <span style="font-size:13px;color:var(--text2)">Liter</span>
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sTank2Color">Tank 2 — Farbe</label>
+          <label class="settings-label" for="sTank2Color">Farbe</label>
           <div class="settings-color-wrap">
             <input class="settings-color" id="sTank2Color" type="color" value="#3b82f6" />
             <span style="font-size:12px;color:var(--text3)">Füllbalken</span>
           </div>
         </div>
       </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="settingsFeedback"></span>
+        <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
+      </div>
+    </div>
 
-      <!-- Batterien -->
-      <div class="settings-section">
-        <div class="settings-section-title">Batterien</div>
+    <!-- Kategorie: Batterien -->
+    <div class="set-pane" id="setPane-batt">
+      <div class="set-card">
+        <div class="set-card-hd">CAN-Instanzen</div>
         <div class="settings-row">
-          <label class="settings-label" for="sBattService">Servicebatterie — CAN-Instanz</label>
+          <label class="settings-label" for="sBattService">Servicebatterie</label>
           <input class="settings-input narrow" id="sBattService" type="number" min="0" max="15" step="1" value="0" />
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sBattStarter">Starterbatterie — CAN-Instanz</label>
+          <label class="settings-label" for="sBattStarter">Starterbatterie</label>
           <input class="settings-input narrow" id="sBattStarter" type="number" min="0" max="15" step="1" value="1" />
         </div>
         <div class="settings-row">
@@ -569,40 +578,35 @@
           </select>
         </div>
       </div>
-
       <div class="settings-actions">
-        <span class="settings-feedback" id="settingsFeedback"></span>
-        <button class="btn-primary" id="saveSettingsBtn" onclick="saveSettings()">Speichern</button>
+        <button class="btn-primary" onclick="saveSettings()">Speichern</button>
       </div>
-
-      <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border)">
-        <div class="settings-section-title">System</div>
-        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-          <div style="font-size:13px;color:var(--text2)">Software auf aktuellen Stand bringen und neu starten.</div>
-          <div style="font-size:12px;color:var(--text3)" id="updateVersionInfo"></div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="btn-primary" id="updateBtn" onclick="runUpdate()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
-              Aktualisieren
-            </button>
-            <span id="updateFeedback" style="font-size:13px;color:var(--text2)"></span>
-          </div>
-        </div>
-        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px">
-          <div style="font-size:13px;color:var(--text2)">Aktuelle Uhrzeit des Pi an den CAN-Bus senden (PGN 126992).</div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="btn-primary" id="timeSyncBtn" onclick="syncTime()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">
-              Uhrzeit synchronisieren
-            </button>
-            <span id="timeSyncFeedback" style="font-size:13px;color:var(--text2)"></span>
-          </div>
-        </div>
-      </div>
-
     </div>
 
-    <!-- Tab: Netzwerk (CAN-Bus) -->
-    <div class="tab-pane" id="stTabNetz" style="padding:16px">
+    <!-- Kategorie: Netzwerk -->
+    <div class="set-pane set-pane-net" id="setPane-netz">
       <div id="settingsNetContent"><div class="net-empty">Lade…</div></div>
+    </div>
+
+    <!-- Kategorie: System -->
+    <div class="set-pane" id="setPane-system">
+      <div class="set-card">
+        <div class="set-card-hd">Software-Update</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Software auf den aktuellen Stand bringen und neu starten.</div>
+        <div style="font-size:13px;margin-bottom:12px" id="updateVersionInfo">Version wird geprüft…</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn-primary" id="updateBtn" onclick="runUpdate()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Aktualisieren</button>
+          <span id="updateFeedback" style="font-size:13px;color:var(--text2)"></span>
+        </div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-hd">Uhrzeit</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Aktuelle Uhrzeit des Pi an den CAN-Bus senden (PGN 126992).</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn-primary" id="timeSyncBtn" onclick="syncTime()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Uhrzeit synchronisieren</button>
+          <span id="timeSyncFeedback" style="font-size:13px;color:var(--text2)"></span>
+        </div>
+      </div>
     </div>
 
   </div>

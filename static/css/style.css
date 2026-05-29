@@ -907,3 +907,18 @@
       .flow-node-val { font-size: 14px; } .flow-node-ico { font-size: 14px; }
       .flow-hub { width: 104px; } .flow-hub-val { font-size: 18px; }
     }
+
+    /* ── Settings: Kategorie-Navigation + Unterseiten ── */
+    .set-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 16px 0; }
+    .set-nav-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text2);
+      padding: 8px 14px; border-radius: 10px; font-size: 13px; cursor: pointer; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 6px; }
+    .set-nav-btn:hover { background: var(--surface2); }
+    .set-nav-btn.active { background: var(--accent2); color: #fff; border-color: transparent; }
+    .set-pane { display: none; padding: 18px 16px; max-width: 640px; margin: 0 auto; }
+    .set-pane.active { display: block; }
+    .set-pane-net { max-width: 100%; }
+    .set-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; }
+    .set-card-hd { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--text3); margin-bottom: 12px; }

@@ -1,21 +1,44 @@
 // ── Settings ───────────────────────────────────────────────────────────────
 
 let _settingsNetTimer = null;
+let _versionInfo = null;   // gecachte Versions-Info (periodisch aktualisiert)
 
-function switchSettingsTab(name) {
-  ['Einstell', 'Netz'].forEach(t => {
-    const pane = $(`stTab${t}`);
-    const btn  = $(`stTab${t}Btn`);
-    const active = (t === 'Einstell' ? 'einstell' : 'netz') === name;
-    pane?.classList.toggle('active', active);
-    btn?.classList.toggle('active', active);
-  });
-  if (name === 'netz') {
+async function refreshVersion() {
+  try {
+    _versionInfo = await fetch('/api/system/version').then(r => r.json());
+  } catch(_) { return; }
+  renderVersionInfo();
+}
+
+function renderVersionInfo() {
+  const vi = $('updateVersionInfo');
+  if (!vi) return;
+  const d = _versionInfo;
+  if (!d) { vi.textContent = 'Version wird geprüft…'; return; }
+  let html = `Installiert: <strong>v${d.version}</strong>`;
+  if (d.up_to_date === false && d.remote_version)
+    html += ` &nbsp;→&nbsp; <span style="color:var(--yellow)">Update verfügbar: v${d.remote_version}</span>`;
+  else if (d.up_to_date === true)
+    html += ` &nbsp;<span style="color:var(--green)">✓ aktuell</span>`;
+  else
+    html += ` &nbsp;<span style="color:var(--text3)">(Update-Status wird geprüft…)</span>`;
+  vi.innerHTML = html;
+}
+
+function switchSettingsCat(cat) {
+  ['tanks', 'batt', 'netz', 'system'].forEach(c =>
+    $(`setPane-${c}`)?.classList.toggle('active', c === cat)
+  );
+  document.querySelectorAll('.set-nav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.cat === cat)
+  );
+  if (cat === 'netz') {
     fetchSettingsNetwork();
     if (!_settingsNetTimer) _settingsNetTimer = setInterval(fetchSettingsNetwork, 5000);
   } else {
     clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   }
+  if (cat === 'system') refreshVersion();
 }
 
 async function fetchSettingsNetwork() {
@@ -101,18 +124,9 @@ function _showSettingsPanel(tab) {
   $('settingsFeedback').textContent = '';
   $('updateFeedback').textContent = '';
   $('updateBtn').disabled = false;
-  fetch('/api/system/version').then(r => r.json()).then(d => {
-    const vi = $('updateVersionInfo');
-    if (!vi) return;
-    let html = `Installiert: <strong>v${d.version}</strong>`;
-    if (d.git) html += ` <span style="color:var(--text3)">(${d.git})</span>`;
-    if (d.remote_git && d.up_to_date === false)
-      html += `&nbsp; → &nbsp;<span style="color:var(--yellow)">Verfügbar: ${d.remote_git}</span>`;
-    else if (d.up_to_date)
-      html += `&nbsp; <span style="color:var(--green)">✓ aktuell</span>`;
-    vi.innerHTML = html;
-  }).catch(() => {});
-  switchSettingsTab(tab || 'einstell');
+  renderVersionInfo();   // sofort aus Cache anzeigen
+  refreshVersion();      // im Hintergrund aktualisieren
+  switchSettingsCat(tab || 'tanks');
   $('settingsOverlay').classList.remove('hidden');
 }
 
