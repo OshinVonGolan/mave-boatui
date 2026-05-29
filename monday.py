@@ -139,7 +139,7 @@ mutation CreateItem($boardId: ID!, $groupId: String!, $name: String!, $colVals: 
 
 
 async def create_item(token: str, board_id: str, group_id: str, name: str,
-                      column_values: dict | None = None) -> dict:
+                      column_values=None) -> dict:
     col_vals = json.dumps(column_values) if column_values else "{}"
     data = await _gql(token, _CREATE_MUTATION, {
         "boardId":  board_id,

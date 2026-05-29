@@ -1775,6 +1775,41 @@
   </div>
 </div>
 
+<!-- ── Stauplan Edit Sheet ─────────────────────────────────────────────────── -->
+<div id="stauEditBg" style="display:none;position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.45)" onclick="closeStauEdit()"></div>
+<div id="stauEditSheet" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
+     background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;
+     padding:20px 20px 32px;max-width:600px;margin:0 auto;box-shadow:0 -8px 32px rgba(0,0,0,.3)">
+  <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 18px"></div>
+  <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px" id="stauEditTitle">Eintrag bearbeiten</div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div>
+      <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Artikel</label>
+      <input id="stauEditName" type="text" style="margin-top:4px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text1);font-size:14px;outline:none">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div>
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Fach</label>
+        <select id="stauEditFach" style="margin-top:4px;width:100%;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px">
+          <!-- populated dynamically -->
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Menge</label>
+        <input id="stauEditMenge" type="text" style="margin-top:4px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text1);font-size:14px;outline:none">
+      </div>
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Notiz</label>
+      <input id="stauEditNotiz" type="text" style="margin-top:4px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text1);font-size:14px;outline:none">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button onclick="saveStauEdit()" style="flex:1;background:var(--accent,#3b82f6);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">Speichern</button>
+      <button onclick="closeStauEdit()" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:11px;font-size:14px;cursor:pointer">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Monday Overlay ──────────────────────────────────────────────────────── -->
 <div id="mondayOverlay" class="overlay hidden">
   <div class="ov-header">
@@ -3965,11 +4000,12 @@ function renderStauTable(query) {
   );
   $('stauTableBody').innerHTML = rows.length
     ? rows.map(i => {
+        const origIdx = STAU_ITEMS.indexOf(i);
         const f = STAU_FAECHER[i.fach];
         return `<tr style="cursor:pointer"
           onmouseenter="hoverFach('${i.fach}')"
           onmouseleave="unhoverFach('${i.fach}')"
-          onclick="selectFach('${i.fach}')">
+          onclick="openStauEdit(${origIdx})">
           <td>${i.name}</td>
           <td><span class="stauplan-badge" style="background:${f?.color||'#888'}">${f?.name||i.fach}</span></td>
           <td>${i.menge}</td>
@@ -3988,6 +4024,41 @@ function unhoverFach(id) {
   if (_stauFachFilter === id) return;
   const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
   if (el) el.setAttribute('fill', 'transparent');
+}
+
+let _stauEditIdx = -1;
+
+function openStauEdit(idx) {
+  const item = STAU_ITEMS[idx];
+  if (!item) return;
+  _stauEditIdx = idx;
+  $('stauEditTitle').textContent = 'Bearbeiten: ' + item.name;
+  $('stauEditName').value  = item.name;
+  $('stauEditMenge').value = item.menge;
+  $('stauEditNotiz').value = item.notiz || '';
+  // Populate fach dropdown
+  $('stauEditFach').innerHTML = Object.entries(STAU_FAECHER).map(([k, f]) =>
+    `<option value="${k}"${k === item.fach ? ' selected' : ''}>${f.name}</option>`
+  ).join('');
+  $('stauEditBg').style.display    = '';
+  $('stauEditSheet').style.display = '';
+  setTimeout(() => $('stauEditName').focus(), 80);
+}
+
+function closeStauEdit() {
+  $('stauEditBg').style.display    = 'none';
+  $('stauEditSheet').style.display = 'none';
+}
+
+function saveStauEdit() {
+  const item = STAU_ITEMS[_stauEditIdx];
+  if (!item) return;
+  item.name  = $('stauEditName').value.trim()  || item.name;
+  item.fach  = $('stauEditFach').value;
+  item.menge = $('stauEditMenge').value.trim();
+  item.notiz = $('stauEditNotiz').value.trim();
+  closeStauEdit();
+  renderStauTable($('stauSearchInput')?.value || '');
 }
 
 // ── Monday ─────────────────────────────────────────────────────────────────

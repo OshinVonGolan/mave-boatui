@@ -372,12 +372,23 @@ async def debug_router_clients():
         raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
     results = {}
     candidates = [
+        # Runde 1 — schon getestet
         '/api/wireless/stations',
         '/api/wireless/interfaces',
         '/api/hosts',
         '/api/dhcp/leases',
         '/api/arp',
         '/api/wireless/status',
+        # Runde 2 — RUTX50-spezifisch
+        '/api/overview',
+        '/api/clients',
+        '/api/network/clients',
+        '/api/router/wireless/stations',
+        '/api/overview/wireless/sta',
+        '/api/wireless/AP/stations',
+        '/api/dhcp',
+        '/api/dhcp/config',
+        '/api/interfaces/wireless',
     ]
     for path in candidates:
         try:
