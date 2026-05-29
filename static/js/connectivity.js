@@ -214,17 +214,21 @@ function renderConnectivity(d) {
     ${(() => {
       const clients = r.wifi_clients ?? [];
       if (!clients.length) return '';
-      const rows = clients.map(c => {
-        const sigColor = !c.signal ? 'var(--text3)' : c.signal > -60 ? 'var(--green)' : c.signal > -75 ? 'var(--yellow)' : 'var(--red)';
+      // stärkstes Signal zuerst
+      const sorted = [...clients].sort((a, b) => (b.signal ?? -999) - (a.signal ?? -999));
+      const rows = sorted.map(c => {
+        const sigColor = c.signal == null ? 'var(--text3)' : c.signal > -60 ? 'var(--green)' : c.signal > -75 ? 'var(--yellow)' : 'var(--red)';
         const name = c.hostname || c.mac || '?';
+        const band = c.band ? `<span style="font-size:10px;color:var(--text3);border:1px solid var(--border);border-radius:4px;padding:1px 5px">${_esc(c.band)}</span>` : '';
         return `<div class="wifi-client-row">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${sigColor}" stroke-width="2" stroke-linecap="round" style="flex-shrink:0">
             <path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/>
             <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="${sigColor}" stroke="none"/>
           </svg>
-          <span class="wifi-client-name" title="${c.hostname ? c.mac : ''}">${_esc(name)}</span>
+          <span class="wifi-client-name" title="${_esc(c.mac || '')}">${_esc(name)}</span>
+          ${band}
           <span class="wifi-client-ip">${c.ip || ''}</span>
-          <span class="wifi-client-sig">${c.signal != null ? c.signal + ' dBm' : ''}</span>
+          <span class="wifi-client-sig" style="color:${sigColor}">${c.signal != null ? c.signal + ' dBm' : ''}</span>
         </div>`;
       }).join('');
       return `<div class="net-device-card" style="margin-top:14px">

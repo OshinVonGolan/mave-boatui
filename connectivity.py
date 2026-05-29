@@ -83,23 +83,30 @@ class ConnectivityMonitor:
         wired   = next((i for i in wan if i.get('network_type') == 'wired'),  None)
         modem   = modems[0] if modems else {}
 
-        # Connected WiFi clients (graceful fallback if endpoint absent)
+        # Verbundene WLAN-Clients aus /api/wireless/interfaces/status.
+        # Jedes Interface (pro Band) hat eine clients-Liste mit hostname/ip/signal.
         wifi_clients = []
         try:
-            stations = self._http(f'{self._router_host}/api/wireless/stations', headers=hdrs)
-            for sta in (stations.get('data') or []):
-                wifi_clients.append({
-                    'hostname': sta.get('hostname') or sta.get('host') or '',
-                    'mac':      sta.get('mac', ''),
-                    'ip':       sta.get('ip') or sta.get('ipaddr', ''),
-                    'signal':   sta.get('signal'),
-                    'network':  sta.get('network', ''),
-                })
+            wifi = self._http(f'{self._router_host}/api/wireless/interfaces/status', headers=hdrs)
+            for iface in (wifi.get('data') or []):
+                ssid = iface.get('ssid', '')
+                for c in (iface.get('clients') or []):
+                    sig = c.get('signal')
+                    if isinstance(sig, str):                  # "-56 dBm" → -56
+                        try: sig = int(sig.split()[0])
+                        except Exception: sig = None
+                    wifi_clients.append({
+                        'hostname': c.get('hostname') or '',
+                        'mac':      c.get('macaddr', ''),
+                        'ip':       c.get('ipaddr', ''),
+                        'signal':   sig,
+                        'band':     c.get('band', ''),
+                        'standard': c.get('standard', ''),
+                        'ssid':     ssid,
+                    })
         except Exception as e:
-            # 501 = endpoint not implemented on this firmware; 403 = missing API permission
-            # Log only once at startup, not every poll
             if not getattr(self, '_wifi_warn_logged', False):
-                log.info('WiFi stations nicht verfügbar (%s) — Karte wird ausgeblendet', e)
+                log.info('WLAN-Clients nicht verfügbar (%s) — Karte wird ausgeblendet', e)
                 self._wifi_warn_logged = True
 
         return {
