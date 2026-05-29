@@ -80,6 +80,7 @@ function openAlarms() {
   _closeAllOverlays();
   history.pushState({ overlay: 'alarms' }, '', '#alarms');
   $('alarmOverlay').classList.remove('hidden');
+  _navActive('alarmBtn');
   switchTab('aktiv');
 }
 function closeAlarms() {

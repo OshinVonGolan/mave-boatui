@@ -147,6 +147,7 @@ async function openWartung() {
   _closeAllOverlays();
   history.pushState({ overlay: 'wartung' }, '', '#wartung');
   $('wartungOverlay').classList.remove('hidden');
+  _navActive('wartungTopBtn');
   await _wartungLoad();
   renderWartung();
 }

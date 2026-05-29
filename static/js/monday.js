@@ -34,6 +34,7 @@ function openMonday() {
   _closeAllOverlays();
   history.pushState({ overlay: 'monday' }, '', '#monday');
   $('mondayOverlay').classList.remove('hidden');
+  _navActive('mondayBtn');
   if (!_mondayData) loadMondayBoard();
   else renderMondayBoard(_mondayData);
 }

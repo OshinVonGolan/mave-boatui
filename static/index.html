@@ -56,7 +56,7 @@
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
     </button>
-    <button class="icon-btn" onclick="openStauplan()" title="Stauplan">
+    <button class="icon-btn" id="stauplanBtn" onclick="openStauplan()" title="Stauplan">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
@@ -68,7 +68,7 @@
         <path d="M9 12h6M9 16h4"/>
       </svg>
     </button>
-    <button class="icon-btn" onclick="openSettings()" title="Einstellungen">
+    <button class="icon-btn" id="settingsBtn" onclick="openSettings()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -239,10 +239,9 @@
   <div class="ov-body">
   <div class="bd-pg">
 
-    <!-- ── Top-left: Servicebatterie ── -->
+    <!-- ── Servicebatterie ── -->
     <div class="bd-card bd-pg-batt" style="display:flex;flex-direction:column">
       <div class="bd-card-hd">Servicebatterie</div>
-      <!-- SOC block -->
       <div class="bd-soc-block" style="margin-bottom:10px">
         <div class="bd-soc-head">
           <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
@@ -251,7 +250,6 @@
         <div class="bd-soc-dir" id="dChargeDir"></div>
         <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
       </div>
-      <!-- V / I / W / Ah -->
       <div class="bd-kv-grid">
         <div class="bd-kv-item">
           <div class="bd-kv-label">Spannung</div>
@@ -272,7 +270,6 @@
           <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
         </div>
       </div>
-      <!-- Mini stats: Restkapazität / Voll vor / Zyklen -->
       <div class="bd-mini-row" style="margin-top:10px">
         <div class="bd-mini-item">
           <div class="bd-label">Restkapazität</div>
@@ -287,19 +284,51 @@
           <div class="bd-mini-val"><span id="dCycles">--</span></div>
         </div>
       </div>
-      <!-- 4-cell mini grid (from BMS) -->
-      <div id="bdCellMini" style="margin-top:10px;display:none">
-        <div class="bd-label" style="margin-bottom:6px">Zellspannungen</div>
-        <div class="bd-cell-mini-grid" id="bdCellMiniGrid"></div>
-      </div>
-      <!-- Min / Max row -->
       <div class="bd-minmax-row">
         <span>↓ Min: <strong id="dMinV">--</strong> V</span>
         <span>↑ Max: <strong id="dMaxV">--</strong> V</span>
       </div>
     </div>
 
-    <!-- ── Top-middle: Verlauf chart ── -->
+    <!-- ── Zellen & BMS (Detail-Diagnose) ── -->
+    <div class="bd-card bd-pg-cells" id="bmsSection">
+      <div class="bd-card-hd">Zellen &amp; BMS</div>
+      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:8px 0">Kein BMS-Signal — warte auf Daten…</div>
+      <div id="bmsDataWrap" style="display:none">
+        <div class="bms-pack-row" id="bmsPackRow"></div>
+        <div id="bmsDailyStats" style="display:none">
+          <div class="bms-pack-row">
+            <div class="bms-pack-item"><div class="bd-label">Heute geladen</div><div class="bms-pack-val val-green" id="bmsTodayCharge">-- Ah</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Heute entladen</div><div class="bms-pack-val val-orange" id="bmsTodayDischarge">-- Ah</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Lade-A</div><div class="bms-pack-val" id="bmsChargeA">-- A</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Entlade-A</div><div class="bms-pack-val" id="bmsDischargeA">-- A</div></div>
+          </div>
+        </div>
+        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+        <div class="bms-flags-row" id="bmsFlags"></div>
+      </div>
+    </div>
+
+    <!-- ── Lade-Quellen (dynamisch) ── -->
+    <div id="chargeSourceCard" class="bd-card bd-pg-sources">
+      <div class="bd-card-hd-row">
+        <span>Lade-Quellen</span>
+        <div style="display:flex;gap:3px">
+          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
+          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
+          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
+        </div>
+      </div>
+      <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Keine aktive Lade-Quelle</div>
+      <div id="chargeSourceHasData" style="display:none">
+        <div class="charge-src-wrap">
+          <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
+          <div class="charge-src-legend" id="chargeSourceLegend"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Verlauf chart (volle Breite unten) ── -->
     <div class="bd-card bd-pg-chart">
       <div class="bd-card-hd-row">
         <span>Verlauf</span>
@@ -314,60 +343,15 @@
       <div class="chart-tog-group">
         <button id="tog-soc"      class="chart-tog active" onclick="toggleSeries('soc')">SOC</button>
         <button id="tog-voltage"  class="chart-tog active" onclick="toggleSeries('voltage')">Spannung</button>
-        <button id="tog-current"  class="chart-tog"        onclick="toggleSeries('current')">Strom</button>
+        <button id="tog-current"  class="chart-tog active" onclick="toggleSeries('current')">Strom</button>
+        <button id="tog-solar"    class="chart-tog active" onclick="toggleSeries('solar')">Solar</button>
         <button id="tog-zelldiff" class="chart-tog"        onclick="toggleSeries('zelldiff')">Zelldiff.</button>
       </div>
       <div class="chart-legend" id="chartLegend"></div>
       <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
     </div>
 
-    <!-- ── Top-right: Solar Erträge ── -->
-    <div class="bd-card bd-pg-solar">
-      <div class="bd-card-hd">Solar Erträge</div>
-      <div class="bd-solar-list">
-        <div class="bd-solar-item">
-          <span class="bd-solar-name">Solar 1</span>
-          <div class="bd-solar-vals">
-            <span class="bd-solar-w" id="bdS1W">-- W</span>
-            <span class="bd-solar-v" id="bdS1V"></span>
-          </div>
-        </div>
-        <div class="bd-solar-item">
-          <span class="bd-solar-name">Solar 2</span>
-          <div class="bd-solar-vals">
-            <span class="bd-solar-w" id="bdS2W">-- W</span>
-            <span class="bd-solar-v" id="bdS2V"></span>
-          </div>
-        </div>
-        <div class="bd-solar-item">
-          <span class="bd-solar-name">Solar 3</span>
-          <div class="bd-solar-vals">
-            <span class="bd-solar-w" id="bdS3W">-- W</span>
-            <span class="bd-solar-v" id="bdS3V"></span>
-          </div>
-        </div>
-      </div>
-      <div class="bd-solar-total" style="margin-top:10px">
-        <div class="bd-label">Gesamt Systemleistung</div>
-        <div class="bd-solar-total-val" id="bdSolarTotal">-- W</div>
-      </div>
-      <div class="bd-mini-row" style="margin-top:10px">
-        <div class="bd-mini-item">
-          <div class="bd-label">Tagesertrag</div>
-          <div class="bd-mini-val"><span id="bdYieldDay">--</span> <span style="font-size:11px;color:var(--text3)">Wh</span></div>
-        </div>
-        <div class="bd-mini-item">
-          <div class="bd-label">Ø Tag</div>
-          <div class="bd-mini-val"><span id="bdYieldDayAvg">--</span> <span style="font-size:11px;color:var(--text3)">Wh</span></div>
-        </div>
-        <div class="bd-mini-item">
-          <div class="bd-label">Ø Woche</div>
-          <div class="bd-mini-val"><span id="bdYieldWeekAvg">--</span> <span style="font-size:11px;color:var(--text3)">kWh</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Bottom-left: Starterbatterie ── -->
+    <!-- ── Starterbatterie ── -->
     <div class="bd-card bd-pg-starter">
       <div class="bd-card-hd">Starterbatterie</div>
       <div class="bd-3col">
@@ -386,54 +370,7 @@
       </div>
     </div>
 
-    <!-- ── Bottom-middle: Ladeströme Kuchendiagramm ── -->
-    <div id="chargeSourceCard" class="bd-card bd-pg-pie">
-      <div class="bd-card-hd-row">
-        <span>Ladeströme</span>
-        <div style="display:flex;gap:3px">
-          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
-          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
-          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
-        </div>
-      </div>
-      <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Warte auf Ladedaten…</div>
-      <div id="chargeSourceHasData" style="display:none">
-        <div class="charge-src-wrap">
-          <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
-          <div class="charge-src-legend" id="chargeSourceLegend"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Bottom-right: Inverter (placeholder) ── -->
-    <div class="bd-card bd-pg-inv bd-card-ph">
-      <div class="bd-card-hd">Inverter</div>
-      <div class="bd-ph-body">
-        <div class="bd-ph-icon">⚡</div>
-        <div class="bd-ph-text">Daten folgen</div>
-      </div>
-    </div>
-
   </div><!-- bd-pg -->
-
-  <!-- Legacy BMS IDs — used by updateBms(), kept hidden -->
-  <div style="display:none" aria-hidden="true">
-    <div id="bmsSection">
-      <div id="bmsNoSignal"></div>
-      <div id="bmsDataWrap">
-        <div id="bmsPackRow"></div>
-        <div id="bmsDailyStats">
-          <div id="bmsTodayCharge"></div>
-          <div id="bmsTodayDischarge"></div>
-          <div id="bmsChargeA"></div>
-          <div id="bmsDischargeA"></div>
-        </div>
-        <div id="bmsFlags"></div>
-        <div class="bms-cell-grid" id="bmsCellGrid"></div>
-      </div>
-    </div>
-  </div>
-
   </div><!-- ov-body -->
 </div>
 

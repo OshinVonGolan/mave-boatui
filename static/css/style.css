@@ -48,6 +48,10 @@
       display: flex; align-items: center; transition: all .15s;
     }
     .icon-btn:hover { background: var(--surface2); color: var(--accent); border-color: var(--accent2); }
+    .icon-btn:focus { outline: none; }
+    /* aktive Seite: blauer Rahmen-Indikator (wie zuvor nur beim Internet-Button) */
+    .icon-btn.nav-active { border-color: var(--accent2); color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent2); }
 
     /* ── Main grid ── */
     main { display: grid; gap: var(--gap); padding: var(--gap);
@@ -226,33 +230,31 @@
     /* ── Battery detail — 3-column page grid ── */
     .bd-pg {
       display: grid;
-      grid-template-columns: 1fr 2fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       grid-template-areas:
-        "batt  chart  solar"
-        "start pie    inv  ";
-      gap: 14px; max-width: 1400px; margin: 0 auto;
+        "batt   cells   sources"
+        "chart  chart   starter";
+      gap: 14px; max-width: 1500px; margin: 0 auto; align-items: start;
     }
-    .bd-pg-chart canvas.chart { flex: 1; min-height: 200px; }
+    .bd-pg-chart canvas.chart { flex: 1; min-height: 300px; }
     .bd-pg-batt    { grid-area: batt; }
     .bd-pg-chart   { grid-area: chart; }
-    .bd-pg-solar   { grid-area: solar; }
-    .bd-pg-starter { grid-area: start; }
-    .bd-pg-pie     { grid-area: pie; }
-    .bd-pg-inv     { grid-area: inv; }
+    .bd-pg-cells   { grid-area: cells; }
+    .bd-pg-sources { grid-area: sources; }
+    .bd-pg-starter { grid-area: starter; }
     @media (max-width: 1023px) {
       .bd-pg {
         grid-template-columns: 1fr 1fr;
         grid-template-areas:
-          "batt  chart"
-          "solar solar"
-          "start pie  "
-          "inv   inv  ";
+          "batt   cells"
+          "sources starter"
+          "chart  chart";
       }
     }
     @media (max-width: 639px) {
       .bd-pg {
         grid-template-columns: 1fr;
-        grid-template-areas: "batt" "chart" "solar" "start" "pie" "inv";
+        grid-template-areas: "batt" "chart" "cells" "sources" "starter";
       }
     }
 

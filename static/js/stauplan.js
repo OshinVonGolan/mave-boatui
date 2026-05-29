@@ -55,6 +55,7 @@ async function openStauplan() {
   _closeAllOverlays();
   history.pushState({ overlay: 'stauplan' }, '', '#stauplan');
   $('stauplanOverlay').classList.remove('hidden');
+  _navActive('stauplanBtn');
   await _stauLoad();
   renderStauTable('');
 }

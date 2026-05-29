@@ -17,6 +17,13 @@ function timeSince(s) {
   return `${m} min`;
 }
 
+// Markiert den Topbar-Button der gerade offenen Seite mit blauem Rahmen.
+// btnId=null entfernt die Markierung überall.
+function _navActive(btnId) {
+  document.querySelectorAll('.icon-btn.nav-active').forEach(b => b.classList.remove('nav-active'));
+  if (btnId) $(btnId)?.classList.add('nav-active');
+}
+
 // ── Config (geladen aus /api/presets) ─────────────────────────────────────
 
 let tanksConfig    = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };

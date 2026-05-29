@@ -29,6 +29,7 @@ function openConnectivity() {
   _closeAllOverlays();
   history.pushState({ overlay: 'connectivity' }, '', '#connectivity');
   $('connInetOverlay').classList.remove('hidden');
+  _navActive('connInetBtn');
   renderConnectivity(_connData);
   fetchConnectivity();
   _connOverlayTimer = setInterval(fetchConnectivity, 20000);
