@@ -25,6 +25,56 @@ async function fetchNetwork() {
   }
 }
 
+// Mapping PGN → lesbare Werte aus dem aktuellen State (kein Backend nötig)
+const _PGN_VALS = {
+  127508: [ // Battery Status
+    { l:'SOC',          v: d => d.battery?.soc        != null ? d.battery.soc + ' %'           : null },
+    { l:'Spannung',     v: d => d.battery?.voltage     != null ? d.battery.voltage.toFixed(2)+' V' : null },
+    { l:'Strom',        v: d => d.battery?.current     != null ? d.battery.current.toFixed(1)+' A' : null },
+    { l:'Temperatur',   v: d => d.battery?.temperature != null ? d.battery.temperature+' °C'    : null },
+  ],
+  127506: [ // DC Detailed Status
+    { l:'Leistung',     v: d => d.battery?.power       != null ? d.battery.power.toFixed(0)+' W'  : null },
+    { l:'Verbraucht',   v: d => d.battery?.consumed_ah != null ? d.battery.consumed_ah.toFixed(1)+' Ah' : null },
+  ],
+  130900: [ // Custom Battery Stats
+    { l:'Leistung',     v: d => d.battery?.power       != null ? d.battery.power.toFixed(0)+' W'  : null },
+    { l:'Verbraucht',   v: d => d.battery?.consumed_ah != null ? d.battery.consumed_ah.toFixed(1)+' Ah' : null },
+    { l:'Zyklen',       v: d => d.battery?.cycles      != null ? d.battery.cycles+''               : null },
+    { l:'Min Spannung', v: d => d.battery?.min_voltage != null ? d.battery.min_voltage.toFixed(2)+' V' : null },
+    { l:'Max Spannung', v: d => d.battery?.max_voltage != null ? d.battery.max_voltage.toFixed(2)+' V' : null },
+  ],
+  130901: [ // BMS Pack
+    { l:'BMS Spannung', v: d => d.bms?.voltage         != null ? d.bms.voltage.toFixed(2)+' V'    : null },
+    { l:'BMS Strom',    v: d => d.bms?.current_total   != null ? d.bms.current_total.toFixed(1)+' A' : null },
+    { l:'BMS SOC',      v: d => d.bms?.soc             != null ? d.bms.soc+' %'                   : null },
+    { l:'Kapazität',    v: d => d.bms?.capacity_ah     != null ? d.bms.capacity_ah.toFixed(0)+' Ah' : null },
+    { l:'Rest kWh',     v: d => d.bms?.remaining_kwh   != null ? d.bms.remaining_kwh.toFixed(2)+' kWh' : null },
+    { l:'Lade-A',       v: d => d.bms?.current_charge  != null ? d.bms.current_charge.toFixed(1)+' A' : null },
+    { l:'Entlade-A',    v: d => d.bms?.current_discharge != null ? d.bms.current_discharge.toFixed(1)+' A' : null },
+  ],
+  130902: [ // BMS Cells
+    { l:'Zellen',       v: d => d.bms?.cell_count      != null ? d.bms.cell_count+''              : null },
+    { l:'Niedrigste',   v: d => d.bms?.lowest_cell_v   != null ? d.bms.lowest_cell_v.toFixed(3)+' V (Zelle '+d.bms.lowest_cell_nr+')' : null },
+    { l:'Höchste',      v: d => d.bms?.highest_cell_v  != null ? d.bms.highest_cell_v.toFixed(3)+' V (Zelle '+d.bms.highest_cell_nr+')' : null },
+  ],
+  127488: [ // Engine Speed
+    { l:'Solar Leistung', v: d => d.solar?.power != null ? d.solar.power.toFixed(0)+' W' : null },
+    { l:'Solar Spannung', v: d => d.solar?.voltage != null ? d.solar.voltage.toFixed(1)+' V' : null },
+  ],
+  127485: [ // Charger Status
+    { l:'Ladeleistung', v: d => d.charger?.power    != null ? d.charger.power.toFixed(0)+' W'    : null },
+  ],
+  127489: [ // Engine Parameters
+    { l:'Alternator',   v: d => d.alternator?.power  != null ? d.alternator.power.toFixed(0)+' W' : null },
+  ],
+  126720: [ // Lights brightness
+    { l:'Licht-Kanal 1', v: d => d.lights?.channels?.[0] != null ? d.lights.channels[0] : null },
+  ],
+};
+
+let _netExpanded = {};
+
 function renderNetworkInto(el, entries) {
   if (!el) return;
   if (!entries.length) {
@@ -38,37 +88,64 @@ function renderNetworkInto(el, entries) {
     bySource[e.src].push(e);
   });
 
+  const state = _lastData || {};
+
   const cards = Object.entries(bySource).map(([src, pgns]) => {
     const srcNum  = parseInt(src);
     const srcHex  = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
     const name    = devicesConfig[src] ?? `Gerät ${srcHex}`;
     const minAge  = Math.min(...pgns.map(p => p.age_s));
     const dotCls  = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
+    const isOpen  = !!_netExpanded[src];
 
-    const rows = pgns.map(p => {
-      const iv  = p.interval_ms != null ? `${p.interval_ms} ms` : '—';
+    // Bekannte Werte aus dem State für die PGNs dieses Geräts
+    const knownVals = [];
+    pgns.forEach(p => {
+      const mapping = _PGN_VALS[p.pgn];
+      if (!mapping) return;
+      mapping.forEach(m => {
+        const v = m.v(state);
+        if (v != null) knownVals.push({ l: m.l, v });
+      });
+    });
+
+    const pgnRows = pgns.map(p => {
+      const iv     = p.interval_ms != null ? `${p.interval_ms} ms` : '—';
       const ageCls = p.age_s < 3 ? 'age-ok' : p.age_s < 15 ? 'age-warn' : 'age-old';
       const ageStr = p.age_s < 2 ? 'aktiv' : `${p.age_s} s`;
       return `<div class="net-pgn-row">
         <div>
           <div class="net-pgn-desc">${p.description}</div>
-          <div class="net-pgn-num">${p.pgn} · 0x${p.pgn.toString(16).toUpperCase()}</div>
+          <div class="net-pgn-num">PGN ${p.pgn} &middot; 0x${p.pgn.toString(16).toUpperCase()}</div>
         </div>
         <div class="net-pgn-iv">${iv}</div>
         <div class="net-pgn-age ${ageCls}">${ageStr}</div>
       </div>`;
     }).join('');
 
-    return `<div class="net-device-card">
+    const valRows = knownVals.length
+      ? `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
+          <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Aktuelle Werte</div>
+          ${knownVals.map(({l,v}) =>
+            `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;border-bottom:1px solid var(--surface2)">
+              <span style="color:var(--text2)">${l}</span>
+              <span style="font-weight:600">${v}</span>
+            </div>`).join('')}
+        </div>` : '';
+
+    return `<div class="net-device-card" style="cursor:pointer" onclick="_netExpanded['${src}']=!_netExpanded['${src}'];renderNetworkInto(this.closest('.net-grid').parentElement,window._lastNetEntries||[])">
       <div class="net-device-header">
         <div class="net-device-dot ${dotCls}"></div>
         <div class="net-device-name">${name}</div>
         <div class="net-device-src">${srcHex} (${srcNum})</div>
+        <span style="margin-left:auto;font-size:12px;color:var(--text3)">${isOpen ? '▲' : '▼'}</span>
       </div>
-      <div class="net-pgn-list">${rows}</div>
+      ${isOpen ? `<div class="net-pgn-list">${pgnRows}${valRows}</div>` : ''}
     </div>`;
   }).join('');
 
+  // Entries für Re-Render merken
+  window._lastNetEntries = entries;
   el.innerHTML = `<div class="net-grid">${cards}</div>`;
 }
 
