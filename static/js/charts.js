@@ -96,7 +96,7 @@ function fmtYVal(v, key) {
   return String(Math.round(v));
 }
 
-const CHART_PAD_L = 10, CHART_PAD_R = 12;
+const CHART_PAD_L = 46, CHART_PAD_R = 16;
 
 function renderCharts() {
   const canvas = $('chartMain');
@@ -108,14 +108,15 @@ function renderCharts() {
 
   const dpr  = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
-  if (!rect.width) return;
+  if (!rect.width || !rect.height) return;
   canvas.width  = rect.width  * dpr;
   canvas.height = rect.height * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
   const W = rect.width, H = rect.height;
 
-  const PAD_L = CHART_PAD_L, PAD_R = CHART_PAD_R, PAD_B = 20, PAD_T = 8;
+  const FONT = '10px -apple-system,BlinkMacSystemFont,sans-serif';
+  const PAD_L = CHART_PAD_L, PAD_R = CHART_PAD_R, PAD_B = 24, PAD_T = 10;
   const CW = W - PAD_L - PAD_R, CH = H - PAD_B - PAD_T;
 
   ctx.fillStyle = '#1e293b';
@@ -127,19 +128,7 @@ function renderCharts() {
 
   renderChartLegend(pts, scrubTs);
 
-  // X-axis time labels
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
-  ctx.textBaseline = 'alphabetic';
-  for (let i = 0; i <= 4; i++) {
-    const ts = tMin0 + chartRangeSec * i / 4;
-    const x  = PAD_L + CW * i / 4;
-    ctx.textAlign = i === 0 ? 'left' : i === 4 ? 'right' : 'center';
-    ctx.fillText(fmtAxisTime(ts, now), x, H - 4);
-  }
-
-  // Aktive Serien mit ≥2 Werten + eigene normalisierte Y-Funktion [0..1] → Plotfläche.
-  // Jede Serie hat ihre eigene Domäne; absolute Werte liest man in Legende/Scrubber ab.
+  // Aktive Serien berechnen
   const active = [];
   Object.entries(SERIES_DEF).forEach(([key, def]) => {
     if (!chartSeries[key]) return;
@@ -148,8 +137,29 @@ function renderCharts() {
     const [lo, hi] = _seriesDomain(vals, def);
     const span = (hi - lo) || 1;
     const yOf = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
-    active.push({ key, def, yOf });
+    active.push({ key, def, yOf, lo, hi });
   });
+
+  // X-Achse Zeitbeschriftung
+  ctx.fillStyle = '#64748b'; ctx.font = FONT; ctx.textBaseline = 'alphabetic';
+  for (let i = 0; i <= 4; i++) {
+    const ts = tMin0 + chartRangeSec * i / 4;
+    const x  = PAD_L + CW * i / 4;
+    ctx.textAlign = i === 0 ? 'left' : i === 4 ? 'right' : 'center';
+    ctx.fillText(fmtAxisTime(ts, now), x, H - 4);
+  }
+
+  // Y-Achse: linke Seite für die erste aktive Serie (farbig beschriftet)
+  if (active.length > 0) {
+    const { def, lo, hi } = active[0];
+    ctx.font = FONT; ctx.fillStyle = def.color + 'bb'; ctx.textAlign = 'right';
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + (hi - lo) * (1 - i / 4);
+      const y = PAD_T + CH * i / 4;
+      ctx.textBaseline = i === 0 ? 'top' : i === 4 ? 'bottom' : 'middle';
+      ctx.fillText(fmtYVal(v, active[0].key), PAD_L - 4, y);
+    }
+  }
 
   // Horizontale Hilfslinien
   ctx.strokeStyle = '#2a3a4f'; ctx.lineWidth = 1;
@@ -158,29 +168,29 @@ function renderCharts() {
     ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
   }
 
-  // Serien zeichnen (nur Linien — bei vielen Serien sind Flächen unleserlich;
-  // dezente Fläche nur wenn genau eine Serie aktiv ist)
+  // Serien zeichnen — immer Area-Fill (halbtransparent), dann Linie drüber
   ctx.save();
   ctx.beginPath(); ctx.rect(PAD_L, PAD_T, CW, CH); ctx.clip();
 
   active.forEach(({ key, def, yOf }) => {
-    if (active.length === 1) {
-      const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
-      grad.addColorStop(0, def.color + '33');
-      grad.addColorStop(1, def.color + '00');
-      let first = true, lastX = 0;
-      ctx.beginPath();
-      pts.forEach(d => {
-        const v = d[key]; if (v == null) { first = true; return; }
-        const x = xOf(d.ts), y = yOf(v);
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-        lastX = x;
-      });
-      if (!first) { ctx.lineTo(lastX, PAD_T + CH); ctx.lineTo(PAD_L, PAD_T + CH);
-        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); }
-    }
+    // Fläche unter der Kurve (immer, aber bei mehreren Serien etwas transparenter)
+    const alphaHex = active.length === 1 ? '3a' : '20';
+    const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
+    grad.addColorStop(0, def.color + alphaHex);
+    grad.addColorStop(1, def.color + '00');
+    let first = true, lastX = 0;
+    ctx.beginPath();
+    pts.forEach(d => {
+      const v = d[key]; if (v == null) { first = true; return; }
+      const x = xOf(d.ts), y = yOf(v);
+      if (first) { ctx.moveTo(x, PAD_T + CH); ctx.lineTo(x, y); first = false; }
+      else ctx.lineTo(x, y);
+      lastX = x;
+    });
+    if (!first) { ctx.lineTo(lastX, PAD_T + CH); ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); }
 
-    let first = true, lastX = 0, lastY = 0;
+    // Linie
+    first = true; let lastY = 0;
     ctx.beginPath();
     pts.forEach(d => {
       const v = d[key]; if (v == null) { first = true; return; }
@@ -191,8 +201,9 @@ function renderCharts() {
     ctx.strokeStyle = def.color; ctx.lineWidth = 2;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
+    // Letzter Punkt
     if (!first && scrubTs === null) {
-      ctx.beginPath(); ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
     }
   });
@@ -336,6 +347,32 @@ function updateBms(bms) {
   updateDualTiles();
   const remEl = $('dRemKwh');
   if (remEl && bms.remaining_kwh != null) remEl.textContent = bms.remaining_kwh.toFixed(2);
+
+  // Neue 2x2 Zellanzeige in der Batterie-Detail-Seite
+  const hasBms = bms.voltage != null;
+  const cellWrap = $('bdCellMini'), cellAbsent = $('bdCellMiniAbsent');
+  if (cellWrap) cellWrap.style.display = hasBms ? '' : 'none';
+  if (cellAbsent) cellAbsent.style.display = hasBms ? 'none' : '';
+  if (hasBms) {
+    const cells2 = bms.cells ?? [];
+    const n2 = cells2.length || (bms.cell_count ?? 0);
+    const grid2 = $('bdCellMiniGrid');
+    if (grid2 && n2) {
+      const order = n2 === 4 ? [1, 2, 0, 3] : Array.from({length: n2}, (_, i) => i);
+      grid2.innerHTML = order.map(i => {
+        const c = cells2[i];
+        const isLo = i === (bms.lowest_cell_nr - 1), isHi = i === (bms.highest_cell_nr - 1);
+        const col = c ? cellColor(c.voltage, isLo, isHi, bms.alarm_min_volt, bms.alarm_max_volt) : 'var(--border)';
+        const vStr = c?.voltage != null ? c.voltage.toFixed(3) : '--';
+        const tStr = c?.temp    != null ? c.temp.toFixed(1) + ' °C' : '';
+        return `<div class="bd-cell-mini-item" style="border-color:${col}">
+          <div class="bd-cell-mini-nr">Zelle ${i + 1}</div>
+          <div class="bd-cell-mini-v" style="color:${col}">${vStr} <span style="font-size:10px;color:var(--text3)">V</span></div>
+          ${tStr ? `<div class="bd-cell-mini-t">${tStr}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+  }
 }
 
 // Solar-Leistung für den Verlaufs-Graph merken (Summe aller Solar-Quellen)
