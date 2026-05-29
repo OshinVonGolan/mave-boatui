@@ -22,6 +22,10 @@ function _W(v) {
   const a = Math.abs(v);
   return a >= 1000 ? (v / 1000).toFixed(2) + ' kW' : Math.round(v) + ' W';
 }
+function _A(a) {
+  if (a == null) return null;
+  return (Math.abs(a) >= 10 ? Math.round(a) : a.toFixed(1)) + ' A';
+}
 function _dur(w) {
   return Math.max(0.3, Math.min(2.2, 400 / Math.max(20, Math.abs(w)))).toFixed(2);
 }
@@ -54,9 +58,10 @@ function _setEdge(id, color, w, reverse = false, forceStatic = false) {
   }
 }
 
-function _setNode(id, text, color) {
-  const el = $('fv-' + id), g = $('fg-' + id);
-  if (el) { el.textContent = text; if (color) el.style.fill = color; else el.style.fill = ''; }
+function _setNode(id, text, color, ampText) {
+  const el = $('fv-' + id), g = $('fg-' + id), sa = $('fsa-' + id);
+  if (el) { el.textContent = text; el.style.fill = color || ''; }
+  if (sa) { sa.textContent = ampText || ''; }
   if (g)  g.classList.toggle('dim', text === '--' || text === '—');
 }
 
@@ -98,14 +103,15 @@ function updateFlow(data) {
 
   if (bmsHasData && bat.voltage != null) {
     // BMS-Pfad: battery_discharge ist gemessen → direkt DC-Last berechnen
-    const volt = bat.voltage;
-    // Shunt-Kalibrierung: wenn BMS-Nettostrom zu weit vom Shunt abweicht → skalieren
+    // Shunt-Kalibrierung: wenn BMS-Nettostrom > 25 % vom Shunt abweicht → skalieren
+    // Scale wird auf [0.5 … 2.0] begrenzt um Sprünge bei bmsNet ≈ 0 zu verhindern
     let discA = bmsDischarge;
     if (shuntI != null && Math.abs(shuntI) > 0.5) {
       const bmsNet = bmsCharge - bmsDischarge;  // BMS-Nettostrom (+ = laden)
       const diff   = Math.abs(bmsNet - num(shuntI));
-      if (diff > Math.abs(shuntI) * 0.25) {
-        const scale = num(shuntI) / (bmsNet || 0.001);
+      if (diff > Math.abs(shuntI) * 0.25 && Math.abs(bmsNet) > 0.2) {
+        const rawScale = num(shuntI) / bmsNet;
+        const scale    = Math.max(0.5, Math.min(2.0, rawScale)); // KEIN explodieren
         discA = bmsDischarge * Math.abs(scale);
       }
     }
@@ -124,9 +130,9 @@ function updateFlow(data) {
   const hasGrid = chargerW != null && chargerW > 5;
 
   // ── Solar ─────────────────────────────────────────────────────────────
-  _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null);
-  _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null);
-  _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null);
+  _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null, _A(data.solar?.current));
+  _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null, _A(data.solar2?.current));
+  _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null, _A(data.solar3?.current));
 
   // ── Ladegerät / Landstrom ─────────────────────────────────────────────
   _setNode('charger', chargerW != null ? _W(chargerW) : '--', chargerW > 5 ? '#3b82f6' : null);
@@ -167,6 +173,7 @@ function updateFlow(data) {
     const parts = [];
     if (bat.soc  != null) parts.push(bat.soc + ' %');
     if (bat.voltage != null) parts.push(bat.voltage.toFixed(2) + ' V');
+    if (shuntI  != null) parts.push(_A(shuntI));
     bs.textContent = parts.join('  ·  ');
   }
   if (bg) bg.classList.remove('dim');
