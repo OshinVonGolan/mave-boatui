@@ -793,12 +793,15 @@
     .ov-close-arrow:hover { color: var(--text); }
     .ov-close-arrow svg { flex-shrink: 0; }
     /* ── Stauplan ── */
-    .stauplan-layout { max-width: 1000px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
-    @media (max-width: 680px) { .stauplan-layout { grid-template-columns: 1fr; } }
-    .stauplan-boat svg { display: block; max-height: 430px; width: auto; }
-    .stauplan-fach { cursor: pointer; transition: opacity .15s, filter .15s; }
-    .stauplan-fach:hover { filter: brightness(1.25); }
-    .stauplan-fach.sp-sel { stroke: #fff; stroke-width: 3; filter: brightness(1.15); }
+    .stauplan-layout { max-width: 1060px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(200px, 360px) 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 700px) { .stauplan-layout { grid-template-columns: 1fr; } }
+    .grundriss-wrap { position: relative; display: block; border-radius: 10px; overflow: hidden; background: var(--surface2); }
+    .grundriss-wrap img { display: block; width: 100%; height: auto; }
+    .grundriss-wrap svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    .grundriss-missing { padding: 40px 20px; text-align: center; color: var(--text3); font-size: 12px; line-height: 1.6; }
+    .stauplan-fach { cursor: pointer; transition: fill .18s; fill: transparent; }
+    .stauplan-fach:hover:not(.sp-sel) { fill: rgba(255,255,255,0.09); }
+    .stauplan-fach.sp-sel { stroke-width: 12; }
     .stauplan-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-height: 160px; }
     .stauplan-panel-hd { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
     .sp-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
@@ -1497,65 +1500,41 @@
 
     <!-- Boat map + info panel -->
     <div class="stauplan-layout">
-      <div class="stauplan-boat">
-        <svg viewBox="0 0 240 490" xmlns="http://www.w3.org/2000/svg">
+      <!-- Grundriss-Bild mit klickbarem SVG-Overlay -->
+      <div class="grundriss-wrap" id="grundrissWrap">
+        <img id="grundrissImg" src="/static/grundriss.jpg" alt="MAVE Grundriss"
+             onerror="document.getElementById('grundrissWrap').innerHTML='<div class=\'grundriss-missing\'>📐 Grundriss-Bild fehlt<br><small>Bild als <code>static/grundriss.jpg</code> speichern</small></div>'">
+        <!-- SVG-Overlay: Koordinaten im Original-Bildraum 5100×7008 px -->
+        <!-- preserveAspectRatio=none → Overlay deckt Bild pixel-genau ab -->
+        <svg viewBox="0 0 5100 7008" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <clipPath id="hullClip">
-              <path d="M120,12 C168,30 207,92 210,174 L210,332 C208,410 173,460 120,472 C67,460 32,410 30,332 L30,174 C33,92 72,30 120,12 Z"/>
+            <!-- Grobe Rumpfkontur — Koordinaten anpassbar -->
+            <clipPath id="hullClip2">
+              <polygon points="
+                3476,400  3780,460  4150,630  4520,950
+                4870,1450 5010,2050 5025,2750 4960,3350
+                4810,4050 4620,4830 4380,5450 4080,6030
+                3720,6320 3476,6440
+                3232,6320 2872,6030 2572,5450 2332,4830
+                2142,4050 1992,3350 1927,2750 1942,2050
+                2083,1450 2432,950  2802,630  3172,460"/>
             </clipPath>
           </defs>
 
-          <!-- Compartments — clipped to hull -->
-          <g clip-path="url(#hullClip)">
-            <rect class="stauplan-fach" data-fach="bug-sb"   x="120" y="12"  width="92"  height="122" fill="#fbbf24" onclick="selectFach('bug-sb')"/>
-            <rect class="stauplan-fach" data-fach="bug-bb"   x="28"  y="12"  width="92"  height="122" fill="#f59e0b" onclick="selectFach('bug-bb')"/>
-            <rect class="stauplan-fach" data-fach="kab-bb"   x="30"  y="138" width="74"  height="105" fill="#60a5fa" onclick="selectFach('kab-bb')"/>
-            <rect class="stauplan-fach" data-fach="motor"    x="104" y="138" width="32"  height="105" fill="#9ca3af" onclick="selectFach('motor')"/>
-            <rect class="stauplan-fach" data-fach="kab-sb"   x="136" y="138" width="74"  height="105" fill="#93c5fd" onclick="selectFach('kab-sb')"/>
-            <rect class="stauplan-fach" data-fach="karten"   x="30"  y="247" width="92"  height="80"  fill="#34d399" onclick="selectFach('karten')"/>
-            <rect class="stauplan-fach" data-fach="kombuese" x="118" y="247" width="92"  height="80"  fill="#fb923c" onclick="selectFach('kombuese')"/>
-            <rect class="stauplan-fach" data-fach="salon"    x="30"  y="330" width="180" height="92"  fill="#a78bfa" onclick="selectFach('salon')"/>
-            <rect class="stauplan-fach" data-fach="werkbank" x="30"  y="425" width="86"  height="50"  fill="#f87171" onclick="selectFach('werkbank')"/>
-            <rect class="stauplan-fach" data-fach="wc"       x="118" y="425" width="92"  height="50"  fill="#22d3ee" onclick="selectFach('wc')"/>
-            <rect class="stauplan-fach" data-fach="heck"     x="30"  y="472" width="180" height="18"  fill="#94a3b8" onclick="selectFach('heck')"/>
+          <!-- Fach-Overlays — transparent bis Klick/Hover -->
+          <g clip-path="url(#hullClip2)">
+            <rect class="stauplan-fach" data-fach="bug-sb"   x="3476" y="400"  width="1534" height="1000" onclick="selectFach('bug-sb')"/>
+            <rect class="stauplan-fach" data-fach="bug-bb"   x="1942" y="400"  width="1534" height="1000" onclick="selectFach('bug-bb')"/>
+            <rect class="stauplan-fach" data-fach="kab-bb"   x="1942" y="1400" width="1100" height="820"  onclick="selectFach('kab-bb')"/>
+            <rect class="stauplan-fach" data-fach="motor"    x="3042" y="1400" width="876"  height="820"  onclick="selectFach('motor')"/>
+            <rect class="stauplan-fach" data-fach="kab-sb"   x="3918" y="1400" width="1092" height="820"  onclick="selectFach('kab-sb')"/>
+            <rect class="stauplan-fach" data-fach="karten"   x="1942" y="2220" width="1534" height="913"  onclick="selectFach('karten')"/>
+            <rect class="stauplan-fach" data-fach="kombuese" x="3476" y="2220" width="1534" height="913"  onclick="selectFach('kombuese')"/>
+            <rect class="stauplan-fach" data-fach="salon"    x="1942" y="3133" width="3068" height="1120" onclick="selectFach('salon')"/>
+            <rect class="stauplan-fach" data-fach="werkbank" x="1942" y="4253" width="1534" height="1187" onclick="selectFach('werkbank')"/>
+            <rect class="stauplan-fach" data-fach="wc"       x="3476" y="4253" width="1534" height="1187" onclick="selectFach('wc')"/>
+            <rect class="stauplan-fach" data-fach="heck"     x="1942" y="5440" width="3068" height="1000" onclick="selectFach('heck')"/>
           </g>
-
-          <!-- Internal grid lines -->
-          <g clip-path="url(#hullClip)" stroke="rgba(15,23,42,.35)" stroke-width="1.5" fill="none">
-            <line x1="30"  y1="134" x2="210" y2="134"/>
-            <line x1="30"  y1="243" x2="210" y2="243"/>
-            <line x1="30"  y1="327" x2="210" y2="327"/>
-            <line x1="30"  y1="422" x2="210" y2="422"/>
-            <line x1="120" y1="12"  x2="120" y2="134"/>
-            <line x1="104" y1="138" x2="104" y2="242"/>
-            <line x1="136" y1="138" x2="136" y2="242"/>
-            <line x1="118" y1="247" x2="118" y2="326"/>
-            <line x1="116" y1="425" x2="116" y2="472"/>
-          </g>
-
-          <!-- Labels -->
-          <g fill="rgba(15,23,42,.75)" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="8.5" font-weight="700" text-anchor="middle">
-            <text x="163" y="65">Bug SB</text>
-            <text x="75"  y="65">Bug BB</text>
-            <text x="67"  y="190">Kabine BB</text>
-            <text x="120" y="191" font-size="7.5">Motor</text>
-            <text x="173" y="190">Kabine SB</text>
-            <text x="74"  y="282">Kartenraum</text>
-            <text x="162" y="282">Kombüse</text>
-            <text x="120" y="381">Salon</text>
-            <text x="73"  y="453">Werkbank</text>
-            <text x="73"  y="463" font-size="7.5">/ Koje</text>
-            <text x="162" y="453">WC / Bad</text>
-            <text x="120" y="483" font-size="7.5">Heckstauraum</text>
-          </g>
-
-          <!-- Hull outline -->
-          <path d="M120,12 C168,30 207,92 210,174 L210,332 C208,410 173,460 120,472 C67,460 32,410 30,332 L30,174 C33,92 72,30 120,12 Z"
-                fill="none" stroke="#475569" stroke-width="2.5"/>
-
-          <!-- Bug label -->
-          <text x="120" y="7" fill="#64748b" font-size="7" text-anchor="middle" font-family="-apple-system,sans-serif">▲ BUG</text>
-          <text x="120" y="487" fill="#64748b" font-size="7" text-anchor="middle" font-family="-apple-system,sans-serif">HECK ▼</text>
         </svg>
       </div>
 
@@ -3667,10 +3646,19 @@ function closeStauplan() {
 }
 
 function selectFach(id) {
-  document.querySelectorAll('.stauplan-fach').forEach(el =>
-    el.classList.toggle('sp-sel', el.dataset.fach === id)
-  );
-  const fach  = STAU_FAECHER[id];
+  document.querySelectorAll('.stauplan-fach').forEach(el => {
+    el.classList.remove('sp-sel');
+    el.setAttribute('fill', 'transparent');
+    el.setAttribute('stroke', 'none');
+  });
+  const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
+  const fach = STAU_FAECHER[id];
+  if (el) {
+    el.classList.add('sp-sel');
+    el.setAttribute('fill', fach.color + '40');   // semi-transparent fill
+    el.setAttribute('stroke', fach.color);
+    el.setAttribute('stroke-width', '18');
+  }
   const items = STAU_ITEMS.filter(i => i.fach === id);
   $('stauplanPanel').innerHTML = `
     <div class="stauplan-panel-hd" style="color:${fach.color}">
