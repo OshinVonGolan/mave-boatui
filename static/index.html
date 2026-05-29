@@ -4169,7 +4169,17 @@ async function createMondayItem() {
     const newItem = await r.json();
     const group = _mondayData?.groups?.find(g => g.id === groupId);
     if (group && newItem.id) {
-      group.items.unshift({ id: newItem.id, name: newItem.name || name, columns: {} });
+      // Parse column_values from API response into the same format as get_board
+      const cols = {};
+      (newItem.column_values || []).forEach(cv => {
+        const statusCols = _mondayData?.status_columns || [];
+        if (statusCols.some(sc => sc.id === cv.id)) {
+          let idx = '';
+          try { idx = String(JSON.parse(cv.value || '{}').index ?? ''); } catch(_) {}
+          cols[cv.id] = { text: cv.text || '', index: idx };
+        }
+      });
+      group.items.unshift({ id: newItem.id, name: newItem.name || name, columns: cols });
     }
     toggleMondayNewForm();
     renderMondayBoard(_mondayData);
