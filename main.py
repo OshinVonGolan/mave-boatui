@@ -41,8 +41,20 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.7.4'
+VERSION  = _git_semver() or '1.8.0'
 GIT_HASH = _git_hash()
+
+
+def read_json(path: Path, default=None):
+    """JSON-Datei laden; default zurückgeben wenn nicht vorhanden."""
+    if path.exists():
+        return json.loads(path.read_text())
+    return default
+
+
+def write_json(path: Path, data) -> None:
+    """JSON-Datei hübsch + UTF-8 schreiben."""
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +74,7 @@ alarms  = AlarmEngine()
 
 _CONN_FILE = BASE_DIR / 'connectivity.json'
 if _CONN_FILE.exists():
-    _conn_cfg  = json.loads(_CONN_FILE.read_text())
+    _conn_cfg  = read_json(_CONN_FILE, {})
     conn_mon   = ConnectivityMonitor(
         router_host  = _conn_cfg.get('router_host',   'https://192.168.1.1'),
         router_user  = _conn_cfg.get('router_user',   'admin'),
@@ -75,13 +87,13 @@ else:
 
 _MONDAY_FILE = BASE_DIR / 'monday.json'
 if _MONDAY_FILE.exists():
-    _monday_cfg = json.loads(_MONDAY_FILE.read_text())
+    _monday_cfg = read_json(_MONDAY_FILE, {})
 else:
     _monday_cfg = {}
     log.warning('monday.json nicht gefunden — Monday-Integration deaktiviert')
 
 def _apply_presets_config():
-    data = json.loads(PRESETS_FILE.read_text())
+    data = read_json(PRESETS_FILE)
     batt = data.get('batteries', {})
     can_if.set_battery_instances(
         service=int(batt.get('service_instance', 0)),
@@ -145,8 +157,17 @@ async def lifespan(_app: FastAPI):
     log.info("CAN-Reader gestoppt")
 
 
+class _NoCacheStatic(StaticFiles):
+    """StaticFiles, das Revalidierung erzwingt (no-cache) — so erscheinen
+    JS/CSS-Updates nach git pull sofort, liefern aber 304 wenn unverändert."""
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+
+
 app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
-app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
 
 
 @app.get('/', include_in_schema=False)
@@ -179,12 +200,12 @@ async def ws_endpoint(ws: WebSocket):
 
 @app.get('/api/presets')
 async def get_presets():
-    return json.loads(PRESETS_FILE.read_text())
+    return read_json(PRESETS_FILE)
 
 
 @app.post('/api/lights/preset/{preset_id}')
 async def apply_preset(preset_id: int):
-    data    = json.loads(PRESETS_FILE.read_text())
+    data    = read_json(PRESETS_FILE)
     presets = data.get('presets', [])
     if not (0 <= preset_id < len(presets)):
         raise HTTPException(404, detail='Preset nicht gefunden')
@@ -209,7 +230,7 @@ async def set_channels(body: dict):
 
 @app.patch('/api/lights/preset/{preset_id}')
 async def update_preset(preset_id: int, body: dict):
-    data    = json.loads(PRESETS_FILE.read_text())
+    data    = read_json(PRESETS_FILE)
     presets = data.get('presets', [])
     if not (0 <= preset_id < len(presets)):
         raise HTTPException(404, detail='Preset nicht gefunden')
@@ -221,7 +242,7 @@ async def update_preset(preset_id: int, body: dict):
         vals = list(body['values'])
         if len(vals) == 9:
             presets[preset_id]['values'] = [max(0, min(255, int(v))) for v in vals]
-    PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    write_json(PRESETS_FILE, data)
     log.info("Preset %d aktualisiert: '%s'", preset_id, presets[preset_id]['name'])
     return data
 
@@ -373,33 +394,29 @@ async def set_monday_status(item_id: str, body: dict):
 
 @app.get('/api/wartung')
 async def get_wartung():
-    if WARTUNG_FILE.exists():
-        return json.loads(WARTUNG_FILE.read_text())
-    return []
+    return read_json(WARTUNG_FILE, [])
 
 @app.put('/api/wartung')
 async def save_wartung(request: Request):
     body = await request.json()
-    WARTUNG_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
+    write_json(WARTUNG_FILE, body)
     return body
 
 
 @app.get('/api/stauplan')
 async def get_stauplan():
-    if STAUPLAN_FILE.exists():
-        return json.loads(STAUPLAN_FILE.read_text())
-    return []
+    return read_json(STAUPLAN_FILE, [])
 
 @app.put('/api/stauplan')
 async def save_stauplan(request: Request):
     body = await request.json()
-    STAUPLAN_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
+    write_json(STAUPLAN_FILE, body)
     return body
 
 
 @app.patch('/api/settings')
 async def update_settings(body: dict):
-    data = json.loads(PRESETS_FILE.read_text())
+    data = read_json(PRESETS_FILE)
     if 'tanks' in body:
         for key, val in body['tanks'].items():
             if key in data.get('tanks', {}):
@@ -409,5 +426,5 @@ async def update_settings(body: dict):
     if 'batteries' in body:
         data.setdefault('batteries', {}).update(body['batteries'])
         _apply_presets_config()
-    PRESETS_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    write_json(PRESETS_FILE, data)
     return data
