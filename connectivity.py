@@ -96,7 +96,11 @@ class ConnectivityMonitor:
                     'network':  sta.get('network', ''),
                 })
         except Exception as e:
-            log.warning('WiFi stations (%s/api/wireless/stations): %s', self._router_host, e)
+            # 501 = endpoint not implemented on this firmware; 403 = missing API permission
+            # Log only once at startup, not every poll
+            if not getattr(self, '_wifi_warn_logged', False):
+                log.info('WiFi stations nicht verfügbar (%s) — Karte wird ausgeblendet', e)
+                self._wifi_warn_logged = True
 
         return {
             'active_type':   primary.get('network_type', 'unknown'),
