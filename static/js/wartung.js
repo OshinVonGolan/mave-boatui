@@ -163,6 +163,8 @@ function renderWartung() {
     html += `<div class="w-cat">
       <div class="w-cat-hd" style="border-color:${cat.color};color:${cat.color}">
         <span class="w-dot" style="background:${cat.color}"></span>${cat.name}
+        <button onclick="event.stopPropagation();deleteWartungCat('${cat.id}')" title="Kategorie löschen"
+          style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 6px;font-size:13px;line-height:1">✕</button>
       </div>`;
     cat.tasks.forEach(task => {
       const s = getWartungStatus(task);
@@ -234,7 +236,7 @@ function openWartungTask(catId, taskId) {
   $('wEditDays').value           = task.interval_days;
   $('wEditIntervalLabel').value  = task.interval_label;
   $('wEditDoneBlock').style.display = '';
-  $('wEditDetails').open = false;
+  $('wEditDetails').open = true;   // Bearbeiten/Löschen direkt sichtbar
   $('wDeleteBtn') && ($('wDeleteBtn').style.display = '');
 
   // Logbuch — alle Einträge, neueste zuerst
@@ -343,6 +345,33 @@ function deleteWartungTask() {
   if (!confirm(`"${task?.name}" löschen?`)) return;
   cat.tasks = cat.tasks.filter(t => t.id !== _wEditTaskId);
   closeWartungEdit();
+  _wartungSave();
+  renderWartung();
+}
+
+const _WARTUNG_COLORS = ['#f97316','#3b82f6','#22c55e','#06b6d4','#a78bfa','#ec4899','#eab308','#14b8a6'];
+
+function addWartungCat() {
+  const name = (prompt('Name der neuen Kategorie:') || '').trim();
+  if (!name) return;
+  let id = _slugify(name);
+  const existing = new Set(WARTUNG_DATA.map(c => c.id));
+  while (existing.has(id)) id += '-2';
+  const color = _WARTUNG_COLORS[WARTUNG_DATA.length % _WARTUNG_COLORS.length];
+  WARTUNG_DATA.push({ id, name, color, tasks: [] });
+  _wartungSave();
+  renderWartung();
+}
+
+function deleteWartungCat(catId) {
+  const cat = WARTUNG_DATA.find(c => c.id === catId);
+  if (!cat) return;
+  const n = cat.tasks.length;
+  const msg = n
+    ? `Kategorie "${cat.name}" mit ${n} Aufgabe(n) löschen?`
+    : `Kategorie "${cat.name}" löschen?`;
+  if (!confirm(msg)) return;
+  WARTUNG_DATA = WARTUNG_DATA.filter(c => c.id !== catId);
   _wartungSave();
   renderWartung();
 }
