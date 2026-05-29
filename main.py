@@ -54,6 +54,7 @@ BASE_DIR      = Path(__file__).parent
 PRESETS_FILE  = BASE_DIR / 'presets.json'
 STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
+WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 
 state   = BoatState()
 can_if  = CanInterface(channel='can0', state=state)
@@ -364,6 +365,18 @@ async def set_monday_status(item_id: str, body: dict):
         return {'ok': True}
     except Exception as e:
         raise HTTPException(502, detail=str(e))
+
+
+@app.get('/api/wartung')
+async def get_wartung():
+    if WARTUNG_FILE.exists():
+        return json.loads(WARTUNG_FILE.read_text())
+    return []
+
+@app.put('/api/wartung')
+async def save_wartung(body: list):
+    WARTUNG_FILE.write_text(json.dumps(body, indent=2, ensure_ascii=False))
+    return body
 
 
 @app.get('/api/stauplan')
