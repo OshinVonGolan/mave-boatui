@@ -41,7 +41,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.7.1'
+VERSION  = _git_semver() or '1.7.2'
 GIT_HASH = _git_hash()
 
 logging.basicConfig(
@@ -302,7 +302,7 @@ async def system_version():
 
 @app.post('/api/system/update')
 async def system_update():
-    before = _git_version()
+    before = _git_hash()
     result = subprocess.run(
         ['git', 'pull'],
         cwd=BASE_DIR, capture_output=True, text=True, timeout=30,
@@ -310,7 +310,7 @@ async def system_update():
     if result.returncode != 0:
         raise HTTPException(500, detail=result.stderr.strip())
     changed = 'Already up to date.' not in result.stdout
-    after = _git_version()
+    after = _git_hash()
     log.info("git pull: %s", result.stdout.strip())
     if changed:
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))

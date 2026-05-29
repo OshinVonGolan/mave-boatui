@@ -2033,7 +2033,14 @@
     <div style="max-width:860px;margin:0 auto;padding:10px 16px 0">
       <input class="stauplan-search" type="search" id="mondaySearchInput" placeholder="Aufgaben suchen…"
              oninput="filterMonday(this.value)" style="margin:0 0 8px">
-      <div id="mondayLabelFilters" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="rule-cat-btn" id="mondayOnlyOpenBtn" onclick="toggleMondayOnlyOpen()">Nur offene</button>
+        <div id="mondayLabelFilters" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+        <button class="monday-refresh" id="mondayResetBtn" onclick="resetMondayFilters()" style="display:none">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          Filter zurücksetzen
+        </button>
+      </div>
     </div>
     <div class="monday-body" id="mondayBody">
       <div class="monday-empty">Lade Aufgaben…</div>
@@ -4106,10 +4113,12 @@ async function runUpdate() {
   fb.style.color = 'var(--text2)';
   fb.textContent = 'Lade…';
   try {
-    const r    = await fetch('/api/system/update', { method: 'POST' });
-    const data = await r.json();
+    const r   = await fetch('/api/system/update', { method: 'POST' });
+    const txt = await r.text();
+    let data = {};
+    try { data = JSON.parse(txt); } catch(_) { /* leere/HTML-Antwort beim Neustart */ }
     if (!r.ok) {
-      fb.textContent = 'Fehler: ' + (data.detail || r.status);
+      fb.textContent = 'Fehler: ' + (data.detail || `HTTP ${r.status}`);
       fb.style.color = 'var(--red)';
       btn.disabled = false;
       return;
@@ -4119,15 +4128,18 @@ async function runUpdate() {
         vi.textContent = `${data.version_before} → ${data.version_after}`;
       fb.textContent = 'Aktualisiert — Server startet neu…';
       fb.style.color = 'var(--green)';
+      // Nach Neustart automatisch neu laden
+      setTimeout(() => location.reload(), 4000);
     } else {
       fb.textContent = 'Bereits aktuell ✓';
       fb.style.color = 'var(--green)';
       btn.disabled = false;
     }
   } catch(e) {
-    fb.textContent = 'Fehler: ' + (e.message || 'Unbekannt');
-    fb.style.color = 'var(--red)';
-    btn.disabled = false;
+    // Verbindungsabbruch durch Neustart ist hier wahrscheinlich = Erfolg
+    fb.textContent = 'Server startet neu…';
+    fb.style.color = 'var(--green)';
+    setTimeout(() => location.reload(), 5000);
   }
 }
 
@@ -4708,6 +4720,32 @@ function saveStauEdit() {
 let _mondayData        = null;
 let _mondayFilter      = '';
 let _mondayLabelFilter = {};   // { columnId: index }
+let _mondayOnlyOpen    = false;
+
+function _mondayItemDone(item) {
+  return Object.values(item.columns || {}).some(cv =>
+    /fertig|erledigt|done|abgeschlossen|completed|fixed/i.test(cv.text || ''));
+}
+
+function _mondayFiltersActive() {
+  return !!_mondayFilter || _mondayOnlyOpen || Object.keys(_mondayLabelFilter).length > 0;
+}
+
+function toggleMondayOnlyOpen() {
+  _mondayOnlyOpen = !_mondayOnlyOpen;
+  $('mondayOnlyOpenBtn').classList.toggle('active', _mondayOnlyOpen);
+  if (_mondayData) renderMondayBoard(_mondayData);
+}
+
+function resetMondayFilters() {
+  _mondayFilter = '';
+  _mondayLabelFilter = {};
+  _mondayOnlyOpen = false;
+  const si = $('mondaySearchInput'); if (si) si.value = '';
+  $('mondayOnlyOpenBtn')?.classList.remove('active');
+  renderMondayLabelFilters();
+  if (_mondayData) renderMondayBoard(_mondayData);
+}
 
 function openMonday() {
   _closeAllOverlays();
@@ -4865,11 +4903,13 @@ function renderMondayBoard(data) {
   const fq = _mondayFilter;
 
   const labelFilters = Object.entries(_mondayLabelFilter);
+  $('mondayResetBtn').style.display = _mondayFiltersActive() ? '' : 'none';
 
   let html = '';
   data.groups.forEach(group => {
     const visible = (group.items || []).filter(i => {
       if (fq && !i.name.toLowerCase().includes(fq)) return false;
+      if (_mondayOnlyOpen && _mondayItemDone(i)) return false;
       // Label-Filter: alle gesetzten Spalten müssen passen
       for (const [colId, idx] of labelFilters) {
         if ((i.columns?.[colId]?.index ?? '') !== idx) return false;
