@@ -156,7 +156,8 @@ function updateFlow(data) {
   // ── DC-Verbraucher ────────────────────────────────────────────────────
   const g = $('fg-dcgrid');
   if (dcNetW != null) {
-    _setNode('dcgrid', _W(dcNetW), dcNetW > 10 ? '#f87171' : null);
+    const dcA = bat.voltage ? dcNetW / bat.voltage : null;
+    _setNode('dcgrid', _W(dcNetW), dcNetW > 10 ? '#f87171' : null, _A(dcA));
     if (g) g.classList.remove('dim');
   } else {
     _setNode('dcgrid', '--');
