@@ -234,7 +234,10 @@
       </svg>
       Batterie — Details
     </div>
-    <div class="ov-header-spacer"></div>
+    <button class="monday-refresh" onclick="openFlow()" title="Energiefluss-Diagramm">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Energiefluss
+    </button>
   </div>
   <div class="ov-body">
   <div class="bd-pg">
@@ -372,6 +375,75 @@
 
   </div><!-- bd-pg -->
   </div><!-- ov-body -->
+</div>
+
+<!-- ── Energiefluss Overlay ─────────────────────────────────────────────────── -->
+<div id="flowOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeFlow()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Energiefluss
+    </div>
+    <div class="ov-header-spacer"></div>
+  </div>
+  <div class="ov-body">
+    <div class="flow-wrap">
+      <!-- Verbindungslinien (hinter den Knoten) -->
+      <svg class="flow-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path class="flow-line" id="fl-solar1"  d="M15 12 L50 50"/>
+        <path class="flow-line" id="fl-solar2"  d="M15 33 L50 50"/>
+        <path class="flow-line" id="fl-solar3"  d="M15 54 L50 50"/>
+        <path class="flow-line" id="fl-alt"     d="M15 80 L50 50"/>
+        <path class="flow-line" id="fl-shore"   d="M85 16 L50 50"/>
+        <path class="flow-line" id="fl-inv"     d="M85 50 L50 50"/>
+        <path class="flow-line" id="fl-service" d="M35 90 L50 50"/>
+        <path class="flow-line" id="fl-starter" d="M65 90 L50 50"/>
+      </svg>
+
+      <!-- Zentrum: DC-Bordnetz -->
+      <div class="flow-hub" style="left:50%;top:50%">
+        <div class="flow-hub-name">DC-Bordnetz</div>
+        <div class="flow-hub-val" id="flowHubVal">-- W</div>
+      </div>
+
+      <!-- Knoten -->
+      <div class="flow-node" id="fn-solar1" style="left:15%;top:12%">
+        <div class="flow-node-ico">☀️</div><div class="flow-node-name">Solar 1</div>
+        <div class="flow-node-val" id="fv-solar1">--</div><div class="flow-node-sub" id="fs-solar1"></div>
+      </div>
+      <div class="flow-node" id="fn-solar2" style="left:15%;top:33%">
+        <div class="flow-node-ico">☀️</div><div class="flow-node-name">Solar 2</div>
+        <div class="flow-node-val" id="fv-solar2">--</div><div class="flow-node-sub" id="fs-solar2"></div>
+      </div>
+      <div class="flow-node" id="fn-solar3" style="left:15%;top:54%">
+        <div class="flow-node-ico">☀️</div><div class="flow-node-name">Solar 3</div>
+        <div class="flow-node-val" id="fv-solar3">--</div><div class="flow-node-sub" id="fs-solar3"></div>
+      </div>
+      <div class="flow-node" id="fn-alt" style="left:15%;top:80%">
+        <div class="flow-node-ico">⚙️</div><div class="flow-node-name">Lichtmaschine</div>
+        <div class="flow-node-val" id="fv-alt">--</div><div class="flow-node-sub" id="fs-alt"></div>
+      </div>
+      <div class="flow-node" id="fn-shore" style="left:85%;top:16%">
+        <div class="flow-node-ico">🔌</div><div class="flow-node-name">Landstrom 230V</div>
+        <div class="flow-node-val" id="fv-shore">--</div><div class="flow-node-sub" id="fs-shore"></div>
+      </div>
+      <div class="flow-node" id="fn-inv" style="left:85%;top:50%">
+        <div class="flow-node-ico">🔋</div><div class="flow-node-name">Inverter</div>
+        <div class="flow-node-val" id="fv-inv">--</div><div class="flow-node-sub" id="fs-inv"></div>
+      </div>
+      <div class="flow-node" id="fn-service" style="left:35%;top:90%">
+        <div class="flow-node-ico">🔋</div><div class="flow-node-name">Servicebatterie</div>
+        <div class="flow-node-val" id="fv-service">--</div><div class="flow-node-sub" id="fs-service"></div>
+      </div>
+      <div class="flow-node" id="fn-starter" style="left:65%;top:90%">
+        <div class="flow-node-ico">🚗</div><div class="flow-node-name">Starterbatterie</div>
+        <div class="flow-node-val" id="fv-starter">--</div><div class="flow-node-sub" id="fs-starter"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── Alarm Overlay ──────────────────────────────────────────────────────── -->
@@ -1136,6 +1208,7 @@
 <script src="/static/js/wartung.js"></script>
 <script src="/static/js/stauplan.js"></script>
 <script src="/static/js/monday.js"></script>
+<script src="/static/js/flow.js"></script>
 <script src="/static/js/init.js"></script>
 </body>
 </html>

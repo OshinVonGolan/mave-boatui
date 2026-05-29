@@ -197,6 +197,7 @@ window.addEventListener('popstate', () => {
   if (hash) {
     const map = {
       battery:  () => { $('battOverlay').classList.remove('hidden'); if (_lastBms) updateBms(_lastBms); setTimeout(renderCharts, 50); },
+      flow:     () => { $('flowOverlay').classList.remove('hidden'); if (_lastData) updateFlow(_lastData); },
       lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },
       network:  () => { $('networkOverlay').classList.remove('hidden'); fetchNetwork(); netTimer = setInterval(fetchNetwork, 5000); },

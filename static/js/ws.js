@@ -161,8 +161,11 @@ function updatePowerSources(data) {
   reRenderChargePie();
 }
 
+let _lastData = null;
+
 function handleData(data) {
   if (data.ping) return;
+  _lastData = data;
   if (data.version) $('versionBadge').textContent = 'v' + data.version;
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
@@ -173,6 +176,7 @@ function handleData(data) {
   }
   updatePowerSources(data);
   updateSolarCard(data);
+  updateFlow(data);
   if (data.bms) updateBms(data.bms);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
