@@ -208,6 +208,24 @@
     </div>
   </section>
 
+  <!-- ── Inverter Steuerung ── -->
+  <section class="card" id="inverterCard" style="grid-area:inverter">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Inverter
+      <span id="inverterStateLabel" style="margin-left:auto;font-size:12px;font-weight:600;color:var(--text3)">--</span>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="inv-btn" id="invBtnOn"  onclick="setInverterMode(2)">An</button>
+      <button class="inv-btn" id="invBtnEco" onclick="setInverterMode(5)">Eco</button>
+      <button class="inv-btn" id="invBtnOff" onclick="setInverterMode(4)">Aus</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap">
+      <span>AC: <strong id="invAcV">--</strong> V &nbsp; <strong id="invAcI">--</strong> A</span>
+      <span>DC: <strong id="invDcV">--</strong> V</span>
+    </div>
+  </section>
+
   <!-- ── Wartungsplan Kachel ── -->
   <section class="card card-wartung" id="wartungCard" onclick="openWartung()" style="cursor:pointer">
     <div class="card-title">

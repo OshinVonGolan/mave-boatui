@@ -8,9 +8,10 @@ import can
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
-    build_brightness_frames, build_time_frame, make_can_id,
+    build_brightness_frames, build_inverter_mode_frame, build_time_frame, make_can_id,
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
+    parse_charger_status_pgn, parse_inverter_status, parse_ve_direct_ext,
     parse_temperature,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
 )
@@ -46,6 +47,13 @@ class BoatState:
             'alarm_min_temp': None, 'alarm_max_temp': None,
             'cells': [],
         }
+        # VE.Direct-Geräte (via PGN 130910 / 127507 / 127750)
+        self.inverter = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
+                         'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None}
+        self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
+                         'dc_voltage': None, 'dc_current': None}   # Smart IP43 (Lader, inst 1)
+        self.orion    = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
+                         'dc_voltage': None, 'dc_current': None}   # Orion-XS DC-DC (inst 0)
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +63,9 @@ class BoatState:
             'solar':      dict(self.solar),
             'alternator': dict(self.alternator),
             'bms':        dict(self.bms),
+            'inverter':   dict(self.inverter),
+            'charger':    dict(self.charger),
+            'orion':      dict(self.orion),
         }
 
 
@@ -99,6 +110,18 @@ class CanInterface:
             log.info("Systemzeit gesendet (PGN 126992)")
         except can.CanError as e:
             log.error("CAN-Sendefehler Systemzeit: %s", e)
+
+    def send_inverter_mode(self, mode: int):
+        """Sendet PGN 130911 – Inverter Mode (2=An, 4=Aus, 5=Eco)."""
+        if self._bus is None:
+            log.warning("CAN nicht verbunden – Senden nicht möglich")
+            return
+        can_id, data = build_inverter_mode_frame(mode)
+        try:
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.info("Inverter-Modus %d gesendet (PGN 130911)", mode)
+        except can.CanError as e:
+            log.error("CAN-Sendefehler Inverter: %s", e)
 
     def send_brightness(self, values: list[int]):
         if self._bus is None:
@@ -242,6 +265,50 @@ class CanInterface:
             p = parse_brightness(payload)
             if p and self.state.lights['channels'] != p['channels']:
                 self.state.lights['channels'] = p['channels']
+                changed = True
+
+        elif pgn == 130910:
+            p = parse_ve_direct_ext(payload)
+            if p:
+                fields = ('state', 'power', 'cs', 'cs_label',
+                          'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power')
+                if p['type'] == 2 and p['instance'] == 0:  # Inverter
+                    target = self.state.inverter
+                    if p.get('cs_label'):
+                        p['state'] = p['cs_label']
+                    for k in fields:
+                        v = p.get(k)
+                        if v is not None and target.get(k) != v:
+                            target[k] = v; changed = True
+                    if 'power' in p and p['power'] is not None and target.get('power') != p['power']:
+                        target['power'] = p['power']; changed = True
+                elif p['type'] == 1 and p['instance'] == 0:  # Orion-XS DC-DC
+                    target = self.state.orion
+                    if p.get('cs_label'):
+                        p['state'] = p['cs_label']
+                    for k in ('state','power','cs','cs_label','dc_voltage','dc_current'):
+                        v = p.get(k)
+                        if v is not None and target.get(k) != v:
+                            target[k] = v; changed = True
+                elif p['type'] == 0:  # Lader (IP43 = inst 1, P5 = inst 2)
+                    target = self.state.charger
+                    if p.get('cs_label'):
+                        p['state'] = p['cs_label']
+                    for k in ('state','power','cs','cs_label','dc_voltage','dc_current'):
+                        v = p.get(k)
+                        if v is not None and target.get(k) != v:
+                            target[k] = v; changed = True
+
+        elif pgn == 127750:
+            p = parse_inverter_status(payload)
+            if p and p.get('state') and self.state.inverter.get('state') != p['state']:
+                self.state.inverter['state'] = p['state']
+                changed = True
+
+        elif pgn == 127507:
+            p = parse_charger_status_pgn(payload)
+            if p and p.get('state') and self.state.charger.get('state') != p['state']:
+                self.state.charger['state'] = p['state']
                 changed = True
 
         if changed:

@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 130900, 130901, 130902}
+FAST_PACKET_PGNS = {126720, 130900, 130901, 130902, 130910}
 
 
 class FastPacketReassembler:
@@ -267,7 +267,97 @@ PGN_NAMES: dict[int, str] = {
     130900: 'Battery Stats (Custom)',
     130901: 'BMS Pack Data (Custom)',
     130902: 'BMS Cell Data (Custom)',
+    130910: 'VE.Direct Extended (Custom)',
+    130911: 'VE.Direct Control (Custom)',
+    127507: 'Charger Status',
+    127750: 'Converter / Inverter Status',
 }
+
+# CS → Ladebezeichnung (VE.Direct / NMEA2K)
+_CHARGER_CS = {
+    0: 'Aus', 2: 'Fehler', 3: 'Bulk', 4: 'Absorption', 5: 'Float',
+    6: 'Storage', 7: 'Equalise', 245: 'Starting', 247: 'Auto-Equalise',
+    252: 'Ext. Control',
+}
+_INVERTER_CS = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 9: 'Aktiv'}
+
+
+def parse_ve_direct_ext(data: bytes):
+    """PGN 130910 – VE.Direct Extended (Fast Packet, 28 Byte Payload).
+    Liefert Daten zu Ladern (Typ 0), DC-DC-Wandlern (Typ 1) und Invertern (Typ 2).
+    """
+    if len(data) < 28:
+        return None
+    inst  = data[0]
+    dtype = data[1]
+    cs    = data[2] if data[2] != 0xFF else None
+    mode  = data[3] if data[3] != 0xFF else None
+
+    def _f(off):
+        v = struct.unpack_from('<f', data, off)[0]
+        return None if (math.isnan(v) or math.isinf(v)) else round(v, 3)
+
+    dc_v = _f(4);  dc_i = _f(8)
+    ac_v = _f(12); ac_i = _f(16); ac_s = _f(20)
+    err  = struct.unpack_from('<h', data, 24)[0]
+    warn = struct.unpack_from('<h', data, 26)[0]
+
+    cs_label  = _CHARGER_CS.get(cs) if cs is not None else None
+    if dtype == 2:  # Inverter
+        cs_label = _INVERTER_CS.get(cs) if cs is not None else None
+        power = round(ac_v * ac_i, 1) if ac_v and ac_i else None
+    else:
+        power = round(dc_v * dc_i, 1) if dc_v and dc_i else None
+
+    return {
+        'instance':   inst,
+        'type':       dtype,       # 0=Lader, 1=DC-DC, 2=Inverter
+        'cs':         cs,
+        'cs_label':   cs_label,
+        'mode':       mode,
+        'dc_voltage': dc_v,
+        'dc_current': dc_i,
+        'ac_voltage': ac_v if dtype == 2 else None,
+        'ac_current': ac_i if dtype == 2 else None,
+        'ac_power':   ac_s if dtype == 2 else None,
+        'power':      power,
+        'err':        err  if err  != -1 else None,
+        'warn':       warn if warn != -1 else None,
+    }
+
+
+def parse_inverter_status(data: bytes):
+    """PGN 127750 – Converter/Inverter Status (Single Frame)."""
+    if len(data) < 4:
+        return None
+    # Byte 3 bits 0-3: operating state per NMEA2K N2kCI_OperatingState
+    state_nibble = data[3] & 0x0F
+    STATES = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 3: 'Aktiv', 9: 'Aktiv'}
+    return {'state': STATES.get(state_nibble, f'State {state_nibble}')}
+
+
+def parse_charger_status_pgn(data: bytes):
+    """PGN 127507 – Charger Status (Single Frame)."""
+    if len(data) < 4:
+        return None
+    inst = data[0]
+    batt = data[1]
+    mode = data[2] & 0x0F   # charging mode / state
+    MODES = {
+        0: 'Unbekannt', 1: 'Aus', 2: 'Bulk', 3: 'Absorption',
+        4: 'Überladen', 5: 'Equalise', 6: 'Float', 7: 'Kein Float',
+        8: 'Const VI', 9: 'Deaktiviert', 0xF: 'Fehler',
+    }
+    return {'instance': inst, 'battery': batt, 'state': MODES.get(mode, f'Mode {mode}')}
+
+
+def build_inverter_mode_frame(mode: int) -> tuple[int, bytes]:
+    """Erstellt PGN 130911 – Inverter Mode Control (Single Frame, 3 Byte).
+    mode: 2=An, 4=Aus, 5=Eco
+    """
+    payload = bytes([0, 0, mode])   # deviceInstance=0, commandType=0, value
+    can_id  = make_can_id(130911, RPI_SOURCE_ADDRESS, priority=3)
+    return can_id, payload
 
 
 def build_time_frame(ts: float) -> tuple[int, bytes]:

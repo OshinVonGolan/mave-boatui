@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.15.1'
+VERSION  = _git_semver() or '1.16.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -362,6 +362,15 @@ async def system_update():
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     return {'ok': True, 'changed': changed, 'output': result.stdout.strip(),
             'version_before': before, 'version_after': after}
+
+
+@app.post('/api/inverter/mode')
+async def set_inverter_mode(body: dict):
+    mode = body.get('mode')
+    if mode not in (2, 4, 5):
+        raise HTTPException(400, detail='mode muss 2 (An), 4 (Aus) oder 5 (Eco) sein')
+    can_if.send_inverter_mode(int(mode))
+    return {'ok': True, 'mode': mode}
 
 
 @app.get('/api/monday/board')

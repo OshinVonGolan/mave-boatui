@@ -120,7 +120,9 @@ function renderChargePie(active, isAvg) {
   }
 
   // Legende
-  $('chargeSourceLegend').innerHTML = active.map(s => {
+  const legEl = $('chargeSourceLegend');
+  if (!legEl) return;
+  legEl.innerHTML = active.map(s => {
     const pct = Math.round(s.watts / total * 100);
     return `<div class="charge-src-row">
       <div class="charge-src-dot" style="background:${s.color}"></div>
@@ -163,6 +165,34 @@ function updatePowerSources(data) {
 
 let _lastData = null;
 
+async function setInverterMode(mode) {
+  const labels = { 2: 'An', 4: 'Aus', 5: 'Eco' };
+  try {
+    const r = await fetch('/api/inverter/mode', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    if (!r.ok) { const e=await r.json().catch(()=>{}); alert('Fehler: '+(e?.detail||r.status)); return; }
+    updateInverterCard({ state: labels[mode] });
+  } catch(e) { alert('Verbindungsfehler'); }
+}
+
+function updateInverterCard(inv) {
+  if (!inv) return;
+  const lbl = $('inverterStateLabel');
+  if (lbl) {
+    lbl.textContent = inv.state || '--';
+    lbl.style.color = inv.state === 'Aktiv' ? 'var(--green)' : inv.state === 'Eco' ? 'var(--yellow)' : inv.state === 'Aus' ? 'var(--text3)' : 'var(--text3)';
+  }
+  ['On','Eco','Off'].forEach(k => $('invBtn'+k)?.classList.remove('active-on','active-eco','active-off'));
+  if (inv.state === 'Aktiv')  { $('invBtnOn')?.classList.add('active-on'); }
+  if (inv.state === 'Eco')    { $('invBtnEco')?.classList.add('active-eco'); }
+  if (inv.state === 'Aus')    { $('invBtnOff')?.classList.add('active-off'); }
+  const av = $('invAcV'); if (av) av.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) : '--';
+  const ai = $('invAcI'); if (ai) ai.textContent = inv.ac_current != null ? inv.ac_current.toFixed(1) : '--';
+  const dv = $('invDcV'); if (dv) dv.textContent = inv.dc_voltage != null ? inv.dc_voltage.toFixed(1) : '--';
+}
+
 function handleData(data) {
   if (data.ping) return;
   _lastData = data;
@@ -177,6 +207,7 @@ function handleData(data) {
   updatePowerSources(data);
   updateSolarCard(data);
   updateFlow(data);
+  if (data.inverter) updateInverterCard(data.inverter);
   if (data.bms) updateBms(data.bms);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);

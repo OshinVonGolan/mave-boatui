@@ -57,14 +57,23 @@
     main { display: grid; gap: var(--gap); padding: var(--gap);
       padding-top: calc(var(--header-h) + var(--gap));
       grid-template-columns: 1fr;
-      grid-template-areas: "battery" "tanks" "lights" "wartung"; }
+      grid-template-areas: "battery" "tanks" "lights" "inverter" "wartung"; }
     @media (min-width: 640px) {
       main { grid-template-columns: 1fr 1fr;
-        grid-template-areas: "battery tanks" "lights lights" "wartung wartung"; } }
+        grid-template-areas: "battery tanks" "lights inverter" "wartung wartung"; } }
     @media (min-width: 1024px) {
       main { grid-template-columns: 1fr 1fr 1fr;
-        grid-template-areas: "battery tanks lights" "wartung wartung wartung";
+        grid-template-areas: "battery tanks lights" "inverter wartung wartung";
         max-width: 1200px; margin: 0 auto; } }
+    .card-wartung { grid-area: wartung; }
+    /* Inverter-Button-Gruppe */
+    .inv-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 700;
+      cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text2);
+      transition: all .15s; }
+    .inv-btn:hover { background: var(--surface); }
+    .inv-btn.active-on  { background: #22c55e22; border-color: #22c55e; color: #22c55e; }
+    .inv-btn.active-eco { background: #eab30822; border-color: #eab308; color: #eab308; }
+    .inv-btn.active-off { background: #ef444422; border-color: #ef4444; color: #ef4444; }
 
     /* ── Cards ── */
     .card { background: var(--surface); border: 1px solid var(--border);
