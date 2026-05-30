@@ -29,6 +29,12 @@ class BoatState:
             'max_voltage': None, 'time_since_full': None,
             'cell_voltage_min': None, 'cell_voltage_max': None,
             'temperature': None,
+            # Erweiterte Shunt-Felder (ab 50-Byte-PGN 130900)
+            'ttg': None,                  # Time to Go (Minuten)
+            'starter_min_voltage': None,  # H15 – Min. Starterspannung (V)
+            'starter_max_voltage': None,  # H16 – Max. Starterspannung (V)
+            'energy_out_kwh': None,       # H17 – Entladene Energie gesamt (kWh)
+            'energy_in_kwh': None,        # H18 – Geladene Energie gesamt (kWh)
         }
         self.tanks  = {'tank1': None, 'tank2': None}
         self.lights = {'channels': [0] * 9}

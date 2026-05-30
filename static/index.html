@@ -118,7 +118,7 @@
         <div class="value"><span id="battAh">--</span><span class="unit">Ah</span></div>
       </div>
       <div class="batt-item">
-        <div class="label">Rest (BMS)</div>
+        <div class="label">Restkapazität</div>
         <div class="value"><span id="battRemAh">--</span><span class="unit">Ah</span></div>
       </div>
     </div>
@@ -552,6 +552,10 @@
             <option value="shunt">Shunt</option>
             <option value="bms">BMS</option>
           </select>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sBattCapacity">Kapazität (Ah)</label>
+          <input class="settings-input narrow" id="sBattCapacity" type="number" min="1" max="9999" step="1" placeholder="z.B. 100" />
         </div>
       </div>
       <div class="settings-actions">

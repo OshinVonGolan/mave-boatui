@@ -397,14 +397,11 @@ function cellColor(v, isLowest, isHighest, alarmMin, alarmMax) {
 function updateBms(bms) {
   if (!bms) return;
   _lastBms = bms;
-  // Restkapazität auf der Startseite
+  // Restkapazität: Shunt (updateBattery) hat Vorrang; BMS als Fallback
   const remAhEl = $('battRemAh');
-  if (remAhEl) {
-    if (bms.capacity_ah != null && bms.soc != null) {
+  if (remAhEl && remAhEl.textContent === '--') {
+    if (bms.capacity_ah != null && bms.soc != null)
       remAhEl.textContent = (bms.capacity_ah * bms.soc / 100).toFixed(1);
-    } else {
-      remAhEl.textContent = '--';
-    }
   }
   const hasBms = bms.voltage != null;
   $('bmsNoSignal').style.display  = hasBms ? 'none' : '';

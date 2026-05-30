@@ -92,7 +92,7 @@ def parse_dc_status(data: bytes):
 
 
 def parse_battery_stats(data: bytes):
-    """PGN 130900 – Custom Battery Stats (Fast Packet, 26 Byte)."""
+    """PGN 130900 – Custom Battery Stats (Fast Packet, 26 oder 50 Byte)."""
     if len(data) < 26:
         return None
 
@@ -108,7 +108,7 @@ def parse_battery_stats(data: bytes):
     time_since  = struct.unpack_from('<I', data, 18)[0]
     soc         = _f(22)
 
-    return {
+    result = {
         'power':           round(power,       1) if power       is not None else None,
         'consumed_ah':     round(consumed_ah, 1) if consumed_ah is not None else None,
         'cycles':          cycles      if cycles     != 0xFFFF        else None,
@@ -117,6 +117,25 @@ def parse_battery_stats(data: bytes):
         'time_since_full': time_since  if time_since != 0xFFFF_FFFF   else None,
         'soc':             round(soc,  1)         if soc        is not None else None,
     }
+
+    # Erweiterte Felder (ab Firmware-Version mit 50-Byte-PGN)
+    if len(data) >= 50:
+        temp        = _f(26)
+        ttg_raw     = struct.unpack_from('<I', data, 30)[0]
+        starter_min = _f(34)
+        starter_max = _f(38)
+        energy_out  = _f(42)
+        energy_in   = _f(46)
+        result.update({
+            'temperature':        round(temp, 1)        if temp        is not None else None,
+            'ttg':                ttg_raw               if ttg_raw     != 0xFFFF_FFFF else None,
+            'starter_min_voltage': round(starter_min, 3) if starter_min is not None else None,
+            'starter_max_voltage': round(starter_max, 3) if starter_max is not None else None,
+            'energy_out_kwh':     round(energy_out, 2)  if energy_out  is not None else None,
+            'energy_in_kwh':      round(energy_in,  2)  if energy_in   is not None else None,
+        })
+
+    return result
 
 
 def parse_bms_pack(data: bytes):

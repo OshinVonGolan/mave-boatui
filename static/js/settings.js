@@ -130,8 +130,9 @@ function _showSettingsPanel(tab) {
   $('sTank2Name').value   = tanksConfig.tank2?.name ?? '';
   $('sTank2Cap').value    = tanksConfig.tank2?.capacity_l ?? '';
   $('sTank2Color').value  = tanksConfig.tank2?.color ?? '#3b82f6';
-  $('sBattService').value = batteriesConfig.service_instance ?? 0;
-  $('sBattStarter').value = batteriesConfig.starter_instance ?? 1;
+  $('sBattService').value  = batteriesConfig.service_instance ?? 0;
+  $('sBattStarter').value  = batteriesConfig.starter_instance ?? 1;
+  $('sBattCapacity').value = batteriesConfig.capacity_ah ?? '';
   const psEl = $('sBattPrimary'); if (psEl) psEl.value = batteriesConfig.primary_source ?? 'shunt';
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
@@ -173,6 +174,7 @@ async function saveSettings() {
       service_instance: parseInt($('sBattService').value) || 0,
       starter_instance: parseInt($('sBattStarter').value) || 1,
       primary_source:   $('sBattPrimary')?.value ?? 'shunt',
+      capacity_ah:      parseFloat($('sBattCapacity').value) || null,
     },
   };
 

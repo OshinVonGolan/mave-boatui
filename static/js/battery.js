@@ -146,16 +146,25 @@ function updateBattery(b) {
   $('battCycles').textContent  = b.cycles ?? '--';
   $('battFull').textContent    = timeSince(b.time_since_full);
 
+  // Restkapazität: konfigurierte Ah + consumed_ah vom Shunt (consumed_ah ist negativ)
+  const capAh   = batteriesConfig.capacity_ah ?? null;
+  const remEl   = $('battRemAh');
+  if (remEl && capAh != null && b.consumed_ah != null) {
+    const rem = Math.max(0, capAh + b.consumed_ah);
+    remEl.textContent = rem.toFixed(1);
+  }
+
   // Detail-Overlay-Felder (non-dual)
   $('dP').textContent   = fmt(b.power, 0);
   $('dAh').textContent  = fmt(b.consumed_ah);
   $('dStarter').textContent = fmtV(b.starter_voltage);
-  if (b.starter_voltage != null) {
-    if (_starterMin === null || b.starter_voltage < _starterMin) _starterMin = b.starter_voltage;
-    if (_starterMax === null || b.starter_voltage > _starterMax) _starterMax = b.starter_voltage;
-    $('dStarterMin').textContent = fmtV(_starterMin);
-    $('dStarterMax').textContent = fmtV(_starterMax);
-  }
+  // Starter Min/Max: bevorzugt Shunt-Werte (H15/H16), Fallback JS-Session
+  if (b.starter_min_voltage != null) _starterMin = b.starter_min_voltage;
+  else if (b.starter_voltage != null && (_starterMin === null || b.starter_voltage < _starterMin)) _starterMin = b.starter_voltage;
+  if (b.starter_max_voltage != null) _starterMax = b.starter_max_voltage;
+  else if (b.starter_voltage != null && (_starterMax === null || b.starter_voltage > _starterMax)) _starterMax = b.starter_voltage;
+  $('dStarterMin').textContent = fmtV(_starterMin);
+  $('dStarterMax').textContent = fmtV(_starterMax);
   $('dCycles').textContent  = b.cycles   ?? '--';
   // min/max: prefer shunt PGN-130900 values; fall back to JS-tracked session extremes
   if (b.voltage != null) {
@@ -164,7 +173,7 @@ function updateBattery(b) {
   }
   $('dMinV').textContent = fmtV(b.min_voltage ?? _serviceMin);
   $('dMaxV').textContent = fmtV(b.max_voltage ?? _serviceMax);
-  $('dFull').textContent    = timeSince(b.time_since_full);
+  $('dFull').textContent = timeSince(b.time_since_full);
 
   updateDualTiles();
   recordHistory(b);
