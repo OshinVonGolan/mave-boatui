@@ -183,7 +183,7 @@ const INV_RATED_W = 2000;  // Nennleistung (= 100%)
 const INV_MAX_W   = 2500;  // Gauge-Maximum (125% für Spitzen sichtbar)
 const _INV_CX = 80, _INV_CY = 68, _INV_R = 58;
 const _INV_START = 225, _INV_SWEEP = 270;
-const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Const VI','Ext. Control','External Control']);
+const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Starting','Auto-Equalise','Const VI','Überladen','Kein Float','Ext. Control','External Control']);
 
 function _invArc(cx, cy, r, start, sweep) {
   const rad = a => (a - 90) * Math.PI / 180;
@@ -219,7 +219,8 @@ function updateInverterCard(inv, charger) {
   _invCurrentState = inv.state || 'Aus';
 
   // Landstrom ableiten aus Ladegerät-Status
-  const shoreActive = charger?.state != null && _SHORE_STATES.has(charger.state);
+  const shoreActive = (charger?.state != null && _SHORE_STATES.has(charger.state))
+                   || (charger?.power != null && charger.power > 0);
   const dot = $('shoreIndicator');
   const lbl = $('shoreLabel');
   if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');

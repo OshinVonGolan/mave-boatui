@@ -131,7 +131,7 @@ function updateWartungHomeTile() {
     html += `<div class="w-home-row">
       <span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
         <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
-        <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);white-space:nowrap;flex-shrink:0">${t.catName}</span>
+        <span class="w-home-cat" style="background:${t.catColor}28">${t.catName}</span>
         <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</span>
       </span>
       <span style="color:${s.color};font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px">${s.label}</span>

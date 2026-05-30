@@ -64,7 +64,8 @@
     @media (min-width: 1024px) {
       main { grid-template-columns: 1fr 1fr 1fr;
         grid-template-areas: "battery tanks lights" "inverter wartung wartung";
-        max-width: 1200px; margin: 0 auto; } }
+        max-width: 1200px; margin: 0 auto; }
+      .card-wartung { max-height: none; min-height: 0; } }
     .card-wartung { grid-area: wartung; }
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
@@ -125,6 +126,10 @@
     .w-home-row:last-child { border-bottom:none; }
     .w-home-badge { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
     .w-badge-pill { font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; }
+    .w-home-cat { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+      color:var(--text2); white-space:nowrap; flex-shrink:0; padding:2px 5px; border-radius:4px; }
+    .card-wartung { overflow:hidden; max-height:228px; }
+    #wartungHomeBody { overflow:hidden; flex:1; min-height:0; }
     .card-title { display: flex; align-items: center; gap: 8px; font-size: 11px;
       font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
     .card-title svg { flex-shrink: 0; }
