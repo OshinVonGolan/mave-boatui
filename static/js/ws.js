@@ -210,10 +210,7 @@ function updateInverterCard(inv, charger) {
   if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');
   if (lbl) { lbl.textContent = shoreActive ? 'Landstrom aktiv' : 'Kein Landstrom'; lbl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
 
-  // Zustandslabel
-  const stLbl = $('invStateLabel');
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
-  if (stLbl) { stLbl.textContent = inv.state || '--'; stLbl.style.color = isActive ? 'var(--green)' : 'var(--text3)'; }
 
   // Gauge
   const power = inv.power;
@@ -237,7 +234,7 @@ function updateInverterCard(inv, charger) {
   // Toggle-Button
   const btn = $('invToggleBtn');
   if (btn) {
-    btn.textContent = isActive ? 'Aus' : 'An';
+    btn.textContent = isActive ? 'Inverter aus' : 'Inverter ein';
     btn.className   = 'inv-btn inv-toggle ' + (isActive ? 'active-off' : 'active-on');
   }
 }
