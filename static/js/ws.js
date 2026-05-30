@@ -180,7 +180,7 @@ async function setInverterMode(mode) {
 // ── Inverter / 230V Kachel ─────────────────────────────────────────────────
 
 const INV_MAX_W = 2000;
-const _INV_CX = 60, _INV_CY = 54, _INV_R = 44;
+const _INV_CX = 80, _INV_CY = 68, _INV_R = 58;
 const _INV_START = 225, _INV_SWEEP = 270;
 const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Const VI','Ext. Control','External Control']);
 
