@@ -7,16 +7,17 @@ const histData = [];  // [{ts, soc, voltage, current}, ...]
 const SERIES_DEF = {
   soc:      { color: '#22c55e', unit: '%',  label: 'SOC',       fmt: v => Math.round(v) + ' %',         domain: [0, 100] },
   voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4 },
-  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true },
-  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true },
+  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: true },
+  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, smooth: true },
   zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.01, zero: true },
 };
 
 const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
-let chartSeries   = { soc: true, voltage: true, current: true, solar: true, zelldiff: false };
-let chartRangeSec = 1800;
-let chartHoverPos = null; // null=live, 0.0–1.0=scrub fraction
+let chartSeries    = { soc: true };   // SOC-Toggle (linke Achse)
+let chartSecondary = 'current';       // aktive Sekundär-Serie (rechte Achse) oder null
+let chartRangeSec  = 1800;
+let chartHoverPos  = null; // null=live, 0.0–1.0=scrub fraction
 let _lastSolarW   = null;
 
 function recordHistory(b) {
@@ -28,6 +29,17 @@ function recordHistory(b) {
   if (_lastZelldiff != null) entry.zelldiff = _lastZelldiff;
   histData.push(entry);
   if (histData.length > HIST_MAX) histData.shift();
+}
+
+// Exponential Moving Average — glättet stark springende Werte (z.B. Strom)
+function _ema(pts, key, alpha = 0.12) {
+  let s = null;
+  return pts.map(d => {
+    const v = d[key];
+    if (v == null) { s = null; return d; }
+    s = (s === null) ? v : alpha * v + (1 - alpha) * s;
+    const r = Object.assign({}, d); r[key] = s; return r;
+  });
 }
 
 // Berechnet [lo,hi] Achsen-Domäne einer Serie aus den Werten + Definition
@@ -45,8 +57,15 @@ function _seriesDomain(vals, def) {
 }
 
 function toggleSeries(key) {
-  chartSeries[key] = !chartSeries[key];
-  $(`tog-${key}`).classList.toggle('active', chartSeries[key]);
+  if (key === 'soc') {
+    chartSeries.soc = !chartSeries.soc;
+    $('tog-soc').classList.toggle('active', chartSeries.soc);
+  } else {
+    const prev = chartSecondary;
+    chartSecondary = (chartSecondary === key) ? null : key;
+    if (prev) $(`tog-${prev}`).classList.remove('active');
+    if (chartSecondary) $(`tog-${chartSecondary}`).classList.add('active');
+  }
   renderCharts();
 }
 
@@ -58,18 +77,22 @@ function setChartRange(btn, secs) {
   renderCharts();
 }
 
-function renderChartLegend(pts, scrubTs) {
+function renderChartLegend(pts, secPts, scrubTs) {
   const leg = $('chartLegend');
   if (!leg) return;
-  leg.innerHTML = Object.entries(SERIES_DEF).filter(([k]) => chartSeries[k]).map(([key, def]) => {
-    const ptsWithKey = pts.filter(d => d[key] != null);
+  const entries = [];
+  if (chartSeries.soc) entries.push({ key: 'soc', src: pts });
+  if (chartSecondary)  entries.push({ key: chartSecondary, src: secPts });
+  leg.innerHTML = entries.map(({ key, src }) => {
+    const def = SERIES_DEF[key];
+    const ptsK = src.filter(d => d[key] != null);
     let displayVal = null;
-    if (scrubTs != null && ptsWithKey.length) {
-      let closest = ptsWithKey[0], minDist = Math.abs(ptsWithKey[0].ts - scrubTs);
-      ptsWithKey.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < minDist) { minDist = dist; closest = d; } });
-      displayVal = closest[key];
+    if (scrubTs != null && ptsK.length) {
+      let cl = ptsK[0], md = Math.abs(ptsK[0].ts - scrubTs);
+      ptsK.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < md) { md = dist; cl = d; } });
+      displayVal = cl[key];
     } else {
-      displayVal = ptsWithKey.at(-1)?.[key] ?? null;
+      displayVal = ptsK.at(-1)?.[key] ?? null;
     }
     return `<div class="chart-legend-item">
       <div class="chart-legend-dot" style="background:${def.color}"></div>
@@ -167,25 +190,38 @@ function renderCharts() {
   const xOf    = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
   const scrubTs = chartHoverPos !== null ? tMin0 + chartHoverPos * chartRangeSec : null;
 
-  renderChartLegend(pts, scrubTs);
+  // Sekundär-Punkte ggf. glätten (EMA), bevor Achsen/Legende berechnet werden
+  const secPts = chartSecondary && SERIES_DEF[chartSecondary]?.smooth
+    ? _ema(pts, chartSecondary)
+    : pts;
 
-  // Aktive Serien
+  renderChartLegend(pts, secPts, scrubTs);
+
+  // Aktive Serien aufbauen: SOC fest links (0–100%), Sekundär-Serie rechts
   const active = [];
-  Object.entries(SERIES_DEF).forEach(([key, def]) => {
-    if (!chartSeries[key]) return;
-    const vals = pts.map(d => d[key]).filter(v => v != null);
-    if (vals.length < 2) return;
-    const [lo, hi] = _seriesDomain(vals, def);
-    const span = (hi - lo) || 1;
-    const yOf  = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
-    active.push({ key, def, lo, hi, yOf });
-  });
 
-  // Y-Achse links + rechts: je eine Serie, Priorität SOC > current > voltage > solar
-  const yAxisOrder = ['soc','current','voltage','solar','zelldiff'];
-  const sorted     = yAxisOrder.map(k => active.find(a => a.key === k)).filter(Boolean);
-  const yLeft      = sorted[0] || null;
-  const yRight     = sorted[1] || null;
+  if (chartSeries.soc) {
+    const vals = pts.map(d => d.soc).filter(v => v != null);
+    if (vals.length >= 2) {
+      const def = SERIES_DEF.soc;
+      const yOf = v => PAD_T + CH * (1 - Math.max(0, Math.min(100, v)) / 100);
+      active.push({ key: 'soc', def, lo: 0, hi: 100, yOf, sPts: pts });
+    }
+  }
+
+  if (chartSecondary) {
+    const key = chartSecondary, def = SERIES_DEF[key];
+    const vals = secPts.map(d => d[key]).filter(v => v != null);
+    if (vals.length >= 2) {
+      const [lo, hi] = _seriesDomain(vals, def);
+      const span = (hi - lo) || 1;
+      const yOf = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
+      active.push({ key, def, lo, hi, yOf, sPts: secPts });
+    }
+  }
+
+  const yLeft  = active.find(a => a.key === 'soc') ?? active[0] ?? null;
+  const yRight = active.find(a => a.key !== 'soc') ?? null;
 
   // Ticks der linken Achse → horizontale Gridlinien
   const yTicks = yLeft ? _niceTicks(yLeft.lo, yLeft.hi, 4) : [];
@@ -264,11 +300,10 @@ function renderCharts() {
   // Adaptiver Gap-Schwellwert: 1/30 des Zeitfensters (z.B. 60s bei 30min, 12min bei 6h)
   const maxGapSec = Math.max(30, chartRangeSec / 30);
 
-  // Fill nur für die primäre (linke) Achsen-Serie — mehrere Fills überlagern sich unschön
   const fillKey = yLeft?.key ?? null;
 
-  active.forEach(({ key, def, yOf }) => {
-    const { segs, last } = _buildSegs(pts, key, xOf, yOf, maxGapSec);
+  active.forEach(({ key, def, yOf, sPts }) => {
+    const { segs, last } = _buildSegs(sPts, key, xOf, yOf, maxGapSec);
     if (!segs.length) return;
 
     // Fill: nur für primäre Serie, nach unten schließen
@@ -317,8 +352,8 @@ function renderCharts() {
     ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(x, PAD_T); ctx.lineTo(x, PAD_T + CH); ctx.stroke();
     ctx.setLineDash([]); ctx.restore();
-    Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
-      const ptsK = pts.filter(d => d[key] != null);
+    Object.entries(seriesYOf).forEach(([key, { yOf, def, sPts }]) => {
+      const ptsK = sPts.filter(d => d[key] != null);
       if (!ptsK.length) return;
       let cl = ptsK[0], md = Math.abs(ptsK[0].ts - scrubTs);
       ptsK.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < md) { md = dist; cl = d; } });
