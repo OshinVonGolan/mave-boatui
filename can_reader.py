@@ -83,6 +83,7 @@ class CanInterface:
         self._on_change   = None   # async callback(data: dict)
         self._broadcast_pending = False
         self._network:  dict = {}   # (pgn, src) → tracking entry
+        self._last_raw: dict = {}   # pgn → {src, len, hex} (Debug)
         self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
         self._service_instance: int = 0
         self._starter_instance: int = 1
@@ -167,6 +168,10 @@ class CanInterface:
             })
         return result
 
+    def get_raw_frames(self) -> dict:
+        """Letzte vollständige Payloads je PGN (hex) für Debugging."""
+        return dict(self._last_raw)
+
     def time_since_last_message(self) -> float:
         if not self._network:
             return float('inf')
@@ -186,6 +191,9 @@ class CanInterface:
 
         if payload is None:
             return
+
+        # Debug: letzten vollständigen Payload je PGN merken (hex)
+        self._last_raw[pgn] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
 
         changed = False
 

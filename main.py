@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.5'
+VERSION  = _git_semver() or '1.16.6'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -290,6 +290,26 @@ async def get_status():
 @app.get('/api/network')
 async def get_network():
     return can_if.get_network_stats()
+
+
+@app.get('/api/debug/bms')
+async def debug_bms():
+    """Roh-Bytes der letzten BMS/VE.Direct-Frames + geparste Werte (Debug)."""
+    from nmea2000 import parse_bms_pack, parse_bms_cells, parse_ve_direct_ext
+    raw = can_if.get_raw_frames()
+    out = {'raw': raw, 'parsed': {}}
+    for pgn, parser in ((130901, parse_bms_pack), (130902, parse_bms_cells),
+                        (130910, parse_ve_direct_ext)):
+        if pgn in raw:
+            try:
+                out['parsed'][pgn] = parser(bytes.fromhex(raw[pgn]['hex']))
+            except Exception as e:
+                out['parsed'][pgn] = {'error': str(e)}
+    out['state'] = {'bms': state.to_dict().get('bms'),
+                    'inverter': state.to_dict().get('inverter'),
+                    'charger': state.to_dict().get('charger'),
+                    'orion': state.to_dict().get('orion')}
+    return out
 
 
 @app.get('/api/alarms')
