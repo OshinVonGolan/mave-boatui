@@ -96,7 +96,7 @@ function fmtYVal(v, key) {
   return String(Math.round(v));
 }
 
-const CHART_PAD_L = 38, CHART_PAD_R = 12;
+const CHART_PAD_L = 38, CHART_PAD_R = 40;
 
 // Berechnet schöne gerundete Y-Achsen-Ticks
 function _niceTicks(lo, hi, nTarget) {
@@ -113,7 +113,8 @@ function _niceTicks(lo, hi, nTarget) {
   return ticks;
 }
 
-// Catmull-Rom → glatte Bézierkurve für ein Segment [{x,y},...]
+// Catmull-Rom → glatte Bézierkurve (tension 0 = scharf, 1 = sehr weich)
+const _SMOOTH_T = 0.4;
 function _smoothSeg(ctx, s) {
   if (s.length === 0) return;
   ctx.moveTo(s[0].x, s[0].y);
@@ -122,9 +123,10 @@ function _smoothSeg(ctx, s) {
     const p0 = s[Math.max(0, i - 1)];
     const p1 = s[i], p2 = s[i + 1];
     const p3 = s[Math.min(s.length - 1, i + 2)];
+    const t = _SMOOTH_T;
     ctx.bezierCurveTo(
-      p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
-      p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
+      p1.x + t * (p2.x - p0.x) / 2, p1.y + t * (p2.y - p0.y) / 2,
+      p2.x - t * (p3.x - p1.x) / 2, p2.y - t * (p3.y - p1.y) / 2,
       p2.x, p2.y
     );
   }
@@ -187,41 +189,63 @@ function renderCharts() {
     active.push({ key, def, lo, hi, yOf });
   });
 
-  // Y-Achse: primäre Serie (erste aktive, Priorität: SOC > current > voltage > solar)
+  // Y-Achse links + rechts: je eine Serie, Priorität SOC > current > voltage > solar
   const yAxisOrder = ['soc','current','voltage','solar','zelldiff'];
-  const yAxisSeries = yAxisOrder.map(k => active.find(a => a.key === k)).find(Boolean) || active[0];
+  const sorted     = yAxisOrder.map(k => active.find(a => a.key === k)).filter(Boolean);
+  const yLeft      = sorted[0] || null;
+  const yRight     = sorted[1] || null;
 
-  // Horizontale Gridlinien an schönen Tick-Positionen der Y-Achse-Serie
-  const yTicks = yAxisSeries ? _niceTicks(yAxisSeries.lo, yAxisSeries.hi, 4) : [];
+  // Ticks der linken Achse → Gridlinien
+  const yTicks = yLeft ? _niceTicks(yLeft.lo, yLeft.hi, 4) : [];
   ctx.strokeStyle = '#2a3a4f'; ctx.lineWidth = 1;
-  yTicks.forEach(v => {
-    const y = Math.round(yAxisSeries.yOf(v)) + 0.5;
-    if (y < PAD_T || y > PAD_T + CH) return;
-    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
-  });
-  // Fallback wenn keine Y-Serien: 4 gleichmäßige Linien
-  if (!yTicks.length) {
+  if (yTicks.length) {
+    yTicks.forEach(v => {
+      const y = Math.round(yLeft.yOf(v)) + 0.5;
+      if (y < PAD_T || y > PAD_T + CH) return;
+      ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
+    });
+  } else {
     for (let i = 0; i <= 4; i++) {
       const y = PAD_T + Math.round(CH * i / 4) + 0.5;
       ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
     }
   }
 
-  // Y-Achsen-Beschriftung (links)
-  if (yAxisSeries) {
-    ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    const col = yAxisSeries.def.color;
+  ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.textBaseline = 'middle';
+
+  // Linke Y-Achse
+  if (yLeft) {
+    ctx.textAlign = 'right';
+    const col = yLeft.def.color;
     yTicks.forEach(v => {
-      const y = yAxisSeries.yOf(v);
+      const y = yLeft.yOf(v);
       if (y < PAD_T - 2 || y > PAD_T + CH + 2) return;
       ctx.fillStyle = col + 'cc';
-      ctx.fillText(fmtYVal(v, yAxisSeries.key), PAD_L - 4, y);
+      ctx.fillText(fmtYVal(v, yLeft.key), PAD_L - 4, y);
     });
-    // Einheit oben links
-    ctx.fillStyle = col + '99';
+    ctx.fillStyle = col + '88';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(yAxisSeries.def.unit, 2, PAD_T);
+    ctx.fillText(yLeft.def.unit, 2, PAD_T);
+  }
+
+  // Rechte Y-Achse (zweite Serie — eigene Ticks, keine neuen Gridlinien)
+  if (yRight) {
+    const rTicks = _niceTicks(yRight.lo, yRight.hi, 4);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const col = yRight.def.color;
+    rTicks.forEach(v => {
+      const y = yRight.yOf(v);
+      if (y < PAD_T - 2 || y > PAD_T + CH + 2) return;
+      ctx.fillStyle = col + 'cc';
+      // kleiner Strich als Tick
+      ctx.beginPath(); ctx.moveTo(PAD_L + CW, y); ctx.lineTo(PAD_L + CW + 3, y);
+      ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillText(fmtYVal(v, yRight.key), PAD_L + CW + 5, y);
+    });
+    ctx.fillStyle = col + '88';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(yRight.def.unit, W - PAD_R + 4, PAD_T);
   }
 
   // X-Achse Zeitlabels
