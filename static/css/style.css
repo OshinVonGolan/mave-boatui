@@ -128,6 +128,8 @@
     .card-title { display: flex; align-items: center; gap: 8px; font-size: 11px;
       font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
     .card-title svg { flex-shrink: 0; }
+    .card-link { margin-left: auto; font-size: 10px; color: var(--text3); font-weight: 400;
+      letter-spacing: .04em; text-transform: none; }
 
     /* ── Battery card — clickable ── */
     .card-battery {
