@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.12'
+VERSION  = _git_semver() or '1.16.13'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -383,10 +383,36 @@ async def system_update():
     changed = 'Already up to date.' not in result.stdout
     after = _git_hash()
     log.info("git pull: %s", result.stdout.strip())
+    changelog = []
     if changed:
+        try:
+            cl = subprocess.run(
+                ['git', 'log', 'ORIG_HEAD..HEAD', '--pretty=format:%s', '--no-merges'],
+                cwd=BASE_DIR, capture_output=True, text=True, timeout=10,
+            )
+            changelog = [l.strip() for l in cl.stdout.strip().splitlines() if l.strip()]
+        except Exception:
+            pass
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     return {'ok': True, 'changed': changed, 'output': result.stdout.strip(),
-            'version_before': before, 'version_after': after}
+            'version_before': before, 'version_after': after, 'changelog': changelog}
+
+
+@app.get('/api/pgn/{pgn}/{src}')
+async def get_pgn_detail(pgn: int, src: int):
+    from nmea2000 import parse_pgn_fields, PGN_NAMES
+    frame = can_if.get_raw_frame(pgn, src)
+    if not frame:
+        raise HTTPException(404, detail=f'Keine Daten für PGN {pgn} von Adresse {src}')
+    payload = bytes.fromhex(frame['hex'])
+    return {
+        'pgn':    pgn,
+        'src':    src,
+        'name':   PGN_NAMES.get(pgn, f'PGN {pgn}'),
+        'hex':    frame['hex'],
+        'len':    frame['len'],
+        'fields': parse_pgn_fields(pgn, payload),
+    }
 
 
 @app.post('/api/inverter/mode')

@@ -71,7 +71,7 @@ function renderSettingsNetwork(el, netData, connData) {
 
     html += `
     <div class="settings-section-title" style="margin-bottom:12px">Internet</div>
-    <div class="net-device-card" style="margin-bottom:20px">
+    <div class="net-grid" style="margin-bottom:20px"><div class="net-device-card">
       <div class="net-device-header">
         <div class="net-device-dot ${dotCls}"></div>
         <div class="net-device-name">RUTX50 Router</div>
@@ -99,7 +99,7 @@ function renderSettingsNetwork(el, netData, connData) {
           <div class="net-pgn-iv">${sl.ping_ms.toFixed(0)} ms · ${fmtBps(sl.downlink_bps)} ↓</div>
         </div>` : ''}
       </div>
-    </div>`;
+    </div></div>`;
   }
 
   // ── CAN-Bus Geräte ────────────────────────────────────────────────────────

@@ -242,10 +242,16 @@ async function syncTime() {
 
 // ── Update ─────────────────────────────────────────────────────────────────
 
-function _showUpdateScreen(verStr) {
+function _showUpdateScreen(verStr, changelog) {
   const el = $('updateScreen');
   if (!el) return;
   if (verStr) $('updateScreenVersion').textContent = verStr;
+  if (changelog?.length) {
+    const list = $('updateScreenChangelogList');
+    if (list) list.innerHTML = changelog.map(c => `<li>${c}</li>`).join('');
+    const wrap = $('updateScreenChangelog');
+    if (wrap) wrap.style.display = '';
+  }
   el.style.display = 'flex';
 }
 
@@ -287,7 +293,7 @@ async function runUpdate() {
       const verStr = (data.version_before && data.version_after)
         ? `${data.version_before} → ${data.version_after}` : '';
       if (vi && verStr) vi.textContent = verStr;
-      _showUpdateScreen(verStr);
+      _showUpdateScreen(verStr, data.changelog || []);
       await _waitForServer();
     } else {
       fb.textContent = 'Bereits aktuell ✓';

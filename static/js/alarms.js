@@ -98,9 +98,8 @@ function renderNetworkInto(el, entries) {
       const ageCls = p.age_s < 3 ? 'ok' : p.age_s < 15 ? 'warn' : 'old';
       const instBadge = p.instance != null
         ? `<span class="net-inst-badge">Inst ${p.instance}</span>` : '';
-      const ivBadge = iv
-        ? `<span class="net-iv-badge">${iv}</span>` : '';
-      return `<div class="net-pgn-row">
+      const ivBadge = iv ? `<span class="net-iv-badge">${iv}</span>` : '';
+      return `<div class="net-pgn-row" style="cursor:pointer" onclick="openPgnDetail(${p.pgn},${p.src})">
         <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${ageCls}"></div></div>
         <div class="net-pgn-info">
           <span class="net-pgn-desc">${p.description}</span>${instBadge}
@@ -444,4 +443,44 @@ async function saveRules() {
     fb.className = 'settings-feedback error show';
     fb.textContent = 'Fehler beim Speichern';
   }
+}
+
+// ── PGN-Detail Popup ────────────────────────────────────────────────────────
+
+async function openPgnDetail(pgn, src) {
+  const bg    = $('pgnDetailBg');
+  const sheet = $('pgnDetailSheet');
+  const title = $('pgnDetailTitle');
+  const sub   = $('pgnDetailSub');
+  const hex   = $('pgnDetailHex');
+  const fields = $('pgnDetailFields');
+  if (!sheet) return;
+
+  title.textContent  = 'Lade…';
+  sub.textContent    = '';
+  hex.textContent    = '';
+  fields.innerHTML   = '';
+  bg.style.display   = 'block';
+  sheet.style.display = 'flex';
+
+  try {
+    const d = await fetch(`/api/pgn/${pgn}/${src}`).then(r => r.json());
+    title.textContent = d.name;
+    sub.textContent   = `PGN ${d.pgn}  ·  Adr. 0x${d.src.toString(16).toUpperCase().padStart(2,'0')}  ·  ${d.len} B`;
+    hex.textContent   = d.hex.match(/.{1,2}/g).join(' ');
+    fields.innerHTML  = (d.fields || []).map(f => `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;
+        padding:7px 16px;border-bottom:1px solid var(--surface2)${f.alarm ? ';background:rgba(239,68,68,.08)' : ''}">
+        <span style="font-size:12px;color:${f.alarm ? 'var(--red)' : 'var(--text2)'}">${f.name}</span>
+        <span style="font-size:13px;font-weight:600;color:${f.alarm ? 'var(--red)' : 'var(--text)'};text-align:right;max-width:60%">${f.value}</span>
+      </div>`).join('');
+  } catch(e) {
+    title.textContent = `PGN ${pgn}`;
+    fields.innerHTML  = '<div style="padding:20px 16px;color:var(--text3);font-size:13px">Keine Daten verfügbar — noch kein Frame empfangen.</div>';
+  }
+}
+
+function closePgnDetail() {
+  $('pgnDetailBg').style.display  = 'none';
+  $('pgnDetailSheet').style.display = 'none';
 }

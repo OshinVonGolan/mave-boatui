@@ -380,6 +380,138 @@ def parse_iso_address_claim(data: bytes) -> dict | None:
             'name_bytes': data[:8].hex()}
 
 
+def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
+    """Zerlegt einen vollständigen PGN-Payload in benannte Felder für die UI."""
+    NA = 'N/A'
+    def fv(name, value): return {'name': name, 'value': str(value) if value is not None else NA}
+
+    if pgn == 127505:
+        if len(payload) < 3: return []
+        fluid_types = {0:'Kraftstoff',1:'Frischwasser',2:'Grauwasser',3:'Livewell',4:'Öl',5:'Schwarzwasser',6:'Motorraum'}
+        lvl_raw = struct.unpack_from('<H', payload, 1)[0]
+        cap_raw = struct.unpack_from('<I', payload, 3)[0] if len(payload) >= 7 else 0xFFFFFFFF
+        return [
+            fv('Instanz', payload[0] & 0x0F),
+            fv('Fluid-Typ', fluid_types.get(payload[0] >> 4, f'Typ {payload[0] >> 4}')),
+            fv('Füllstand', f'{lvl_raw * 0.004:.1f} %' if lvl_raw != 0xFFFF else NA),
+            fv('Kapazität', f'{cap_raw * 0.1:.0f} L' if cap_raw != 0xFFFFFFFF else NA),
+        ]
+
+    elif pgn == 127506:
+        if len(payload) < 3: return []
+        dc_types = {0:'Batteriebank',1:'Lichtmaschine',2:'Wandler',3:'Solar',4:'Solar',6:'Wind'}
+        soc_raw = struct.unpack_from('<H', payload, 3)[0] if len(payload) >= 5 else 0xFFFF
+        return [
+            fv('Instanz', payload[1]),
+            fv('DC-Typ', dc_types.get(payload[2] & 0x0F, f'Typ {payload[2] & 0x0F}')),
+            fv('SOC', f'{soc_raw * 0.004:.1f} %' if soc_raw != 0xFFFF else NA),
+        ]
+
+    elif pgn == 127507:
+        p = parse_charger_status_pgn(payload)
+        if not p: return []
+        return [fv('Instanz', p['instance']), fv('Batterie-Instanz', p['battery']), fv('Zustand', p['state'])]
+
+    elif pgn == 127508:
+        p = parse_dc_status(payload)
+        if not p: return []
+        return [
+            fv('Instanz', p['instance']),
+            fv('Spannung', f"{p['voltage']:.2f} V" if p['voltage'] is not None else NA),
+            fv('Strom',    f"{p['current']:.1f} A"  if p['current'] is not None else NA),
+        ]
+
+    elif pgn == 127750:
+        p = parse_inverter_status(payload)
+        return [fv('Zustand', p['state'])] if p else []
+
+    elif pgn == 130312:
+        p = parse_temperature(payload)
+        if not p: return []
+        src_map = {0:'Seewasser',1:'Außenluft',2:'Innenluft',3:'Motorraum',4:'Kühlwasser',
+                   5:'Getriebeöl',6:'Motoröl',7:'Batterieraum',14:'Benutzerdefiniert'}
+        return [fv('Instanz', p['instance']),
+                fv('Quelle', src_map.get(p['source'], f"Quelle {p['source']}")),
+                fv('Temperatur', f"{p['temperature_c']} °C")]
+
+    elif pgn == 130900:
+        p = parse_battery_stats(payload)
+        if not p: return []
+        labels = {'power':'Leistung','consumed_ah':'Verbraucht (Ah)','cycles':'Ladezyklen',
+                  'min_voltage':'Min. Spannung (V)','max_voltage':'Max. Spannung (V)',
+                  'time_since_full':'Seit Vollladung (s)','soc':'SOC (%)'}
+        return [fv(labels.get(k, k), v) for k, v in p.items() if v is not None]
+
+    elif pgn == 130901:
+        p = parse_bms_pack(payload)
+        if not p: return []
+        fields = []
+        if p.get('voltage')           is not None: fields.append(fv('Spannung', f"{p['voltage']:.2f} V"))
+        if p.get('current_total')     is not None: fields.append(fv('Strom', f"{p['current_total']:.2f} A"))
+        if p.get('current_charge')    is not None: fields.append(fv('Ladestrom', f"{p['current_charge']:.2f} A"))
+        if p.get('current_discharge') is not None: fields.append(fv('Entladestrom', f"{p['current_discharge']:.2f} A"))
+        if p.get('soc')               is not None: fields.append(fv('SOC', f"{p['soc']} %"))
+        if p.get('capacity_ah')       is not None: fields.append(fv('Kapazität', f"{p['capacity_ah']:.1f} Ah"))
+        if p.get('remaining_kwh')     is not None: fields.append(fv('Verbleibend', f"{p['remaining_kwh']:.3f} kWh"))
+        if p.get('lowest_cell_v')     is not None: fields.append(fv('Niedrigste Zelle', f"{p['lowest_cell_v']:.3f} V (#{p['lowest_cell_nr']})"))
+        if p.get('highest_cell_v')    is not None: fields.append(fv('Höchste Zelle', f"{p['highest_cell_v']:.3f} V (#{p['highest_cell_nr']})"))
+        if p.get('lowest_temp')       is not None: fields.append(fv('Temp. min/max', f"{p['lowest_temp']:.1f} / {p['highest_temp']:.1f} °C"))
+        if p.get('cell_count')        is not None: fields.append(fv('Zellanzahl', p['cell_count']))
+        fields.append(fv('Laden', 'erlaubt' if p.get('allow_charge') else 'gesperrt'))
+        fields.append(fv('Entladen', 'erlaubt' if p.get('allow_discharge') else 'gesperrt'))
+        for alarm, label in [('comm_error','BMS-Komm.fehler'),('alarm_min_volt','Zellspg. zu niedrig'),
+                              ('alarm_max_volt','Zellspg. zu hoch'),('alarm_min_temp','Temp. zu niedrig'),
+                              ('alarm_max_temp','Temp. zu hoch')]:
+            if p.get(alarm): fields.append({'name': '⚠ Alarm', 'value': label, 'alarm': True})
+        return fields
+
+    elif pgn == 130902:
+        p = parse_bms_cells(payload)
+        if not p: return []
+        result = [fv('Zellanzahl', p['cell_count'])]
+        for i, cell in enumerate(p['cells']):
+            v = f"{cell['voltage']:.3f} V" if cell.get('voltage') is not None else NA
+            t = f" · {cell['temp']:.1f} °C" if cell.get('temp') is not None else ''
+            result.append(fv(f'Zelle {i+1}', v + t))
+        return result
+
+    elif pgn == 130910:
+        p = parse_ve_direct_ext(payload)
+        if not p: return []
+        type_names = {0:'Lader', 1:'DC-DC Wandler', 2:'Wechselrichter'}
+        fields = [
+            fv('Instanz', p['instance']),
+            fv('Typ', type_names.get(p['type'], f"Typ {p['type']}")),
+            fv('Zustand', p.get('cs_label') or (f"CS {p['cs']}" if p.get('cs') is not None else NA)),
+        ]
+        if p.get('dc_voltage') is not None: fields.append(fv('DC-Spannung', f"{p['dc_voltage']:.3f} V"))
+        if p.get('dc_current') is not None: fields.append(fv('DC-Strom',    f"{p['dc_current']:.3f} A"))
+        if p.get('power')      is not None: fields.append(fv('Leistung',    f"{p['power']:.1f} W"))
+        if p.get('ac_voltage') is not None: fields.append(fv('AC-Spannung', f"{p['ac_voltage']:.1f} V"))
+        if p.get('ac_current') is not None: fields.append(fv('AC-Strom',    f"{p['ac_current']:.1f} A"))
+        return fields
+
+    elif pgn == 126996:
+        p = parse_product_info(payload)
+        if not p: return []
+        return [fv('Modell-ID', p['model_id']), fv('Software', p.get('sw_version') or NA)]
+
+    elif pgn == 60928:
+        p = parse_iso_address_claim(payload)
+        if not p: return []
+        return [fv('Hersteller-Code', p['mfr_code']), fv('Geräte-Funktion', p['device_fn']),
+                fv('Geräte-Klasse', p['device_cls']), fv('NAME (hex)', p['name_bytes'])]
+
+    elif pgn == 126720:
+        p = parse_brightness(payload)
+        if p:
+            fields = [fv('Typ-Byte', f"0x{payload[0]:02X}"), fv('Bank-Instanz', payload[1] if len(payload) > 1 else NA)]
+            for i in range(4): fields.append(fv(f'Kanal {i+1}', f"{p['channels'][i]} ({round(p['channels'][i]/255*100)} %)"))
+            return fields
+
+    return [{'name': 'Raw (hex)', 'value': ' '.join(f'{b:02X}' for b in payload)}]
+
+
 def build_inverter_mode_frame(mode: int) -> tuple[int, bytes]:
     """Erstellt PGN 130911 – Inverter Mode Control (Single Frame, 3 Byte).
     mode: 2=An, 4=Aus, 5=Eco
