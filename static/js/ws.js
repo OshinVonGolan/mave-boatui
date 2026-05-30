@@ -227,23 +227,40 @@ function updateInverterCard(inv, charger) {
 
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
 
-  // Fehler/Alarm-Codes: inv.err = AR (Alarm Reason), inv.warn = WARN
   const _INV_AR = {
     0x0001:'Niedrige Batterie', 0x0002:'Überhitzung', 0x0008:'Überlast',
     0x0010:'Batt. zu niedrig',  0x0020:'Zu heiß',     0x0040:'Overload',
     0x0100:'AC abgeschaltet',
   };
-  const alarmRow = $('invAlarmRow'), alarmLbl = $('invAlarmLabel');
-  if (alarmRow && alarmLbl) {
-    const ar   = inv.err;   // Offset 24 = AR für Inverter
-    const warn = inv.warn;  // Offset 26 = WARN
-    const bits = (ar || 0) | (warn || 0);
-    if (bits !== 0) {
-      const msgs = Object.entries(_INV_AR).filter(([k]) => bits & +k).map(([,v]) => v);
-      alarmLbl.textContent = msgs.length ? msgs.join(', ') : `Alarm 0x${bits.toString(16)}`;
-      alarmRow.style.display = 'flex';
+
+  const indicatorRow = $('invIndicatorRow');
+  if (indicatorRow) indicatorRow.style.display = 'flex';
+
+  const invDot = $('invStatusDot'), invLbl = $('invStatusLabel');
+  if (invDot && invLbl) {
+    const ar   = inv.err  || 0;
+    const warn = inv.warn || 0;
+    if (ar) {
+      const msgs = Object.entries(_INV_AR).filter(([k]) => ar & +k).map(([,v]) => v);
+      invDot.style.background = 'var(--red)';
+      invDot.style.boxShadow  = '0 0 4px var(--red)';
+      invLbl.textContent = msgs.length ? msgs[0] : `Alarm 0x${ar.toString(16)}`;
+      invLbl.style.color = 'var(--red)';
+    } else if (warn) {
+      invDot.style.background = 'var(--yellow)';
+      invDot.style.boxShadow  = '0 0 4px var(--yellow)';
+      invLbl.textContent = 'Warnung';
+      invLbl.style.color = 'var(--yellow)';
+    } else if (isActive) {
+      invDot.style.background = 'var(--green)';
+      invDot.style.boxShadow  = '0 0 4px var(--green)';
+      invLbl.textContent = inv.state;
+      invLbl.style.color = 'var(--green)';
     } else {
-      alarmRow.style.display = 'none';
+      invDot.style.background = 'var(--border)';
+      invDot.style.boxShadow  = 'none';
+      invLbl.textContent = 'Inverter Aus';
+      invLbl.style.color = 'var(--text3)';
     }
   }
 
