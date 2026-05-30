@@ -4,3 +4,5 @@ venv/
 .env
 connectivity.json
 monday.json
+presets.json
+alarms.json
