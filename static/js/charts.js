@@ -408,7 +408,7 @@ function updateBms(bms) {
   // BMS-Relais-Status auf der Batterie-Kachel
   const relayRow = $('bmsRelayRow');
   if (relayRow && bms.allow_charge != null) {
-    relayRow.style.display = '';
+    relayRow.style.display = 'flex';
     const _dot = (id, ok) => {
       const el = $(id);
       if (!el) return;

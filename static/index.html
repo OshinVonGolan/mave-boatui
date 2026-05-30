@@ -91,14 +91,17 @@
       </span>
     </div>
 
-    <div id="bmsRelayRow" style="display:none;align-items:center;gap:6px;margin-bottom:5px">
-      <div id="bmsRelayChargeDot" class="shore-dot"></div>
-      <span style="font-size:12px;color:var(--text3)">Laden</span>
-      <div id="bmsRelayDischargeDot" class="shore-dot" style="margin-left:6px"></div>
-      <span style="font-size:12px;color:var(--text3)">Entladen</span>
-    </div>
-
-    <div class="gauge-wrap">
+    <div class="gauge-wrap" style="position:relative">
+      <div id="bmsRelayRow" style="display:none;position:absolute;top:14px;left:0;flex-direction:column;gap:6px;align-items:flex-start">
+        <div style="display:flex;align-items:center;gap:5px">
+          <div id="bmsRelayChargeDot" class="shore-dot"></div>
+          <span style="font-size:11px;color:var(--text3)">Laden</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <div id="bmsRelayDischargeDot" class="shore-dot"></div>
+          <span style="font-size:11px;color:var(--text3)">Entladen</span>
+        </div>
+      </div>
       <svg class="gauge-svg" viewBox="0 0 160 112">
         <path class="gauge-track" id="gaugeTrack"/>
         <path class="gauge-value" id="gaugeValue"/>
@@ -118,12 +121,12 @@
       <div class="batt-item">
         <div class="label">Strom</div>
         <div class="value"><span id="battI">--</span><span class="unit">A</span></div>
-        <div style="font-size:12px;color:var(--text2);font-weight:500;margin-top:2px"><span id="battPSmall">--</span> W</div>
+        <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:1px"><span id="battPSmall">--</span> W</div>
       </div>
       <div class="batt-item">
         <div class="label">Restkapazität</div>
         <div class="value"><span id="battRemAh">--</span><span class="unit">Ah</span></div>
-        <div style="font-size:12px;color:var(--text2);font-weight:500;margin-top:2px"><span id="battAh">--</span> Ah entnom.</div>
+        <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:1px"><span id="battAh">--</span> Ah entnom.</div>
       </div>
       <div class="batt-item">
         <div class="label">Heute entn.</div>
