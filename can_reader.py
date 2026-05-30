@@ -264,9 +264,9 @@ class CanInterface:
                         changed = True
 
         elif pgn == 130902:
-            cells = parse_bms_cells(payload)   # gibt eine Liste zurück, kein Dict!
-            if cells is not None and self.state.bms.get('cells') != cells:
-                self.state.bms['cells'] = cells
+            p = parse_bms_cells(payload)   # gibt Dict {'cell_count':.., 'cells':[..]} zurück
+            if p and self.state.bms.get('cells') != p['cells']:
+                self.state.bms['cells'] = p['cells']
                 changed = True
 
         elif pgn == 126720:
