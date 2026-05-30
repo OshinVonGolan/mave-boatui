@@ -182,13 +182,13 @@ class CanInterface:
     def get_raw_frames(self) -> dict:
         """Backward-compat: ein Eintrag pro PGN (neueste src)."""
         result = {}
-        for (pgn, src), data in self._last_raw.items():
+        for (pgn, src, instance), data in self._last_raw.items():
             if pgn not in result:
                 result[pgn] = data
         return result
 
-    def get_raw_frame(self, pgn: int, src: int) -> dict | None:
-        return self._last_raw.get((pgn, src))
+    def get_raw_frame(self, pgn: int, src: int, instance: int | None = None) -> dict | None:
+        return self._last_raw.get((pgn, src, instance))
 
     def time_since_last_message(self) -> float:
         if not self._network:
@@ -212,8 +212,12 @@ class CanInterface:
         if payload is None:
             return
 
-        # Debug: letzten vollständigen Payload je (pgn, src) merken (hex)
-        self._last_raw[(pgn, src)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
+        # Debug: letzten vollständigen Payload je (pgn, src, instance) merken
+        _inst = None
+        if pgn in (127508, 130910) and payload:        _inst = payload[0]
+        elif pgn in (127505, 130312) and payload:      _inst = payload[0] & 0x0F
+        elif pgn == 127506 and len(payload) > 1:       _inst = payload[1]
+        self._last_raw[(pgn, src, _inst)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
 
         changed = False
 

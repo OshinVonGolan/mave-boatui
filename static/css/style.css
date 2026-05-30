@@ -607,8 +607,21 @@
       vertical-align: middle; line-height: 16px; }
     .net-iv-badge { font-size: 10px; color: var(--text3); white-space: nowrap;
       flex-shrink: 0; font-family: monospace; }
+    .net-pgn-row:hover { background: var(--surface2); border-radius: 4px; }
 
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
+
+    /* ── PGN-Detail Modal ── */
+    .pgn-nav-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 14px; line-height: 1.4; }
+    .pgn-nav-btn:hover { background: var(--border); }
+    .pgn-field-row { display: flex; justify-content: space-between; align-items: baseline;
+      padding: 7px 16px; border-bottom: 1px solid var(--surface2); }
+    .pgn-field-row.alarm { background: rgba(239,68,68,.08); }
+    .pgn-field-row:last-child { border-bottom: none; }
+    .pgn-field-name { font-size: 12px; color: var(--text2); flex-shrink: 0; margin-right: 12px; }
+    .pgn-field-val  { font-size: 13px; font-weight: 600; color: var(--text); text-align: right; }
+    .pgn-field-empty { padding: 24px 16px; color: var(--text3); font-size: 13px; text-align: center; }
 
     /* ── Light detail — channel cards ── */
     #chSlidersWrap {

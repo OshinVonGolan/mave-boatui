@@ -1,6 +1,7 @@
 // ── Network overlay ────────────────────────────────────────────────────────
 
 let netTimer = null;
+let _lastNetEntries = [];
 
 function openNetwork() {
   _closeAllOverlays();
@@ -18,6 +19,7 @@ function closeNetwork() {
 async function fetchNetwork() {
   try {
     const data = await fetch('/api/network').then(r => r.json());
+    _lastNetEntries = data;
     renderNetworkInto($('netContent'), data);
   } catch(_) {
     const el = $('netContent');
@@ -447,40 +449,52 @@ async function saveRules() {
 
 // ── PGN-Detail Popup ────────────────────────────────────────────────────────
 
-async function openPgnDetail(pgn, src) {
-  const bg    = $('pgnDetailBg');
-  const sheet = $('pgnDetailSheet');
-  const title = $('pgnDetailTitle');
-  const sub   = $('pgnDetailSub');
-  const hex   = $('pgnDetailHex');
-  const fields = $('pgnDetailFields');
-  if (!sheet) return;
+let _pgnNavList = [];
+let _pgnNavIdx  = 0;
 
-  title.textContent  = 'Lade…';
-  sub.textContent    = '';
-  hex.textContent    = '';
-  fields.innerHTML   = '';
-  bg.style.display   = 'block';
-  sheet.style.display = 'flex';
+function openPgnDetail(pgn, src) {
+  // Alle PGNs dieses Geräts als Navigationsliste
+  _pgnNavList = _lastNetEntries.filter(e => e.src === src);
+  _pgnNavIdx  = _pgnNavList.findIndex(e => e.pgn === pgn);
+  if (_pgnNavIdx < 0) _pgnNavIdx = 0;
 
+  $('pgnDetailBg').style.display    = 'block';
+  $('pgnDetailModal').style.display = 'flex';
+  _loadPgnDetail();
+}
+
+async function _loadPgnDetail() {
+  const entry = _pgnNavList[_pgnNavIdx];
+  if (!entry) return;
+
+  $('pgnDetailCounter').textContent = `${_pgnNavIdx + 1} / ${_pgnNavList.length}`;
+  $('pgnDetailTitle').textContent   = entry.description + (entry.instance != null ? ` · Inst ${entry.instance}` : '');
+  const devName = entry.device_name || `Gerät 0x${entry.src.toString(16).toUpperCase().padStart(2,'0')}`;
+  $('pgnDetailDevice').textContent  = devName + `  ·  Adr. 0x${entry.src.toString(16).toUpperCase().padStart(2,'0')}`;
+  $('pgnDetailHex').textContent     = 'Lade…';
+  $('pgnDetailFields').innerHTML    = '';
+
+  const instParam = entry.instance != null ? `?instance=${entry.instance}` : '';
   try {
-    const d = await fetch(`/api/pgn/${pgn}/${src}`).then(r => r.json());
-    title.textContent = d.name;
-    sub.textContent   = `PGN ${d.pgn}  ·  Adr. 0x${d.src.toString(16).toUpperCase().padStart(2,'0')}  ·  ${d.len} B`;
-    hex.textContent   = d.hex.match(/.{1,2}/g).join(' ');
-    fields.innerHTML  = (d.fields || []).map(f => `
-      <div style="display:flex;justify-content:space-between;align-items:baseline;
-        padding:7px 16px;border-bottom:1px solid var(--surface2)${f.alarm ? ';background:rgba(239,68,68,.08)' : ''}">
-        <span style="font-size:12px;color:${f.alarm ? 'var(--red)' : 'var(--text2)'}">${f.name}</span>
-        <span style="font-size:13px;font-weight:600;color:${f.alarm ? 'var(--red)' : 'var(--text)'};text-align:right;max-width:60%">${f.value}</span>
+    const d = await fetch(`/api/pgn/${entry.pgn}/${entry.src}${instParam}`).then(r => r.json());
+    $('pgnDetailHex').textContent  = `PGN ${d.pgn}  ·  ${d.len} B  ·  ${d.hex.match(/.{1,2}/g).join(' ')}`;
+    $('pgnDetailFields').innerHTML = (d.fields || []).map(f => `
+      <div class="pgn-field-row${f.alarm ? ' alarm' : ''}">
+        <span class="pgn-field-name">${f.name}</span>
+        <span class="pgn-field-val">${f.value}</span>
       </div>`).join('');
-  } catch(e) {
-    title.textContent = `PGN ${pgn}`;
-    fields.innerHTML  = '<div style="padding:20px 16px;color:var(--text3);font-size:13px">Keine Daten verfügbar — noch kein Frame empfangen.</div>';
+  } catch(_) {
+    $('pgnDetailHex').textContent  = `PGN ${entry.pgn}`;
+    $('pgnDetailFields').innerHTML = '<div class="pgn-field-empty">Noch kein Frame empfangen.</div>';
   }
 }
 
+function _navigatePgn(dir) {
+  _pgnNavIdx = ((_pgnNavIdx + dir) + _pgnNavList.length) % _pgnNavList.length;
+  _loadPgnDetail();
+}
+
 function closePgnDetail() {
-  $('pgnDetailBg').style.display  = 'none';
-  $('pgnDetailSheet').style.display = 'none';
+  $('pgnDetailBg').style.display    = 'none';
+  $('pgnDetailModal').style.display = 'none';
 }

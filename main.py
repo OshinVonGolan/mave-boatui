@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.13'
+VERSION  = _git_semver() or '1.16.14'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -399,9 +399,9 @@ async def system_update():
 
 
 @app.get('/api/pgn/{pgn}/{src}')
-async def get_pgn_detail(pgn: int, src: int):
+async def get_pgn_detail(pgn: int, src: int, instance: int | None = None):
     from nmea2000 import parse_pgn_fields, PGN_NAMES
-    frame = can_if.get_raw_frame(pgn, src)
+    frame = can_if.get_raw_frame(pgn, src, instance)
     if not frame:
         raise HTTPException(404, detail=f'Keine Daten für PGN {pgn} von Adresse {src}')
     payload = bytes.fromhex(frame['hex'])
