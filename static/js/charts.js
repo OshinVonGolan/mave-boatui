@@ -6,15 +6,14 @@ const histData = [];  // [{ts, soc, voltage, current}, ...]
 // domain: feste Achsen-Grenzen [min,max] oder null = automatisch aus Daten
 const SERIES_DEF = {
   soc:      { color: '#22c55e', unit: '%',  label: 'SOC',       fmt: v => Math.round(v) + ' %',         domain: [0, 100] },
-  voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4, smooth: true },
-  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: true },
-  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, smooth: true },
-  zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.01, zero: true },
+  voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4, smooth: 0.04 },
+  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: 0.12 },
+  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, smooth: 0.12 },
+  zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.01, zero: true, smooth: 0.04 },
 };
 
 const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
-let chartSeries    = { soc: true };   // SOC-Toggle (linke Achse)
 let chartSecondary = 'current';       // aktive Sekundär-Serie (rechte Achse) oder null
 let chartRangeSec  = 1800;
 let chartHoverPos  = null; // null=live, 0.0–1.0=scrub fraction
@@ -57,15 +56,10 @@ function _seriesDomain(vals, def) {
 }
 
 function toggleSeries(key) {
-  if (key === 'soc') {
-    chartSeries.soc = !chartSeries.soc;
-    $('tog-soc').classList.toggle('active', chartSeries.soc);
-  } else {
-    const prev = chartSecondary;
-    chartSecondary = (chartSecondary === key) ? null : key;
-    if (prev) $(`tog-${prev}`).classList.remove('active');
-    if (chartSecondary) $(`tog-${chartSecondary}`).classList.add('active');
-  }
+  const prev = chartSecondary;
+  chartSecondary = (chartSecondary === key) ? null : key;
+  if (prev) $(`tog-${prev}`).classList.remove('active');
+  if (chartSecondary) $(`tog-${chartSecondary}`).classList.add('active');
   renderCharts();
 }
 
@@ -80,9 +74,8 @@ function setChartRange(btn, secs) {
 function renderChartLegend(pts, secPts, scrubTs) {
   const leg = $('chartLegend');
   if (!leg) return;
-  const entries = [];
-  if (chartSeries.soc) entries.push({ key: 'soc', src: pts });
-  if (chartSecondary)  entries.push({ key: chartSecondary, src: secPts });
+  const entries = [{ key: 'soc', src: pts }];
+  if (chartSecondary) entries.push({ key: chartSecondary, src: secPts });
   leg.innerHTML = entries.map(({ key, src }) => {
     const def = SERIES_DEF[key];
     const ptsK = src.filter(d => d[key] != null);
@@ -190,9 +183,11 @@ function renderCharts() {
   const xOf    = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
   const scrubTs = chartHoverPos !== null ? tMin0 + chartHoverPos * chartRangeSec : null;
 
-  // Sekundär-Punkte ggf. glätten (EMA), bevor Achsen/Legende berechnet werden
-  const secPts = chartSecondary && SERIES_DEF[chartSecondary]?.smooth
-    ? _ema(pts, chartSecondary)
+  // Sekundär-Punkte ggf. glätten (EMA): alpha kommt direkt aus SERIES_DEF
+  const secDef   = chartSecondary ? SERIES_DEF[chartSecondary] : null;
+  const secAlpha = typeof secDef?.smooth === 'number' ? secDef.smooth : 0.12;
+  const secPts   = chartSecondary && secDef?.smooth
+    ? _ema(pts, chartSecondary, secAlpha)
     : pts;
 
   renderChartLegend(pts, secPts, scrubTs);
@@ -200,7 +195,7 @@ function renderCharts() {
   // Aktive Serien aufbauen: SOC fest links (0–100%), Sekundär-Serie rechts
   const active = [];
 
-  if (chartSeries.soc) {
+  {
     const vals = pts.map(d => d.soc).filter(v => v != null);
     if (vals.length >= 2) {
       const def = SERIES_DEF.soc;

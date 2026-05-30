@@ -127,17 +127,16 @@ function updateWartungHomeTile() {
   if (dueSoon > 0) html += `<span class="w-badge-pill" style="background:#f59e0b1a;color:#f59e0b">${dueSoon} demnächst</span>`;
   html += '</div>';
 
-  pending.slice(0, 5).forEach(({ t, s }) => {
+  pending.forEach(({ t, s }) => {
     html += `<div class="w-home-row">
-      <span style="display:flex;align-items:center;gap:6px">
+      <span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
         <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
-        ${t.name}
+        <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);white-space:nowrap;flex-shrink:0">${t.catName}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</span>
       </span>
-      <span style="color:${s.color};font-size:12px;font-weight:600">${s.label}</span>
+      <span style="color:${s.color};font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px">${s.label}</span>
     </div>`;
   });
-  if (pending.length > 5)
-    html += `<div style="font-size:11px;color:var(--text3);padding-top:6px">+${pending.length - 5} weitere</div>`;
 
   if (card) card.style.borderColor = overdue > 0 ? '#ef4444' : '#f59e0b';
   body.innerHTML = html;
