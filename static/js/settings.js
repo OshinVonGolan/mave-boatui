@@ -73,13 +73,15 @@ function renderSettingsNetwork(el, netData, connData) {
     const mobDot   = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old';
     const clientCt = r.wifi_client_count ?? r.wifi_clients?.length ?? 0;
     const slUptime = sl.uptime_s != null ? fmtUptime(sl.uptime_s) : '—';
+    const routerUrl = connData.router_url || 'https://192.168.1.1';
+    const routerIp  = routerUrl.replace(/^https?:\/\//, '');
     html += `
     <div class="settings-section-title" style="margin-bottom:12px">WLAN</div>
     <div class="net-grid" style="margin-bottom:20px"><div class="net-device-card">
-      <div class="net-device-header">
+      <div class="net-device-header" style="cursor:pointer" onclick="window.open('${routerUrl}','_blank')">
         <div class="net-device-dot ${dotCls}"></div>
         <div class="net-device-name">RUTX50 Router</div>
-        <div class="net-device-src">${r.wan_ip || ''}</div>
+        <div class="net-device-src" style="text-decoration:underline;color:var(--accent)">${routerIp}</div>
       </div>
       <div class="net-pgn-list">
         <div class="net-pgn-row">

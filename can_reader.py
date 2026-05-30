@@ -8,7 +8,7 @@ import can
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
-    build_brightness_frames, build_inverter_mode_frame, build_time_frame, make_can_id,
+    build_brightness_frames, build_inverter_mode_frame, build_iso_request, build_time_frame, make_can_id,
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_charger_status_pgn, parse_inverter_status, parse_ve_direct_ext,
@@ -126,6 +126,17 @@ class CanInterface:
             log.info("Inverter-Modus %d gesendet (PGN 130911)", mode)
         except can.CanError as e:
             log.error("CAN-Sendefehler Inverter: %s", e)
+
+    def request_product_info(self):
+        """Sendet PGN 59904 ISO Request für PGN 126996 (Produktinfo) an alle Geräte."""
+        if self._bus is None:
+            return
+        try:
+            can_id, data = build_iso_request(126996, RPI_SOURCE_ADDRESS)
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.info("ISO Request für PGN 126996 (Produktinfo) gesendet")
+        except can.CanError as e:
+            log.warning("ISO Request Fehler: %s", e)
 
     def send_brightness(self, values: list[int]):
         if self._bus is None:
@@ -390,6 +401,8 @@ class CanInterface:
                 with can.Bus(channel=self.channel, bustype='socketcan') as bus:
                     self._bus = bus
                     log.info("CAN-Bus %s verbunden", self.channel)
+                    time.sleep(1)  # kurz warten bis Bus stabil
+                    self.request_product_info()
                     for msg in bus:
                         if not self._running:
                             break

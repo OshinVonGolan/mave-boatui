@@ -514,6 +514,13 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
     return [{'name': 'Raw (hex)', 'value': ' '.join(f'{b:02X}' for b in payload)}]
 
 
+def build_iso_request(requested_pgn: int, src: int, dst: int = 0xFF) -> tuple[int, bytes]:
+    """PGN 59904 – ISO Request: fordert ein bestimmtes PGN von allen (dst=0xFF) oder einem Gerät an."""
+    payload = struct.pack('<I', requested_pgn)[:3]
+    can_id  = make_can_id(59904, src, dst, priority=6)
+    return can_id, payload
+
+
 def build_inverter_mode_frame(mode: int) -> tuple[int, bytes]:
     """Erstellt PGN 130911 – Inverter Mode Control (Single Frame, 3 Byte).
     mode: 2=An, 4=Aus, 5=Eco

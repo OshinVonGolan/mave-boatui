@@ -46,6 +46,7 @@ class ConnectivityMonitor:
                 starlink = self._fetch_starlink()
                 with self._lock:
                     self._status = {'router': router, 'starlink': starlink,
+                                    'router_url': self._router_host,
                                     'ts': time.time()}
             except Exception as e:
                 log.warning('connectivity poll: %s', e)
