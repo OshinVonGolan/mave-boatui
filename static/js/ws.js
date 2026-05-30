@@ -267,11 +267,8 @@ function updateInverterCard(inv, charger) {
   const pwEl = $('invPowerVal');
   if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
 
-  // Slide-Toggle
+  // Pill-Toggle
   $('invSlideTrack')?.classList.toggle('on', isActive);
-  const offLbl = $('invSlideOff'), onLbl = $('invSlideOn');
-  if (offLbl) offLbl.classList.toggle('active', !isActive);
-  if (onLbl)  onLbl.classList.toggle('active',  isActive);
 }
 
 function handleData(data) {

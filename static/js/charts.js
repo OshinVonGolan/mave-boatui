@@ -96,7 +96,55 @@ function fmtYVal(v, key) {
   return String(Math.round(v));
 }
 
-const CHART_PAD_L = 10, CHART_PAD_R = 12;
+const CHART_PAD_L = 38, CHART_PAD_R = 12;
+
+// Berechnet schöne gerundete Y-Achsen-Ticks
+function _niceTicks(lo, hi, nTarget) {
+  if (hi === lo) return [lo];
+  const span = hi - lo;
+  const rough = span / nTarget;
+  const exp   = Math.pow(10, Math.floor(Math.log10(rough)));
+  const frac  = rough / exp;
+  const step  = frac < 1.5 ? exp : frac < 3.5 ? 2 * exp : frac < 7.5 ? 5 * exp : 10 * exp;
+  const start = Math.ceil(lo / step - 1e-9) * step;
+  const ticks = [];
+  for (let v = start; v <= hi + step * 1e-9; v += step)
+    ticks.push(parseFloat(v.toFixed(10)));
+  return ticks;
+}
+
+// Catmull-Rom → glatte Bézierkurve für ein Segment [{x,y},...]
+function _smoothSeg(ctx, s) {
+  if (s.length === 0) return;
+  ctx.moveTo(s[0].x, s[0].y);
+  if (s.length < 3) { if (s.length === 2) ctx.lineTo(s[1].x, s[1].y); return; }
+  for (let i = 0; i < s.length - 1; i++) {
+    const p0 = s[Math.max(0, i - 1)];
+    const p1 = s[i], p2 = s[i + 1];
+    const p3 = s[Math.min(s.length - 1, i + 2)];
+    ctx.bezierCurveTo(
+      p1.x + (p2.x - p0.x) / 6, p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6, p2.y - (p3.y - p1.y) / 6,
+      p2.x, p2.y
+    );
+  }
+}
+
+// Sammelt Segmente (bei null-Werten unterbrochen) und gibt letzten Punkt zurück
+function _buildSegs(pts, key, xOf, yOf) {
+  let seg = [], segs = [], last = null;
+  // Downsampling bei vielen Punkten
+  const step = pts.length > 400 ? Math.ceil(pts.length / 400) : 1;
+  pts.forEach((d, i) => {
+    if (i % step !== 0 && i !== pts.length - 1) return;
+    const v = d[key];
+    if (v == null) { if (seg.length) { segs.push(seg); seg = []; } return; }
+    const p = { x: xOf(d.ts), y: yOf(v) };
+    seg.push(p); last = p;
+  });
+  if (seg.length) segs.push(seg);
+  return { segs, last };
+}
 
 function renderCharts() {
   const canvas = $('chartMain');
@@ -121,15 +169,63 @@ function renderCharts() {
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
 
-  const tMin0 = now - chartRangeSec;
-  const xOf = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
+  const tMin0  = now - chartRangeSec;
+  const xOf    = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
   const scrubTs = chartHoverPos !== null ? tMin0 + chartHoverPos * chartRangeSec : null;
 
   renderChartLegend(pts, scrubTs);
 
-  // X-axis time labels
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+  // Aktive Serien
+  const active = [];
+  Object.entries(SERIES_DEF).forEach(([key, def]) => {
+    if (!chartSeries[key]) return;
+    const vals = pts.map(d => d[key]).filter(v => v != null);
+    if (vals.length < 2) return;
+    const [lo, hi] = _seriesDomain(vals, def);
+    const span = (hi - lo) || 1;
+    const yOf  = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
+    active.push({ key, def, lo, hi, yOf });
+  });
+
+  // Y-Achse: primäre Serie (erste aktive, Priorität: SOC > current > voltage > solar)
+  const yAxisOrder = ['soc','current','voltage','solar','zelldiff'];
+  const yAxisSeries = yAxisOrder.map(k => active.find(a => a.key === k)).find(Boolean) || active[0];
+
+  // Horizontale Gridlinien an schönen Tick-Positionen der Y-Achse-Serie
+  const yTicks = yAxisSeries ? _niceTicks(yAxisSeries.lo, yAxisSeries.hi, 4) : [];
+  ctx.strokeStyle = '#2a3a4f'; ctx.lineWidth = 1;
+  yTicks.forEach(v => {
+    const y = Math.round(yAxisSeries.yOf(v)) + 0.5;
+    if (y < PAD_T || y > PAD_T + CH) return;
+    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
+  });
+  // Fallback wenn keine Y-Serien: 4 gleichmäßige Linien
+  if (!yTicks.length) {
+    for (let i = 0; i <= 4; i++) {
+      const y = PAD_T + Math.round(CH * i / 4) + 0.5;
+      ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
+    }
+  }
+
+  // Y-Achsen-Beschriftung (links)
+  if (yAxisSeries) {
+    ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    const col = yAxisSeries.def.color;
+    yTicks.forEach(v => {
+      const y = yAxisSeries.yOf(v);
+      if (y < PAD_T - 2 || y > PAD_T + CH + 2) return;
+      ctx.fillStyle = col + 'cc';
+      ctx.fillText(fmtYVal(v, yAxisSeries.key), PAD_L - 4, y);
+    });
+    // Einheit oben links
+    ctx.fillStyle = col + '99';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(yAxisSeries.def.unit, 2, PAD_T);
+  }
+
+  // X-Achse Zeitlabels
+  ctx.fillStyle = '#64748b'; ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textBaseline = 'alphabetic';
   for (let i = 0; i <= 4; i++) {
     const ts = tMin0 + chartRangeSec * i / 4;
@@ -138,87 +234,61 @@ function renderCharts() {
     ctx.fillText(fmtAxisTime(ts, now), x, H - 4);
   }
 
-  // Aktive Serien mit ≥2 Werten + eigene normalisierte Y-Funktion [0..1] → Plotfläche.
-  // Jede Serie hat ihre eigene Domäne; absolute Werte liest man in Legende/Scrubber ab.
-  const active = [];
-  Object.entries(SERIES_DEF).forEach(([key, def]) => {
-    if (!chartSeries[key]) return;
-    const vals = pts.map(d => d[key]).filter(v => v != null);
-    if (vals.length < 2) return;
-    const [lo, hi] = _seriesDomain(vals, def);
-    const span = (hi - lo) || 1;
-    const yOf = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
-    active.push({ key, def, yOf });
-  });
-
-  // Horizontale Hilfslinien
-  ctx.strokeStyle = '#2a3a4f'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = PAD_T + Math.round(CH * i / 4) + 0.5;
-    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
-  }
-
-  // Serien zeichnen (nur Linien — bei vielen Serien sind Flächen unleserlich;
-  // dezente Fläche nur wenn genau eine Serie aktiv ist)
+  // Serien zeichnen: Fill + glatte Linie
   ctx.save();
   ctx.beginPath(); ctx.rect(PAD_L, PAD_T, CW, CH); ctx.clip();
 
-  active.forEach(({ key, def, yOf }) => {
-    if (active.length === 1) {
-      const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
-      grad.addColorStop(0, def.color + '33');
-      grad.addColorStop(1, def.color + '00');
-      let first = true, lastX = 0;
-      ctx.beginPath();
-      pts.forEach(d => {
-        const v = d[key]; if (v == null) { first = true; return; }
-        const x = xOf(d.ts), y = yOf(v);
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-        lastX = x;
-      });
-      if (!first) { ctx.lineTo(lastX, PAD_T + CH); ctx.lineTo(PAD_L, PAD_T + CH);
-        ctx.closePath(); ctx.fillStyle = grad; ctx.fill(); }
-    }
+  const fillAlpha = active.length === 1 ? '30' : '1a';
 
-    let first = true, lastX = 0, lastY = 0;
-    ctx.beginPath();
-    pts.forEach(d => {
-      const v = d[key]; if (v == null) { first = true; return; }
-      const x = xOf(d.ts), y = yOf(v);
-      if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
-      lastX = x; lastY = y;
+  active.forEach(({ key, def, yOf }) => {
+    const { segs, last } = _buildSegs(pts, key, xOf, yOf);
+    if (!segs.length) return;
+
+    // Fill: für jedes Segment schließen wir nach unten
+    segs.forEach(s => {
+      if (s.length < 2) return;
+      const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
+      grad.addColorStop(0, def.color + fillAlpha);
+      grad.addColorStop(1, def.color + '00');
+      ctx.beginPath();
+      _smoothSeg(ctx, s);
+      ctx.lineTo(s[s.length - 1].x, PAD_T + CH);
+      ctx.lineTo(s[0].x, PAD_T + CH);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
     });
+
+    // Linie
+    ctx.beginPath();
+    segs.forEach(s => _smoothSeg(ctx, s));
     ctx.strokeStyle = def.color; ctx.lineWidth = 2;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
-    if (!first && scrubTs === null) {
-      ctx.beginPath(); ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+    // Livepoint
+    if (last && scrubTs === null) {
+      ctx.beginPath(); ctx.arc(last.x, last.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
     }
   });
 
   ctx.restore();
 
-  // für Scrubber unten verfügbar machen
+  // Crosshair + dots
   const seriesYOf = Object.fromEntries(active.map(a => [a.key, a]));
-
-  // Crosshair + dots at hover position
   if (scrubTs !== null) {
     const x = xOf(scrubTs);
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath(); ctx.moveTo(x, PAD_T); ctx.lineTo(x, PAD_T + CH); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-
+    ctx.setLineDash([]); ctx.restore();
     Object.entries(seriesYOf).forEach(([key, { yOf, def }]) => {
-      const ptsWithKey = pts.filter(d => d[key] != null);
-      if (!ptsWithKey.length) return;
-      let closest = ptsWithKey[0], minDist = Math.abs(ptsWithKey[0].ts - scrubTs);
-      ptsWithKey.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < minDist) { minDist = dist; closest = d; } });
-      const y = yOf(closest[key]);
+      const ptsK = pts.filter(d => d[key] != null);
+      if (!ptsK.length) return;
+      let cl = ptsK[0], md = Math.abs(ptsK[0].ts - scrubTs);
+      ptsK.forEach(d => { const dist = Math.abs(d.ts - scrubTs); if (dist < md) { md = dist; cl = d; } });
+      const y = yOf(cl[key]);
       ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
