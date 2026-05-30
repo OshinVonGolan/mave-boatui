@@ -380,6 +380,8 @@ function openBattDetail() {
 function closeBattDetail() {
   $('battOverlay').classList.add('hidden');
   history.replaceState(null, '', location.pathname);
+  // Inverter-Card sofort auf letzten bekannten Zustand setzen (verhindert Flash)
+  if (_lastData) updateInverterCard(_lastData.inverter, _lastData.charger);
 }
 
 // ── BMS update ─────────────────────────────────────────────────────────────
@@ -402,6 +404,20 @@ function updateBms(bms) {
   if (remAhEl && remAhEl.textContent === '--') {
     if (bms.capacity_ah != null && bms.soc != null)
       remAhEl.textContent = (bms.capacity_ah * bms.soc / 100).toFixed(1);
+  }
+  // BMS-Relais-Status auf der Batterie-Kachel
+  const relayRow = $('bmsRelayRow');
+  if (relayRow && bms.allow_charge != null) {
+    relayRow.style.display = '';
+    const _dot = (id, ok) => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.toggle('on', ok);
+      el.style.background  = ok ? 'var(--green)' : 'var(--red)';
+      el.style.boxShadow   = ok ? '0 0 4px var(--green)' : '0 0 4px var(--red)';
+    };
+    _dot('bmsRelayChargeDot',    bms.allow_charge);
+    _dot('bmsRelayDischargeDot', bms.allow_discharge);
   }
   const hasBms = bms.voltage != null;
   $('bmsNoSignal').style.display  = hasBms ? 'none' : '';

@@ -50,6 +50,30 @@ let _serviceMin = null, _serviceMax = null;
 let _lastZelldiff = null;
 let _lastBattery = null;
 
+// ── Heute entnommene Energie (aus Shunt-Leistung akkumuliert) ──────────────
+
+let _todayWhDrawn = 0;
+let _lastShuntTs  = null;
+
+function _accumTodayWh(power) {
+  const now      = Date.now() / 1000;
+  const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
+  if (_lastShuntTs === null || _lastShuntTs < midnight) {
+    _todayWhDrawn = 0;
+    _lastShuntTs  = now;
+    return;
+  }
+  const dtH = (now - _lastShuntTs) / 3600;
+  if (power != null && power < 0) _todayWhDrawn += Math.abs(power) * dtH;
+  _lastShuntTs = now;
+}
+
+function _fmtWh(wh) {
+  if (wh == null) return { val: '--', unit: 'Wh' };
+  if (wh >= 1000) return { val: (wh / 1000).toFixed(2), unit: 'kWh' };
+  return { val: Math.round(wh).toString(), unit: 'Wh' };
+}
+
 // ── Dual-source tile update ────────────────────────────────────────────────
 
 function updateDualTiles() {
@@ -145,6 +169,16 @@ function updateBattery(b) {
   $('battStarter').textContent = fmtV(b.starter_voltage);
   $('battCycles').textContent  = b.cycles ?? '--';
   $('battFull').textContent    = timeSince(b.time_since_full);
+
+  // Heute entnommene Energie aus Shunt-Leistung akkumulieren
+  _accumTodayWh(b.power);
+  const todayEl   = $('battTodayWh');
+  const todayUnit = $('battTodayUnit');
+  if (todayEl) {
+    const { val, unit } = _fmtWh(_todayWhDrawn > 0 ? _todayWhDrawn : null);
+    todayEl.textContent = val;
+    if (todayUnit) todayUnit.textContent = unit;
+  }
 
   // Restkapazität: konfigurierte Ah + consumed_ah vom Shunt (consumed_ah ist negativ)
   const capAh   = batteriesConfig.capacity_ah ?? null;
