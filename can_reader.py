@@ -213,9 +213,11 @@ class CanInterface:
             return
 
         # Debug: letzten vollständigen Payload je (pgn, src, instance) merken
+        # Für 127505 volle Byte 0 (Typ+Instanz), da Tanks gleiche Instanz aber verschiedenen Typ haben können
         _inst = None
         if pgn in (127508, 130910) and payload:        _inst = payload[0]
-        elif pgn in (127505, 130312) and payload:      _inst = payload[0] & 0x0F
+        elif pgn == 127505 and payload:                _inst = payload[0]
+        elif pgn == 130312 and payload:                _inst = payload[0] & 0x0F
         elif pgn == 127506 and len(payload) > 1:       _inst = payload[1]
         self._last_raw[(pgn, src, _inst)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
 
@@ -230,7 +232,7 @@ class CanInterface:
         elif pgn == 127505:
             p = parse_fluid_level(payload)
             if p:
-                self._track_network(pgn, src, p['instance'])
+                self._track_network(pgn, src, payload[0])   # volle Byte 0 (Typ+Instanz)
                 key = 'tank1' if p['instance'] == 0 else 'tank2'
                 if self.state.tanks[key] != p['level']:
                     self.state.tanks[key] = p['level']

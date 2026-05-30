@@ -388,13 +388,16 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
     if pgn == 127505:
         if len(payload) < 3: return []
         fluid_types = {0:'Kraftstoff',1:'Frischwasser',2:'Grauwasser',3:'Livewell',4:'Öl',5:'Schwarzwasser',6:'Motorraum'}
-        lvl_raw = struct.unpack_from('<H', payload, 1)[0]
-        cap_raw = struct.unpack_from('<I', payload, 3)[0] if len(payload) >= 7 else 0xFFFFFFFF
+        inst      = payload[0] & 0x0F
+        ftype     = payload[0] >> 4
+        lvl_raw   = struct.unpack_from('<H', payload, 1)[0]
+        cap_raw   = struct.unpack_from('<I', payload, 3)[0] if len(payload) >= 7 else 0xFFFFFFFF
         return [
-            fv('Instanz', payload[0] & 0x0F),
-            fv('Fluid-Typ', fluid_types.get(payload[0] >> 4, f'Typ {payload[0] >> 4}')),
+            fv('Instanz', inst),
+            fv('Fluid-Typ', f"{fluid_types.get(ftype, f'Typ {ftype}')} (0x{ftype:X})"),
             fv('Füllstand', f'{lvl_raw * 0.004:.1f} %' if lvl_raw != 0xFFFF else NA),
             fv('Kapazität', f'{cap_raw * 0.1:.0f} L' if cap_raw != 0xFFFFFFFF else NA),
+            fv('Byte 0 (raw)', f'0x{payload[0]:02X}'),
         ]
 
     elif pgn == 127506:
