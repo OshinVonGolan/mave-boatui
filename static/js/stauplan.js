@@ -164,7 +164,7 @@ function closeStauEdit() {
   $('stauEditSheet').style.display = 'none';
 }
 
-function saveStauEdit() {
+function _saveStauEditExisting() {
   const item = STAU_ITEMS[_stauEditIdx];
   if (!item) return;
   item.name  = $('stauEditName').value.trim()  || item.name;
@@ -201,11 +201,9 @@ function openStauNew() {
   setTimeout(() => $('stauEditName').focus(), 80);
 }
 
-// Override saveStauEdit to handle both new + edit
-const _origSaveStauEdit = saveStauEdit;
+// Behandelt sowohl neuen Artikel (idx=-1) als auch Bearbeiten
 function saveStauEdit() {
   if (_stauEditIdx === -1) {
-    // New item
     const name = $('stauEditName').value.trim();
     if (!name) { $('stauEditName').focus(); return; }
     STAU_ITEMS.push({
@@ -218,6 +216,6 @@ function saveStauEdit() {
     _stauSave();
     renderStauTable($('stauSearchInput')?.value || '');
   } else {
-    _origSaveStauEdit();
+    _saveStauEditExisting();
   }
 }

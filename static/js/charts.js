@@ -348,8 +348,7 @@ function updateBms(bms) {
   const remEl = $('dRemKwh');
   if (remEl && bms.remaining_kwh != null) remEl.textContent = bms.remaining_kwh.toFixed(2);
 
-  // Neue 2x2 Zellanzeige in der Batterie-Detail-Seite
-  const hasBms = bms.voltage != null;
+  // Neue 2x2 Zellanzeige in der Batterie-Detail-Seite (hasBms ist oben definiert)
   const cellWrap = $('bdCellMini'), cellAbsent = $('bdCellMiniAbsent');
   if (cellWrap) cellWrap.style.display = hasBms ? '' : 'none';
   if (cellAbsent) cellAbsent.style.display = hasBms ? 'none' : '';
