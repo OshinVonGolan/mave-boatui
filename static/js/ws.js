@@ -177,20 +177,58 @@ async function setInverterMode(mode) {
   } catch(e) { alert('Verbindungsfehler'); }
 }
 
-function updateInverterCard(inv) {
+// ── Inverter / 230V Kachel ─────────────────────────────────────────────────
+
+const INV_MAX_W = 2000;
+const _INV_CX = 60, _INV_CY = 54, _INV_R = 44;
+const _INV_START = 225, _INV_SWEEP = 270;
+const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Const VI','Ext. Control','External Control']);
+
+function _invArc(cx, cy, r, start, sweep) {
+  const rad = a => (a - 90) * Math.PI / 180;
+  const x1 = cx + r * Math.cos(rad(start)), y1 = cy + r * Math.sin(rad(start));
+  const x2 = cx + r * Math.cos(rad(start + sweep)), y2 = cy + r * Math.sin(rad(start + sweep));
+  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+$('invGaugeTrack')?.setAttribute('d', _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, _INV_SWEEP));
+
+function updateInverterCard(inv, charger) {
   if (!inv) return;
-  const lbl = $('inverterStateLabel');
-  if (lbl) {
-    lbl.textContent = inv.state || '--';
-    lbl.style.color = inv.state === 'Aktiv' ? 'var(--green)' : inv.state === 'Eco' ? 'var(--yellow)' : inv.state === 'Aus' ? 'var(--text3)' : 'var(--text3)';
+
+  // Landstrom ableiten aus Ladegerät-Status
+  const shoreActive = charger?.state != null && _SHORE_STATES.has(charger.state);
+  const dot = $('shoreIndicator');
+  const lbl = $('shoreLabel');
+  if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');
+  if (lbl) { lbl.textContent = shoreActive ? 'Landstrom aktiv' : 'Kein Landstrom'; lbl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
+
+  // Zustandslabel + AC-Spannung
+  const stLbl = $('invStateLabel');
+  if (stLbl) { stLbl.textContent = inv.state || '--'; stLbl.style.color = inv.state === 'Aktiv' ? 'var(--green)' : inv.state === 'Eco' ? 'var(--yellow)' : 'var(--text3)'; }
+  const acV = $('invAcVSmall');
+  if (acV) acV.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) + ' V' : '-- V';
+
+  // Leistungs-Gauge
+  const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
+  const power = inv.power;
+  const pct = (power != null && isActive) ? Math.max(0, Math.min(100, power / INV_MAX_W * 100)) : 0;
+  const color = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+  const gaugeEl = $('invGaugeVal');
+  if (gaugeEl) {
+    const sweep = _INV_SWEEP * pct / 100;
+    gaugeEl.setAttribute('d', sweep < 2 ? '' : _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, sweep));
+    gaugeEl.style.stroke = color;
   }
+  const pwEl = $('invPowerVal');
+  if (pwEl) pwEl.textContent = shoreActive && !isActive ? '--' : (power != null ? Math.round(power) : '--');
+  const loadEl = $('invLoadPct');
+  if (loadEl) loadEl.textContent = isActive && power != null ? Math.round(pct) + '%' : '--%';
+
+  // Buttons
   ['On','Eco','Off'].forEach(k => $('invBtn'+k)?.classList.remove('active-on','active-eco','active-off'));
-  if (inv.state === 'Aktiv')  { $('invBtnOn')?.classList.add('active-on'); }
-  if (inv.state === 'Eco')    { $('invBtnEco')?.classList.add('active-eco'); }
-  if (inv.state === 'Aus')    { $('invBtnOff')?.classList.add('active-off'); }
-  const av = $('invAcV'); if (av) av.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) : '--';
-  const ai = $('invAcI'); if (ai) ai.textContent = inv.ac_current != null ? inv.ac_current.toFixed(1) : '--';
-  const dv = $('invDcV'); if (dv) dv.textContent = inv.dc_voltage != null ? inv.dc_voltage.toFixed(1) : '--';
+  if (inv.state === 'Aktiv') $('invBtnOn')?.classList.add('active-on');
+  if (inv.state === 'Eco')   $('invBtnEco')?.classList.add('active-eco');
+  if (inv.state === 'Aus')   $('invBtnOff')?.classList.add('active-off');
 }
 
 function handleData(data) {
@@ -207,7 +245,7 @@ function handleData(data) {
   updatePowerSources(data);
   updateSolarCard(data);
   updateFlow(data);
-  if (data.inverter) updateInverterCard(data.inverter);
+  if (data.inverter) updateInverterCard(data.inverter, data.charger);
   if (data.bms) updateBms(data.bms);
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);

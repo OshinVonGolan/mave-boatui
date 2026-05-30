@@ -37,9 +37,9 @@
     <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M5 12.55a11 11 0 0 1 14 0"/>
-          <path d="M1.5 9a16 16 0 0 1 21 0"/>
-          <path d="M8.5 16.1a6 6 0 0 1 7 0"/>
+          <path d="M1.5 9a14 14 0 0 1 21 0"/>
+          <path d="M5 12.5a10 10 0 0 1 14 0"/>
+          <path d="M8.5 16a6 6 0 0 1 7 0"/>
           <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>
         </svg>
         <div class="conn-inet-dot" id="connInetDot"></div>
@@ -209,21 +209,35 @@
     </div>
   </section>
 
-  <!-- ── Inverter Steuerung ── -->
+  <!-- ── 230V / Inverter Kachel ── -->
   <section class="card" id="inverterCard" style="grid-area:inverter">
     <div class="card-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Inverter
-      <span id="inverterStateLabel" style="margin-left:auto;font-size:12px;font-weight:600;color:var(--text3)">--</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      230V
+      <span id="invStateLabel" style="margin-left:auto;font-size:11px;font-weight:600;color:var(--text3)">--</span>
+      <span id="invAcVSmall" style="font-size:10px;color:var(--text3);margin-left:6px">-- V</span>
     </div>
-    <div style="display:flex;gap:8px">
+
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <div id="shoreIndicator" class="shore-dot"></div>
+      <span id="shoreLabel" style="font-size:12px;color:var(--text3)">Kein Landstrom</span>
+    </div>
+
+    <div style="margin:0 auto 8px;max-width:140px">
+      <svg viewBox="0 0 120 84" style="width:100%;display:block;overflow:visible">
+        <path id="invGaugeTrack" fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round"/>
+        <path id="invGaugeVal"   fill="none" stroke="var(--green)"  stroke-width="10" stroke-linecap="round" d=""/>
+        <text id="invPowerVal" x="60" y="50" text-anchor="middle" fill="var(--text)" font-size="22" font-weight="700" font-family="-apple-system,sans-serif">--</text>
+        <text x="60" y="63" text-anchor="middle" fill="var(--text3)" font-size="10" font-family="-apple-system,sans-serif">W  ·  <tspan id="invLoadPct">--%</tspan></text>
+      </svg>
+    </div>
+
+    <div style="display:flex;gap:6px">
       <button class="inv-btn" id="invBtnOn"  onclick="setInverterMode(2)">An</button>
       <button class="inv-btn" id="invBtnEco" onclick="setInverterMode(5)">Eco</button>
       <button class="inv-btn" id="invBtnOff" onclick="setInverterMode(4)">Aus</button>
-    </div>
-    <div style="font-size:12px;color:var(--text3);display:flex;gap:12px;flex-wrap:wrap">
-      <span>AC: <strong id="invAcV">--</strong> V &nbsp; <strong id="invAcI">--</strong> A</span>
-      <span>DC: <strong id="invDcV">--</strong> V</span>
     </div>
   </section>
 
@@ -590,10 +604,10 @@
     </button>
     <div class="ov-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M1.5 8.5a12 12 0 0 1 21 0"/>
-        <path d="M5 12.5a7 7 0 0 1 14 0"/>
-        <path d="M8.5 16.5a3 3 0 0 1 7 0"/>
-        <circle cx="12" cy="20" r="1" fill="currentColor"/>
+        <path d="M1.5 9a14 14 0 0 1 21 0"/>
+        <path d="M5 12.5a10 10 0 0 1 14 0"/>
+        <path d="M8.5 16a6 6 0 0 1 7 0"/>
+        <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>
       </svg>
       Internet-Verbindung
     </div>
