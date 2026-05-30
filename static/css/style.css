@@ -973,10 +973,11 @@
       filter: drop-shadow(0 0 12px rgba(6,182,212,.4)); }
     .flow-g.dim { opacity: .55; }
     .flow-g.dim .flow-box { fill: #16243a; stroke: #2b3c54; }
-    .flow-name { fill: #9bb0c8; font-size: 15px; font-weight: 600; letter-spacing: .04em;
+    .flow-name { fill: #6e8fb0; font-size: 19px; font-weight: 600; letter-spacing: .05em;
       text-anchor: middle; text-transform: uppercase; }
-    .flow-val  { fill: #eef4fb; font-size: 24px; font-weight: 800; text-anchor: middle; }
-    .flow-sub  { fill: #9bb0c8; font-size: 15px; text-anchor: middle; }
+    .flow-val  { fill: #eef4fb; font-size: 36px; font-weight: 800; text-anchor: middle; }
+    .flow-sub  { fill: #8baac4; font-size: 18px; text-anchor: middle; }
+    .flow-icon { fill: #4a6a8a; stroke: #4a6a8a; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
 
     /* ── Settings: Kategorie-Navigation + Unterseiten ── */
     .set-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 16px 0; }

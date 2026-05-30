@@ -1222,6 +1222,163 @@
   <div id="pgnDetailFields" style="overflow-y:auto;flex:1"></div>
 </div>
 
+<!-- ── Energiefluss Overlay ─────────────────────────────────────────────────── -->
+<div id="flowOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeFlow()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="ov-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Energiefluss
+    </div>
+  </div>
+  <div class="ov-body" style="padding:8px;background:#0b1726;display:flex;align-items:flex-start;justify-content:center;overflow:auto">
+    <svg class="flow-schema" viewBox="0 0 920 580" xmlns="http://www.w3.org/2000/svg" style="max-height:calc(100vh - 52px)">
+
+      <!-- ── Basis-Kanten (grau, immer sichtbar) ── -->
+      <path class="flow-edge" d="M 169,74 H 276"/>
+      <path class="flow-edge" d="M 100,30 V 15 H 810 V 30"/>
+      <path class="flow-edge" d="M 345,118 V 175 H 460 V 232"/>
+      <path class="flow-edge" d="M 460,232 V 175 H 555 V 118"/>
+      <path class="flow-edge" d="M 624,74 H 741"/>
+      <path class="flow-edge" d="M 169,210 H 258 V 253 H 378"/>
+      <path class="flow-edge" d="M 169,310 H 258 V 285 H 378"/>
+      <path class="flow-edge" d="M 169,410 H 258 V 317 H 378"/>
+      <path class="flow-edge" d="M 542,285 H 741"/>
+      <path class="flow-edge" d="M 460,461 V 338"/>
+      <path class="flow-edge" d="M 351,505 H 391"/>
+      <path class="flow-edge" d="M 179,505 H 213"/>
+
+      <!-- ── Animierte Fluss-Dots (gesteuert durch flow.js) ── -->
+      <path id="fe-charger"      class="flow-edge-dot" d="M 169,74 H 276"/>
+      <path id="fe-gridbord"     class="flow-edge-dot" d="M 100,30 V 15 H 810 V 30"/>
+      <path id="fe-gridcharger"  class="flow-edge-dot" d="M 345,118 V 175 H 460 V 232"/>
+      <path id="fe-inv"          class="flow-edge-dot" d="M 460,232 V 175 H 555 V 118"/>
+      <path id="fe-invbord"      class="flow-edge-dot" d="M 624,74 H 741"/>
+      <path id="fe-solar1"       class="flow-edge-dot" d="M 169,210 H 258 V 253 H 378"/>
+      <path id="fe-solar2"       class="flow-edge-dot" d="M 169,310 H 258 V 285 H 378"/>
+      <path id="fe-solar3"       class="flow-edge-dot" d="M 169,410 H 258 V 317 H 378"/>
+      <path id="fe-dcgrid"       class="flow-edge-dot" d="M 542,285 H 741"/>
+      <path id="fe-orion"        class="flow-edge-dot" d="M 460,461 V 338"/>
+      <path id="fe-starterorion" class="flow-edge-dot" d="M 351,505 H 391"/>
+      <path id="fe-altstarter"   class="flow-edge-dot" d="M 179,505 H 213"/>
+
+      <!-- ── LANDSTROM ── -->
+      <g id="fg-grid" class="flow-g dim">
+        <rect class="flow-box" x="31" y="30" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(100,47)"><path d="M2,-6.5L-4,1h4.5L-2,6.5l7.5,-8.5H1z"/></g>
+        <text class="flow-name" x="100" y="63">Landstrom</text>
+        <text id="fv-grid" class="flow-val" x="100" y="94">—</text>
+      </g>
+
+      <!-- ── LADEGERÄT ── -->
+      <g id="fg-charger" class="flow-g dim">
+        <rect class="flow-box" x="276" y="30" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(345,47)"><path d="M-3,-6v4M3,-6v4M-5,-2h10v3a5,5,0,0,1-10,0zM0,5v2"/></g>
+        <text class="flow-name" x="345" y="63">Ladegerät</text>
+        <text id="fv-charger" class="flow-val" x="345" y="94">--</text>
+      </g>
+
+      <!-- ── INVERTER ── -->
+      <g id="fg-inv" class="flow-g dim">
+        <rect class="flow-box" x="486" y="30" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(555,47)"><path d="M-7,0C-5,-5,-2,-5,0,0S5,5,7,0" fill="none"/></g>
+        <text class="flow-name" x="555" y="63">Inverter</text>
+        <text id="fv-inv" class="flow-val" x="555" y="94">--</text>
+      </g>
+
+      <!-- ── AC-LASTEN ── -->
+      <g id="fg-bord" class="flow-g dim">
+        <rect class="flow-box" x="741" y="30" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(810,47)"><path d="M0,-7.5L-7,-1.5v9h4.5v-4.5h5v4.5h4.5V-1.5z" fill="none"/></g>
+        <text class="flow-name" x="810" y="63">AC-Lasten</text>
+        <text id="fv-bord" class="flow-val" x="810" y="94">—</text>
+      </g>
+
+      <!-- ── SOLAR 1 ── -->
+      <g id="fg-solar1" class="flow-g dim">
+        <rect class="flow-box" x="31" y="166" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(100,183)">
+          <circle r="3.5"/><path d="M0,-6.5v2.5M0,6.5v-2.5M-6.5,0h2.5M6.5,0h-2.5M-4.6,-4.6l1.8,1.8M4.6,4.6l-1.8,-1.8M4.6,-4.6l-1.8,1.8M-4.6,4.6l1.8,-1.8" fill="none"/>
+        </g>
+        <text class="flow-name" x="100" y="199">Solar 1</text>
+        <text id="fv-solar1" class="flow-val" x="100" y="230">--</text>
+        <text id="fsa-solar1" class="flow-sub" x="100" y="249">--</text>
+      </g>
+
+      <!-- ── SOLAR 2 ── -->
+      <g id="fg-solar2" class="flow-g dim">
+        <rect class="flow-box" x="31" y="266" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(100,283)">
+          <circle r="3.5"/><path d="M0,-6.5v2.5M0,6.5v-2.5M-6.5,0h2.5M6.5,0h-2.5M-4.6,-4.6l1.8,1.8M4.6,4.6l-1.8,-1.8M4.6,-4.6l-1.8,1.8M-4.6,4.6l1.8,-1.8" fill="none"/>
+        </g>
+        <text class="flow-name" x="100" y="299">Solar 2</text>
+        <text id="fv-solar2" class="flow-val" x="100" y="330">--</text>
+        <text id="fsa-solar2" class="flow-sub" x="100" y="349">--</text>
+      </g>
+
+      <!-- ── SOLAR 3 ── -->
+      <g id="fg-solar3" class="flow-g dim">
+        <rect class="flow-box" x="31" y="366" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(100,383)">
+          <circle r="3.5"/><path d="M0,-6.5v2.5M0,6.5v-2.5M-6.5,0h2.5M6.5,0h-2.5M-4.6,-4.6l1.8,1.8M4.6,4.6l-1.8,-1.8M4.6,-4.6l-1.8,1.8M-4.6,4.6l1.8,-1.8" fill="none"/>
+        </g>
+        <text class="flow-name" x="100" y="399">Solar 3</text>
+        <text id="fv-solar3" class="flow-val" x="100" y="430">--</text>
+        <text id="fsa-solar3" class="flow-sub" x="100" y="449">--</text>
+      </g>
+
+      <!-- ── BATTERIE (Hauptknoten) ── -->
+      <g id="fg-batt" class="flow-g">
+        <rect class="flow-box-main" x="378" y="232" width="164" height="106" rx="12"/>
+        <g class="flow-icon" transform="translate(460,249)">
+          <rect x="-7.5" y="-4.5" width="13" height="9" rx="1.5" fill="none"/><rect x="5.5" y="-2" width="3" height="4" rx="0.5"/><path d="M-5.5,0h7" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+        </g>
+        <text class="flow-name" x="460" y="265">Batterie</text>
+        <text id="fv-batt" class="flow-val" x="460" y="298">--</text>
+        <text id="fs-batt" class="flow-sub" x="460" y="322">--</text>
+      </g>
+
+      <!-- ── DC-LASTEN ── -->
+      <g id="fg-dcgrid" class="flow-g dim">
+        <rect class="flow-box" x="741" y="241" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(810,258)"><path d="M0,-7.5L-7,-1.5v9h4.5v-4.5h5v4.5h4.5V-1.5z" fill="none"/></g>
+        <text class="flow-name" x="810" y="274">DC-Lasten</text>
+        <text id="fv-dcgrid" class="flow-val" x="810" y="305">--</text>
+        <text id="fsa-dcgrid" class="flow-sub" x="810" y="324">--</text>
+      </g>
+
+      <!-- ── ORION XS ── -->
+      <g id="fg-orion" class="flow-g dim">
+        <rect class="flow-box" x="391" y="461" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(460,478)"><path d="M-7,-2.5h11M-0.5,-5.5l3.5,3-3.5,3M7,2.5h-11M0.5,5.5l-3.5,-3l3.5,-3" fill="none"/></g>
+        <text class="flow-name" x="460" y="494">Orion XS</text>
+        <text id="fv-orion" class="flow-val" x="460" y="525">--</text>
+      </g>
+
+      <!-- ── STARTER / SPANNUNGSTEILER ── -->
+      <g id="fg-starter" class="flow-g dim">
+        <rect class="flow-box" x="213" y="461" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(282,478)">
+          <rect x="-6.5" y="-4" width="11" height="8" rx="1" fill="none"/><rect x="4.5" y="-1.5" width="2.5" height="3" rx="0.5"/><path d="M-5,0h5" stroke-width="2" stroke-linecap="round" fill="none"/>
+        </g>
+        <text class="flow-name" x="282" y="494">Starter</text>
+        <text id="fv-starter" class="flow-val" x="282" y="525">--</text>
+      </g>
+
+      <!-- ── LICHTMASCHINE ── -->
+      <g id="fg-alt" class="flow-g dim">
+        <rect class="flow-box" x="41" y="461" width="138" height="88" rx="10"/>
+        <g class="flow-icon" transform="translate(110,478)"><path d="M5,-5.5A7.5,7.5,0,1,1,-6,5M-6,5l-2,-3.5l3.5,0.5" fill="none"/></g>
+        <text class="flow-name" x="110" y="494">Lichtm.</text>
+        <text id="fv-alt" class="flow-val" x="110" y="525">--</text>
+      </g>
+
+    </svg>
+  </div>
+</div>
+
 <script src="/static/js/charts.js"></script>
 <script src="/static/js/alarms.js"></script>
 <script src="/static/js/settings.js"></script>
