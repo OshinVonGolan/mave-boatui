@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 130900, 130901, 130902, 130910}
+FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910}
 
 
 class FastPacketReassembler:
@@ -349,6 +349,35 @@ def parse_charger_status_pgn(data: bytes):
         8: 'Const VI', 9: 'Deaktiviert', 0xF: 'Fehler',
     }
     return {'instance': inst, 'battery': batt, 'state': MODES.get(mode, f'Mode {mode}')}
+
+
+def parse_product_info(data: bytes) -> dict | None:
+    """PGN 126996 – Product Information (Fast Packet, ~134 Byte Payload).
+    Gibt model_id (Gerätename) und sw_version zurück.
+    """
+    if len(data) < 36:
+        return None
+    def _str(raw: bytes) -> str:
+        return raw.rstrip(b'\x00\xff ').decode('ascii', errors='replace').strip()
+    model_id   = _str(data[4:36])
+    sw_version = _str(data[36:68]) if len(data) >= 68 else ''
+    if not model_id:
+        return None
+    return {'model_id': model_id, 'sw_version': sw_version}
+
+
+def parse_iso_address_claim(data: bytes) -> dict | None:
+    """PGN 60928 – ISO Address Claim (8 Byte NAME-Feld).
+    Gibt Hersteller-Code und Geräte-Funktion zurück.
+    """
+    if len(data) < 8:
+        return None
+    name = int.from_bytes(data[:8], 'little')
+    mfr_code    = (name >> 21) & 0x7FF   # Bits 21-30
+    device_fn   = (name >> 40) & 0xFF    # Bits 40-47
+    device_cls  = (name >> 49) & 0x7F    # Bits 49-55
+    return {'mfr_code': mfr_code, 'device_fn': device_fn, 'device_cls': device_cls,
+            'name_bytes': data[:8].hex()}
 
 
 def build_inverter_mode_frame(mode: int) -> tuple[int, bytes]:

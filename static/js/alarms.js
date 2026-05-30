@@ -87,11 +87,12 @@ function renderNetworkInto(el, entries) {
   });
 
   const cards = Object.entries(bySource).map(([src, pgns]) => {
-    const srcNum = parseInt(src);
-    const srcHex = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
-    const name   = devicesConfig[src] ?? `Gerät ${srcHex}`;
-    const minAge = Math.min(...pgns.map(p => p.age_s));
-    const dotCls = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
+    const srcNum   = parseInt(src);
+    const srcHex   = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
+    const busName  = pgns[0]?.device_name || '';
+    const name     = busName || devicesConfig[src] || `Gerät ${srcHex}`;
+    const minAge   = Math.min(...pgns.map(p => p.age_s));
+    const dotCls   = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
 
     const pgnRows = pgns.map(p => {
       const iv     = p.interval_ms != null ? `${p.interval_ms} ms` : null;

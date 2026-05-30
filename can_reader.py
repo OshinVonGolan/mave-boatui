@@ -12,6 +12,7 @@ from nmea2000 import (
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_charger_status_pgn, parse_inverter_status, parse_ve_direct_ext,
+    parse_iso_address_claim, parse_product_info,
     parse_temperature,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
 )
@@ -85,6 +86,8 @@ class CanInterface:
         self._network:  dict = {}   # (pgn, src) → tracking entry
         self._last_raw: dict = {}   # pgn → {src, len, hex} (Debug)
         self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
+        self._device_names: dict = {}   # src → model_id (aus PGN 126996)
+        self._device_addrclaim: dict = {}  # src → name_bytes (aus PGN 60928)
         self._service_instance: int = 0
         self._starter_instance: int = 1
 
@@ -168,6 +171,7 @@ class CanInterface:
                 'pgn':         pgn,
                 'src':         src,
                 'instance':    instance,
+                'device_name': self._device_names.get(src, ''),
                 'description': PGN_NAMES.get(pgn, f'PGN {pgn}'),
                 'count':       e['count'],
                 'interval_ms': avg_ms,
@@ -337,6 +341,17 @@ class CanInterface:
                 if p.get('state') and self.state.charger.get('state') != p['state']:
                     self.state.charger['state'] = p['state']
                     changed = True
+
+        elif pgn == 60928:
+            p = parse_iso_address_claim(payload)
+            if p:
+                self._device_addrclaim[src] = p['name_bytes']
+
+        elif pgn == 126996:
+            p = parse_product_info(payload)
+            if p and p['model_id']:
+                self._device_names[src] = p['model_id']
+                log.info("Gerät %d: %s (SW: %s)", src, p['model_id'], p['sw_version'])
 
         if changed:
             self._schedule_broadcast()
