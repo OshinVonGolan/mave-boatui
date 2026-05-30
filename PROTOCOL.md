@@ -8,15 +8,48 @@ sowie die PGNs des VE.Direct-NMEA2K-Gateways (Teensy 4.1).
 
 ## Geräte im Netzwerk
 
-| Gerät                   | Hardware      | Quelladresse |
-|-------------------------|---------------|--------------|
-| mave-boatui (Pi)        | Raspberry Pi  | 100          |
-| Battery Board           | Teensy 3.1    | –            |
-| VE.Direct Gateway       | Teensy 4.1    | 22           |
+| Gerät                   | Hardware      | Quelladresse                          |
+|-------------------------|---------------|---------------------------------------|
+| mave-boatui (Pi)        | Raspberry Pi  | 100 (fest, `RPI_SOURCE_ADDRESS`)      |
+| Battery Board           | Teensy 3.1    | auto (bevorzugt 1, NMEA2K Address Claim) |
+| VE.Direct Gateway       | Teensy 4.1    | auto (bevorzugt 0, NMEA2K Address Claim) |
+
+Beide Teensy-Geräte verwenden `SetMode(N2km_NodeOnly, 0)` — sie starten mit
+Preferred Address 0 und wählen automatisch eine freie Adresse per Address Claim
+(PGN 60928). Der Pi trackt die aktuellen Adressen laufend über empfangene
+PGN 130910-Frames (VE.Direct Gateway) und PGN 130901-Frames (Battery Board).
 
 ---
 
 ## Empfangene PGNs (Pi / mave-boatui)
+
+### PGN 59904 – ISO Request *(gesendet vom Pi beim Start)*
+**Format:** Single Frame, 3 Byte · **Richtung:** Pi → alle Geräte (broadcast)
+
+Der Pi sendet PGN 59904 nach dem CAN-Bus-Connect (1 s Delay), um alle Geräte
+zur Übertragung ihrer Produktinformation (PGN 126996) aufzufordern.
+
+| Byte | Inhalt |
+|------|--------|
+| 0–2  | Angefordertes PGN (uint24 LE): 126996 |
+
+---
+
+### PGN 60928 – ISO Address Claim
+**Format:** Single Frame, 8 Byte
+
+Wird von jedem Gerät beim Bus-Beitritt gesendet. Der Pi empfängt diese Frames
+und speichert das 8-Byte-NAME-Feld pro Quelladresse intern (`_device_addrclaim`).
+
+| Bits    | Inhalt |
+|---------|--------|
+| 0–20    | Identity Number (21 Bit, herstellereindeutig) |
+| 21–30   | Manufacturer Code (10 Bit) |
+| 40–47   | Device Function |
+| 49–55   | Device Class |
+| 63      | Arbitrary Address Capable |
+
+---
 
 ### PGN 126720 – Proprietary Fast-Packet (Helligkeit empfangen)
 **Format:** Fast Packet, 11 Byte Payload
@@ -33,16 +66,38 @@ Kanäle 1–4 sind dimmbare Leuchtkanäle, Kanal 9 ist das Relais (0/255).
 
 ---
 
+### PGN 126996 – Product Information
+**Format:** Fast Packet, ~134 Byte Payload
+
+Wird als Antwort auf einen PGN-59904-Request empfangen. Enthält den
+einprogrammierten Produktnamen (Model ID), der im Netzwerk-View angezeigt wird.
+
+| Offset | Typ    | Inhalt |
+|--------|--------|--------|
+| 0–1    | uint16 | NMEA 2000 Database Version |
+| 2–3    | uint16 | Manufacturer Product Code |
+| 4–35   | char32 | Model ID (null-padded ASCII, z.B. `"VE.Direct NMEA2K GW"`) |
+| 36–67  | char32 | Software Version Code |
+| 68–99  | char32 | Model Version |
+| 100–131| char32 | Serial Code |
+| 132    | uint8  | Certification Level |
+| 133    | uint8  | Load Equivalency |
+
+Der Pi speichert `model_id` pro Quelladresse in `_device_names[src]`.
+
+---
+
 ### PGN 127505 – Fluid Level
 **Format:** Single Frame (7 Byte)
 
 | Byte | Inhalt |
 |------|--------|
-| 0    | Instanz (Nibble 0–3) |
-| 1–2  | Füllstand (uint16, LE) × 0.004 → % |
+| 0    | Bits 3–0: Instanz (0 = Tank 1, 1 = Tank 2) · Bits 7–4: Fluid-Typ (0=Kraftstoff, 1=Frischwasser, 2=Grauwasser …) |
+| 1–2  | Füllstand (uint16 LE) × 0.004 → % (0xFFFF = N/A) |
+| 3–6  | Kapazität (uint32 LE) × 0.1 L (0xFFFFFFFF = N/A) |
 
-Instanzen werden in `presets.json → tanks` konfiguriert und auf Tank 1 / Tank 2
-gemappt.
+Tank-Zuweisung im Pi: Instanz 0 → `tank1`, Instanz 1 → `tank2`.
+Namen/Kapazitäten werden in `presets.json → tanks` konfiguriert.
 
 ---
 
@@ -52,7 +107,7 @@ gemappt.
 | Byte | Inhalt |
 |------|--------|
 | 1    | Instanz |
-| 2    | DC-Typ (Nibble): 1 = Lichtmaschine, 4 = Solar |
+| 2    | DC-Typ (Nibble 0–3): 1 = Lichtmaschine, 4 = Solar |
 
 Wird nur ausgewertet, um Lichtmaschine (Typ 1) und Solar (Typ 4) von
 Batteriebänken zu unterscheiden. Spannungs-/Stromwerte kommen über PGN 127508.
@@ -60,31 +115,33 @@ Batteriebänken zu unterscheiden. Spannungs-/Stromwerte kommen über PGN 127508.
 ---
 
 ### PGN 127507 – Charger Status *(VE.Direct Gateway)*
-**Format:** Single Frame · **Quelle:** VE.Direct-Gateway (Quelladresse 22)
+**Format:** Single Frame · **Quelle:** VE.Direct-Gateway (auto-address)
 
 Meldet den Ladezustand der Lader und DC-DC-Lader.
+Wird nur gesendet, wenn innerhalb der letzten **5 Sekunden** ein gültiger
+VE.Direct-Frame empfangen wurde (Timeout-Schutz gegen veraltete Werte).
 
-| Feld         | Inhalt                           |
-|--------------|----------------------------------|
-| deviceInstance | 0 = Orion-XS, 1 = Smart IP43 |
-| batteryInstance | 0 = Hausbatterie               |
-| Charge State | siehe CS-Mapping-Tabelle unten   |
-| Charger Mode | `Standalone`                     |
+| Feld            | Inhalt |
+|-----------------|--------|
+| deviceInstance  | 0 = Orion-XS DC-DC, 1 = Smart IP43 Lader |
+| batteryInstance | 0 = Hausbatterie |
+| Charge State    | s. CS-Mapping unten |
+| Charger Mode    | `Standalone` |
 
 **VE.Direct CS → NMEA-2000-Ladezustand:**
 
-| CS  | VE.Direct        | NMEA 2000            |
-|-----|------------------|----------------------|
-| 0   | Off              | Not Charging         |
-| 2   | Fault            | Fault                |
-| 3   | Bulk             | Bulk                 |
-| 4   | Absorption       | Absorption           |
-| 5   | Float            | Float                |
-| 6   | Storage          | Float                |
-| 7   | Equalize         | Equalise             |
-| 245 | Starting-up      | Not Charging         |
-| 247 | Auto equalize    | Equalise             |
-| 252 | External control | Constant VI          |
+| CS  | VE.Direct        | NMEA 2000        |
+|-----|------------------|------------------|
+| 0   | Off              | Not Charging     |
+| 2   | Fault            | Fault            |
+| 3   | Bulk             | Bulk             |
+| 4   | Absorption       | Absorption       |
+| 5   | Float            | Float            |
+| 6   | Storage          | Float            |
+| 7   | Equalize         | Equalise         |
+| 245 | Starting-up      | Not Charging     |
+| 247 | Auto equalize    | Equalise         |
+| 252 | External control | Constant VI      |
 
 ---
 
@@ -100,18 +157,19 @@ Meldet den Ladezustand der Lader und DC-DC-Lader.
 Instanzen für Service- und Starterbatterie werden in
 `presets.json → batteries` konfiguriert:
 
-| Instanz | Bedeutung      |
-|---------|----------------|
-| 0       | Hausbatterie   |
+| Instanz | Bedeutung       |
+|---------|-----------------|
+| 0       | Hausbatterie    |
 | 1       | Starterbatterie |
 
 ---
 
 ### PGN 127750 – Converter (Inverter/Charger) Status *(VE.Direct Gateway)*
-**Format:** Single Frame · **Quelle:** VE.Direct-Gateway (Quelladresse 22)
+**Format:** Single Frame · **Quelle:** VE.Direct-Gateway (auto-address)
 
 Meldet den Betriebszustand des Wechselrichters (Phoenix Inverter Smart 2000 VA).
 `deviceInstance = 0`.
+Wird nur gesendet, wenn VE.Direct-Daten frisch (< 5 s) sind.
 
 **VE.Direct CS → NMEA-2000-Converter-Mode:**
 
@@ -122,13 +180,13 @@ Meldet den Betriebszustand des Wechselrichters (Phoenix Inverter Smart 2000 VA).
 | 2  | Fault      | `N2kCICS_Fault`      |
 | 9  | Inverting  | `N2kCICS_Inverting`  |
 
-Der Zustand ändert sich nach einer Steuerung via PGN 130911:
+Der Zustand ändert sich nach einer Steuerung via PGN 61184:
 
 | Steuer-Modus | VE.Direct CS | PGN 127750 Operating State |
-|--------------|--------------|---------------------------|
-| On  (2)      | 9            | `N2kCICS_Inverting`       |
-| Eco (5)      | 1            | `N2kCICS_LP_Mode`         |
-| Off (4)      | 0            | `N2kCICS_Off`             |
+|--------------|--------------|----------------------------|
+| On  (2)      | 9            | `N2kCICS_Inverting`        |
+| Eco (5)      | 1            | `N2kCICS_LP_Mode`          |
+| Off (4)      | 0            | `N2kCICS_Off`              |
 
 ---
 
@@ -137,7 +195,7 @@ Der Zustand ändert sich nach einer Steuerung via PGN 130911:
 
 | Byte | Inhalt |
 |------|--------|
-| 0    | Instanz |
+| 0    | Instanz (Nibble 0–3) |
 | 1    | Temperaturquelle |
 | 2–3  | Temperatur (uint16 LE) × 0.01 K − 273.15 → °C (0xFFFF = N/A) |
 
@@ -205,11 +263,12 @@ Der Zustand ändert sich nach einer Steuerung via PGN 130911:
 ---
 
 ### PGN 130910 – VE.Direct Extended *(Custom, VE.Direct Gateway)*
-**Format:** Fast Packet, **28 Byte Payload** · **Quelle:** VE.Direct-Gateway (Quelladresse 22)
+**Format:** Fast Packet, **28 Byte Payload** · **Quelle:** VE.Direct-Gateway (auto-address)
 
 Enthält alle VE.Direct-Felder ohne Standard-PGN-Äquivalent. Byte 0 (Instanz)
 und Byte 1 (Typ) identifizieren das Gerät; NaN-Felder sind für den jeweiligen
 Gerätetyp nicht verfügbar.
+Wird nur gesendet, wenn VE.Direct-Daten frisch (< 5 s) sind.
 
 | Offset | Typ     | Inhalt                                       | Skalierung       |
 |--------|---------|----------------------------------------------|------------------|
@@ -227,25 +286,67 @@ Gerätetyp nicht verfügbar.
 
 **Feldverfügbarkeit je Gerätetyp:**
 
-| Feld            | Lader | DC-DC | Inverter |
-|-----------------|-------|-------|----------|
-| CS / MODE / V / I | ✓   | ✓     | ✓        |
-| AC_OUT_V/I/S    | –     | –     | ✓        |
-| ERR (→ Offset 24) | ✓  | ✓     | –        |
-| AR  (→ Offset 24) | –  | –     | ✓        |
-| WARN            | –     | –     | ✓        |
+| Feld              | Lader | DC-DC | Inverter |
+|-------------------|-------|-------|----------|
+| CS / MODE / V / I | ✓     | ✓     | ✓        |
+| AC_OUT_V/I/S      | –     | –     | ✓        |
+| ERR (Offset 24)   | ✓     | ✓     | –        |
+| AR  (Offset 24)   | –     | –     | ✓        |
+| WARN              | –     | –     | ✓        |
 
 **Geräte-Instanzen:**
 
-| Instanz | Gerät                     | Typ    |
-|---------|---------------------------|--------|
-| 0 (Typ 1) | Orion-XS DC-DC           | DC-DC    |
-| 1 (Typ 0) | Phoenix Smart IP43       | Lader    |
-| 0 (Typ 2) | Phoenix Inverter 2000 VA | Inverter |
+| Instanz   | Gerät                      | Typ      |
+|-----------|----------------------------|----------|
+| 0 (Typ 1) | Orion-XS DC-DC             | DC-DC    |
+| 1 (Typ 0) | Phoenix Smart IP43         | Lader    |
+| 0 (Typ 2) | Phoenix Inverter 2000 VA   | Inverter |
 
 ---
 
 ## Gesendete PGNs (Pi / mave-boatui)
+
+### PGN 59904 – ISO Request *(Startup)*
+**Format:** Single Frame, 3 Byte · **Richtung:** Pi → broadcast (0xFF)
+
+Wird 1 Sekunde nach CAN-Bus-Connect gesendet. Fordert alle Geräte zur
+Übertragung von PGN 126996 (Product Information) auf.
+
+| Byte | Inhalt |
+|------|--------|
+| 0–2  | Angefordertes PGN (uint24 LE): 126996 = `0x14 0xF0 0x01` |
+
+---
+
+### PGN 61184 – VE.Direct Control *(Custom, Inverter-Steuerung)*
+**Format:** Single Frame, 3 Byte, **PDU1 (adressiert)**
+**Richtung:** Pi → VE.Direct-Gateway (Zieladresse dynamisch aus empfangenen PGN-130910-Frames)
+
+Steuert den Inverter-Modus. PDU1 (pf=0xEF=239 < 240) → Zieladresse im CAN-Frame.
+Der Pi ermittelt die aktuelle Gateway-Adresse aus `_network[(130910, src, ...)]`.
+Fallback: Broadcast (0xFF) wenn Gateway noch nicht gesehen.
+
+| Offset | Typ   | Inhalt |
+|--------|-------|--------|
+| 0      | uint8 | deviceInstance (0 = Inverter) |
+| 1      | uint8 | commandType (0 = Modus setzen) |
+| 2      | uint8 | value (Modus-Wert, s. u.) |
+
+**Inverter-Modus-Werte (commandType = 0, deviceInstance = 0):**
+
+| Wert | Modus |
+|------|-------|
+| 2    | **An** (Inverting) |
+| 4    | **Aus** |
+| 5    | **Eco** (Low Power Standby) |
+
+Unbekannte Werte werden vom Gateway ignoriert. Der neue Zustand ist
+anschließend in PGN 127750 und 130910 sichtbar.
+
+**PGN 130911 (veraltet):** Das Gateway akzeptiert als Fallback noch PGN 130911
+(PDU2, broadcast). Neuer Code soll ausschließlich PGN 61184 verwenden.
+
+---
 
 ### PGN 126720 – Proprietary Fast-Packet (Helligkeit setzen)
 **Format:** Fast Packet, 11 Byte Payload, 2 CAN-Frames
@@ -261,78 +362,77 @@ Ausgelöst durch `/api/lights/preset/{id}` oder `/api/lights/channels`.
 
 ---
 
-### PGN 130911 – VE.Direct Control *(Custom, Inverter-Steuerung)*
-**Format:** Single Frame, **3 Byte Payload**
-**Richtung:** mave-boatui → VE.Direct-Gateway
+### PGN 126992 – System Time
+**Format:** Single Frame, 8 Byte · **Richtung:** Pi → broadcast
 
-Steuert den Inverter-Modus über den Bus. Das Gateway empfängt diesen PGN und
-übersetzt ihn in einen VE.Direct-HEX-Befehl an den Wechselrichter.
-
-| Offset | Typ   | Inhalt                            |
-|--------|-------|-----------------------------------|
-| 0      | uint8 | deviceInstance (Zielgerät)        |
-| 1      | uint8 | commandType (0 = Modus setzen)    |
-| 2      | uint8 | value (Modus-Wert; s. u.)         |
-
-**Inverter-Modus-Werte (commandType = 0, deviceInstance = 0):**
-
-| Wert | Modus              |
-|------|--------------------|
-| 2    | **An** (Inverting) |
-| 4    | **Aus**            |
-| 5    | **Eco** (Low Power Standby) |
-
-Unbekannte Werte werden vom Gateway ignoriert. Der neue Zustand ist
-anschließend in PGN 127750 und 130910 sichtbar.
+Wird beim Start und auf Anfrage (`/api/system/time-sync`) gesendet.
 
 ---
 
 ## VE.Direct-HEX-Steuerung (Gateway-intern)
 
-Wenn das Gateway PGN 130911 empfängt, sendet es auf dem UART des Zielgeräts
+Wenn das Gateway PGN 61184 empfängt, sendet es auf dem UART des Zielgeräts
 einen VE.Direct-HEX-SET-Befehl (Register 0x0200 = Device Mode).
 
-**Befehlsformat:** `:8LLHH00VVCC\n`  
-**Prüfsumme:** `(0x55 − (cmd + reg_lo + reg_hi + flags + value)) & 0xFF`
+**Befehlsformat:** `:8LLHH00VVCC\r\n`
+- LL = Register-Low-Byte (0x0200 → `00`)
+- HH = Register-High-Byte (0x0200 → `02`)
+- VV = Modusw-Wert
+- CC = Prüfsumme: `(0x55 − (0x08 + LL + HH + 0x00 + VV)) & 0xFF`
 
-| Modus | Befehlsstring      | Prüfsumme                            |
-|-------|--------------------|--------------------------------------|
-| On  (0x02) | `:80002000249\n` | 0x55 − (8+0+2+0+2) = 0x49 |
-| Off (0x04) | `:80002000447\n` | 0x55 − (8+0+2+0+4) = 0x47 |
-| Eco (0x05) | `:80002000546\n` | 0x55 − (8+0+2+0+5) = 0x46 |
+| Modus    | Befehlsstring         | Prüfsumme                      |
+|----------|-----------------------|--------------------------------|
+| On  (2)  | `:80002000249\r\n`    | 0x55 − (8+0+2+0+2) = 0x49     |
+| Off (4)  | `:80002000447\r\n`    | 0x55 − (8+0+2+0+4) = 0x47     |
+| Eco (5)  | `:80002000546\r\n`    | 0x55 − (8+0+2+0+5) = 0x46     |
+
+---
+
+## VE.Direct Data Timeout (Gateway)
+
+Das Gateway sendet PGN 127507, 127750 und 130910 nur wenn der letzte
+VE.Direct-Frame des jeweiligen Geräts **weniger als 5 Sekunden alt** ist.
+Bei Überschreitung (Gerät abgeschaltet/getrennt) werden keine PGNs gesendet,
+sodass der Pi keine veralteten Werte mehr empfängt.
 
 ---
 
 ## CAN-Konfiguration
 
-| Parameter              | Wert                       |
-|------------------------|----------------------------|
-| Interface (Pi)         | `can0`                     |
-| Interface (Gateway)    | FlexCAN (Teensy 4.1)       |
-| Baudrate               | 250 kbit/s (NMEA 2000)     |
-| Quelladresse Pi        | 100 (`RPI_SOURCE_ADDRESS`) |
-| Quelladresse Gateway   | 22                         |
-| Light Bank Instanz     | 1                          |
-| VE.Direct-Baudrate     | 19200 Baud                 |
+| Parameter              | Wert |
+|------------------------|------|
+| Interface (Pi)         | `can0` |
+| Interface (Gateway)    | FlexCAN (Teensy 4.1) |
+| Baudrate               | 250 kbit/s (NMEA 2000) |
+| Quelladresse Pi        | 100 (fest, `RPI_SOURCE_ADDRESS`) |
+| Quelladresse Gateway   | auto (bevorzugt 0) |
+| Quelladresse Battery Board | auto (bevorzugt 1) |
+| Light Bank Instanz     | 1 (`LIGHT_BANK_INSTANCE`) |
+| VE.Direct-Baudrate     | 19200 Baud |
+| VE.Direct Data Timeout | 5000 ms |
 
-**Fast-Packet-PGNs:** `126720, 130900, 130901, 130902, 130910`  
-**Single-Frame-PGNs:** `127505, 127506, 127507, 127508, 127750, 130311, 130912`
+**Fast-Packet-PGNs (Pi):** `126720, 126996, 130900, 130901, 130902, 130910`
 
 ---
 
 ## PGN-Übersicht (Gesamtnetz)
 
-| PGN    | Quelle           | Empfänger  | Inhalt                            |
-|--------|------------------|------------|-----------------------------------|
-| 126720 | Pi (100)         | alle       | Licht-Helligkeit setzen/empfangen |
-| 127505 | –                | Pi         | Füllstand Tanks                   |
-| 127506 | Battery Board    | Pi         | DC-Typ (Lichtmaschine/Solar)      |
-| 127507 | Gateway (22)     | Pi         | Ladestatus Lader/DC-DC            |
-| 127508 | Battery Board    | Pi         | Batteriespannung/-strom           |
-| 127750 | Gateway (22)     | Pi         | Inverter-Betriebszustand          |
-| 130312 | Battery Board    | Pi         | Temperatur                        |
-| 130900 | Battery Board    | Pi         | Battery Stats (Custom)            |
-| 130901 | Battery Board    | Pi         | BMS Pack Data (Custom)            |
-| 130902 | Battery Board    | Pi         | BMS Cell Data (Custom)            |
-| 130910 | Gateway (22)     | Pi         | VE.Direct Extended (Custom)       |
-| 130911 | Pi (100)         | Gateway    | Inverter-Steuerung (Custom)       |
+| PGN    | Richtung              | Quelle / Ziel           | Inhalt |
+|--------|-----------------------|-------------------------|--------|
+| 59904  | Pi → alle            | Pi (100) → broadcast    | ISO Request (fordert PGN 126996 an) |
+| 60928  | alle → alle          | jedes Gerät             | ISO Address Claim (Adressvergabe) |
+| 61184  | Pi → Gateway         | Pi (100) → Gateway (auto) | VE.Direct Control / Inverter-Modus (PDU1) |
+| 126720 | Pi ↔ andere          | Pi (100) ↔ alle         | Licht-Helligkeit setzen / empfangen |
+| 126992 | Pi → alle            | Pi (100) → broadcast    | Systemzeit |
+| 126996 | Geräte → Pi          | alle → Pi               | Produktinformation / Gerätename |
+| 127505 | Sensor → Pi          | – → Pi                  | Füllstand Tanks |
+| 127506 | Battery Board → Pi   | Battery Board → Pi      | DC-Typ (Lichtmaschine / Solar) |
+| 127507 | Gateway → Pi         | Gateway (auto) → Pi     | Ladestatus Lader / DC-DC |
+| 127508 | Battery Board → Pi   | Battery Board → Pi      | Batteriespannung / -strom |
+| 127750 | Gateway → Pi         | Gateway (auto) → Pi     | Inverter-Betriebszustand |
+| 130312 | Battery Board → Pi   | Battery Board → Pi      | Temperatur |
+| 130900 | Battery Board → Pi   | Battery Board → Pi      | Battery Stats (Custom) |
+| 130901 | Battery Board → Pi   | Battery Board → Pi      | BMS Pack Data (Custom) |
+| 130902 | Battery Board → Pi   | Battery Board → Pi      | BMS Cell Data (Custom) |
+| 130910 | Gateway → Pi         | Gateway (auto) → Pi     | VE.Direct Extended (Custom) |
+| 130911 | Pi → Gateway         | Pi (100) → broadcast    | Inverter-Steuerung (veraltet, Fallback für 61184) |
