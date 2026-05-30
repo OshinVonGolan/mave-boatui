@@ -68,130 +68,79 @@ function _setNode(id, text, color, ampText) {
 function updateFlow(data) {
   if ($('flowOverlay')?.classList.contains('hidden')) return;
 
-  const num = v => (v == null ? 0 : v);
   const bat = data.battery ?? {};
   const bms = data.bms ?? {};
+  const C   = '#4a78c8'; // Einheitliche Linienfarbe
 
-  // ── Shunt-Nettostrom ──────────────────────────────────────────────────
-  // positiv = Batterie entladen (Netz zieht aus Batterie)
-  // negativ = Batterie lädt (Quellen laden Batterie)
-  const shuntI = bat.current;        // A, Shunt-Messung
-  const shuntW = bat.power;          // W, direkt vom Shunt
+  // Shunt: negativ = Entladen, positiv = Laden (wie in battery.js)
+  const shuntI = bat.current;
+  const shuntW = bat.power;
 
-  // Vorzeichen-Konvention (wie in battery.js bestätigt):
-  // bat.power / bat.current > 0  →  Laden (grün)
-  // bat.power / bat.current < 0  →  Entladen (orange)
-
-  // BMS misst:
-  //   current_charge    = Strom INS Batterie rein (A, immer positiv)
-  //   current_discharge = Strom AUS Batterie raus ins DC-Netz (A, immer positiv)
-  // Erwartung: bmsCharge - bmsDischarge ≈ shuntI (gleiche Vorzeichen-Konvention)
-  const bmsCharge    = bms.current_charge;
-  const bmsDischarge = bms.current_discharge;
-  const bmsHasData   = bmsCharge != null && bmsDischarge != null;
-
-  // Bekannte externe Quellen (Solar, Ladegerät, Orion)
-  const s1w = data.solar?.power, s2w = data.solar2?.power, s3w = data.solar3?.power;
+  const s1w      = data.solar?.power, s2w = data.solar2?.power, s3w = data.solar3?.power;
   const chargerW = data.charger?.power;
   const orionW   = data.orion?.power;
-  const hasSourceData = s1w != null || s2w != null || s3w != null
-                     || chargerW != null || orionW != null;
-  const sourcesIn = num(s1w) + num(s2w) + num(s3w) + num(chargerW) + num(orionW);
-  const invW  = data.inverter?.power;
+  const altW     = data.alternator?.power;
+  const invW     = data.inverter?.power;
 
-  let dcNetW = null;
+  // DC-Lasten = BMS-Entladestrom × Spannung (plausibel: 0–400 A)
+  const bmsDischarge = bms.current_discharge;
+  const dcRawA  = (bmsDischarge != null && bmsDischarge >= 0 && bmsDischarge <= 400) ? bmsDischarge : null;
+  const dcNetW  = (dcRawA != null && bat.voltage != null) ? dcRawA * bat.voltage : null;
 
-  if (bmsHasData && bat.voltage != null) {
-    // BMS-Pfad: battery_discharge ist gemessen → direkt DC-Last berechnen
-    // Shunt-Kalibrierung: wenn BMS-Nettostrom > 25 % vom Shunt abweicht → skalieren
-    // Scale wird auf [0.5 … 2.0] begrenzt um Sprünge bei bmsNet ≈ 0 zu verhindern
-    let discA = bmsDischarge;
-    if (shuntI != null && Math.abs(shuntI) > 0.5) {
-      const bmsNet = bmsCharge - bmsDischarge;  // BMS-Nettostrom (+ = laden)
-      const diff   = Math.abs(bmsNet - num(shuntI));
-      if (diff > Math.abs(shuntI) * 0.25 && Math.abs(bmsNet) > 0.2) {
-        const rawScale = num(shuntI) / bmsNet;
-        const scale    = Math.max(0.5, Math.min(2.0, rawScale)); // KEIN explodieren
-        discA = bmsDischarge * Math.abs(scale);
-      }
-    }
-    // DC-Last = Quellen + Batterie-Entladung - Inverter
-    dcNetW = Math.max(0, sourcesIn + discA * bat.voltage - num(invW));
-
-  } else if (hasSourceData && shuntW != null) {
-    // Kein BMS, aber Quellen bekannt:
-    // Energiebilanz: sourcesIn - shuntW (pos=laden) - invW = DC-Last
-    dcNetW = Math.max(0, sourcesIn - shuntW - num(invW));
-
-  }
-  // Wenn weder BMS noch Quelldaten: kein Wert anzeigen (würde nur Shunt wiedergeben)
-
-  // ── Landstrom-Präsenz aus Ladegerät ableiten ──────────────────────────
-  const hasGrid = chargerW != null && chargerW > 5;
+  const hasGrid    = chargerW != null && chargerW > 5;
+  const bordActive = invW > 10 || hasGrid;
 
   // ── Solar ─────────────────────────────────────────────────────────────
   _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null, _A(data.solar?.current));
   _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null, _A(data.solar2?.current));
   _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null, _A(data.solar3?.current));
 
-  // ── Ladegerät / Landstrom ─────────────────────────────────────────────
+  // ── Landstrom / Ladegerät ─────────────────────────────────────────────
+  _setNode('grid',    hasGrid ? 'aktiv' : '—');
   _setNode('charger', chargerW != null ? _W(chargerW) : '--', chargerW > 5 ? '#3b82f6' : null);
-  _setNode('grid', hasGrid ? 'aktiv' : '—');
 
-  // ── Orion XS (Lichtmaschine → Batterie) ──────────────────────────────
-  _setNode('orion', orionW != null ? _W(orionW) : '--', orionW > 0 ? '#22d3ee' : null);
-  const altW = data.alternator?.power;
-  _setNode('alt', altW != null ? _W(altW) : '--');
-  // Starter zeigt Spannung
-  const startV = bat.starter_voltage;
-  _setNode('starter', startV != null ? startV.toFixed(1) + ' V' : '--');
+  // ── Inverter + AC-Lasten (= Inverterleistung) ─────────────────────────
+  _setNode('inv',  invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null);
+  _setNode('bord', invW != null && invW > 0 ? _W(invW) : (bordActive ? '—' : '—'),
+           invW > 10 ? '#a78bfa' : null);
 
-  // ── Inverter ──────────────────────────────────────────────────────────
-  _setNode('inv', invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null);
+  // ── Orion / Lichtmaschine / Starter ──────────────────────────────────
+  _setNode('orion',   orionW  != null ? _W(orionW)  : '--', orionW  > 0 ? '#22d3ee' : null);
+  _setNode('alt',     altW    != null ? _W(altW)    : '--');
+  _setNode('starter', bat.starter_voltage != null ? bat.starter_voltage.toFixed(1) + ' V' : '--');
 
-  // ── Bordnetz (230V) ───────────────────────────────────────────────────
-  const bordActive = invW > 10 || hasGrid;
-  _setNode('bord', bordActive ? 'aktiv' : '—');
+  // ── DC-Lasten ─────────────────────────────────────────────────────────
+  _setNode('dcgrid', dcNetW != null ? _W(dcNetW) : '--',
+           dcNetW > 10 ? '#f87171' : null,
+           dcNetW != null ? _A(dcRawA) : null);
 
-  // ── DC-Verbraucher ────────────────────────────────────────────────────
-  const g = $('fg-dcgrid');
-  if (dcNetW != null) {
-    const dcA = bmsHasData ? bmsDischarge : (bat.voltage ? dcNetW / bat.voltage : null);
-    _setNode('dcgrid', _W(dcNetW), dcNetW > 10 ? '#f87171' : null, _A(dcA));
-    if (g) g.classList.remove('dim');
-  } else {
-    _setNode('dcgrid', '--');
-    if (g) g.classList.add('dim');
-  }
-
-  // ── Batterie (zentral) ───────────────────────────────────────────────
+  // ── Batterie (Hauptknoten) ────────────────────────────────────────────
   const bv = $('fv-batt'), bs = $('fs-batt'), bg = $('fg-batt');
   if (bv) {
     bv.textContent = shuntW != null ? _W(shuntW) : '--';
-    bv.style.fill = shuntW == null ? '' : shuntW > 0 ? '#f97316' : shuntW < 0 ? '#22c55e' : '#eef4fb';
+    // negativ = Entladen → orange; positiv = Laden → grün
+    bv.style.fill = shuntW == null ? '' : shuntW < 0 ? '#f97316' : shuntW > 0 ? '#22c55e' : '#eef4fb';
   }
   if (bs) {
     const parts = [];
-    if (bat.soc  != null) parts.push(bat.soc + ' %');
+    if (bat.soc     != null) parts.push(bat.soc + ' %');
     if (bat.voltage != null) parts.push(bat.voltage.toFixed(2) + ' V');
-    if (shuntI  != null) parts.push(_A(shuntI));
+    if (shuntI      != null) parts.push(_A(shuntI));
     bs.textContent = parts.join('  ·  ');
   }
   if (bg) bg.classList.remove('dim');
 
-  // ── Kanten setzen ────────────────────────────────────────────────────
-  _setEdge('fe-solar1',      '#eab308', s1w, false);
-  _setEdge('fe-solar2',      '#eab308', s2w, false);
-  _setEdge('fe-solar3',      '#f59e0b', s3w, false);
-  _setEdge('fe-charger',     '#3b82f6', chargerW, false);
-  // Ladegerät→Batterie: wenn Ladegerät läuft aber ohne kWh-Wert → static
-  _setEdge('fe-gridcharger', '#3b82f6', chargerW, false, hasGrid && chargerW == null);
-  // Landstrom→Bordnetz: wenn Landstrom aktiv → static (Wert unbekannt)
-  _setEdge('fe-gridbord',    '#3b82f6', null, false, hasGrid);
-  _setEdge('fe-orion',       '#22d3ee', orionW, false);
-  _setEdge('fe-starterorion','#22d3ee', orionW, false, altW > 5 && orionW == null);
-  _setEdge('fe-altstarter',  '#06b6d4', altW,   false, altW == null && orionW > 5);
-  _setEdge('fe-inv',         '#a78bfa', invW, false);
-  _setEdge('fe-invbord',     '#a78bfa', invW, false, bordActive && invW == null);
-  _setEdge('fe-dcgrid',      '#f87171', dcNetW, false);
+  // ── Kanten (alle einheitlich dunkelblau) ─────────────────────────────
+  _setEdge('fe-solar1',       C, s1w,      false);
+  _setEdge('fe-solar2',       C, s2w,      false);
+  _setEdge('fe-solar3',       C, s3w,      false);
+  _setEdge('fe-charger',      C, chargerW, false);
+  _setEdge('fe-gridcharger',  C, chargerW, false, hasGrid && chargerW == null);
+  _setEdge('fe-gridbord',     C, null,     false, hasGrid);
+  _setEdge('fe-orion',        C, orionW,   false);
+  _setEdge('fe-starterorion', C, orionW,   false, altW > 5 && orionW == null);
+  _setEdge('fe-altstarter',   C, altW,     false, altW == null && orionW > 5);
+  _setEdge('fe-inv',          C, invW,     false);
+  _setEdge('fe-invbord',      C, invW,     false, bordActive && invW == null);
+  _setEdge('fe-dcgrid',       C, dcNetW,   false);
 }
