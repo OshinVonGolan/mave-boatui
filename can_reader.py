@@ -50,7 +50,8 @@ class BoatState:
         }
         # VE.Direct-Geräte (via PGN 130910 / 127507 / 127750)
         self.inverter = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
-                         'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None}
+                         'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None,
+                         'warn': None}
         self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'dc_voltage': None, 'dc_current': None}   # Smart IP43 (Lader, inst 1)
         self.orion    = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
@@ -335,7 +336,7 @@ class CanInterface:
             if p:
                 self._track_network(pgn, src, p['instance'])
                 fields = ('state', 'power', 'cs', 'cs_label',
-                          'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power')
+                          'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power', 'warn')
                 if p['type'] == 2 and p['instance'] == 0:  # Inverter
                     target = self.state.inverter
                     if p.get('cs_label'):
@@ -344,7 +345,9 @@ class CanInterface:
                         v = p.get(k)
                         if v is not None and target.get(k) != v:
                             target[k] = v; changed = True
-                    if 'power' in p and p['power'] is not None and target.get('power') != p['power']:
+                    # power=0 explizit aktualisieren (v is not None blockiert 0.0 nicht,
+                    # aber der separate Block prüft nochmal)
+                    if 'power' in p and target.get('power') != p['power']:
                         target['power'] = p['power']; changed = True
                 elif p['type'] == 1 and p['instance'] == 0:  # Orion-XS DC-DC
                     target = self.state.orion

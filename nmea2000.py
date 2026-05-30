@@ -275,6 +275,17 @@ PGN_NAMES: dict[int, str] = {
 }
 
 # CS → Ladebezeichnung (VE.Direct / NMEA2K)
+# VE.Direct AR (Alarm Reason) Bitmask – für Inverter (Offset 26 in PGN 130910)
+_INVERTER_AR = {
+    0x0001: 'Niedrige Batterie',
+    0x0002: 'Überhitzung',
+    0x0008: 'Überlast',
+    0x0010: 'Batteriespannung zu niedrig',
+    0x0020: 'Zu hohe Temperatur',
+    0x0040: 'Overload',
+    0x0100: 'AC-Ausgang abgeschaltet',
+}
+
 _CHARGER_CS = {
     0: 'Aus', 2: 'Fehler', 3: 'Bulk', 4: 'Absorption', 5: 'Float',
     6: 'Storage', 7: 'Equalise', 245: 'Starting', 247: 'Auto-Equalise',
@@ -306,9 +317,9 @@ def parse_ve_direct_ext(data: bytes):
     cs_label  = _CHARGER_CS.get(cs) if cs is not None else None
     if dtype == 2:  # Inverter
         cs_label = _INVERTER_CS.get(cs) if cs is not None else None
-        power = round(ac_v * ac_i, 1) if ac_v and ac_i else None
+        power = round(ac_v * ac_i, 1) if ac_v is not None and ac_i is not None else None
     else:
-        power = round(dc_v * dc_i, 1) if dc_v and dc_i else None
+        power = round(dc_v * dc_i, 1) if dc_v is not None and dc_i is not None else None
 
     return {
         'instance':   inst,

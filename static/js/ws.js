@@ -179,7 +179,7 @@ async function setInverterMode(mode) {
 
 // ── Inverter / 230V Kachel ─────────────────────────────────────────────────
 
-const INV_MAX_W = 2000;
+const INV_MAX_W = 2500;  // Nenneistung 2000W + Puffer für Spitzen
 const _INV_CX = 80, _INV_CY = 68, _INV_R = 58;
 const _INV_START = 225, _INV_SWEEP = 270;
 const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Const VI','Ext. Control','External Control']);
@@ -212,10 +212,28 @@ function updateInverterCard(inv, charger) {
 
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
 
+  // Fehler/Alarm-Codes (AR = Alarm Reason, Bitmask)
+  const _INV_AR = {
+    0x0001:'Niedrige Batterie', 0x0002:'Überhitzung', 0x0008:'Überlast',
+    0x0010:'Batt. zu niedrig', 0x0020:'Zu heiß', 0x0040:'Overload',
+    0x0100:'AC abgeschaltet',
+  };
+  const alarmRow = $('invAlarmRow'), alarmLbl = $('invAlarmLabel');
+  if (alarmRow && alarmLbl) {
+    const warn = inv.warn;
+    if (warn != null && warn !== 0) {
+      const msgs = Object.entries(_INV_AR).filter(([k]) => warn & +k).map(([,v]) => v);
+      alarmLbl.textContent = msgs.length ? msgs.join(', ') : `AR 0x${warn.toString(16)}`;
+      alarmRow.style.display = 'flex';
+    } else {
+      alarmRow.style.display = 'none';
+    }
+  }
+
   // Gauge
   const power = inv.power;
   const pct = (power != null && isActive) ? Math.max(0, Math.min(100, power / INV_MAX_W * 100)) : 0;
-  const color = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
+  const color = pct >= 85 ? 'var(--red)' : pct >= 65 ? 'var(--yellow)' : 'var(--green)';
   const gaugeEl = $('invGaugeVal');
   if (gaugeEl) {
     const sweep = _INV_SWEEP * pct / 100;
@@ -223,7 +241,7 @@ function updateInverterCard(inv, charger) {
     gaugeEl.style.stroke = color;
   }
   const loadEl = $('invLoadPct');
-  if (loadEl) loadEl.textContent = isActive && power != null ? Math.round(pct) + '%' : '--%';
+  if (loadEl) loadEl.textContent = isActive ? Math.round(pct) + '%' : '--%';
 
   // Tiles
   const vEl = $('invAcV');

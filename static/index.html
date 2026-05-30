@@ -218,9 +218,13 @@
       230V
     </div>
 
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
       <div id="shoreIndicator" class="shore-dot"></div>
       <span id="shoreLabel" style="font-size:12px;color:var(--text3)">Kein Landstrom</span>
+    </div>
+    <div id="invAlarmRow" style="display:none;align-items:center;gap:6px;margin-bottom:6px">
+      <div class="shore-dot" style="background:var(--red);box-shadow:0 0 4px var(--red)"></div>
+      <span id="invAlarmLabel" style="font-size:12px;color:var(--red)"></span>
     </div>
 
     <div class="gauge-wrap">
