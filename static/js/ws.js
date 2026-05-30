@@ -223,7 +223,7 @@ function updateInverterCard(inv, charger) {
   const dot = $('shoreIndicator');
   const lbl = $('shoreLabel');
   if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');
-  if (lbl) { lbl.textContent = shoreActive ? 'Landstrom aktiv' : 'Kein Landstrom'; lbl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
+  if (lbl) { lbl.textContent = 'Landstrom'; lbl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
 
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
 
@@ -254,12 +254,12 @@ function updateInverterCard(inv, charger) {
     } else if (isActive) {
       invDot.style.background = 'var(--green)';
       invDot.style.boxShadow  = '0 0 4px var(--green)';
-      invLbl.textContent = inv.state;
+      invLbl.textContent = 'Inverter';
       invLbl.style.color = 'var(--green)';
     } else {
       invDot.style.background = 'var(--border)';
       invDot.style.boxShadow  = 'none';
-      invLbl.textContent = 'Inverter Aus';
+      invLbl.textContent = 'Inverter';
       invLbl.style.color = 'var(--text3)';
     }
   }
