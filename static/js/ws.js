@@ -267,12 +267,11 @@ function updateInverterCard(inv, charger) {
   const pwEl = $('invPowerVal');
   if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
 
-  // Toggle-Button
-  const btn = $('invToggleBtn');
-  if (btn) {
-    btn.textContent = isActive ? 'Inverter aus' : 'Inverter ein';
-    btn.className   = 'inv-btn inv-toggle ' + (isActive ? 'active-off' : 'active-on');
-  }
+  // Slide-Toggle
+  $('invSlideTrack')?.classList.toggle('on', isActive);
+  const offLbl = $('invSlideOff'), onLbl = $('invSlideOn');
+  if (offLbl) offLbl.classList.toggle('active', !isActive);
+  if (onLbl)  onLbl.classList.toggle('active',  isActive);
 }
 
 function handleData(data) {

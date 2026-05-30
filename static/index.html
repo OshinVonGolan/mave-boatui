@@ -247,7 +247,13 @@
       </div>
     </div>
 
-    <button class="inv-btn inv-toggle" id="invToggleBtn" onclick="toggleInverter()">An</button>
+    <div class="inv-slide-wrap" onclick="toggleInverter()">
+      <span class="inv-slide-label" id="invSlideOff">Aus</span>
+      <div class="inv-slide-track" id="invSlideTrack">
+        <div class="inv-slide-thumb" id="invSlideThumb"></div>
+      </div>
+      <span class="inv-slide-label" id="invSlideOn">An</span>
+    </div>
   </section>
 
   <!-- ── Wartungsplan Kachel ── -->
