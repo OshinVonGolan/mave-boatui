@@ -248,7 +248,12 @@ function _showUpdateScreen(verStr, changelog) {
   if (verStr) $('updateScreenVersion').textContent = verStr;
   if (changelog?.length) {
     const list = $('updateScreenChangelogList');
-    if (list) list.innerHTML = changelog.map(c => `<li>${c}</li>`).join('');
+    if (list) list.innerHTML = changelog.map(({title, items}) => {
+      const bullets = items?.length
+        ? `<ul style="margin:3px 0 6px 14px;padding:0;color:var(--text3)">${items.map(i=>`<li style="margin:2px 0">${i}</li>`).join('')}</ul>`
+        : '';
+      return `<li style="margin-bottom:4px"><strong style="color:var(--text)">${title}</strong>${bullets}</li>`;
+    }).join('');
     const wrap = $('updateScreenChangelog');
     if (wrap) wrap.style.display = '';
   }

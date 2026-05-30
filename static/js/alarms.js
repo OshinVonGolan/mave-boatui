@@ -77,6 +77,7 @@ const _PGN_VALS = {
 
 function renderNetworkInto(el, entries) {
   if (!el) return;
+  _lastNetEntries = entries;   // immer aktualisieren (auch aus Settings)
   if (!entries.length) {
     el.innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
     return;
@@ -476,16 +477,18 @@ async function _loadPgnDetail() {
 
   const instParam = entry.instance != null ? `?instance=${entry.instance}` : '';
   try {
-    const d = await fetch(`/api/pgn/${entry.pgn}/${entry.src}${instParam}`).then(r => r.json());
+    const r = await fetch(`/api/pgn/${entry.pgn}/${entry.src}${instParam}`);
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
     $('pgnDetailHex').textContent  = `PGN ${d.pgn}  ·  ${d.len} B  ·  ${d.hex.match(/.{1,2}/g).join(' ')}`;
     $('pgnDetailFields').innerHTML = (d.fields || []).map(f => `
       <div class="pgn-field-row${f.alarm ? ' alarm' : ''}">
         <span class="pgn-field-name">${f.name}</span>
         <span class="pgn-field-val">${f.value}</span>
-      </div>`).join('');
+      </div>`).join('') || '<div class="pgn-field-empty">Keine Felder verfügbar.</div>';
   } catch(_) {
     $('pgnDetailHex').textContent  = `PGN ${entry.pgn}`;
-    $('pgnDetailFields').innerHTML = '<div class="pgn-field-empty">Noch kein Frame empfangen.</div>';
+    $('pgnDetailFields').innerHTML = '<div class="pgn-field-empty">Noch kein Frame empfangen — warte auf Daten vom Bus.</div>';
   }
 }
 

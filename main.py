@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.14'
+VERSION  = _git_semver() or '1.16.15'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -387,10 +387,20 @@ async def system_update():
     if changed:
         try:
             cl = subprocess.run(
-                ['git', 'log', 'ORIG_HEAD..HEAD', '--pretty=format:%s', '--no-merges'],
+                ['git', 'log', 'ORIG_HEAD..HEAD', '--no-merges',
+                 '--pretty=format:ENTRY%n%s%n%b'],
                 cwd=BASE_DIR, capture_output=True, text=True, timeout=10,
             )
-            changelog = [l.strip() for l in cl.stdout.strip().splitlines() if l.strip()]
+            for block in cl.stdout.split('ENTRY\n'):
+                block = block.strip()
+                if not block:
+                    continue
+                lines = block.splitlines()
+                title = lines[0].strip()
+                items = [l.strip() for l in lines[1:]
+                         if l.strip() and not l.strip().startswith('Co-Authored')]
+                if title:
+                    changelog.append({'title': title, 'items': items})
         except Exception:
             pass
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
