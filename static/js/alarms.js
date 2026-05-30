@@ -73,8 +73,6 @@ const _PGN_VALS = {
   ],
 };
 
-let _netExpanded = {};
-
 function renderNetworkInto(el, entries) {
   if (!el) return;
   if (!entries.length) {
@@ -88,64 +86,40 @@ function renderNetworkInto(el, entries) {
     bySource[e.src].push(e);
   });
 
-  const state = _lastData || {};
-
   const cards = Object.entries(bySource).map(([src, pgns]) => {
-    const srcNum  = parseInt(src);
-    const srcHex  = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
-    const name    = devicesConfig[src] ?? `Gerät ${srcHex}`;
-    const minAge  = Math.min(...pgns.map(p => p.age_s));
-    const dotCls  = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
-    const isOpen  = !!_netExpanded[src];
-
-    // Bekannte Werte aus dem State für die PGNs dieses Geräts
-    const knownVals = [];
-    pgns.forEach(p => {
-      const mapping = _PGN_VALS[p.pgn];
-      if (!mapping) return;
-      mapping.forEach(m => {
-        const v = m.v(state);
-        if (v != null) knownVals.push({ l: m.l, v });
-      });
-    });
+    const srcNum = parseInt(src);
+    const srcHex = '0x' + srcNum.toString(16).toUpperCase().padStart(2,'0');
+    const name   = devicesConfig[src] ?? `Gerät ${srcHex}`;
+    const minAge = Math.min(...pgns.map(p => p.age_s));
+    const dotCls = minAge < 3 ? 'ok' : minAge < 15 ? 'warn' : 'old';
 
     const pgnRows = pgns.map(p => {
-      const iv     = p.interval_ms != null ? `${p.interval_ms} ms` : '—';
-      const ageCls = p.age_s < 3 ? 'age-ok' : p.age_s < 15 ? 'age-warn' : 'age-old';
-      const ageStr = p.age_s < 2 ? 'aktiv' : `${p.age_s} s`;
+      const iv     = p.interval_ms != null ? `${p.interval_ms} ms` : null;
+      const ageCls = p.age_s < 3 ? 'ok' : p.age_s < 15 ? 'warn' : 'old';
+      const instBadge = p.instance != null
+        ? `<span class="net-inst-badge">Inst ${p.instance}</span>` : '';
+      const ivBadge = iv
+        ? `<span class="net-iv-badge">${iv}</span>` : '';
       return `<div class="net-pgn-row">
-        <div>
-          <div class="net-pgn-desc">${p.description}</div>
-          <div class="net-pgn-num">PGN ${p.pgn} &middot; 0x${p.pgn.toString(16).toUpperCase()}</div>
+        <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${ageCls}"></div></div>
+        <div class="net-pgn-info">
+          <span class="net-pgn-desc">${p.description}</span>${instBadge}
+          <span class="net-pgn-num">PGN ${p.pgn}</span>
         </div>
-        <div class="net-pgn-iv">${iv}</div>
-        <div class="net-pgn-age ${ageCls}">${ageStr}</div>
+        ${ivBadge}
       </div>`;
     }).join('');
 
-    const valRows = knownVals.length
-      ? `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
-          <div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Aktuelle Werte</div>
-          ${knownVals.map(({l,v}) =>
-            `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;border-bottom:1px solid var(--surface2)">
-              <span style="color:var(--text2)">${l}</span>
-              <span style="font-weight:600">${v}</span>
-            </div>`).join('')}
-        </div>` : '';
-
-    return `<div class="net-device-card" style="cursor:pointer" onclick="_netExpanded['${src}']=!_netExpanded['${src}'];renderNetworkInto(this.closest('.net-grid').parentElement,window._lastNetEntries||[])">
+    return `<div class="net-device-card">
       <div class="net-device-header">
         <div class="net-device-dot ${dotCls}"></div>
         <div class="net-device-name">${name}</div>
-        <div class="net-device-src">${srcHex} (${srcNum})</div>
-        <span style="margin-left:auto;font-size:12px;color:var(--text3)">${isOpen ? '▲' : '▼'}</span>
+        <div class="net-device-src">${srcHex}</div>
       </div>
-      ${isOpen ? `<div class="net-pgn-list">${pgnRows}${valRows}</div>` : ''}
+      <div class="net-pgn-list">${pgnRows}</div>
     </div>`;
   }).join('');
 
-  // Entries für Re-Render merken
-  window._lastNetEntries = entries;
   el.innerHTML = `<div class="net-grid">${cards}</div>`;
 }
 

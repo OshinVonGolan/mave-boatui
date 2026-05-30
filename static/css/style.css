@@ -568,32 +568,43 @@
     /* ── Network overlay — device cards ── */
     .net-grid { display: grid; gap: 12px;
       grid-template-columns: 1fr; max-width: 1100px; margin: 0 auto; }
-    @media (min-width: 600px)  { .net-grid { grid-template-columns: 1fr 1fr; } }
-    @media (min-width: 1000px) { .net-grid { grid-template-columns: 1fr 1fr 1fr; } }
+    @media (min-width: 550px)  { .net-grid { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 900px)  { .net-grid { grid-template-columns: 1fr 1fr 1fr; } }
 
     .net-device-card { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden; }
-    .net-device-header { display: flex; align-items: center; gap: 10px;
-      padding: 12px 14px; border-bottom: 1px solid var(--border);
+    .net-device-header { display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; border-bottom: 1px solid var(--border);
       background: var(--surface2); }
     .net-device-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .net-device-dot.ok   { background: var(--green); }
+    .net-device-dot.ok   { background: var(--green); box-shadow: 0 0 4px var(--green); }
     .net-device-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }
     .net-device-dot.old  { background: var(--border); }
-    .net-device-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
-    .net-device-src  { font-size: 11px; color: var(--text3); font-family: monospace; }
+    .net-device-name { font-size: 13px; font-weight: 600; color: var(--text); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .net-device-src  { font-size: 11px; color: var(--text3); font-family: monospace;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+      padding: 1px 5px; flex-shrink: 0; }
 
-    .net-pgn-list { padding: 4px 0; }
-    .net-pgn-row { display: flex; align-items: center; gap: 8px;
-      padding: 8px 14px; border-bottom: 1px solid var(--surface2); }
+    .net-pgn-list { padding: 0; }
+    .net-pgn-row { display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-bottom: 1px solid var(--surface2); }
     .net-pgn-row:last-child { border-bottom: none; }
-    .net-pgn-desc { flex: 1; font-size: 13px; color: var(--text); }
-    .net-pgn-num  { font-size: 10px; color: var(--text3); font-family: monospace; }
-    .net-pgn-iv   { font-size: 12px; color: var(--text2); white-space: nowrap; }
-    .net-pgn-age  { font-size: 11px; white-space: nowrap; min-width: 38px; text-align: right; }
-    .age-ok   { color: var(--green); }
-    .age-warn { color: var(--yellow); }
-    .age-old  { color: var(--text3); }
+    .net-pgn-dot-wrap { flex-shrink: 0; display: flex; align-items: center; }
+    .net-pgn-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .net-pgn-dot.ok   { background: var(--green); }
+    .net-pgn-dot.warn { background: var(--yellow); }
+    .net-pgn-dot.old  { background: var(--border); }
+    .net-pgn-info { flex: 1; min-width: 0; display: flex; flex-wrap: wrap;
+      align-items: baseline; gap: 4px; }
+    .net-pgn-desc { font-size: 12px; color: var(--text); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; }
+    .net-pgn-num  { font-size: 10px; color: var(--text3); font-family: monospace;
+      width: 100%; }
+    .net-inst-badge { font-size: 10px; background: var(--accent);
+      color: #fff; border-radius: 3px; padding: 0 4px; flex-shrink: 0; }
+    .net-iv-badge { font-size: 11px; color: var(--text3); white-space: nowrap;
+      flex-shrink: 0; font-family: monospace; }
 
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }
 

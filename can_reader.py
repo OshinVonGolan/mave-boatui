@@ -139,9 +139,12 @@ class CanInterface:
 
     # ── Empfangen ───────────────────────────────────────────────────────────
 
-    def _track_network(self, pgn: int, src: int):
+    # PGNs die eine Instanz im Payload haben — werden nach Payload-Assembly getrackt
+    _INSTANCE_PGNS = {127505, 127506, 127507, 127508, 127750, 130312, 130910}
+
+    def _track_network(self, pgn: int, src: int, instance: int | None = None):
         now = time.monotonic()
-        key = (pgn, src)
+        key = (pgn, src, instance)
         if key not in self._network:
             self._network[key] = {'count': 1, 'first_seen': now, 'last_seen': now, 'intervals': []}
         else:
@@ -155,12 +158,16 @@ class CanInterface:
     def get_network_stats(self) -> list[dict]:
         now = time.monotonic()
         result = []
-        for (pgn, src), e in sorted(self._network.items(), key=lambda x: (x[0][1], x[0][0])):
+        for (pgn, src, instance), e in sorted(
+            self._network.items(),
+            key=lambda x: (x[0][1], x[0][0], x[0][2] if x[0][2] is not None else -1)
+        ):
             ivs = e['intervals']
             avg_ms = round(sum(ivs) / len(ivs) * 1000) if ivs else None
             result.append({
                 'pgn':         pgn,
                 'src':         src,
+                'instance':    instance,
                 'description': PGN_NAMES.get(pgn, f'PGN {pgn}'),
                 'count':       e['count'],
                 'interval_ms': avg_ms,
@@ -184,8 +191,10 @@ class CanInterface:
         raw = bytes(msg.data)
 
         is_fp = pgn in FAST_PACKET_PGNS
-        if not is_fp or (raw and (raw[0] & 0x1F) == 0):
-            self._track_network(pgn, src)
+        # Instanz-PGNs werden erst nach Payload-Assembly mit korrekter Instanz getrackt
+        if pgn not in self._INSTANCE_PGNS:
+            if not is_fp or (raw and (raw[0] & 0x1F) == 0):
+                self._track_network(pgn, src, None)
 
         payload = self._fp.process(pgn, src, raw) if is_fp else raw
 
@@ -200,11 +209,13 @@ class CanInterface:
         if pgn == 127506:
             p = parse_dc_detailed(payload)
             if p:
+                self._track_network(pgn, src, p['instance'])
                 self._dc_types[p['instance']] = p['dc_type']
 
         elif pgn == 127505:
             p = parse_fluid_level(payload)
             if p:
+                self._track_network(pgn, src, p['instance'])
                 key = 'tank1' if p['instance'] == 0 else 'tank2'
                 if self.state.tanks[key] != p['level']:
                     self.state.tanks[key] = p['level']
@@ -214,6 +225,7 @@ class CanInterface:
             p = parse_dc_status(payload)
             if p:
                 inst = p['instance']
+                self._track_network(pgn, src, inst)
                 dc_type = self._dc_types.get(inst)
 
                 if inst == self._service_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
@@ -251,9 +263,11 @@ class CanInterface:
 
         elif pgn == 130312:
             p = parse_temperature(payload)
-            if p and self.state.battery['temperature'] != p['temperature_c']:
-                self.state.battery['temperature'] = p['temperature_c']
-                changed = True
+            if p:
+                self._track_network(pgn, src, payload[0] & 0x0F)
+                if self.state.battery['temperature'] != p['temperature_c']:
+                    self.state.battery['temperature'] = p['temperature_c']
+                    changed = True
 
         elif pgn == 130901:
             p = parse_bms_pack(payload)
@@ -278,6 +292,7 @@ class CanInterface:
         elif pgn == 130910:
             p = parse_ve_direct_ext(payload)
             if p:
+                self._track_network(pgn, src, p['instance'])
                 fields = ('state', 'power', 'cs', 'cs_label',
                           'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power')
                 if p['type'] == 2 and p['instance'] == 0:  # Inverter
@@ -309,15 +324,19 @@ class CanInterface:
 
         elif pgn == 127750:
             p = parse_inverter_status(payload)
-            if p and p.get('state') and self.state.inverter.get('state') != p['state']:
-                self.state.inverter['state'] = p['state']
-                changed = True
+            if p:
+                self._track_network(pgn, src, payload[0] if payload else None)
+                if p.get('state') and self.state.inverter.get('state') != p['state']:
+                    self.state.inverter['state'] = p['state']
+                    changed = True
 
         elif pgn == 127507:
             p = parse_charger_status_pgn(payload)
-            if p and p.get('state') and self.state.charger.get('state') != p['state']:
-                self.state.charger['state'] = p['state']
-                changed = True
+            if p:
+                self._track_network(pgn, src, p.get('inst', payload[0] if payload else None))
+                if p.get('state') and self.state.charger.get('state') != p['state']:
+                    self.state.charger['state'] = p['state']
+                    changed = True
 
         if changed:
             self._schedule_broadcast()
