@@ -192,8 +192,16 @@ function _invArc(cx, cy, r, start, sweep) {
 }
 $('invGaugeTrack')?.setAttribute('d', _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, _INV_SWEEP));
 
+let _invCurrentState = 'Aus';
+
+function toggleInverter() {
+  const isOn = _invCurrentState === 'Aktiv' || _invCurrentState === 'Eco';
+  setInverterMode(isOn ? 4 : 2);
+}
+
 function updateInverterCard(inv, charger) {
   if (!inv) return;
+  _invCurrentState = inv.state || 'Aus';
 
   // Landstrom ableiten aus Ladegerät-Status
   const shoreActive = charger?.state != null && _SHORE_STATES.has(charger.state);
@@ -202,14 +210,12 @@ function updateInverterCard(inv, charger) {
   if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');
   if (lbl) { lbl.textContent = shoreActive ? 'Landstrom aktiv' : 'Kein Landstrom'; lbl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
 
-  // Zustandslabel + AC-Spannung
+  // Zustandslabel
   const stLbl = $('invStateLabel');
-  if (stLbl) { stLbl.textContent = inv.state || '--'; stLbl.style.color = inv.state === 'Aktiv' ? 'var(--green)' : inv.state === 'Eco' ? 'var(--yellow)' : 'var(--text3)'; }
-  const acV = $('invAcVSmall');
-  if (acV) acV.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) + ' V' : '-- V';
-
-  // Leistungs-Gauge
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
+  if (stLbl) { stLbl.textContent = inv.state || '--'; stLbl.style.color = isActive ? 'var(--green)' : 'var(--text3)'; }
+
+  // Gauge
   const power = inv.power;
   const pct = (power != null && isActive) ? Math.max(0, Math.min(100, power / INV_MAX_W * 100)) : 0;
   const color = pct >= 80 ? 'var(--red)' : pct >= 60 ? 'var(--yellow)' : 'var(--green)';
@@ -219,16 +225,21 @@ function updateInverterCard(inv, charger) {
     gaugeEl.setAttribute('d', sweep < 2 ? '' : _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, sweep));
     gaugeEl.style.stroke = color;
   }
-  const pwEl = $('invPowerVal');
-  if (pwEl) pwEl.textContent = shoreActive && !isActive ? '--' : (power != null ? Math.round(power) : '--');
   const loadEl = $('invLoadPct');
   if (loadEl) loadEl.textContent = isActive && power != null ? Math.round(pct) + '%' : '--%';
 
-  // Buttons
-  ['On','Eco','Off'].forEach(k => $('invBtn'+k)?.classList.remove('active-on','active-eco','active-off'));
-  if (inv.state === 'Aktiv') $('invBtnOn')?.classList.add('active-on');
-  if (inv.state === 'Eco')   $('invBtnEco')?.classList.add('active-eco');
-  if (inv.state === 'Aus')   $('invBtnOff')?.classList.add('active-off');
+  // Tiles
+  const vEl = $('invAcV');
+  if (vEl) vEl.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) : '--';
+  const pwEl = $('invPowerVal');
+  if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
+
+  // Toggle-Button
+  const btn = $('invToggleBtn');
+  if (btn) {
+    btn.textContent = isActive ? 'Aus' : 'An';
+    btn.className   = 'inv-btn inv-toggle ' + (isActive ? 'active-off' : 'active-on');
+  }
 }
 
 function handleData(data) {

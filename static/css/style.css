@@ -70,6 +70,7 @@
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
     .shore-dot.on { background: var(--green); box-shadow: 0 0 4px var(--green); }
 
+    .inv-toggle { width: 100%; }
     .inv-btn { flex: 1; padding: 10px; border-radius: 10px; font-size: 14px; font-weight: 700;
       cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text2);
       transition: all .15s; }
