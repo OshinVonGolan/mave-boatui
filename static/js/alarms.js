@@ -102,7 +102,7 @@ function renderNetworkInto(el, entries) {
       const instBadge = p.instance != null
         ? `<span class="net-inst-badge">Inst ${p.instance}</span>` : '';
       const ivBadge = iv ? `<span class="net-iv-badge">${iv}</span>` : '';
-      return `<div class="net-pgn-row" style="cursor:pointer" onclick="openPgnDetail(${p.pgn},${p.src})">
+      return `<div class="net-pgn-row" style="cursor:pointer" onclick="openPgnDetail(${p.pgn},${p.src},${p.instance ?? 'null'})">
         <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${ageCls}"></div></div>
         <div class="net-pgn-info">
           <span class="net-pgn-desc">${p.description}</span>${instBadge}
@@ -453,10 +453,10 @@ async function saveRules() {
 let _pgnNavList = [];
 let _pgnNavIdx  = 0;
 
-function openPgnDetail(pgn, src) {
-  // Alle PGNs dieses Geräts als Navigationsliste
+function openPgnDetail(pgn, src, instance) {
   _pgnNavList = _lastNetEntries.filter(e => e.src === src);
-  _pgnNavIdx  = _pgnNavList.findIndex(e => e.pgn === pgn);
+  _pgnNavIdx  = _pgnNavList.findIndex(e => e.pgn === pgn && e.instance === (instance ?? null));
+  if (_pgnNavIdx < 0) _pgnNavIdx = _pgnNavList.findIndex(e => e.pgn === pgn);
   if (_pgnNavIdx < 0) _pgnNavIdx = 0;
 
   $('pgnDetailBg').style.display    = 'block';

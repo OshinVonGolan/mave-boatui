@@ -397,7 +397,6 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
             fv('Fluid-Typ', f"{fluid_types.get(ftype, f'Typ {ftype}')} (0x{ftype:X})"),
             fv('Füllstand', f'{lvl_raw * 0.004:.1f} %' if lvl_raw != 0xFFFF else NA),
             fv('Kapazität', f'{cap_raw * 0.1:.0f} L' if cap_raw != 0xFFFFFFFF else NA),
-            fv('Byte 0 (raw)', f'0x{payload[0]:02X}'),
         ]
 
     elif pgn == 127506:
