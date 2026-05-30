@@ -179,7 +179,8 @@ async function setInverterMode(mode) {
 
 // ── Inverter / 230V Kachel ─────────────────────────────────────────────────
 
-const INV_MAX_W = 2500;  // Nenneistung 2000W + Puffer für Spitzen
+const INV_RATED_W = 2000;  // Nennleistung (= 100%)
+const INV_MAX_W   = 2500;  // Gauge-Maximum (125% für Spitzen sichtbar)
 const _INV_CX = 80, _INV_CY = 68, _INV_R = 58;
 const _INV_START = 225, _INV_SWEEP = 270;
 const _SHORE_STATES = new Set(['Bulk','Absorption','Float','Storage','Equalise','Const VI','Ext. Control','External Control']);
@@ -191,6 +192,20 @@ function _invArc(cx, cy, r, start, sweep) {
   return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
 }
 $('invGaugeTrack')?.setAttribute('d', _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, _INV_SWEEP));
+// 100%-Markierung bei INV_RATED_W/INV_MAX_W des Bogens
+(function() {
+  const mark = $('invGaugeMark');
+  if (!mark) return;
+  const markPct  = INV_RATED_W / INV_MAX_W;          // 0.8 = 80% des Gauge
+  const markDeg  = _INV_START + _INV_SWEEP * markPct;
+  const rad      = a => (a - 90) * Math.PI / 180;
+  const r1 = _INV_R - 8, r2 = _INV_R + 8;
+  const x1 = _INV_CX + r1 * Math.cos(rad(markDeg));
+  const y1 = _INV_CY + r1 * Math.sin(rad(markDeg));
+  const x2 = _INV_CX + r2 * Math.cos(rad(markDeg));
+  const y2 = _INV_CY + r2 * Math.sin(rad(markDeg));
+  mark.setAttribute('d', `M ${x1.toFixed(1)} ${y1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)}`);
+})();
 
 let _invCurrentState = 'Aus';
 
@@ -212,18 +227,20 @@ function updateInverterCard(inv, charger) {
 
   const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
 
-  // Fehler/Alarm-Codes (AR = Alarm Reason, Bitmask)
+  // Fehler/Alarm-Codes: inv.err = AR (Alarm Reason), inv.warn = WARN
   const _INV_AR = {
     0x0001:'Niedrige Batterie', 0x0002:'Überhitzung', 0x0008:'Überlast',
-    0x0010:'Batt. zu niedrig', 0x0020:'Zu heiß', 0x0040:'Overload',
+    0x0010:'Batt. zu niedrig',  0x0020:'Zu heiß',     0x0040:'Overload',
     0x0100:'AC abgeschaltet',
   };
   const alarmRow = $('invAlarmRow'), alarmLbl = $('invAlarmLabel');
   if (alarmRow && alarmLbl) {
-    const warn = inv.warn;
-    if (warn != null && warn !== 0) {
-      const msgs = Object.entries(_INV_AR).filter(([k]) => warn & +k).map(([,v]) => v);
-      alarmLbl.textContent = msgs.length ? msgs.join(', ') : `AR 0x${warn.toString(16)}`;
+    const ar   = inv.err;   // Offset 24 = AR für Inverter
+    const warn = inv.warn;  // Offset 26 = WARN
+    const bits = (ar || 0) | (warn || 0);
+    if (bits !== 0) {
+      const msgs = Object.entries(_INV_AR).filter(([k]) => bits & +k).map(([,v]) => v);
+      alarmLbl.textContent = msgs.length ? msgs.join(', ') : `Alarm 0x${bits.toString(16)}`;
       alarmRow.style.display = 'flex';
     } else {
       alarmRow.style.display = 'none';
@@ -232,16 +249,17 @@ function updateInverterCard(inv, charger) {
 
   // Gauge
   const power = inv.power;
-  const pct = (power != null && isActive) ? Math.max(0, Math.min(100, power / INV_MAX_W * 100)) : 0;
-  const color = pct >= 85 ? 'var(--red)' : pct >= 65 ? 'var(--yellow)' : 'var(--green)';
+  const gaugePct  = (power != null && isActive) ? Math.max(0, Math.min(100, power / INV_MAX_W * 100)) : 0;
+  const displayPct = (power != null && isActive) ? Math.round(power / INV_RATED_W * 100) : 0;
+  const color = gaugePct >= 85 ? 'var(--red)' : gaugePct >= 65 ? 'var(--yellow)' : 'var(--green)';
   const gaugeEl = $('invGaugeVal');
   if (gaugeEl) {
-    const sweep = _INV_SWEEP * pct / 100;
+    const sweep = _INV_SWEEP * gaugePct / 100;
     gaugeEl.setAttribute('d', sweep < 2 ? '' : _invArc(_INV_CX, _INV_CY, _INV_R, _INV_START, sweep));
     gaugeEl.style.stroke = color;
   }
   const loadEl = $('invLoadPct');
-  if (loadEl) loadEl.textContent = isActive ? Math.round(pct) + '%' : '--%';
+  if (loadEl) loadEl.textContent = isActive ? displayPct + '%' : '--%';
 
   // Tiles
   const vEl = $('invAcV');

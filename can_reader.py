@@ -51,7 +51,7 @@ class BoatState:
         # VE.Direct-Geräte (via PGN 130910 / 127507 / 127750)
         self.inverter = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None,
-                         'warn': None}
+                         'err': None, 'warn': None}  # err = AR (Alarm Reason), warn = WARN
         self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'dc_voltage': None, 'dc_current': None}   # Smart IP43 (Lader, inst 1)
         self.orion    = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
@@ -336,7 +336,8 @@ class CanInterface:
             if p:
                 self._track_network(pgn, src, p['instance'])
                 fields = ('state', 'power', 'cs', 'cs_label',
-                          'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power', 'warn')
+                          'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power',
+                          'err', 'warn')
                 if p['type'] == 2 and p['instance'] == 0:  # Inverter
                     target = self.state.inverter
                     if p.get('cs_label'):
