@@ -215,14 +215,19 @@ async def ws_endpoint(ws: WebSocket):
     ws_clients.add(ws)
     log.info("WebSocket verbunden (%d aktiv)", len(ws_clients))
     try:
-        await ws.send_json({**state.to_dict(), 'version': VERSION})
+        try:
+            await ws.send_json({**state.to_dict(), 'version': VERSION})
+        except Exception as e:
+            log.error("WebSocket init JSON-Fehler: %s", e)
+            raise
         while True:
             try:
                 await asyncio.wait_for(ws.receive_text(), timeout=30)
             except asyncio.TimeoutError:
                 await ws.send_json({'ping': True})
-    except (WebSocketDisconnect, Exception):
-        pass
+    except (WebSocketDisconnect, Exception) as e:
+        if not isinstance(e, WebSocketDisconnect):
+            log.debug("WebSocket Fehler: %s", e)
     finally:
         ws_clients.discard(ws)
         log.info("WebSocket getrennt (%d aktiv)", len(ws_clients))
