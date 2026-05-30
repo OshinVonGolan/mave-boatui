@@ -109,12 +109,15 @@ class ConnectivityMonitor:
                 log.info('WLAN-Clients nicht verfügbar (%s) — Karte wird ausgeblendet', e)
                 self._wifi_warn_logged = True
 
+        wan_ip = primary.get('ipaddr', '') or ''
         return {
-            'active_type':   primary.get('network_type', 'unknown'),
-            'active_uptime': primary.get('uptime', 0),
-            'wired_up':      wired  is not None,
-            'mobile_up':     mobile is not None,
-            'wifi_clients':  wifi_clients,
+            'active_type':    primary.get('network_type', 'unknown'),
+            'active_uptime':  primary.get('uptime', 0),
+            'wired_up':       wired  is not None,
+            'mobile_up':      mobile is not None,
+            'wifi_clients':   wifi_clients,
+            'wifi_client_count': len(wifi_clients),
+            'wan_ip':         wan_ip,
             'mobile': {
                 'operator':    modem.get('operator', ''),
                 'conntype':    modem.get('conntype', ''),

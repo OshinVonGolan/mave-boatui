@@ -69,32 +69,45 @@ function renderSettingsNetwork(el, netData, connData) {
     const dotCls = isWan ? (slOk ? 'ok' : 'warn') : (r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old');
     const sigColor = sigPct >= 60 ? 'var(--green)' : sigPct >= 30 ? 'var(--yellow)' : 'var(--red)';
 
-    const slDot  = sl.state === 'CONNECTED' ? 'ok' : r.wired_up ? 'warn' : 'old';
-    const mobDot = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old';
+    const slDot    = sl.state === 'CONNECTED' ? 'ok' : r.wired_up ? 'warn' : 'old';
+    const mobDot   = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : 'old';
+    const clientCt = r.wifi_client_count ?? r.wifi_clients?.length ?? 0;
+    const slUptime = sl.uptime_s != null ? fmtUptime(sl.uptime_s) : '—';
     html += `
     <div class="settings-section-title" style="margin-bottom:12px">WLAN</div>
     <div class="net-grid" style="margin-bottom:20px"><div class="net-device-card">
       <div class="net-device-header">
         <div class="net-device-dot ${dotCls}"></div>
         <div class="net-device-name">RUTX50 Router</div>
-        <div class="net-device-src" style="font-size:10px">Uptime ${fmtUptime(r.active_uptime)}</div>
+        <div class="net-device-src">${r.wan_ip || ''}</div>
       </div>
       <div class="net-pgn-list">
         <div class="net-pgn-row">
-          <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${slDot}"></div></div>
-          <div class="net-pgn-info"><span class="net-pgn-desc">Starlink</span></div>
-          <div class="net-pgn-iv" style="color:${slDot==='ok'?'var(--green)':slDot==='warn'?'var(--yellow)':'var(--text3)'}">
-            ${sl.state === 'CONNECTED' ? 'Verbunden' : r.wired_up ? 'Aktiv' : 'Getrennt'}
-            ${sl.ping_ms != null ? ` · ${sl.ping_ms.toFixed(0)} ms` : ''}
-            ${sl.downlink_bps != null ? ` · ${fmtBps(sl.downlink_bps)} ↓` : ''}
-          </div>
+          <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ok"></div></div>
+          <div class="net-pgn-info"><span class="net-pgn-desc">Verbundene Geräte</span></div>
+          <div class="net-pgn-iv">${clientCt}</div>
         </div>
         <div class="net-pgn-row">
           <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${mobDot}"></div></div>
           <div class="net-pgn-info"><span class="net-pgn-desc">Mobilfunk${mob.operator ? ` · ${mob.operator}` : ''}</span></div>
-          <div class="net-pgn-iv" style="color:${sigColor}">
-            ${r.mobile_up ? `${sigPct} %${mob.ntype ? ` · ${mob.ntype}` : ''}` : 'Getrennt'}
+          <div class="net-pgn-iv" style="color:${sigColor}">${r.mobile_up ? `${sigPct} %${mob.ntype ? ` · ${mob.ntype}` : ''}` : 'Getrennt'}</div>
+        </div>
+        <div class="net-pgn-row">
+          <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${slDot}"></div></div>
+          <div class="net-pgn-info"><span class="net-pgn-desc">Starlink Qualität</span></div>
+          <div class="net-pgn-iv" style="color:${slDot==='ok'?'var(--green)':slDot==='warn'?'var(--yellow)':'var(--text3)'}">
+            ${sl.ping_ms != null ? `${sl.ping_ms.toFixed(0)} ms` : '—'}${sl.downlink_bps != null ? ` · ${fmtBps(sl.downlink_bps)} ↓` : ''}
           </div>
+        </div>
+        <div class="net-pgn-row">
+          <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ${slDot}"></div></div>
+          <div class="net-pgn-info"><span class="net-pgn-desc">Starlink Uptime</span></div>
+          <div class="net-pgn-iv">${slUptime}</div>
+        </div>
+        <div class="net-pgn-row">
+          <div class="net-pgn-dot-wrap"><div class="net-pgn-dot ok"></div></div>
+          <div class="net-pgn-info"><span class="net-pgn-desc">Router verbunden seit</span></div>
+          <div class="net-pgn-iv">${fmtUptime(r.active_uptime)}</div>
         </div>
       </div>
     </div></div>`;

@@ -37,10 +37,10 @@
     <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
-          <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
-          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-          <circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>
+          <path d="M5 12.55a11 11 0 0 1 14 0"/>
+          <path d="M1.5 9a16 16 0 0 1 21 0"/>
+          <path d="M8.5 16.1a6 6 0 0 1 7 0"/>
+          <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>
         </svg>
         <div class="conn-inet-dot" id="connInetDot"></div>
       </div>
@@ -108,17 +108,18 @@
         <div class="label">Spannung</div>
         <div class="value"><span id="battV">--</span><span class="unit">V</span></div>
       </div>
-      <div class="batt-item">
+      <div class="batt-item" style="position:relative">
         <div class="label">Strom</div>
         <div class="value"><span id="battI">--</span><span class="unit">A</span></div>
-      </div>
-      <div class="batt-item">
-        <div class="label">Leistung</div>
-        <div class="value"><span id="battP">--</span><span class="unit">W</span></div>
+        <span id="battPSmall" style="position:absolute;bottom:2px;right:4px;font-size:10px;color:var(--text3);line-height:1">-- W</span>
       </div>
       <div class="batt-item">
         <div class="label">Verbraucht</div>
         <div class="value"><span id="battAh">--</span><span class="unit">Ah</span></div>
+      </div>
+      <div class="batt-item">
+        <div class="label">Rest (BMS)</div>
+        <div class="value"><span id="battRemAh">--</span><span class="unit">Ah</span></div>
       </div>
     </div>
 
