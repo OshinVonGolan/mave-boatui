@@ -164,7 +164,7 @@ function updateBattery(b) {
   const vEl = $('battV'); vEl.textContent = fmtV(b.voltage); vEl.className = colorClass(b.voltage, 12.6, 12.0);
   const iEl = $('battI'); iEl.textContent = fmt(b.current); iEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
   const pSmall = $('battPSmall');
-  if (pSmall) pSmall.textContent = b.power != null ? `${fmt(b.power, 0)} W` : '-- W';
+  if (pSmall) pSmall.textContent = b.power != null ? fmt(b.power, 0) : '--';
   $('battAh').textContent      = fmt(b.consumed_ah);
   $('battStarter').textContent = fmtV(b.starter_voltage);
   $('battCycles').textContent  = b.cycles ?? '--';
