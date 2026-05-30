@@ -113,39 +113,31 @@ function _niceTicks(lo, hi, nTarget) {
   return ticks;
 }
 
-// Catmull-Rom → glatte Bézierkurve (tension 0 = scharf, 1 = sehr weich)
-const _SMOOTH_T = 0.4;
-function _smoothSeg(ctx, s) {
-  if (s.length === 0) return;
-  ctx.moveTo(s[0].x, s[0].y);
-  if (s.length < 3) { if (s.length === 2) ctx.lineTo(s[1].x, s[1].y); return; }
-  for (let i = 0; i < s.length - 1; i++) {
-    const p0 = s[Math.max(0, i - 1)];
-    const p1 = s[i], p2 = s[i + 1];
-    const p3 = s[Math.min(s.length - 1, i + 2)];
-    const t = _SMOOTH_T;
-    ctx.bezierCurveTo(
-      p1.x + t * (p2.x - p0.x) / 2, p1.y + t * (p2.y - p0.y) / 2,
-      p2.x - t * (p3.x - p1.x) / 2, p2.y - t * (p3.y - p1.y) / 2,
-      p2.x, p2.y
-    );
-  }
-}
-
-// Sammelt Segmente (bei null-Werten unterbrochen) und gibt letzten Punkt zurück
-function _buildSegs(pts, key, xOf, yOf) {
-  let seg = [], segs = [], last = null;
-  // Downsampling bei vielen Punkten
-  const step = pts.length > 400 ? Math.ceil(pts.length / 400) : 1;
-  pts.forEach((d, i) => {
-    if (i % step !== 0 && i !== pts.length - 1) return;
+// Zeichnet eine Linie mit lineTo — schnell, korrekt, kein Overshoot
+// maxGapSec: Zeitlücken größer als dieser Wert trennen Segmente (verhindert lange Diagonalen)
+function _buildSegs(pts, key, xOf, yOf, maxGapSec = 60) {
+  let seg = [], segs = [], last = null, prevTs = null;
+  pts.forEach(d => {
     const v = d[key];
-    if (v == null) { if (seg.length) { segs.push(seg); seg = []; } return; }
+    if (v == null) {
+      if (seg.length) { segs.push(seg); seg = []; }
+      prevTs = null;
+      return;
+    }
+    if (prevTs !== null && (d.ts - prevTs) > maxGapSec) {
+      if (seg.length) { segs.push(seg); seg = []; }
+    }
     const p = { x: xOf(d.ts), y: yOf(v) };
-    seg.push(p); last = p;
+    seg.push(p); last = p; prevTs = d.ts;
   });
   if (seg.length) segs.push(seg);
   return { segs, last };
+}
+
+function _smoothSeg(ctx, s) {
+  if (!s.length) return;
+  ctx.moveTo(s[0].x, s[0].y);
+  for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
 }
 
 function renderCharts() {
@@ -195,7 +187,7 @@ function renderCharts() {
   const yLeft      = sorted[0] || null;
   const yRight     = sorted[1] || null;
 
-  // Ticks der linken Achse → Gridlinien
+  // Ticks der linken Achse → horizontale Gridlinien
   const yTicks = yLeft ? _niceTicks(yLeft.lo, yLeft.hi, 4) : [];
   ctx.strokeStyle = '#2a3a4f'; ctx.lineWidth = 1;
   if (yTicks.length) {
@@ -209,6 +201,13 @@ function renderCharts() {
       const y = PAD_T + Math.round(CH * i / 4) + 0.5;
       ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + CW, y); ctx.stroke();
     }
+  }
+
+  // Vertikale Gitternetzlinien (an den gleichen Positionen wie die X-Achsen-Labels)
+  ctx.strokeStyle = '#243040'; ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const x = Math.round(PAD_L + CW * i / 4) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, PAD_T); ctx.lineTo(x, PAD_T + CH); ctx.stroke();
   }
 
   ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
@@ -262,41 +261,52 @@ function renderCharts() {
   ctx.save();
   ctx.beginPath(); ctx.rect(PAD_L, PAD_T, CW, CH); ctx.clip();
 
-  const fillAlpha = active.length === 1 ? '30' : '1a';
+  // Adaptiver Gap-Schwellwert: 1/30 des Zeitfensters (z.B. 60s bei 30min, 12min bei 6h)
+  const maxGapSec = Math.max(30, chartRangeSec / 30);
+
+  // Fill nur für die primäre (linke) Achsen-Serie — mehrere Fills überlagern sich unschön
+  const fillKey = yLeft?.key ?? null;
 
   active.forEach(({ key, def, yOf }) => {
-    const { segs, last } = _buildSegs(pts, key, xOf, yOf);
+    const { segs, last } = _buildSegs(pts, key, xOf, yOf, maxGapSec);
     if (!segs.length) return;
 
-    // Fill: für jedes Segment schließen wir nach unten
-    segs.forEach(s => {
-      if (s.length < 2) return;
-      const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
-      grad.addColorStop(0, def.color + fillAlpha);
-      grad.addColorStop(1, def.color + '00');
-      ctx.beginPath();
-      _smoothSeg(ctx, s);
-      ctx.lineTo(s[s.length - 1].x, PAD_T + CH);
-      ctx.lineTo(s[0].x, PAD_T + CH);
-      ctx.closePath();
-      ctx.fillStyle = grad;
-      ctx.fill();
-    });
+    // Fill: nur für primäre Serie, nach unten schließen
+    if (key === fillKey) {
+      segs.forEach(s => {
+        if (s.length < 2) return;
+        const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
+        grad.addColorStop(0, def.color + '28');
+        grad.addColorStop(1, def.color + '00');
+        ctx.beginPath();
+        _smoothSeg(ctx, s);
+        ctx.lineTo(s[s.length - 1].x, PAD_T + CH);
+        ctx.lineTo(s[0].x, PAD_T + CH);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+      });
+    }
 
     // Linie
     ctx.beginPath();
     segs.forEach(s => _smoothSeg(ctx, s));
-    ctx.strokeStyle = def.color; ctx.lineWidth = 2;
+    ctx.strokeStyle = def.color; ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 
     // Livepoint
     if (last && scrubTs === null) {
       ctx.beginPath(); ctx.arc(last.x, last.y, 3, 0, Math.PI * 2);
       ctx.fillStyle = def.color; ctx.fill();
+      ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.stroke();
     }
   });
 
   ctx.restore();
+
+  // Chart-Rahmen
+  ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+  ctx.strokeRect(PAD_L + 0.5, PAD_T + 0.5, CW, CH);
 
   // Crosshair + dots
   const seriesYOf = Object.fromEntries(active.map(a => [a.key, a]));
