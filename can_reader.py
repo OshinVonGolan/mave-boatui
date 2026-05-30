@@ -256,9 +256,9 @@ class CanInterface:
                         changed = True
 
         elif pgn == 130902:
-            p = parse_bms_cells(payload)
-            if p and self.state.bms.get('cells') != p['cells']:
-                self.state.bms['cells'] = p['cells']
+            cells = parse_bms_cells(payload)   # gibt eine Liste zurück, kein Dict!
+            if cells is not None and self.state.bms.get('cells') != cells:
+                self.state.bms['cells'] = cells
                 changed = True
 
         elif pgn == 126720:
@@ -340,7 +340,12 @@ class CanInterface:
                     for msg in bus:
                         if not self._running:
                             break
-                        self._handle(msg)
+                        try:
+                            self._handle(msg)
+                        except Exception as e:
+                            # Ein einzelner fehlerhafter Frame darf NICHT die
+                            # ganze CAN-Verbindung killen + Reconnect auslösen.
+                            log.warning("Frame-Fehler (PGN-Verarbeitung): %s", e)
             except Exception as e:
                 self._bus = None
                 log.error("CAN-Fehler: %s — Reconnect in 5 s", e)
