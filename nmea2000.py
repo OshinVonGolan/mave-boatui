@@ -268,7 +268,8 @@ PGN_NAMES: dict[int, str] = {
     130901: 'BMS Pack Data (Custom)',
     130902: 'BMS Cell Data (Custom)',
     130910: 'VE.Direct Extended (Custom)',
-    130911: 'VE.Direct Control (Custom)',
+    61184:  'VE.Direct Control (Custom)',
+    130911: 'VE.Direct Control (Custom, alt)',
     127507: 'Charger Status',
     127750: 'Converter / Inverter Status',
 }
@@ -521,12 +522,15 @@ def build_iso_request(requested_pgn: int, src: int, dst: int = 0xFF) -> tuple[in
     return can_id, payload
 
 
-def build_inverter_mode_frame(mode: int) -> tuple[int, bytes]:
-    """Erstellt PGN 130911 – Inverter Mode Control (Single Frame, 3 Byte).
-    mode: 2=An, 4=Aus, 5=Eco
+def build_inverter_mode_frame(mode: int, instance: int = 0,
+                              dst: int = 0xFF) -> tuple[int, bytes]:
+    """Erstellt PGN 61184 – VE.Direct Control (PDU1, adressierbar).
+    mode:     2=An, 4=Aus, 5=Eco
+    instance: Geräte-Instanz (Standard 0 = Inverter)
+    dst:      Zieladresse (0xFF = broadcast, sonst Gateway-Adresse)
     """
-    payload = bytes([0, 0, mode])   # deviceInstance=0, commandType=0, value
-    can_id  = make_can_id(130911, RPI_SOURCE_ADDRESS, priority=3)
+    payload = bytes([instance, 0, mode])   # deviceInstance, commandType=0, value
+    can_id  = make_can_id(61184, RPI_SOURCE_ADDRESS, dst=dst, priority=3)
     return can_id, payload
 
 

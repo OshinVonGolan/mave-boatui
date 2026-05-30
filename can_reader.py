@@ -115,15 +115,30 @@ class CanInterface:
         except can.CanError as e:
             log.error("CAN-Sendefehler Systemzeit: %s", e)
 
-    def send_inverter_mode(self, mode: int):
-        """Sendet PGN 130911 – Inverter Mode (2=An, 4=Aus, 5=Eco)."""
+    def _find_vedirect_gateway_src(self) -> int:
+        """Gibt die CAN-Quelladresse des VE.Direct-Gateways zurück.
+        Sucht nach dem Gerät, das PGN 130910 (VE.Direct Extended) sendet.
+        Fällt auf 0xFF (broadcast) zurück wenn unbekannt.
+        """
+        for (pgn, src, _inst) in self._network:
+            if pgn == 130910:
+                return src
+        return 0xFF
+
+    def send_inverter_mode(self, mode: int, instance: int = 0):
+        """Sendet PGN 61184 – VE.Direct Control adressiert an den Gateway (PDU1).
+        mode:     2=An, 4=Aus, 5=Eco
+        instance: Geräte-Instanz des Inverters (Standard 0)
+        """
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
             return
-        can_id, data = build_inverter_mode_frame(mode)
+        dst = self._find_vedirect_gateway_src()
+        can_id, data = build_inverter_mode_frame(mode, instance, dst)
         try:
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
-            log.info("Inverter-Modus %d gesendet (PGN 130911)", mode)
+            log.info("Inverter-Modus %d → Instanz %d → Gateway Adr.%d (PGN 61184)",
+                     mode, instance, dst)
         except can.CanError as e:
             log.error("CAN-Sendefehler Inverter: %s", e)
 
