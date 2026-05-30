@@ -1152,6 +1152,21 @@
 <script src="/static/js/battery.js"></script>
 <script src="/static/js/tanks.js"></script>
 <script src="/static/js/lights.js"></script>
+<!-- ── Update-Ladebildschirm ──────────────────────────────────────────────── -->
+<div id="updateScreen" style="display:none;position:fixed;inset:0;z-index:9999;
+  background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:20px">
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round">
+    <path d="M24 8v8M24 32v8M8 24H16M32 24h8M12.7 12.7l5.66 5.66M29.64 29.64l5.66 5.66M12.7 35.3l5.66-5.66M29.64 18.36l5.66-5.66">
+      <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1.2s" repeatCount="indefinite"/>
+    </path>
+  </svg>
+  <div style="text-align:center">
+    <div id="updateScreenTitle" style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px">Update wird installiert…</div>
+    <div id="updateScreenSub" style="font-size:13px;color:var(--text3)">Bitte warten</div>
+  </div>
+  <div id="updateScreenVersion" style="font-size:12px;color:var(--text3);font-family:monospace"></div>
+</div>
+
 <script src="/static/js/charts.js"></script>
 <script src="/static/js/alarms.js"></script>
 <script src="/static/js/settings.js"></script>

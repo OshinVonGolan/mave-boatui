@@ -242,6 +242,29 @@ async function syncTime() {
 
 // ── Update ─────────────────────────────────────────────────────────────────
 
+function _showUpdateScreen(verStr) {
+  const el = $('updateScreen');
+  if (!el) return;
+  if (verStr) $('updateScreenVersion').textContent = verStr;
+  el.style.display = 'flex';
+}
+
+async function _waitForServer() {
+  $('updateScreenTitle').textContent = 'Server startet neu…';
+  $('updateScreenSub').textContent   = 'Bitte warten';
+  // kurz warten damit der Server sicher down ist
+  await new Promise(r => setTimeout(r, 3000));
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    $('updateScreenSub').textContent = 'Verbinde' + '.'.repeat((i % 3) + 1);
+    try {
+      const r = await fetch('/api/network', { cache: 'no-store' });
+      if (r.ok) { location.href = location.pathname; return; }
+    } catch(_) {}
+  }
+  location.href = location.pathname;
+}
+
 async function runUpdate() {
   const btn = $('updateBtn');
   const fb  = $('updateFeedback');
@@ -253,7 +276,7 @@ async function runUpdate() {
     const r   = await fetch('/api/system/update', { method: 'POST' });
     const txt = await r.text();
     let data = {};
-    try { data = JSON.parse(txt); } catch(_) { /* leere/HTML-Antwort beim Neustart */ }
+    try { data = JSON.parse(txt); } catch(_) {}
     if (!r.ok) {
       fb.textContent = 'Fehler: ' + (data.detail || `HTTP ${r.status}`);
       fb.style.color = 'var(--red)';
@@ -261,21 +284,19 @@ async function runUpdate() {
       return;
     }
     if (data.changed) {
-      if (vi && data.version_before && data.version_after)
-        vi.textContent = `${data.version_before} → ${data.version_after}`;
-      fb.textContent = 'Aktualisiert — Server startet neu…';
-      fb.style.color = 'var(--green)';
-      // Nach Neustart auf Startseite neu laden (ohne #settings)
-      setTimeout(() => { location.href = location.pathname; }, 4000);
+      const verStr = (data.version_before && data.version_after)
+        ? `${data.version_before} → ${data.version_after}` : '';
+      if (vi && verStr) vi.textContent = verStr;
+      _showUpdateScreen(verStr);
+      await _waitForServer();
     } else {
       fb.textContent = 'Bereits aktuell ✓';
       fb.style.color = 'var(--green)';
       btn.disabled = false;
     }
   } catch(e) {
-    // Verbindungsabbruch durch Neustart ist hier wahrscheinlich = Erfolg
-    fb.textContent = 'Server startet neu…';
-    fb.style.color = 'var(--green)';
-    setTimeout(() => { location.href = location.pathname; }, 5000);
+    // Verbindungsabbruch = Neustart läuft
+    _showUpdateScreen('');
+    await _waitForServer();
   }
 }

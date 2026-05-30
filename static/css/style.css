@@ -587,23 +587,25 @@
       padding: 1px 5px; flex-shrink: 0; }
 
     .net-pgn-list { padding: 0; }
-    .net-pgn-row { display: flex; align-items: center; gap: 6px;
-      padding: 6px 12px; border-bottom: 1px solid var(--surface2); }
+    .net-pgn-row { display: flex; align-items: center; gap: 8px;
+      padding: 5px 12px; border-bottom: 1px solid var(--surface2); }
     .net-pgn-row:last-child { border-bottom: none; }
-    .net-pgn-dot-wrap { flex-shrink: 0; display: flex; align-items: center; }
-    .net-pgn-dot { width: 6px; height: 6px; border-radius: 50%; }
+    /* Direkte Kinder (Router-Kachel): desc nimmt Restbreite, iv rechts */
+    .net-pgn-row > .net-pgn-desc { flex: 1; font-size: 12px; color: var(--text2); }
+    .net-pgn-iv { font-size: 12px; color: var(--text); white-space: nowrap; font-weight: 500; }
+    /* CAN-Kacheln: dot + info-Block + iv-badge */
+    .net-pgn-dot-wrap { flex-shrink: 0; display: flex; align-items: center; padding-right: 2px; }
+    .net-pgn-dot { width: 5px; height: 5px; border-radius: 50%; }
     .net-pgn-dot.ok   { background: var(--green); }
     .net-pgn-dot.warn { background: var(--yellow); }
     .net-pgn-dot.old  { background: var(--border); }
-    .net-pgn-info { flex: 1; min-width: 0; display: flex; flex-wrap: wrap;
-      align-items: baseline; gap: 4px; }
-    .net-pgn-desc { font-size: 12px; color: var(--text); white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; }
-    .net-pgn-num  { font-size: 10px; color: var(--text3); font-family: monospace;
-      width: 100%; }
-    .net-inst-badge { font-size: 10px; background: var(--accent);
-      color: #fff; border-radius: 3px; padding: 0 4px; flex-shrink: 0; }
-    .net-iv-badge { font-size: 11px; color: var(--text3); white-space: nowrap;
+    .net-pgn-info { flex: 1; min-width: 0; }
+    .net-pgn-desc { font-size: 12px; color: var(--text); }
+    .net-pgn-num  { font-size: 10px; color: var(--text3); font-family: monospace; margin-top: 1px; }
+    .net-inst-badge { display: inline-block; font-size: 9px; background: var(--accent);
+      color: #fff; border-radius: 3px; padding: 0 4px; margin-left: 4px;
+      vertical-align: middle; line-height: 16px; }
+    .net-iv-badge { font-size: 10px; color: var(--text3); white-space: nowrap;
       flex-shrink: 0; font-family: monospace; }
 
     .net-empty { color: var(--text3); text-align: center; padding: 60px 20px; font-size: 14px; }

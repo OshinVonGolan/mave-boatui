@@ -140,7 +140,7 @@ class CanInterface:
     # ── Empfangen ───────────────────────────────────────────────────────────
 
     # PGNs die eine Instanz im Payload haben — werden nach Payload-Assembly getrackt
-    _INSTANCE_PGNS = {127505, 127506, 127507, 127508, 127750, 130312, 130910}
+    _INSTANCE_PGNS = {127505, 127506, 127508, 130312, 130910}
 
     def _track_network(self, pgn: int, src: int, instance: int | None = None):
         now = time.monotonic()
@@ -325,7 +325,7 @@ class CanInterface:
         elif pgn == 127750:
             p = parse_inverter_status(payload)
             if p:
-                self._track_network(pgn, src, payload[0] if payload else None)
+                self._track_network(pgn, src, None)
                 if p.get('state') and self.state.inverter.get('state') != p['state']:
                     self.state.inverter['state'] = p['state']
                     changed = True
@@ -333,7 +333,7 @@ class CanInterface:
         elif pgn == 127507:
             p = parse_charger_status_pgn(payload)
             if p:
-                self._track_network(pgn, src, p.get('inst', payload[0] if payload else None))
+                self._track_network(pgn, src, None)
                 if p.get('state') and self.state.charger.get('state') != p['state']:
                     self.state.charger['state'] = p['state']
                     changed = True
