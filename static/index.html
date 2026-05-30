@@ -247,82 +247,112 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
     </button>
     <div class="ov-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/>
+      </svg>
       Batterie — Details
     </div>
-    <button class="monday-refresh" onclick="openFlow()" title="Energiefluss">
+    <button class="monday-refresh" onclick="openFlow()" title="Energiefluss-Diagramm">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       Energiefluss
     </button>
   </div>
-  <div class="ov-body" style="padding:14px">
-  <div class="bd2-layout">
+  <div class="ov-body">
+  <div class="bd-pg">
 
-    <!-- ── LINKE KARTE: Service-Batterie Daten ── -->
-    <div class="bd2-card">
-      <div class="bd2-section-hd">Servicebatterie</div>
-
-      <!-- SOC -->
-      <div style="display:flex;align-items:baseline;gap:6px">
-        <span id="dSoc" style="font-size:72px;font-weight:800;line-height:1;color:var(--green)">--</span>
-        <span style="font-size:24px;color:var(--text2);font-weight:400">%</span>
-        <span id="dChargeDir" style="font-size:14px;color:var(--text2);margin-left:6px"></span>
+    <!-- ── Servicebatterie ── -->
+    <div class="bd-card bd-pg-batt" style="display:flex;flex-direction:column">
+      <div class="bd-card-hd">Servicebatterie</div>
+      <div class="bd-soc-block" style="margin-bottom:10px">
+        <div class="bd-soc-head">
+          <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
+        </div>
+        <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
+        <div class="bd-soc-dir" id="dChargeDir"></div>
+        <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
       </div>
-      <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
-      <div id="dSocSec" style="display:none;font-size:12px;color:var(--text3)"></div>
-
-      <!-- Spannung / Strom / Leistung / Verbraucht -->
-      <div class="bd2-kv-grid">
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Spannung</div>
-          <div class="bd2-kv-val"><span id="dV">--</span><span class="bd2-kv-unit">V</span></div>
-          <div id="dVSec" style="display:none;font-size:11px;color:var(--text3)"></div>
+      <div class="bd-kv-grid">
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Spannung</div>
+          <div class="bd-kv-line"><span id="dV" class="bd-kv-val">--</span><span class="bd-kv-unit">V</span></div>
+          <div class="bd-kv-sec" id="dVSec" style="display:none"></div>
         </div>
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Strom</div>
-          <div class="bd2-kv-val"><span id="dI">--</span><span class="bd2-kv-unit">A</span></div>
-          <div id="dISec" style="display:none;font-size:11px;color:var(--text3)"></div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Strom</div>
+          <div class="bd-kv-line"><span id="dI" class="bd-kv-val">--</span><span class="bd-kv-unit">A</span></div>
+          <div class="bd-kv-sec" id="dISec" style="display:none"></div>
         </div>
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Leistung</div>
-          <div class="bd2-kv-val"><span id="dP">--</span><span class="bd2-kv-unit">W</span></div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Leistung</div>
+          <div class="bd-kv-line"><span id="dP" class="bd-kv-val">--</span><span class="bd-kv-unit">W</span></div>
         </div>
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Verbraucht</div>
-          <div class="bd2-kv-val"><span id="dAh">--</span><span class="bd2-kv-unit">Ah</span></div>
-        </div>
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Restkapazität</div>
-          <div class="bd2-kv-val"><span id="dRemKwh">--</span><span class="bd2-kv-unit">kWh</span></div>
-        </div>
-        <div class="bd2-kv">
-          <div class="bd2-kv-label">Zyklen</div>
-          <div class="bd2-kv-val"><span id="dCycles">--</span></div>
+        <div class="bd-kv-item">
+          <div class="bd-kv-label">Verbraucht</div>
+          <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
         </div>
       </div>
-
-      <!-- Voll vor / Min / Max -->
-      <div class="bd2-stat-row">
-        <span class="bd2-stat"><span class="bd2-stat-l">Voll vor</span><span id="dFull">--</span></span>
-        <span class="bd2-stat"><span class="bd2-stat-l">Min</span><span id="dMinV">--</span>&thinsp;V</span>
-        <span class="bd2-stat"><span class="bd2-stat-l">Max</span><span id="dMaxV">--</span>&thinsp;V</span>
-      </div>
-
-      <!-- 2×2 Zellen-Array -->
-      <div>
-        <div class="bd2-section-hd">Zellspannungen</div>
-        <div id="bdCellMini" style="display:none;margin-top:8px">
-          <div class="bd-cell-mini-grid" id="bdCellMiniGrid"></div>
+      <div class="bd-mini-row" style="margin-top:10px">
+        <div class="bd-mini-item">
+          <div class="bd-label">Restkapazität</div>
+          <div class="bd-mini-val"><span id="dRemKwh">--</span> <span style="font-size:11px;color:var(--text3)">kWh</span></div>
         </div>
-        <div id="bdCellMiniAbsent" style="color:var(--text3);font-size:12px;margin-top:4px">Kein BMS-Signal</div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Voll vor</div>
+          <div class="bd-mini-val"><span id="dFull">--</span></div>
+        </div>
+        <div class="bd-mini-item">
+          <div class="bd-label">Zyklen</div>
+          <div class="bd-mini-val"><span id="dCycles">--</span></div>
+        </div>
       </div>
+      <div class="bd-minmax-row">
+        <span>↓ Min: <strong id="dMinV">--</strong> V</span>
+        <span>↑ Max: <strong id="dMaxV">--</strong> V</span>
+      </div>
+    </div>
 
-    </div><!-- /.bd2-card -->
+    <!-- ── Zellen & BMS (Detail-Diagnose) ── -->
+    <div class="bd-card bd-pg-cells" id="bmsSection">
+      <div class="bd-card-hd">Zellen &amp; BMS</div>
+      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:8px 0">Kein BMS-Signal — warte auf Daten…</div>
+      <div id="bmsDataWrap" style="display:none">
+        <div class="bms-pack-row" id="bmsPackRow"></div>
+        <div id="bmsDailyStats" style="display:none">
+          <div class="bms-pack-row">
+            <div class="bms-pack-item"><div class="bd-label">Heute geladen</div><div class="bms-pack-val val-green" id="bmsTodayCharge">-- Ah</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Heute entladen</div><div class="bms-pack-val val-orange" id="bmsTodayDischarge">-- Ah</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Lade-A</div><div class="bms-pack-val" id="bmsChargeA">-- A</div></div>
+            <div class="bms-pack-item"><div class="bd-label">Entlade-A</div><div class="bms-pack-val" id="bmsDischargeA">-- A</div></div>
+          </div>
+        </div>
+        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+        <div class="bms-flags-row" id="bmsFlags"></div>
+      </div>
+    </div>
 
-    <!-- ── RECHTE KARTE: Verlauf-Chart ── -->
-    <div class="bd2-card bd2-chart-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-        <div class="bd2-section-hd" style="margin-bottom:0">Verlauf</div>
+    <!-- ── Lade-Quellen (dynamisch) ── -->
+    <div id="chargeSourceCard" class="bd-card bd-pg-sources">
+      <div class="bd-card-hd-row">
+        <span>Lade-Quellen</span>
+        <div style="display:flex;gap:3px">
+          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
+          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
+          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
+        </div>
+      </div>
+      <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Keine aktive Lade-Quelle</div>
+      <div id="chargeSourceHasData" style="display:none">
+        <div class="charge-src-wrap">
+          <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
+          <div class="charge-src-legend" id="chargeSourceLegend"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Verlauf chart (volle Breite unten) ── -->
+    <div class="bd-card bd-pg-chart">
+      <div class="bd-card-hd-row">
+        <span>Verlauf</span>
         <div class="chart-range-group">
           <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
           <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
@@ -339,147 +369,30 @@
         <button id="tog-zelldiff" class="chart-tog"        onclick="toggleSeries('zelldiff')">Zelldiff.</button>
       </div>
       <div class="chart-legend" id="chartLegend"></div>
-      <canvas class="chart bd2-canvas" id="chartMain" style="cursor:crosshair"></canvas>
+      <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
     </div>
 
-  </div><!-- /.bd2-layout -->
-
-  <!-- Legacy BMS IDs (unsichtbar, werden von updateBms() befüllt) -->
-  <div style="display:none" aria-hidden="true">
-    <div id="bmsSection">
-      <div id="bmsNoSignal"></div>
-      <div id="bmsDataWrap">
-        <div id="bmsPackRow"></div>
-        <div id="bmsDailyStats">
-          <div id="bmsTodayCharge"></div><div id="bmsTodayDischarge"></div>
-          <div id="bmsChargeA"></div><div id="bmsDischargeA"></div>
+    <!-- ── Starterbatterie ── -->
+    <div class="bd-card bd-pg-starter">
+      <div class="bd-card-hd">Starterbatterie</div>
+      <div class="bd-3col">
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">Aktuell</div>
+          <div class="bd-3col-val"><span id="dStarter">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
         </div>
-        <div id="bmsFlags"></div>
-        <div class="bms-cell-grid" id="bmsCellGrid"></div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↓ Min</div>
+          <div class="bd-3col-val"><span id="dStarterMin">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
+        <div class="bd-3col-item">
+          <div class="bd-3col-label">↑ Max</div>
+          <div class="bd-3col-val"><span id="dStarterMax">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+        </div>
       </div>
     </div>
-    <span id="dStarter"></span><span id="dStarterMin"></span><span id="dStarterMax"></span>
-  </div>
 
-  </div><!-- /.ov-body -->
-</div>
-<div id="flowOverlay" class="overlay hidden">
-  <div class="ov-header">
-    <button class="ov-close-arrow" onclick="closeFlow()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <div class="ov-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Energiefluss
-    </div>
-    <div class="ov-header-spacer"></div>
-  </div>
-  <div class="ov-body">
-    <div class="flow-card">
-    <svg class="flow-schema" viewBox="0 0 1400 760" xmlns="http://www.w3.org/2000/svg">
-      <g>
-        <path class="flow-edge" d="M115,30 V8 H1285 V30"/>
-        <path class="flow-edge-dot" id="fe-gridbord" d="M115,30 V8 H1285 V30"/>
-        <path class="flow-edge" d="M200,72 H402 V180"/>
-        <path class="flow-edge-dot" id="fe-gridcharger" d="M200,72 H402 V180"/>
-        <path class="flow-edge" d="M495,225 H560"/>
-        <path class="flow-edge-dot" id="fe-charger" d="M495,225 H560"/>
-        <path class="flow-edge" d="M905,225 H840"/>
-        <path class="flow-edge-dot" id="fe-inv" d="M905,225 H840"/>
-        <path class="flow-edge" d="M997,180 V115 H1200"/>
-        <path class="flow-edge-dot" id="fe-invbord" d="M997,180 V115 H1200"/>
-        <path class="flow-edge" d="M225,292 H560"/>
-        <path class="flow-edge-dot" id="fe-solar1" d="M225,292 H560"/>
-        <path class="flow-edge" d="M225,407 H560"/>
-        <path class="flow-edge-dot" id="fe-solar2" d="M225,407 H560"/>
-        <path class="flow-edge" d="M225,514 H560"/>
-        <path class="flow-edge-dot" id="fe-solar3" d="M225,514 H560"/>
-        <path class="flow-edge" d="M840,380 H1200"/>
-        <path class="flow-edge-dot" id="fe-dcgrid" d="M840,380 H1200"/>
-        <path class="flow-edge" d="M720,520 V545"/>
-        <path class="flow-edge-dot" id="fe-orion" d="M720,520 V545"/>
-        <path class="flow-edge" d="M360,690 H415"/>
-        <path class="flow-edge-dot" id="fe-altstarter" d="M360,690 H415"/>
-        <path class="flow-edge" d="M505,650 V545 H630"/>
-        <path class="flow-edge-dot" id="fe-starterorion" d="M505,650 V545 H630"/>
-      </g>
-
-      <g class="flow-g" id="fg-grid">
-        <rect class="flow-box" x="30" y="30" width="170" height="85" rx="10"/>
-        <text class="flow-name" x="115" y="52">Grid</text>
-        <text class="flow-val"  x="115" y="80" id="fv-grid">—</text>
-        <text class="flow-sub"  x="115" y="98" id="fsa-grid"></text>
-      </g>
-      <g class="flow-g" id="fg-bord">
-        <rect class="flow-box" x="1200" y="30" width="170" height="85" rx="10"/>
-        <text class="flow-name" x="1285" y="52">AC-Loads</text>
-        <text class="flow-val"  x="1285" y="80" id="fv-bord">—</text>
-        <text class="flow-sub"  x="1285" y="98" id="fsa-bord"></text>
-      </g>
-      <g class="flow-g" id="fg-charger">
-        <rect class="flow-box" x="310" y="180" width="185" height="90" rx="10"/>
-        <text class="flow-name" x="402" y="202">Charger</text>
-        <text class="flow-val"  x="402" y="233" id="fv-charger">--</text>
-        <text class="flow-sub"  x="402" y="251" id="fsa-charger"></text>
-      </g>
-      <g class="flow-g" id="fg-inv">
-        <rect class="flow-box" x="905" y="180" width="185" height="90" rx="10"/>
-        <text class="flow-name" x="997" y="202">Inverter</text>
-        <text class="flow-val"  x="997" y="233" id="fv-inv">--</text>
-        <text class="flow-sub"  x="997" y="251" id="fsa-inv"></text>
-      </g>
-      <g class="flow-g" id="fg-solar1">
-        <rect class="flow-box" x="30" y="250" width="195" height="85" rx="10"/>
-        <text class="flow-name" x="127" y="272">Solar 1 — Dodger Port</text>
-        <text class="flow-val"  x="127" y="300" id="fv-solar1">--</text>
-        <text class="flow-sub"  x="127" y="318" id="fsa-solar1"></text>
-      </g>
-      <g class="flow-g" id="fg-solar2">
-        <rect class="flow-box" x="30" y="365" width="195" height="85" rx="10"/>
-        <text class="flow-name" x="127" y="387">Solar 2 — Dodger Stbd</text>
-        <text class="flow-val"  x="127" y="415" id="fv-solar2">--</text>
-        <text class="flow-sub"  x="127" y="433" id="fsa-solar2"></text>
-      </g>
-      <g class="flow-g" id="fg-solar3">
-        <rect class="flow-box" x="30" y="472" width="195" height="85" rx="10"/>
-        <text class="flow-name" x="127" y="494">Solar 3 — Deck</text>
-        <text class="flow-val"  x="127" y="522" id="fv-solar3">--</text>
-        <text class="flow-sub"  x="127" y="540" id="fsa-solar3"></text>
-      </g>
-      <g class="flow-g" id="fg-batt">
-        <rect class="flow-box-main" x="560" y="230" width="280" height="290" rx="14"/>
-        <text class="flow-name" x="700" y="256">LiFePo4 &#183; DC-Bus</text>
-        <text class="flow-val"  x="700" y="330" id="fv-batt" style="font-size:32px">--</text>
-        <text class="flow-sub"  x="700" y="362" id="fs-batt" style="font-size:14px"></text>
-        <text class="flow-sub"  x="700" y="384" id="fsa-batt" style="font-size:13px;opacity:.7"></text>
-      </g>
-      <g class="flow-g" id="fg-dcgrid">
-        <rect class="flow-box" x="1200" y="335" width="170" height="90" rx="10"/>
-        <text class="flow-name" x="1285" y="357">DC-Loads</text>
-        <text class="flow-val"  x="1285" y="388" id="fv-dcgrid">--</text>
-        <text class="flow-sub"  x="1285" y="406" id="fsa-dcgrid"></text>
-      </g>
-      <g class="flow-g" id="fg-orion">
-        <rect class="flow-box" x="630" y="545" width="180" height="85" rx="10"/>
-        <text class="flow-name" x="720" y="567">Orion XS</text>
-        <text class="flow-val"  x="720" y="595" id="fv-orion">--</text>
-        <text class="flow-sub"  x="720" y="613" id="fsa-orion"></text>
-      </g>
-      <g class="flow-g" id="fg-alt">
-        <rect class="flow-box" x="180" y="650" width="180" height="80" rx="10"/>
-        <text class="flow-name" x="270" y="672">Lichtmaschine</text>
-        <text class="flow-val"  x="270" y="698" id="fv-alt">--</text>
-        <text class="flow-sub"  x="270" y="716" id="fsa-alt"></text>
-      </g>
-      <g class="flow-g" id="fg-starter">
-        <rect class="flow-box" x="415" y="650" width="180" height="80" rx="10"/>
-        <text class="flow-name" x="505" y="672">Starterbatterie</text>
-        <text class="flow-val"  x="505" y="698" id="fv-starter">--</text>
-        <text class="flow-sub"  x="505" y="716" id="fsa-starter"></text>
-      </g>
-    </svg>
-    </div>
-  </div>
+  </div><!-- bd-pg -->
+  </div><!-- ov-body -->
 </div>
 
 <!-- ── Alarm Overlay ──────────────────────────────────────────────────────── -->
