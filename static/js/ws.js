@@ -133,6 +133,13 @@ function renderChargePie(active, isAvg) {
   }).join('');
 }
 
+function _setSourceDot(dotId, active) {
+  const el = $(dotId);
+  if (!el) return;
+  el.style.background  = active ? 'var(--green)' : 'var(--border)';
+  el.style.boxShadow   = active ? '0 0 4px var(--green)' : 'none';
+}
+
 function updatePowerSources(data) {
   let anyVisible = false;
 
@@ -149,6 +156,14 @@ function updatePowerSources(data) {
   if (data.alternator?.power != null) showSource('srcAlt',   'altW',   data.alternator.power);
 
   $('srcRow').classList.toggle('hidden', !anyVisible);
+
+  // Ladequellen-Dots rechts neben dem Gauge
+  const solarPower = (data.solar?.power ?? 0) + (data.solar2?.power ?? 0) + (data.solar3?.power ?? 0);
+  const hasAny = data.charger?.power != null || solarPower > 0 || data.alternator?.power != null;
+  if (hasAny) $('srcDotsRow').style.display = 'flex';
+  _setSourceDot('srcDotCharger', (data.charger?.active === true) || (data.charger?.power ?? 0) > 0);
+  _setSourceDot('srcDotSolar',   solarPower > 5);
+  _setSourceDot('srcDotAlt',     (data.alternator?.power ?? 0) > 5);
 
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };
