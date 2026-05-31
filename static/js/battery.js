@@ -60,8 +60,8 @@ let _battEnergyUnit = 'ah';
 function toggleBattUnit(e) {
   e?.stopPropagation();
   _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
-  $('battToggleAh')?.classList.toggle('active', _battEnergyUnit === 'ah');
-  $('battToggleWh')?.classList.toggle('active', _battEnergyUnit === 'wh');
+  const btn = $('battUnitToggle');
+  if (btn) btn.textContent = _battEnergyUnit === 'ah' ? 'Ah' : 'Wh';
   _renderBattGrid();
 }
 
@@ -78,9 +78,7 @@ function _renderBattGrid() {
   if (ah) {
     if (mainEl)   { mainEl.textContent = fmt(b.current); mainEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange'; }
     if (mainUnit)   mainUnit.textContent = 'A';
-    if (subEl)      subEl.textContent   = b.power != null ? fmt(b.power, 0) : '--';
-    if (subUnit)    subUnit.textContent = 'W';
-    if (subParent)  subParent.style.display = '';
+    if (subParent)  subParent.style.display = 'none';
     if (lblEl)      lblEl.textContent   = 'Strom';
   } else {
     if (mainEl)   { mainEl.textContent = b.power != null ? fmt(b.power, 0) : '--'; mainEl.className = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange'; }
