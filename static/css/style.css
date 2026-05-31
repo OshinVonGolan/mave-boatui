@@ -62,12 +62,12 @@
       main { grid-template-columns: 1fr 1fr;
         grid-template-areas: "battery tanks" "lights inverter" "wartung wartung"; } }
     .card-wartung { overflow:hidden; max-height:228px; }
-    #wartungHomeBody { overflow:hidden; flex:1; min-height:0; }
+    #wartungHomeBody { overflow:hidden; }
     @media (min-width: 1024px) {
       main { grid-template-columns: 1fr 1fr 1fr;
         grid-template-areas: "battery tanks lights" "inverter wartung wartung";
         max-width: 1200px; margin: 0 auto; }
-      .card-wartung { max-height: none; min-height: 0; } }
+      /* max-height at desktop set via JS (_syncWartungHeight) to match inverterCard */ }
     .card-wartung { grid-area: wartung; }
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }

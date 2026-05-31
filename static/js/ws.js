@@ -309,6 +309,7 @@ function handleData(data) {
   updateFlow(data);
   if (data.inverter) updateInverterCard(data.inverter, data.charger);
   if (data.bms) updateBms(data.bms);
+  _syncWartungHeight();
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
     if (!$('alarmOverlay').classList.contains('hidden') &&
@@ -317,6 +318,18 @@ function handleData(data) {
     }
   }
 }
+
+function _syncWartungHeight() {
+  const inv  = document.getElementById('inverterCard');
+  const wart = document.getElementById('wartungCard');
+  if (!inv || !wart) return;
+  if (window.innerWidth >= 1024) {
+    wart.style.maxHeight = inv.offsetHeight + 'px';
+  } else {
+    wart.style.maxHeight = '';
+  }
+}
+window.addEventListener('resize', _syncWartungHeight);
 
 function connect() {
   setConnState('warn');

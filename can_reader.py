@@ -64,6 +64,8 @@ class BoatState:
                          'dc_voltage': None, 'dc_current': None}   # Orion-XS DC-DC (inst 0)
 
     def to_dict(self) -> dict:
+        charger_d = {k: v for k, v in self.charger.items() if k != '_last_seen'}
+        charger_d['active'] = (time.time() - self.charger['_last_seen']) < 30
         return {
             'battery':    dict(self.battery),
             'tanks':      dict(self.tanks),
@@ -72,7 +74,7 @@ class BoatState:
             'alternator': dict(self.alternator),
             'bms':        dict(self.bms),
             'inverter':   dict(self.inverter),
-            'charger':    {k: v for k, v in self.charger.items() if k != '_last_seen'} | {'active': (time.time() - self.charger['_last_seen']) < 30},
+            'charger':    charger_d,
             'orion':      dict(self.orion),
         }
 
