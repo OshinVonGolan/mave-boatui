@@ -60,9 +60,13 @@ let _battEnergyUnit = 'ah';
 function toggleBattUnit(e) {
   e?.stopPropagation();
   _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
-  const btn = $('battUnitToggle');
-  if (btn) btn.textContent = _battEnergyUnit === 'ah' ? 'Wh' : 'Ah';
+  _updateBattToggle();
   _renderBattGrid();
+}
+
+function _updateBattToggle() {
+  $('battToggleAh')?.classList.toggle('btu-active', _battEnergyUnit === 'ah');
+  $('battToggleWh')?.classList.toggle('btu-active', _battEnergyUnit === 'wh');
 }
 
 function _renderBattGrid() {

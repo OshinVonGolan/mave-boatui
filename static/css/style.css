@@ -173,8 +173,11 @@
       box-shadow: 0 0 0 3px var(--surface), 0 2px 6px rgba(0,0,0,0.4);
       transition: filter .1s;
     }
-    .batt-center-btn::before { content: '⇄'; font-size: 11px; opacity: .7; }
     .batt-center-btn:active  { filter: brightness(.85); }
+    .batt-center-btn span    { pointer-events: none; }
+    .btu-sep  { opacity: .35; margin: 0 2px; font-weight: 400; }
+    .btu-active { opacity: 1; }
+    .batt-center-btn span:not(.btu-active):not(.btu-sep) { opacity: .35; }
     .batt-item { background: var(--surface2); border-radius: 10px; padding: 7px 10px; text-align: center; }
     .batt-grid .batt-item:nth-child(2) { border-bottom-right-radius: 16px; }
     .batt-grid .batt-item:nth-child(3) { border-bottom-left-radius:  16px; }
