@@ -447,8 +447,8 @@ function updateBms(bms) {
       const diff  = (minV != null && maxV != null) ? maxV - minV : null;
       const tempHigh = (bms.highest_temp ?? 0) > 40;
       const tempLow  = (bms.lowest_temp  ?? 0) < 5;
-      const cellBad  = (minV != null && minV < 3.0) || (maxV != null && maxV > 3.65);
-      const cellWarn = (minV != null && minV < 3.1) || (maxV != null && maxV > 3.6) || (diff != null && diff > 0.08);
+      const cellBad  = (minV != null && minV < 3.0) || (maxV != null && maxV > 3.65) || (diff != null && diff > 0.08);
+      const cellWarn = (minV != null && minV < 3.1) || (maxV != null && maxV > 3.6) || (diff != null && diff > 0.04);
       let color, shadow;
       if (anyAlarm || cellBad || tempHigh || tempLow) {
         color = 'var(--red)';   shadow = '0 0 4px var(--red)';
