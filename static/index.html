@@ -117,13 +117,13 @@
         <div class="value"><span id="battV">--</span><span class="unit">V</span></div>
       </div>
       <div class="batt-item">
-        <div class="label">Strom</div>
-        <div class="value"><span id="battI">--</span><span class="unit">A</span></div>
-        <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:1px"><span id="battPSmall">--</span> W</div>
+        <div class="label" id="battStromLabel">Strom</div>
+        <div class="value"><span id="battIMain">--</span><span class="unit" id="battIMainUnit">A</span></div>
+        <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:1px"><span id="battISub">--</span> <span id="battISubUnit">W</span></div>
       </div>
       <div class="batt-item">
         <div class="label">Restkapazität</div>
-        <div class="value"><span id="battRemAh">--</span><span class="unit">Ah</span></div>
+        <div class="value"><span id="battRemVal">--</span><span class="unit" id="battRemUnit">Ah</span></div>
       </div>
       <div class="batt-item" onclick="toggleBattUnit()" style="cursor:pointer">
         <div class="label" style="display:flex;justify-content:center;align-items:center;gap:5px">

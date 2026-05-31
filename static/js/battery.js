@@ -61,6 +61,50 @@ function toggleBattUnit() {
   _battEnergyUnit = _battEnergyUnit === 'wh' ? 'ah' : 'wh';
   const tog = $('battUnitToggle');
   if (tog) { tog.textContent = _battEnergyUnit === 'wh' ? 'Wh' : 'Ah'; tog.classList.toggle('active', _battEnergyUnit === 'ah'); }
+  _renderBattGrid();
+}
+
+function _renderBattGrid() {
+  const b   = _lastBattery;
+  if (!b) return;
+  const ah  = _battEnergyUnit === 'ah';
+
+  // STROM / LEISTUNG
+  const mainEl   = $('battIMain'), mainUnit = $('battIMainUnit');
+  const subEl    = $('battISub'),  subUnit  = $('battISubUnit');
+  const lblEl    = $('battStromLabel');
+  if (ah) {
+    if (mainEl)  mainEl.textContent  = fmt(b.current);
+    if (mainEl)  mainEl.className    = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
+    if (mainUnit) mainUnit.textContent = 'A';
+    if (subEl)   subEl.textContent   = b.power != null ? fmt(b.power, 0) : '--';
+    if (subUnit) subUnit.textContent = 'W';
+    if (lblEl)   lblEl.textContent   = 'Strom';
+  } else {
+    if (mainEl)  mainEl.textContent  = b.power != null ? fmt(b.power, 0) : '--';
+    if (mainEl)  mainEl.className    = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange';
+    if (mainUnit) mainUnit.textContent = 'W';
+    if (subEl)   subEl.textContent   = fmt(b.current);
+    if (subUnit) subUnit.textContent = 'A';
+    if (lblEl)   lblEl.textContent   = 'Leistung';
+  }
+
+  // RESTKAPAZITÄT
+  const remEl   = $('battRemVal'), remUnit = $('battRemUnit');
+  const capAh   = batteriesConfig.capacity_ah ?? null;
+  if (remEl && capAh != null && b.consumed_ah != null) {
+    const remainAh = Math.max(0, capAh + b.consumed_ah);
+    if (ah) {
+      remEl.textContent  = remainAh.toFixed(1);
+      if (remUnit) remUnit.textContent = 'Ah';
+    } else {
+      const wh = remainAh * (b.voltage ?? 13.0);
+      const { val, unit } = _fmtWh(wh);
+      remEl.textContent  = val;
+      if (remUnit) remUnit.textContent = unit;
+    }
+  }
+
   _renderTodayTile();
 }
 
@@ -187,24 +231,12 @@ function updateBattery(b) {
   _lastBattery = b;
   updateChargeStatus(b);
   const vEl = $('battV'); vEl.textContent = fmtV(b.voltage); vEl.className = colorClass(b.voltage, 12.6, 12.0);
-  const iEl = $('battI'); iEl.textContent = fmt(b.current); iEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
-  const pSmall = $('battPSmall');
-  if (pSmall) pSmall.textContent = b.power != null ? fmt(b.power, 0) : '--';
-  $('battAh').textContent      = fmt(b.consumed_ah);
   $('battStarter').textContent = fmtV(b.starter_voltage);
   $('battCycles').textContent  = b.cycles ?? '--';
   $('battFull').textContent    = timeSince(b.time_since_full);
 
   _accumTodayWh(b.power, b.current);
-  _renderTodayTile();
-
-  // Restkapazität: konfigurierte Ah + consumed_ah vom Shunt (consumed_ah ist negativ)
-  const capAh   = batteriesConfig.capacity_ah ?? null;
-  const remEl   = $('battRemAh');
-  if (remEl && capAh != null && b.consumed_ah != null) {
-    const rem = Math.max(0, capAh + b.consumed_ah);
-    remEl.textContent = rem.toFixed(1);
-  }
+  _renderBattGrid();
 
   // Detail-Overlay-Felder (non-dual)
   $('dP').textContent   = fmt(b.power, 0);

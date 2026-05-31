@@ -417,7 +417,7 @@ function updateBms(bms) {
   if (!bms) return;
   _lastBms = bms;
   // Restkapazität: Shunt (updateBattery) hat Vorrang; BMS als Fallback
-  const remAhEl = $('battRemAh');
+  const remAhEl = $('battRemVal');
   if (remAhEl && remAhEl.textContent === '--') {
     if (bms.capacity_ah != null && bms.soc != null)
       remAhEl.textContent = (bms.capacity_ah * bms.soc / 100).toFixed(1);
