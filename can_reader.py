@@ -341,8 +341,8 @@ class CanInterface:
 
         elif pgn == 130910:
             p = parse_ve_direct_ext(payload)
+            self._track_network(pgn, src, payload[0] if payload else None)
             if p:
-                self._track_network(pgn, src, p['instance'])
                 fields = ('state', 'power', 'cs', 'cs_label',
                           'dc_voltage', 'dc_current', 'ac_voltage', 'ac_current', 'ac_power',
                           'err', 'warn')
