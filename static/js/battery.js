@@ -61,7 +61,7 @@ function toggleBattUnit(e) {
   e?.stopPropagation();
   _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
   const btn = $('battUnitToggle');
-  if (btn) btn.textContent = _battEnergyUnit === 'ah' ? 'Ah' : 'Wh';
+  if (btn) btn.textContent = _battEnergyUnit === 'ah' ? 'Wh' : 'Ah';
   _renderBattGrid();
 }
 
@@ -211,13 +211,29 @@ function accumBmsAh(chargeA, dischargeA) {
 
 function recomputeDailyAhFromHist() {
   const midnightTs = new Date().setHours(0,0,0,0) / 1000;
+
+  // BMS-Ah (current_charge/current_discharge)
   _todayChargeAh = 0; _todayDischargeAh = 0;
-  const today = histData.filter(e => e.ts >= midnightTs && (e.current_charge != null || e.current_discharge != null));
-  for (let i = 1; i < today.length; i++) {
-    const dtH = (today[i].ts - today[i-1].ts) / 3600;
-    _todayChargeAh    += (today[i-1].current_charge    ?? 0) * dtH;
-    _todayDischargeAh += (today[i-1].current_discharge ?? 0) * dtH;
+  const todayBms = histData.filter(e => e.ts >= midnightTs && (e.current_charge != null || e.current_discharge != null));
+  for (let i = 1; i < todayBms.length; i++) {
+    const dtH = (todayBms[i].ts - todayBms[i-1].ts) / 3600;
+    _todayChargeAh    += (todayBms[i-1].current_charge    ?? 0) * dtH;
+    _todayDischargeAh += (todayBms[i-1].current_discharge ?? 0) * dtH;
   }
+
+  // Shunt-Ah/Wh aus history.current + history.voltage
+  _todayAhDrawn = 0; _todayWhDrawn = 0;
+  const todayShunt = histData.filter(e => e.ts >= midnightTs && e.current != null);
+  for (let i = 1; i < todayShunt.length; i++) {
+    const dtH = (todayShunt[i].ts - todayShunt[i-1].ts) / 3600;
+    const cur = todayShunt[i-1].current;
+    if (cur < 0) {
+      _todayAhDrawn += Math.abs(cur) * dtH;
+      const v = todayShunt[i-1].voltage ?? 13.0;
+      _todayWhDrawn += Math.abs(cur) * v * dtH;
+    }
+  }
+  _lastShuntTs = todayShunt.length ? todayShunt[todayShunt.length - 1].ts : null;
 }
 
 // ── Battery update ─────────────────────────────────────────────────────────

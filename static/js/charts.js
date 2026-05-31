@@ -26,6 +26,7 @@ function recordHistory(b) {
   if (b.current  != null) entry.current  = b.current;
   if (_lastSolarW   != null) entry.solar    = _lastSolarW;
   if (_lastZelldiff != null) entry.zelldiff = _lastZelldiff;
+  if (Object.keys(entry).length < 2) return; // kein Datenwert — nicht pushen
   histData.push(entry);
   if (histData.length > HIST_MAX) histData.shift();
 }

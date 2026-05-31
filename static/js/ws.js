@@ -384,6 +384,7 @@ function connect() {
           });
           if (Object.keys(ce).length > 1) chargeHist.push(ce);
         });
+        histData.sort((a, b) => a.ts - b.ts);
         recomputeDailyAhFromHist();
         if (!$('battOverlay').classList.contains('hidden')) renderCharts();
         reRenderChargePie();
