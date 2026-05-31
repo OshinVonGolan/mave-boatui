@@ -57,7 +57,8 @@ let _todayAhDrawn = 0;
 let _lastShuntTs  = null;
 let _battEnergyUnit = 'ah';
 
-function toggleBattUnit() {
+function toggleBattUnit(e) {
+  e?.stopPropagation();
   _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
   $('battToggleAh')?.classList.toggle('active', _battEnergyUnit === 'ah');
   $('battToggleWh')?.classList.toggle('active', _battEnergyUnit === 'wh');
@@ -73,20 +74,19 @@ function _renderBattGrid() {
   const mainEl   = $('battIMain'), mainUnit = $('battIMainUnit');
   const subEl    = $('battISub'),  subUnit  = $('battISubUnit');
   const lblEl    = $('battStromLabel');
+  const subParent = subEl?.parentElement;
   if (ah) {
-    if (mainEl)  mainEl.textContent  = fmt(b.current);
-    if (mainEl)  mainEl.className    = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange';
-    if (mainUnit) mainUnit.textContent = 'A';
-    if (subEl)   subEl.textContent   = b.power != null ? fmt(b.power, 0) : '--';
-    if (subUnit) subUnit.textContent = 'W';
-    if (lblEl)   lblEl.textContent   = 'Strom';
+    if (mainEl)   { mainEl.textContent = fmt(b.current); mainEl.className = b.current == null ? '' : b.current >= 0 ? 'val-green' : 'val-orange'; }
+    if (mainUnit)   mainUnit.textContent = 'A';
+    if (subEl)      subEl.textContent   = b.power != null ? fmt(b.power, 0) : '--';
+    if (subUnit)    subUnit.textContent = 'W';
+    if (subParent)  subParent.style.display = '';
+    if (lblEl)      lblEl.textContent   = 'Strom';
   } else {
-    if (mainEl)  mainEl.textContent  = b.power != null ? fmt(b.power, 0) : '--';
-    if (mainEl)  mainEl.className    = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange';
-    if (mainUnit) mainUnit.textContent = 'W';
-    if (subEl)   subEl.textContent   = fmt(b.current);
-    if (subUnit) subUnit.textContent = 'A';
-    if (lblEl)   lblEl.textContent   = 'Leistung';
+    if (mainEl)   { mainEl.textContent = b.power != null ? fmt(b.power, 0) : '--'; mainEl.className = b.power == null ? '' : b.power >= 0 ? 'val-green' : 'val-orange'; }
+    if (mainUnit)   mainUnit.textContent = 'W';
+    if (subParent)  subParent.style.display = 'none';
+    if (lblEl)      lblEl.textContent   = 'Leistung';
   }
 
   // RESTKAPAZITÄT

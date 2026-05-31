@@ -86,6 +86,9 @@
         <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/><path d="M7 7V4"/><path d="M11 7V4"/>
       </svg>
       Batterie
+      <span class="batt-unit-switch" onclick="toggleBattUnit(event)">
+        <span id="battToggleAh" class="batt-unit-sw active">Ah</span><span style="color:var(--border)">/</span><span id="battToggleWh" class="batt-unit-sw">Wh</span>
+      </span>
       <span class="card-link">Details →</span>
     </div>
 
@@ -109,11 +112,6 @@
           <tspan id="gaugeArrow" x="80" dy="15" font-size="13" fill="var(--text3)"></tspan>
         </text>
       </svg>
-    </div>
-
-    <div class="batt-unit-row" onclick="toggleBattUnit()">
-      <span id="battToggleAh" class="batt-unit-opt active">Ah</span>
-      <span id="battToggleWh" class="batt-unit-opt">Wh</span>
     </div>
 
     <div class="batt-grid">
