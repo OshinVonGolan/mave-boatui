@@ -231,10 +231,9 @@ function openWartungTask(catId, taskId) {
   $('wEditDate').value   = todayISO();
   $('wEditNotes').value  = '';
   _wEditPopulateCats(catId);
-  $('wEditName').value   = task.name;
-  $('wEditMaterial').value       = task.material || '';
-  $('wEditDays').value           = task.interval_days;
-  $('wEditIntervalLabel').value  = task.interval_label;
+  $('wEditName').value     = task.name;
+  $('wEditMaterial').value = task.material || '';
+  _setWartungIntervalUI(task.interval_days, task.interval_label);
   $('wEditDoneBlock').style.display = '';
   $('wEditDetails').open = true;   // Bearbeiten/Löschen direkt sichtbar
   $('wDeleteBtn') && ($('wDeleteBtn').style.display = '');
@@ -257,6 +256,45 @@ function openWartungTask(catId, taskId) {
   $('wartungEditSheet').style.display = 'block';
 }
 
+function _setWartungIntervalUI(days, label) {
+  const sel = $('wEditIntervalPreset');
+  const custom = $('wEditIntervalCustom');
+  if (!sel) return;
+  const match = Array.from(sel.options).find(o => o.value === `${days}|${label}`);
+  if (match) {
+    sel.value = match.value;
+    if (custom) custom.style.display = 'none';
+  } else {
+    sel.value = 'custom';
+    if (custom) custom.style.display = 'grid';
+    if ($('wEditDays'))          $('wEditDays').value = days;
+    if ($('wEditIntervalLabel')) $('wEditIntervalLabel').value = label;
+  }
+}
+
+function applyWartungPreset() {
+  const val = $('wEditIntervalPreset')?.value;
+  const custom = $('wEditIntervalCustom');
+  if (!val) return;
+  if (val === 'custom') {
+    if (custom) custom.style.display = 'grid';
+  } else {
+    if (custom) custom.style.display = 'none';
+  }
+}
+
+function _getWartungIntervalValues() {
+  const val = $('wEditIntervalPreset')?.value || 'custom';
+  if (val !== 'custom') {
+    const [days, ...labelParts] = val.split('|');
+    return { days: parseInt(days), label: labelParts.join('|') };
+  }
+  return {
+    days:  parseInt($('wEditDays')?.value) || 0,
+    label: $('wEditIntervalLabel')?.value.trim() || 'manuell',
+  };
+}
+
 function openWartungNew() {
   _wEditCatId  = WARTUNG_DATA[0]?.id || null;
   _wEditTaskId = null;
@@ -266,8 +304,7 @@ function openWartungNew() {
   _wEditPopulateCats(_wEditCatId);
   $('wEditName').value          = '';
   $('wEditMaterial').value      = '';
-  $('wEditDays').value          = 365;
-  $('wEditIntervalLabel').value = 'jährlich';
+  _setWartungIntervalUI(365, 'jährlich');
   $('wEditDoneBlock').style.display = 'none';  // erst nach Anlegen erledigbar
   $('wEditDetails').open = true;
   $('wDeleteBtn') && ($('wDeleteBtn').style.display = 'none');
@@ -308,8 +345,7 @@ function saveWartungTask() {
   const targetCat     = WARTUNG_DATA.find(c => c.id === targetCatId);
   if (!targetCat) return;
   const material      = $('wEditMaterial').value.trim();
-  const intervalDays  = parseInt($('wEditDays').value) || 0;
-  const intervalLabel = $('wEditIntervalLabel').value.trim() || 'manuell';
+  const { days: intervalDays, label: intervalLabel } = _getWartungIntervalValues();
 
   if (_wEditTaskId === null) {
     // Neue Aufgabe

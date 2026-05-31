@@ -29,8 +29,8 @@ function renderTank(idx, pct) {
   const clamped = Math.max(0, Math.min(100, pct));
   fill.style.height = clamped + '%';
   const customColor = tanksConfig[`tank${idx}`]?.color;
-  fill.style.background = clamped < 20 ? 'var(--red)'
-    : clamped < 50 ? (customColor || 'var(--yellow)')
+  fill.style.background = clamped < 50
+    ? (customColor || 'var(--yellow)')
     : (customColor || 'var(--green)');
 
   const cap = tanksConfig[`tank${idx}`]?.capacity_l ?? 100;

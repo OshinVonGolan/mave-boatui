@@ -102,6 +102,8 @@
     .card { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px;
       display: flex; flex-direction: column; gap: 16px; }
+    .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
+    .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
     .card-battery { grid-area: battery; }
     .card-tanks   { grid-area: tanks; }
     .card-lights  { grid-area: lights; }
@@ -142,7 +144,6 @@
       -webkit-tap-highlight-color: transparent; user-select: none;
     }
     .card-battery:hover { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
-    .card-battery:active { opacity: .9; }
 
 
     /* ── SOC Gauge ── */
@@ -206,7 +207,6 @@
     .card-tanks { cursor: pointer; -webkit-tap-highlight-color: transparent;
       transition: border-color .2s; }
     .card-tanks:hover { border-color: var(--accent2); }
-    .card-tanks:active { opacity: .9; }
     .tanks-row { display: flex; gap: 16px; flex: 1; }
     .tank { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .tank-name { font-size: 12px; color: var(--text2); }
@@ -536,7 +536,7 @@
     }
     .rule-input:focus { border-color: var(--accent); }
     .rule-severity { font-size: 10px; font-weight: 600; padding: 2px 6px;
-      border-radius: 4px; white-space: nowrap; }
+      border-radius: 4px; white-space: nowrap; border: none; cursor: pointer; }
     .rule-severity.warning  { background: rgba(234,179,8,.15);  color: var(--yellow); }
     .rule-severity.critical { background: rgba(239,68,68,.15); color: var(--red); }
     .rule-no-data { font-size: 11px; color: var(--text3); font-style: italic; padding-left: 46px; }

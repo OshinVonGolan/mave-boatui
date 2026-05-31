@@ -55,11 +55,13 @@ class AlarmEngine:
             if val is not None:
                 self._data_seen.add(key)
 
-            if not rule.get('enabled') or val is None:
+            if not rule.get('enabled'):
                 if key in self._active:
                     self._active.pop(key)
                     changed = True
                 continue
+            if val is None:
+                continue  # Datenlücke: aktiven Alarm nicht löschen
 
             op = rule['op']
             if op == 'range':

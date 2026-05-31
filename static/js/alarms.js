@@ -293,7 +293,7 @@ function renderRules(rules) {
           <span class="rule-slider"></span>
         </label>
         <span class="rule-name">${r.name}</span>
-        <span class="rule-severity ${r.severity}">${sevLabel}</span>
+        <button class="rule-severity ${r.severity}" onclick="toggleRuleSeverity('${key}')">${sevLabel}</button>
       </div>`;
     const noDataRow = noData
       ? `<div class="rule-no-data">(keine Daten empfangen)</div>` : '';
@@ -420,6 +420,12 @@ function initDualRange(key, r) {
   update();
 }
 
+function toggleRuleSeverity(key) {
+  if (!_rulesCache[key]) return;
+  _rulesCache[key].severity = _rulesCache[key].severity === 'critical' ? 'warning' : 'critical';
+  renderRules(_rulesCache);
+}
+
 async function saveRules() {
   const fb = $('rulesFeedback');
   _commitVisibleRules();  // sichtbare Eingaben übernehmen (auch aus anderen Kategorien bereits committet)
@@ -427,9 +433,9 @@ async function saveRules() {
   Object.keys(_rulesCache).forEach(key => {
     const r = _rulesCache[key];
     if (r.op === 'range') {
-      updates[key] = { enabled: r.enabled, min: r.min, max: r.max };
+      updates[key] = { enabled: r.enabled, min: r.min, max: r.max, severity: r.severity };
     } else {
-      updates[key] = { enabled: r.enabled, threshold: r.threshold };
+      updates[key] = { enabled: r.enabled, threshold: r.threshold, severity: r.severity };
     }
   });
   try {

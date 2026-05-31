@@ -323,7 +323,7 @@ function renderCharts() {
       segs.forEach(s => {
         if (s.length < 2) return;
         const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + CH);
-        grad.addColorStop(0, def.color + '28');
+        grad.addColorStop(0, def.color + '18');
         grad.addColorStop(1, def.color + '00');
         ctx.beginPath();
         _smoothSeg(ctx, s);
@@ -435,6 +435,31 @@ function updateBms(bms) {
     };
     _dot('bmsRelayChargeDot',    bms.allow_charge);
     _dot('bmsRelayDischargeDot', bms.allow_discharge);
+
+    // Zellgesundheits-Dot
+    const hdot = $('cellHealthDot');
+    if (hdot) {
+      const anyAlarm = bms.alarm_min_volt || bms.alarm_max_volt ||
+                       bms.alarm_min_temp || bms.alarm_max_temp;
+      const cells = bms.cells ?? [];
+      const minV  = cells.length ? Math.min(...cells) : bms.lowest_cell_v;
+      const maxV  = cells.length ? Math.max(...cells) : bms.highest_cell_v;
+      const diff  = (minV != null && maxV != null) ? maxV - minV : null;
+      const tempHigh = (bms.highest_temp ?? 0) > 40;
+      const tempLow  = (bms.lowest_temp  ?? 0) < 5;
+      const cellBad  = (minV != null && minV < 3.0) || (maxV != null && maxV > 3.65);
+      const cellWarn = (minV != null && minV < 3.1) || (maxV != null && maxV > 3.6) || (diff != null && diff > 0.08);
+      let color, shadow;
+      if (anyAlarm || cellBad || tempHigh || tempLow) {
+        color = 'var(--red)';   shadow = '0 0 4px var(--red)';
+      } else if (cellWarn || (diff != null && diff > 0.04)) {
+        color = 'var(--yellow)'; shadow = '0 0 4px var(--yellow)';
+      } else {
+        color = 'var(--green)';  shadow = '0 0 4px var(--green)';
+      }
+      hdot.style.background = color;
+      hdot.style.boxShadow  = shadow;
+    }
   }
   const hasBms = bms.voltage != null;
   $('bmsNoSignal').style.display  = hasBms ? 'none' : '';

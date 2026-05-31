@@ -99,6 +99,10 @@
           <div id="bmsRelayDischargeDot" class="shore-dot"></div>
           <span style="font-size:11px;color:var(--text3)">Entladen</span>
         </div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <div id="cellHealthDot" class="shore-dot"></div>
+          <span style="font-size:11px;color:var(--text3)">Zellen</span>
+        </div>
       </div>
       <div id="srcDotsRow" style="display:flex;position:absolute;top:14px;right:0;flex-direction:column;gap:6px;align-items:flex-end">
         <div style="display:flex;align-items:center;gap:5px">
@@ -1064,14 +1068,29 @@
           <input type="text" id="wEditMaterial" placeholder="z.B. Ölfilter, 5L Öl" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text1);font-size:13px;outline:none">
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <label style="font-size:11px;color:var(--text3)">Intervall (Tage, 0 = manuell)</label>
-          <input type="number" id="wEditDays" min="0" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text1);font-size:13px;outline:none">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--text3)">Intervall-Bezeichnung</label>
-          <input type="text" id="wEditIntervalLabel" placeholder="z.B. jährlich" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text1);font-size:13px;outline:none">
+      <div>
+        <label style="font-size:11px;color:var(--text3)">Intervall</label>
+        <select id="wEditIntervalPreset" onchange="applyWartungPreset()" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;outline:none">
+          <option value="1|täglich">Täglich</option>
+          <option value="7|wöchentlich">Wöchentlich</option>
+          <option value="30|monatlich">Monatlich</option>
+          <option value="90|vierteljährlich">Vierteljährlich</option>
+          <option value="180|halbjährlich">Halbjährlich</option>
+          <option value="365|jährlich" selected>Jährlich</option>
+          <option value="730|alle 2 Jahre">Alle 2 Jahre</option>
+          <option value="0|nach jeder Fahrt">Nach jeder Fahrt</option>
+          <option value="0|nach Betriebsstunden">Nach Betriebsstunden</option>
+          <option value="custom">Benutzerdefiniert…</option>
+        </select>
+        <div id="wEditIntervalCustom" style="display:none;margin-top:6px;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:11px;color:var(--text3)">Tage (0 = manuell)</label>
+            <input type="number" id="wEditDays" min="0" value="365" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text1);font-size:13px;outline:none">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--text3)">Bezeichnung</label>
+            <input type="text" id="wEditIntervalLabel" placeholder="z.B. nach Saison" style="margin-top:3px;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text1);font-size:13px;outline:none">
+          </div>
         </div>
       </div>
       <div style="display:flex;gap:8px">

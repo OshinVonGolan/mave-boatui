@@ -133,6 +133,29 @@ function renderChargePie(active, isAvg) {
   }).join('');
 }
 
+const _ALARM_CARD_MAP = {
+  bat_soc_warn: 'battCard', bat_soc_crit: 'battCard',
+  bat_voltage: 'battCard', bat_temp_high: 'battCard',
+  starter_voltage: 'battCard',
+  bms_comm_err: 'battCard', bms_min_v: 'battCard', bms_max_v: 'battCard',
+  bms_min_t: 'battCard', bms_max_t: 'battCard',
+};
+
+function _applyAlarmBorders(alarms) {
+  const activeKeys = new Set(
+    alarms.filter(a => !a.resolved).map(a => a.key)
+  );
+  // Batterie-Kachel
+  $('battCard')?.classList.toggle('card--alarm',
+    [...activeKeys].some(k => _ALARM_CARD_MAP[k] === 'battCard'));
+  // Tank-Balken
+  [1, 2].forEach(i => {
+    const wrap = $(`tank${i}Fill`)?.parentElement;
+    const alarmKey = `tank${i}_low`;
+    wrap?.classList.toggle('tank-bar-wrap--alarm', activeKeys.has(alarmKey));
+  });
+}
+
 function _setSourceDot(dotId, active) {
   const el = $(dotId);
   if (!el) return;
@@ -325,6 +348,7 @@ function handleData(data) {
   _syncWartungHeight();
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
+    _applyAlarmBorders(data.alarms);
     if (!$('alarmOverlay').classList.contains('hidden') &&
         $('tabAktiv').classList.contains('active')) {
       renderAlarms(data.alarms);
