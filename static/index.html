@@ -111,6 +111,11 @@
       </svg>
     </div>
 
+    <div class="batt-unit-row" onclick="toggleBattUnit()">
+      <span id="battToggleAh" class="batt-unit-opt active">Ah</span>
+      <span id="battToggleWh" class="batt-unit-opt">Wh</span>
+    </div>
+
     <div class="batt-grid">
       <div class="batt-item">
         <div class="label">Spannung</div>
@@ -125,12 +130,9 @@
         <div class="label">Restkapazität</div>
         <div class="value"><span id="battRemVal">--</span><span class="unit" id="battRemUnit">Ah</span></div>
       </div>
-      <div class="batt-item" onclick="toggleBattUnit()" style="cursor:pointer">
-        <div class="label" style="display:flex;justify-content:center;align-items:center;gap:5px">
-          Heute entn.
-          <span id="battUnitToggle" class="batt-unit-toggle">Wh</span>
-        </div>
-        <div class="value"><span id="battTodayWh">--</span><span class="unit" id="battTodayUnit">Wh</span></div>
+      <div class="batt-item">
+        <div class="label">Heute entn.</div>
+        <div class="value"><span id="battTodayWh">--</span><span class="unit" id="battTodayUnit">Ah</span></div>
       </div>
     </div>
 

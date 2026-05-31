@@ -55,12 +55,12 @@ let _lastBattery = null;
 let _todayWhDrawn = 0;
 let _todayAhDrawn = 0;
 let _lastShuntTs  = null;
-let _battEnergyUnit = 'wh';
+let _battEnergyUnit = 'ah';
 
 function toggleBattUnit() {
-  _battEnergyUnit = _battEnergyUnit === 'wh' ? 'ah' : 'wh';
-  const tog = $('battUnitToggle');
-  if (tog) { tog.textContent = _battEnergyUnit === 'wh' ? 'Wh' : 'Ah'; tog.classList.toggle('active', _battEnergyUnit === 'ah'); }
+  _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
+  $('battToggleAh')?.classList.toggle('active', _battEnergyUnit === 'ah');
+  $('battToggleWh')?.classList.toggle('active', _battEnergyUnit === 'wh');
   _renderBattGrid();
 }
 
