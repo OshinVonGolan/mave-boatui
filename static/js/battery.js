@@ -53,18 +53,43 @@ let _lastBattery = null;
 // ── Heute entnommene Energie (aus Shunt-Leistung akkumuliert) ──────────────
 
 let _todayWhDrawn = 0;
+let _todayAhDrawn = 0;
 let _lastShuntTs  = null;
+let _battEnergyUnit = 'wh';
 
-function _accumTodayWh(power) {
+function toggleBattUnit() {
+  _battEnergyUnit = _battEnergyUnit === 'wh' ? 'ah' : 'wh';
+  const tog = $('battUnitToggle');
+  if (tog) { tog.textContent = _battEnergyUnit === 'wh' ? 'Wh' : 'Ah'; tog.classList.toggle('active', _battEnergyUnit === 'ah'); }
+  _renderTodayTile();
+}
+
+function _renderTodayTile() {
+  const el   = $('battTodayWh');
+  const unit = $('battTodayUnit');
+  if (!el) return;
+  if (_battEnergyUnit === 'ah') {
+    el.textContent   = _todayAhDrawn > 0 ? _todayAhDrawn.toFixed(1) : '--';
+    if (unit) unit.textContent = 'Ah';
+  } else {
+    const { val, unit: u } = _fmtWh(_todayWhDrawn > 0 ? _todayWhDrawn : null);
+    el.textContent = val;
+    if (unit) unit.textContent = u;
+  }
+}
+
+function _accumTodayWh(power, current) {
   const now      = Date.now() / 1000;
   const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
   if (_lastShuntTs === null || _lastShuntTs < midnight) {
     _todayWhDrawn = 0;
+    _todayAhDrawn = 0;
     _lastShuntTs  = now;
     return;
   }
   const dtH = (now - _lastShuntTs) / 3600;
-  if (power != null && power < 0) _todayWhDrawn += Math.abs(power) * dtH;
+  if (power   != null && power   < 0) _todayWhDrawn += Math.abs(power)   * dtH;
+  if (current != null && current < 0) _todayAhDrawn += Math.abs(current) * dtH;
   _lastShuntTs = now;
 }
 
@@ -170,15 +195,8 @@ function updateBattery(b) {
   $('battCycles').textContent  = b.cycles ?? '--';
   $('battFull').textContent    = timeSince(b.time_since_full);
 
-  // Heute entnommene Energie aus Shunt-Leistung akkumulieren
-  _accumTodayWh(b.power);
-  const todayEl   = $('battTodayWh');
-  const todayUnit = $('battTodayUnit');
-  if (todayEl) {
-    const { val, unit } = _fmtWh(_todayWhDrawn > 0 ? _todayWhDrawn : null);
-    todayEl.textContent = val;
-    if (todayUnit) todayUnit.textContent = unit;
-  }
+  _accumTodayWh(b.power, b.current);
+  _renderTodayTile();
 
   // Restkapazität: konfigurierte Ah + consumed_ah vom Shunt (consumed_ah ist negativ)
   const capAh   = batteriesConfig.capacity_ah ?? null;

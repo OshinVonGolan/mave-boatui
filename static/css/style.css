@@ -155,6 +155,10 @@
     .gauge-pct   { font-size: 28px; font-weight: 700; fill: var(--text); }
     .gauge-label { font-size: 11px; fill: var(--text3); letter-spacing: .08em; }
 
+    .batt-unit-toggle { font-size:8px; font-weight:700; padding:1px 4px; border-radius:3px;
+      background:var(--surface2); color:var(--text3); letter-spacing:.04em; text-transform:none; }
+    .batt-unit-toggle.active { background:var(--accent2); color:#fff; }
+
     /* ── Battery grid ── */
     .batt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .batt-item { background: var(--surface2); border-radius: 10px; padding: 7px 10px; text-align: center; }
