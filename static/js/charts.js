@@ -7,7 +7,7 @@ const histData = [];  // [{ts, soc, voltage, current}, ...]
 const SERIES_DEF = {
   soc:      { color: '#22c55e', unit: '%',  label: 'SOC',       fmt: v => Math.round(v) + ' %',         domain: [0, 100] },
   voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4, smooth: 0.04 },
-  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: 0.12 },
+  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: 0.04 },
   solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, smooth: 0.12 },
   zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.01, zero: true, smooth: 0.04 },
 };
@@ -156,13 +156,30 @@ function _smoothSeg(ctx, s) {
   for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
 }
 
+function _decimate(pts, maxPts) {
+  if (pts.length <= maxPts) return pts;
+  const out = [], step = pts.length / maxPts;
+  for (let i = 0; i < maxPts; i++) {
+    const lo = Math.floor(i * step), hi = Math.min(pts.length, Math.floor((i+1)*step));
+    const bucket = pts.slice(lo, hi);
+    const merged = { ts: bucket[Math.floor(bucket.length/2)].ts };
+    for (const k of Object.keys(bucket[0])) {
+      if (k === 'ts') continue;
+      const vals = bucket.map(d => d[k]).filter(v => v != null);
+      if (vals.length) merged[k] = vals.reduce((a,b) => a+b, 0) / vals.length;
+    }
+    out.push(merged);
+  }
+  return out;
+}
+
 function renderCharts() {
   const canvas = $('chartMain');
   if (!canvas) return;
 
   const now    = Date.now() / 1000;
   const cutoff = now - chartRangeSec;
-  const pts    = histData.filter(d => d.ts >= cutoff);
+  const pts    = _decimate(histData.filter(d => d.ts >= cutoff), 2000);
 
   const dpr  = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();

@@ -173,6 +173,7 @@ async function setInverterMode(mode) {
       body: JSON.stringify({ mode }),
     });
     if (!r.ok) { const e=await r.json().catch(()=>{}); alert('Fehler: '+(e?.detail||r.status)); return; }
+    _invLockUntil = Date.now() + 5000;
     updateInverterCard({ state: labels[mode] });
   } catch(e) { alert('Verbindungsfehler'); }
 }
@@ -208,6 +209,7 @@ $('invGaugeTrack')?.setAttribute('d', _invArc(_INV_CX, _INV_CY, _INV_R, _INV_STA
 })();
 
 let _invCurrentState = 'Aus';
+let _invLockUntil   = 0;
 
 function toggleInverter() {
   const isOn = _invCurrentState === 'Aktiv' || _invCurrentState === 'Eco';
@@ -216,11 +218,13 @@ function toggleInverter() {
 
 function updateInverterCard(inv, charger) {
   if (!inv) return;
+  const fromBus = charger !== undefined;
+  if (fromBus && Date.now() < _invLockUntil) inv = { ...inv, state: _invCurrentState };
   _invCurrentState = inv.state || 'Aus';
 
-  // Landstrom ableiten aus Ladegerät-Status
-  const shoreActive = (charger?.state != null && _SHORE_STATES.has(charger.state))
-                   || (charger?.power != null && charger.power > 0);
+  // Landstrom: aktiv wenn Ladegerät-PGN in den letzten 30s empfangen wurde
+  const shoreActive = charger?.active === true
+                   || (charger?.active == null && charger?.state != null && _SHORE_STATES.has(charger.state));
   const dot = $('shoreIndicator');
   const lbl = $('shoreLabel');
   if (dot) dot.className = 'shore-dot' + (shoreActive ? ' on' : '');

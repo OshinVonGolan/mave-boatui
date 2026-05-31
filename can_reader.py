@@ -59,7 +59,7 @@ class BoatState:
                          'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None,
                          'err': None, 'warn': None}  # err = AR (Alarm Reason), warn = WARN
         self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
-                         'dc_voltage': None, 'dc_current': None}   # Smart IP43 (Lader, inst 1)
+                         'dc_voltage': None, 'dc_current': None, '_last_seen': 0.0}  # Smart IP43
         self.orion    = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'dc_voltage': None, 'dc_current': None}   # Orion-XS DC-DC (inst 0)
 
@@ -72,7 +72,7 @@ class BoatState:
             'alternator': dict(self.alternator),
             'bms':        dict(self.bms),
             'inverter':   dict(self.inverter),
-            'charger':    dict(self.charger),
+            'charger':    {k: v for k, v in self.charger.items() if k != '_last_seen'} | {'active': (time.time() - self.charger['_last_seen']) < 30},
             'orion':      dict(self.orion),
         }
 
@@ -366,6 +366,7 @@ class CanInterface:
                             target[k] = v; changed = True
                 elif p['type'] == 0:  # Lader (IP43 = inst 1, P5 = inst 2)
                     target = self.state.charger
+                    target['_last_seen'] = time.time()
                     if p.get('cs_label'):
                         p['state'] = p['cs_label']
                     for k in ('state','power','cs','cs_label','dc_voltage','dc_current'):
@@ -385,8 +386,10 @@ class CanInterface:
             p = parse_charger_status_pgn(payload)
             if p:
                 self._track_network(pgn, src, None)
-                if p.get('state') and self.state.charger.get('state') != p['state']:
-                    self.state.charger['state'] = p['state']
+                self.state.charger['_last_seen'] = time.time()
+                new_state = p.get('state')
+                if new_state and new_state != 'Unbekannt' and self.state.charger.get('state') != new_state:
+                    self.state.charger['state'] = new_state
                     changed = True
 
         elif pgn == 60928:

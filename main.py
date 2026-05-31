@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.46'
+VERSION  = _git_semver() or '1.16.47'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -132,14 +132,17 @@ def _apply_presets_config():
 _apply_presets_config()
 
 ws_clients: set[WebSocket] = set()
-history: deque[dict] = deque(maxlen=50000)
+history: deque[dict] = deque(maxlen=10800)   # 10800 × 5 s ≈ 15 h
+_hist_last_ts: float = 0.0
 
 
 async def broadcast(data: dict):
+    global _hist_last_ts
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
     alarms.check(check_data)
     batt = data.get('battery', {})
-    entry: dict = {'ts': time.time()}
+    now = time.time()
+    entry: dict = {'ts': now}
     for key in ('soc', 'voltage', 'current'):
         v = batt.get(key)
         if v is not None:
@@ -155,8 +158,9 @@ async def broadcast(data: dict):
         v = bms.get(bms_key)
         if v is not None:
             entry[bms_key] = v
-    if len(entry) > 1:
+    if len(entry) > 1 and now - _hist_last_ts >= 5.0:
         history.append(entry)
+        _hist_last_ts = now
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
     dead = set()
     for ws in list(ws_clients):
