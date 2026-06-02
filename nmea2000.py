@@ -459,12 +459,14 @@ def parse_inverter_status(data: bytes):
 
 
 def parse_charger_status_pgn(data: bytes):
-    """PGN 127507 – Charger Status (Single Frame)."""
+    """PGN 127507 – Charger Status (Single Frame).
+    Byte 0: device_instance (bits 0-3) | battery_instance (bits 4-7).
+    """
     if len(data) < 4:
         return None
-    inst = data[0]
-    batt = data[1]
-    mode = data[2] & 0x0F   # charging mode / state
+    inst = data[0] & 0x0F          # bits 0-3: device instance
+    batt = (data[0] >> 4) & 0x0F   # bits 4-7: battery instance
+    mode = data[1] & 0x0F          # byte 1 bits 0-3: operating state
     MODES = {
         0: 'Unbekannt', 1: 'Aus', 2: 'Bulk', 3: 'Absorption',
         4: 'Überladen', 5: 'Equalise', 6: 'Float', 7: 'Kein Float',

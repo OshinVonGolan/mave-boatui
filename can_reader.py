@@ -193,7 +193,7 @@ class CanInterface:
     # ── Empfangen ───────────────────────────────────────────────────────────
 
     # PGNs die eine Instanz im Payload haben — werden nach Payload-Assembly getrackt
-    _INSTANCE_PGNS = {127505, 127506, 127508, 130312, 130910, 130912, 130913}
+    _INSTANCE_PGNS = {127505, 127506, 127507, 127508, 130312, 130910, 130912, 130913}
 
     def _track_network(self, pgn: int, src: int, instance: int | None = None):
         now = time.monotonic()
@@ -264,7 +264,7 @@ class CanInterface:
 
         # Debug: letzten vollständigen Payload je (pgn, src, instance) merken
         _inst = None
-        if pgn in (127508, 130910, 130912, 130913) and payload:  _inst = payload[0]
+        if pgn in (127507, 127508, 130910, 130912, 130913) and payload:  _inst = payload[0] & 0x0F
         elif pgn in (127505, 130312) and payload:      _inst = payload[0] & 0x0F
         elif pgn == 127506 and len(payload) > 1:       _inst = payload[1]
         self._last_raw[(pgn, src, _inst)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
