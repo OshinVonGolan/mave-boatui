@@ -202,16 +202,24 @@ function updatePowerSources(data) {
 let _lastData = null;
 
 async function setInverterMode(mode) {
-  const labels = { 2: 'An', 4: 'Aus', 5: 'Eco' };
   try {
     const r = await fetch('/api/inverter/mode', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),
     });
-    if (!r.ok) { const e=await r.json().catch(()=>{}); alert('Fehler: '+(e?.detail||r.status)); return; }
-    _invLockUntil = Date.now() + 5000;
-    updateInverterCard({ state: labels[mode] });
-  } catch(e) { alert('Verbindungsfehler'); }
+    if (!r.ok) {
+      // API-Fehler: optimistischen Zustand rückgängig machen
+      const e = await r.json().catch(() => {});
+      alert('Fehler: ' + (e?.detail || r.status));
+      _invCurrentState = mode === 2 ? 'Aus' : 'Aktiv';
+      _invPending = false;
+      _invLockUntil = 0;
+      if (_lastData?.inverter) updateInverterCard(_lastData.inverter, _lastData?.charger);
+    }
+  } catch(e) {
+    alert('Verbindungsfehler');
+    _invPending = false; _invLockUntil = 0;
+  }
 }
 
 // ── Inverter / 230V Kachel ─────────────────────────────────────────────────
@@ -246,16 +254,31 @@ $('invGaugeTrack')?.setAttribute('d', _invArc(_INV_CX, _INV_CY, _INV_R, _INV_STA
 
 let _invCurrentState = 'Aus';
 let _invLockUntil   = 0;
+let _invPending     = false;   // true: Befehl gesendet, warte auf Bus-Bestätigung
 
 function toggleInverter() {
   const isOn = _invCurrentState === 'Aktiv' || _invCurrentState === 'Eco';
-  setInverterMode(isOn ? 4 : 2);
+  const newMode = isOn ? 4 : 2;
+
+  // Optimistic: sofort umschalten, kein Warten auf API-Roundtrip oder Bus-Frame
+  _invCurrentState = isOn ? 'Aus' : 'Aktiv';
+  _invLockUntil    = Date.now() + 20000;   // 20 s Lock — Inverter braucht Zeit zum Starten
+  _invPending      = !isOn;                // "Startet…" nur beim Einschalten
+  updateInverterCard({ state: _invCurrentState });
+
+  setInverterMode(newMode);
 }
 
 function updateInverterCard(inv, charger) {
   if (!inv) return;
   const fromBus = charger !== undefined;
+
+  // Bus-Frame während Lock: optimistischen Zustand beibehalten
   if (fromBus && Date.now() < _invLockUntil) inv = { ...inv, state: _invCurrentState };
+
+  // Bus bestätigt Zustand → Pending aufheben
+  if (fromBus && _invPending && (inv.state === 'Aktiv' || inv.state === 'Eco')) _invPending = false;
+
   _invCurrentState = inv.state || 'Aus';
 
   // Landstrom: aktiv wenn Ladegerät-PGN in den letzten 30s empfangen wurde
@@ -291,6 +314,11 @@ function updateInverterCard(inv, charger) {
       invDot.style.background = 'var(--yellow)';
       invDot.style.boxShadow  = '0 0 4px var(--yellow)';
       invLbl.textContent = 'Warnung';
+      invLbl.style.color = 'var(--yellow)';
+    } else if (_invPending) {
+      invDot.style.background = 'var(--yellow)';
+      invDot.style.boxShadow  = '0 0 4px var(--yellow)';
+      invLbl.textContent = 'Startet…';
       invLbl.style.color = 'var(--yellow)';
     } else if (isActive) {
       invDot.style.background = 'var(--green)';
