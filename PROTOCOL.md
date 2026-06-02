@@ -356,7 +356,7 @@ Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `V
 |--------|---------|-----------------------------------------------|------------------|
 | 0      | uint8   | Geräte-Instanz (0 = Orion-XS)                 | –                |
 | 1      | float32 | Ausgangsleistung P (W); NaN = N/A             | `P` direkt       |
-| 5      | float32 | Eingangsspannung DC_IN_V (V); NaN = N/A       | `DC_IN_V` ÷ 1000 |
+| 5      | float32 | Eingangsspannung DC_IN_V (V); NaN = N/A       | `DC_IN_V` ÷ 100 (0,01V-Einheit) |
 | 9      | float32 | Eingangsstrom DC_IN_I (A); NaN = N/A          | `DC_IN_I` ÷ 1000 |
 | 13     | float32 | Eingangsleistung DC_IN_P (W); NaN = N/A       | `DC_IN_P` direkt |
 | 17     | uint32  | Off Reason OR (Bitmask); 0xFFFFFFFF = N/A     | –                |
