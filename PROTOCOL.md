@@ -14,6 +14,16 @@ sowie die PGNs des VE.Direct-NMEA2K-Gateways (Teensy 4.1).
 | Battery Board           | Teensy 3.1    | auto (bevorzugt 1, NMEA2K Address Claim) |
 | VE.Direct Gateway       | Teensy 4.1    | auto (bevorzugt 0, NMEA2K Address Claim) |
 
+**Victron-Geräte am VE.Direct-Gateway (Teensy 4.1):**
+
+| Serial-Port | Gerät                  | VEDeviceType | deviceInstance |
+|-------------|------------------------|--------------|----------------|
+| Serial2     | Orion-XS DC-DC #1      | `VE_DCDC`    | 0              |
+| Serial3     | Orion-XS DC-DC #2      | `VE_DCDC`    | 2              |
+| Serial4     | Phoenix Inverter 2000VA | `VE_INVERTER` | 0             |
+| Serial5     | Phoenix Smart IP43     | `VE_CHARGER` | 1              |
+| Serial6     | MPPT 75/15             | `VE_SOLAR`   | 3              |
+
 Beide Teensy-Geräte verwenden `SetMode(N2km_NodeOnly, 0)` — sie starten mit
 Preferred Address 0 und wählen automatisch eine freie Adresse per Address Claim
 (PGN 60928). Der Pi trackt die aktuellen Adressen laufend über empfangene
@@ -123,7 +133,7 @@ VE.Direct-Frame empfangen wurde (Timeout-Schutz gegen veraltete Werte).
 
 | Feld            | Inhalt |
 |-----------------|--------|
-| deviceInstance  | 0 = Orion-XS DC-DC, 1 = Smart IP43 Lader |
+| deviceInstance  | 0 = Orion-XS #1, 1 = Smart IP43, 2 = Orion-XS #2, 3 = MPPT 75/15 |
 | batteryInstance | 0 = Hausbatterie |
 | Charge State    | s. CS-Mapping unten |
 | Charger Mode    | `Standalone` |
@@ -294,13 +304,47 @@ Wird nur gesendet, wenn VE.Direct-Daten frisch (< 5 s) sind.
 | AR  (Offset 24)   | –     | –     | ✓        |
 | WARN              | –     | –     | ✓        |
 
+Byte 3 enthält bei `VE_INVERTER` den rohen `MODE`-Wert, bei `VE_SOLAR` den MPPT-Tracker-Modus
+(0 = Aus, 1 = Spannungs-/Strombegrenzt, 2 = MPPT aktiv). Bei anderen Typen den `MODE`-Wert oder
+0xFF wenn nicht verfügbar.
+
 **Geräte-Instanzen:**
 
-| Instanz   | Gerät                      | Typ      |
-|-----------|----------------------------|----------|
-| 0 (Typ 1) | Orion-XS DC-DC             | DC-DC    |
-| 1 (Typ 0) | Phoenix Smart IP43         | Lader    |
-| 0 (Typ 2) | Phoenix Inverter 2000 VA   | Inverter |
+| Instanz   | Gerät                      | Typ (Byte 1)          |
+|-----------|----------------------------|-----------------------|
+| 0 (Typ 1) | Orion-XS DC-DC #1          | DC-DC (`VE_DCDC`)     |
+| 1 (Typ 0) | Phoenix Smart IP43         | Lader (`VE_CHARGER`)  |
+| 0 (Typ 2) | Phoenix Inverter 2000 VA   | Inverter (`VE_INVERTER`) |
+| 2 (Typ 1) | Orion-XS DC-DC #2          | DC-DC (`VE_DCDC`)     |
+| 3 (Typ 3) | MPPT 75/15                 | Solar (`VE_SOLAR`)    |
+
+---
+
+### PGN 130912 – Solar Extended *(Custom, VE.Direct Gateway – MPPT 75/15)*
+**Format:** Fast Packet, **14 Byte Payload** · **Quelle:** VE.Direct-Gateway (auto-address)
+
+Enthält MPPT-Solar-Daten (Panelspannung, Panelleistung, Tagesertrag) ohne Standard-PGN-Äquivalent.
+Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `VE_SOLAR` hat.
+
+| Offset | Typ     | Inhalt                                            | Skalierung        |
+|--------|---------|---------------------------------------------------|-------------------|
+| 0      | uint8   | Geräte-Instanz (3 = MPPT 75/15)                   | –                 |
+| 1      | float32 | Panel-Spannung VPV (V); NaN = N/A                 | `VPV` ÷ 1000      |
+| 5      | float32 | Panel-Leistung PPV (W); NaN = N/A                 | `PPV` direkt      |
+| 9      | uint16  | Tagesertrag H20 (Wh); 0xFFFF = N/A               | `H20` × 10        |
+| 11     | uint16  | Max. Leistung heute H21 (W); 0xFFFF = N/A         | `H21` direkt      |
+| 13     | uint8   | MPPT-Tracker-Modus; 0xFF = N/A                    | –                 |
+
+**H20-Skalierung:** VE.Direct-Feld `H20` ist in Einheiten von 0,01 kWh → × 10 ergibt Wh.
+
+**MPPT-Tracker-Modus (Byte 13):**
+
+| Wert | Bedeutung |
+|------|-----------|
+| 0    | Aus (Off season / Nacht) |
+| 1    | Voltage or current limited |
+| 2    | MPPT aktiv (Maximum Power Point Tracking) |
+| 0xFF | N/A |
 
 ---
 
@@ -412,6 +456,7 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | VE.Direct Data Timeout | 5000 ms |
 
 **Fast-Packet-PGNs (Pi):** `126720, 126996, 130900, 130901, 130902, 130910`
+**Fast-Packet-PGNs (Gateway):** `130910, 130912`
 
 ---
 
@@ -427,12 +472,13 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | 126996 | Geräte → Pi          | alle → Pi               | Produktinformation / Gerätename |
 | 127505 | Sensor → Pi          | – → Pi                  | Füllstand Tanks |
 | 127506 | Battery Board → Pi   | Battery Board → Pi      | DC-Typ (Lichtmaschine / Solar) |
-| 127507 | Gateway → Pi         | Gateway (auto) → Pi     | Ladestatus Lader / DC-DC |
+| 127507 | Gateway → Pi         | Gateway (auto) → Pi     | Ladestatus: Orion-XS #1/#2, Smart IP43, MPPT 75/15 |
 | 127508 | Battery Board → Pi   | Battery Board → Pi      | Batteriespannung / -strom |
 | 127750 | Gateway → Pi         | Gateway (auto) → Pi     | Inverter-Betriebszustand |
 | 130312 | Battery Board → Pi   | Battery Board → Pi      | Temperatur |
 | 130900 | Battery Board → Pi   | Battery Board → Pi      | Battery Stats (Custom) |
 | 130901 | Battery Board → Pi   | Battery Board → Pi      | BMS Pack Data (Custom) |
 | 130902 | Battery Board → Pi   | Battery Board → Pi      | BMS Cell Data (Custom) |
-| 130910 | Gateway → Pi         | Gateway (auto) → Pi     | VE.Direct Extended (Custom) |
+| 130910 | Gateway → Pi         | Gateway (auto) → Pi     | VE.Direct Extended (Custom) – alle 5 Geräte |
 | 130911 | Pi → Gateway         | Pi (100) → broadcast    | Inverter-Steuerung (veraltet, Fallback für 61184) |
+| 130912 | Gateway → Pi         | Gateway (auto) → Pi     | Solar Extended (Custom) – MPPT 75/15 |
