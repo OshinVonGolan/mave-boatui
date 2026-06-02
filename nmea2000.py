@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910}
+FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910, 130912, 130913}
 
 
 class FastPacketReassembler:
@@ -287,6 +287,8 @@ PGN_NAMES: dict[int, str] = {
     130901: 'BMS Pack Data (Custom)',
     130902: 'BMS Cell Data (Custom)',
     130910: 'VE.Direct Extended (Custom)',
+    130912: 'Solar Extended (Custom)',
+    130913: 'DC-DC Extended (Custom)',
     61184:  'VE.Direct Control (Custom)',
     130911: 'VE.Direct Control (Custom, alt)',
     127507: 'Charger Status',
@@ -311,6 +313,95 @@ _CHARGER_CS = {
     252: 'Ext. Control',
 }
 _INVERTER_CS = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 9: 'Aktiv'}
+
+
+_MPPT_MODE = {0: 'Aus', 1: 'Begrenzt', 2: 'Aktiv'}
+
+_ORION_OR_BITS = {
+    0x0001: 'Kein Eingang',
+    0x0002: 'Schalter aus',
+    0x0004: 'Remote',
+    0x0008: 'Schutz aktiv',
+    0x0020: 'Payload',
+    0x0040: 'BMS',
+    0x0080: 'Motor-Absch.',
+}
+
+
+def _or_label(or_val: int | None) -> str | None:
+    if or_val is None:
+        return None
+    bits = [label for bit, label in _ORION_OR_BITS.items() if or_val & bit]
+    return ', '.join(bits) if bits else 'OK'
+
+
+def parse_solar_ext(data: bytes):
+    """PGN 130912 – Solar Extended (Fast Packet, 14 Byte).
+    Layout:
+      0      uint8   device instance
+      1-4    float32 panel voltage VPV (V); NaN = N/A
+      5-8    float32 panel power PPV (W); NaN = N/A
+      9-10   uint16  yield today H20 (Wh); 0xFFFF = N/A
+      11-12  uint16  max power today H21 (W); 0xFFFF = N/A
+      13     uint8   MPPT tracker mode; 0xFF = N/A
+    """
+    if len(data) < 14:
+        return None
+
+    def _f(off):
+        v = struct.unpack_from('<f', data, off)[0]
+        return None if (math.isnan(v) or math.isinf(v)) else round(v, 3)
+
+    inst     = data[0]
+    vpv      = _f(1)
+    ppv      = _f(5)
+    h20_raw  = struct.unpack_from('<H', data,  9)[0]
+    h21_raw  = struct.unpack_from('<H', data, 11)[0]
+    mppt_raw = data[13]
+    return {
+        'instance':          inst,
+        'vpv':               vpv,
+        'ppv':               round(ppv) if ppv is not None else None,
+        'yield_today_wh':    h20_raw  if h20_raw  != 0xFFFF else None,
+        'max_power_today_w': h21_raw  if h21_raw  != 0xFFFF else None,
+        'mppt_mode':         mppt_raw if mppt_raw != 0xFF   else None,
+        'mppt_mode_label':   _MPPT_MODE.get(mppt_raw, f'Mode {mppt_raw}') if mppt_raw != 0xFF else None,
+    }
+
+
+def parse_dcdc_ext(data: bytes):
+    """PGN 130913 – DC-DC Extended (Fast Packet, 21 Byte).
+    Layout:
+      0      uint8   device instance
+      1-4    float32 output power P (W); NaN = N/A
+      5-8    float32 input voltage DC_IN_V (V); NaN = N/A
+      9-12   float32 input current DC_IN_I (A); NaN = N/A
+      13-16  float32 input power DC_IN_P (W); NaN = N/A
+      17-20  uint32  off reason OR bitmask; 0xFFFFFFFF = N/A
+    """
+    if len(data) < 21:
+        return None
+
+    def _f(off):
+        v = struct.unpack_from('<f', data, off)[0]
+        return None if (math.isnan(v) or math.isinf(v)) else round(v, 3)
+
+    inst   = data[0]
+    p_out  = _f(1)
+    v_in   = _f(5)
+    i_in   = _f(9)
+    p_in   = _f(13)
+    or_raw = struct.unpack_from('<I', data, 17)[0]
+    or_val = or_raw if or_raw != 0xFFFF_FFFF else None
+    return {
+        'instance':      inst,
+        'output_power':  round(p_out) if p_out is not None else None,
+        'input_voltage': v_in,
+        'input_current': i_in,
+        'input_power':   round(p_in) if p_in  is not None else None,
+        'off_reason':    or_val,
+        'off_reason_label': _or_label(or_val),
+    }
 
 
 def parse_ve_direct_ext(data: bytes):
@@ -511,7 +602,7 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
     elif pgn == 130910:
         p = parse_ve_direct_ext(payload)
         if not p: return []
-        type_names = {0:'Lader', 1:'DC-DC Wandler', 2:'Wechselrichter'}
+        type_names = {0:'Lader', 1:'DC-DC Wandler', 2:'Wechselrichter', 3:'Solar MPPT'}
         fields = [
             fv('Instanz', p['instance']),
             fv('Typ', type_names.get(p['type'], f"Typ {p['type']}")),
@@ -522,6 +613,28 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
         if p.get('power')      is not None: fields.append(fv('Leistung',    f"{p['power']:.1f} W"))
         if p.get('ac_voltage') is not None: fields.append(fv('AC-Spannung', f"{p['ac_voltage']:.1f} V"))
         if p.get('ac_current') is not None: fields.append(fv('AC-Strom',    f"{p['ac_current']:.1f} A"))
+        return fields
+
+    elif pgn == 130912:
+        p = parse_solar_ext(payload)
+        if not p: return []
+        fields = [fv('Instanz', p['instance'])]
+        if p.get('vpv')               is not None: fields.append(fv('Panel-Spannung VPV', f"{p['vpv']:.2f} V"))
+        if p.get('ppv')               is not None: fields.append(fv('Panel-Leistung PPV', f"{p['ppv']} W"))
+        if p.get('yield_today_wh')    is not None: fields.append(fv('Ertrag heute', f"{p['yield_today_wh']} Wh"))
+        if p.get('max_power_today_w') is not None: fields.append(fv('Max heute', f"{p['max_power_today_w']} W"))
+        if p.get('mppt_mode_label')   is not None: fields.append(fv('Tracker-Modus', p['mppt_mode_label']))
+        return fields
+
+    elif pgn == 130913:
+        p = parse_dcdc_ext(payload)
+        if not p: return []
+        fields = [fv('Instanz', p['instance'])]
+        if p.get('output_power')  is not None: fields.append(fv('Ausgangsleistung', f"{p['output_power']} W"))
+        if p.get('input_voltage') is not None: fields.append(fv('Eingangs-Spannung', f"{p['input_voltage']:.3f} V"))
+        if p.get('input_current') is not None: fields.append(fv('Eingangs-Strom', f"{p['input_current']:.3f} A"))
+        if p.get('input_power')   is not None: fields.append(fv('Eingangsleistung', f"{p['input_power']} W"))
+        if p.get('off_reason_label') is not None: fields.append(fv('Off Reason', p['off_reason_label']))
         return fields
 
     elif pgn == 126996:

@@ -115,10 +115,10 @@ function _renderTodayTile() {
   const unit = $('battTodayUnit');
   if (!el) return;
   if (_battEnergyUnit === 'ah') {
-    el.textContent   = _todayAhDrawn > 0 ? _todayAhDrawn.toFixed(1) : '--';
+    el.textContent   = _todayAhDrawn >= 0.05 ? _todayAhDrawn.toFixed(1) : '--';
     if (unit) unit.textContent = 'Ah';
   } else {
-    const { val, unit: u } = _fmtWh(_todayWhDrawn > 0 ? _todayWhDrawn : null);
+    const { val, unit: u } = _fmtWh(_todayWhDrawn >= 10 ? _todayWhDrawn : null);
     el.textContent = val;
     if (unit) unit.textContent = u;
   }
@@ -237,7 +237,14 @@ function recomputeDailyAhFromHist() {
       _todayWhDrawn += Math.abs(cur) * v * dtH;
     }
   }
-  _lastShuntTs = todayShunt.length ? todayShunt[todayShunt.length - 1].ts : null;
+  // _lastShuntTs auf letzten History-Eintrag setzen, oder auf jetzt wenn leer –
+  // so wird der nächste _accumTodayWh-Aufruf nicht fälschlich zurückgesetzt.
+  _lastShuntTs = todayShunt.length
+    ? todayShunt[todayShunt.length - 1].ts
+    : Date.now() / 1000;
+
+  // Sofort rendern, nicht auf nächste WS-Nachricht warten.
+  _renderTodayTile();
 }
 
 // ── Battery update ─────────────────────────────────────────────────────────
@@ -298,4 +305,187 @@ function updateTopbarBatt(soc) {
   const color = v >= 50 ? 'var(--green)' : v >= 20 ? 'var(--yellow)' : 'var(--red)';
   if (wrap) wrap.style.color = color;
   if (pct)  pct.textContent = Math.round(v) + '%';
+}
+
+// ── Device Tiles (Battery Detail Overlay) ─────────────────────────────────
+
+const _MPPT_MODE_LABEL = ['Aus', 'Begrenzt', 'Aktiv'];
+const _ORION_OR = {
+  0x0001: 'Kein Eingang', 0x0002: 'Schalter aus', 0x0004: 'Remote',
+  0x0008: 'Schutz aktiv', 0x0020: 'Payload', 0x0040: 'BMS', 0x0080: 'Motor-Absch.',
+};
+
+function _orLabel(or_val) {
+  if (or_val == null) return null;
+  const bits = Object.entries(_ORION_OR).filter(([bit]) => or_val & Number(bit)).map(([,lbl]) => lbl);
+  return bits.length ? bits.join(', ') : 'OK';
+}
+
+function _kv(label, val, unit='', cls='') {
+  if (val == null || val === '' || val === '--') return '';
+  const v = unit ? `${val}<span class="dt-unit"> ${unit}</span>` : val;
+  return `<div class="dt-kv${cls ? ' ' + cls : ''}"><span class="dt-lbl">${label}</span><span class="dt-val">${v}</span></div>`;
+}
+
+function _statusDot(active) {
+  return `<span class="dt-dot" style="background:${active ? 'var(--green)' : 'var(--border)'}"></span>`;
+}
+
+function _tile(icon, title, statusTxt, bodyHtml, active=true) {
+  return `<div class="dt-card${active ? '' : ' dt-card-off'}">
+    <div class="dt-head">
+      <span class="dt-icon">${icon}</span>
+      <span class="dt-title">${title}</span>
+      ${_statusDot(active)}
+      ${statusTxt ? `<span class="dt-status">${statusTxt}</span>` : ''}
+    </div>
+    <div class="dt-body">${bodyHtml}</div>
+  </div>`;
+}
+
+function _tileBattBoard(b, bms) {
+  if (!b) return '';
+  const socPct = b.soc != null ? Math.round(b.soc) : null;
+  const socBar = socPct != null
+    ? `<div class="dt-soc-wrap"><div class="dt-soc-fill" style="width:${socPct}%;background:${socPct>=50?'var(--green)':socPct>=20?'var(--yellow)':'var(--red)'}"></div></div>`
+    : '';
+  const socTxt = socPct != null ? `<span class="dt-soc-num">${socPct}%</span>` : '';
+  const body = `
+    <div class="dt-soc-row">${socTxt}${socBar}</div>
+    <div class="dt-kvgrid">
+      ${_kv('Spannung',    b.voltage    != null ? b.voltage.toFixed(2) : null, 'V')}
+      ${_kv('Strom',       b.current    != null ? b.current.toFixed(1) : null, 'A', b.current < 0 ? 'val-orange' : 'val-green')}
+      ${_kv('Leistung',    b.power      != null ? Math.round(b.power)  : null, 'W', b.power < 0 ? 'val-orange' : 'val-green')}
+      ${_kv('Verbraucht',  b.consumed_ah != null ? b.consumed_ah.toFixed(1) : null, 'Ah')}
+      ${_kv('Min',         b.min_voltage != null ? b.min_voltage.toFixed(3) : null, 'V')}
+      ${_kv('Max',         b.max_voltage != null ? b.max_voltage.toFixed(3) : null, 'V')}
+      ${_kv('Zyklen',      b.cycles)}
+      ${_kv('Voll vor',    b.time_since_full != null ? timeSince(b.time_since_full) : null)}
+      ${_kv('Starter',     b.starter_voltage != null ? b.starter_voltage.toFixed(2) : null, 'V')}
+      ${_kv('Temp.',       b.temperature != null ? b.temperature.toFixed(1) : null, '°C')}
+    </div>`;
+  return _tile('⚡', 'Servicebatterie / Shunt', socPct != null ? `${socPct}%` : '', body, true);
+}
+
+function _tileBms(bms) {
+  if (!bms || bms.voltage == null) return '';
+  const flags = [
+    bms.allow_charge    === false ? '<span class="dt-flag dt-flag-warn">Laden gesperrt</span>' : '',
+    bms.allow_discharge === false ? '<span class="dt-flag dt-flag-warn">Entladen gesperrt</span>' : '',
+    bms.comm_error      ? '<span class="dt-flag dt-flag-err">BMS Komm.-Fehler</span>' : '',
+    bms.alarm_min_volt  ? '<span class="dt-flag dt-flag-err">Zellspg. zu niedrig</span>' : '',
+    bms.alarm_max_volt  ? '<span class="dt-flag dt-flag-err">Zellspg. zu hoch</span>' : '',
+    bms.alarm_min_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu niedrig</span>' : '',
+    bms.alarm_max_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu hoch</span>' : '',
+  ].filter(Boolean).join('');
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Spannung',    bms.voltage       != null ? bms.voltage.toFixed(2) : null, 'V')}
+      ${_kv('Strom',       bms.current_total != null ? bms.current_total.toFixed(2) : null, 'A', bms.current_total < 0 ? 'val-orange' : 'val-green')}
+      ${_kv('SOC',         bms.soc != null ? bms.soc + ' %' : null)}
+      ${_kv('Kapazität',   bms.capacity_ah   != null ? bms.capacity_ah.toFixed(1) : null, 'Ah')}
+      ${_kv('Verbleibend', bms.remaining_kwh != null ? (bms.remaining_kwh * 1000).toFixed(0) : null, 'Wh')}
+      ${_kv('Lade-A',      bms.current_charge    != null ? bms.current_charge.toFixed(2) : null, 'A')}
+      ${_kv('Entlade-A',   bms.current_discharge != null ? bms.current_discharge.toFixed(2) : null, 'A')}
+      ${_kv('Zellen',      bms.cell_count)}
+      ${bms.lowest_cell_v  != null ? _kv('Niedrigste Zelle', `${bms.lowest_cell_v.toFixed(3)} V (#${bms.lowest_cell_nr ?? '?'})`) : ''}
+      ${bms.highest_cell_v != null ? _kv('Höchste Zelle',    `${bms.highest_cell_v.toFixed(3)} V (#${bms.highest_cell_nr ?? '?'})`) : ''}
+      ${bms.lowest_temp    != null ? _kv('Temp. min/max', `${bms.lowest_temp.toFixed(1)} / ${(bms.highest_temp??0).toFixed(1)} °C`) : ''}
+    </div>
+    ${flags ? `<div class="dt-flags">${flags}</div>` : ''}`;
+  const socTxt = bms.soc != null ? `SOC ${bms.soc}%` : '';
+  return _tile('🔋', '123SmartBMS', socTxt, body, true);
+}
+
+function _tileMppt(solar) {
+  if (!solar || (solar.voltage == null && solar.vpv == null && solar.cs_label == null)) return '';
+  const state = solar.cs_label ?? '--';
+  const isActive = solar.cs != null && solar.cs !== 0;
+  const mpptLbl = solar.mppt_mode != null ? (_MPPT_MODE_LABEL[solar.mppt_mode] ?? `Mode ${solar.mppt_mode}`) : null;
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Zustand',        state)}
+      ${_kv('Tracker',        mpptLbl)}
+      ${_kv('Batterie-Spg.', solar.voltage  != null ? solar.voltage.toFixed(3)  : null, 'V')}
+      ${_kv('Lade-Strom',    solar.current  != null ? solar.current.toFixed(3)  : null, 'A', 'val-green')}
+      ${_kv('Ausgangsleistung', solar.power != null ? Math.round(solar.power)   : null, 'W', 'val-green')}
+      ${_kv('Panel-Spannung', solar.vpv     != null ? solar.vpv.toFixed(2)      : null, 'V')}
+      ${_kv('Panel-Leistung', solar.ppv     != null ? Math.round(solar.ppv)     : null, 'W', 'val-green')}
+      ${_kv('Ertrag heute',   solar.yield_today_wh    != null ? solar.yield_today_wh    : null, 'Wh')}
+      ${_kv('Max heute',      solar.max_power_today_w != null ? solar.max_power_today_w : null, 'W')}
+    </div>`;
+  return _tile('☀️', 'MPPT 75/15', state, body, isActive);
+}
+
+function _tileOrion(orion) {
+  if (!orion || (orion.cs == null && orion.output_power == null)) return '';
+  const state = orion.state ?? orion.cs_label ?? '--';
+  const isActive = orion.cs != null && orion.cs !== 0;
+  const orLbl = orion.off_reason_label ?? _orLabel(orion.off_reason);
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Zustand',           state)}
+      ${_kv('Aus-Spg.',          orion.dc_voltage    != null ? orion.dc_voltage.toFixed(3)   : null, 'V')}
+      ${_kv('Aus-Strom',         orion.dc_current    != null ? orion.dc_current.toFixed(3)   : null, 'A', 'val-green')}
+      ${_kv('Ausgangsleistung',  orion.output_power  != null ? Math.round(orion.output_power): null, 'W', 'val-green')}
+      ${_kv('Ein-Spannung',      orion.input_voltage != null ? orion.input_voltage.toFixed(3): null, 'V')}
+      ${_kv('Ein-Strom',         orion.input_current != null ? orion.input_current.toFixed(3): null, 'A')}
+      ${_kv('Eingangsleistung',  orion.input_power   != null ? Math.round(orion.input_power) : null, 'W')}
+      ${orLbl ? _kv('Off Reason', orLbl) : ''}
+    </div>`;
+  return _tile('🔄', 'Orion-XS DC-DC', state, body, isActive);
+}
+
+function _tileCharger(charger) {
+  if (!charger || charger.state == null) return '';
+  const isActive = charger.active !== false && charger.state && charger.state !== 'Aus';
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Zustand',    charger.state)}
+      ${_kv('Spannung',   charger.dc_voltage != null ? charger.dc_voltage.toFixed(3) : null, 'V')}
+      ${_kv('Strom',      charger.dc_current != null ? charger.dc_current.toFixed(3) : null, 'A', 'val-green')}
+      ${_kv('Leistung',   charger.power      != null ? Math.round(charger.power)     : null, 'W', 'val-green')}
+    </div>`;
+  return _tile('🔌', 'Smart IP43', charger.state ?? '', body, isActive);
+}
+
+function _tileInverter(inv) {
+  if (!inv || inv.state == null) return '';
+  const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Zustand',     inv.state)}
+      ${_kv('AC-Spannung', inv.ac_voltage != null ? inv.ac_voltage.toFixed(1) : null, 'V')}
+      ${_kv('AC-Strom',    inv.ac_current != null ? inv.ac_current.toFixed(1) : null, 'A')}
+      ${_kv('AC-Leistung', inv.power      != null ? Math.round(inv.power)     : null, 'W', isActive ? 'val-orange' : '')}
+      ${_kv('DC-Spannung', inv.dc_voltage != null ? inv.dc_voltage.toFixed(3) : null, 'V')}
+      ${_kv('DC-Strom',    inv.dc_current != null ? inv.dc_current.toFixed(3) : null, 'A')}
+    </div>`;
+  return _tile('⚡', 'Inverter 2000VA', inv.state ?? '', body, isActive);
+}
+
+function _tileStarter(b) {
+  if (!b || b.starter_voltage == null) return '';
+  const body = `
+    <div class="dt-kvgrid">
+      ${_kv('Spannung', b.starter_voltage != null ? b.starter_voltage.toFixed(2) : null, 'V')}
+      ${_kv('Min',      _starterMin != null ? _starterMin.toFixed(2) : null, 'V')}
+      ${_kv('Max',      _starterMax != null ? _starterMax.toFixed(2) : null, 'V')}
+    </div>`;
+  return _tile('🚗', 'Starterbatterie', '', body, true);
+}
+
+function renderDeviceTiles(data) {
+  const sec = $('deviceTilesSection');
+  if (!sec) return;
+  const b   = data.battery ?? null;
+  const bms = data.bms     ?? null;
+  sec.innerHTML =
+    _tileBattBoard(b, bms) +
+    _tileBms(bms) +
+    _tileMppt(data.solar) +
+    _tileOrion(data.orion) +
+    _tileCharger(data.charger) +
+    _tileInverter(data.inverter) +
+    _tileStarter(b);
 }

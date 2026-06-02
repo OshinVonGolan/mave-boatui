@@ -345,6 +345,7 @@ function handleData(data) {
   updateFlow(data);
   if (data.inverter) updateInverterCard(data.inverter, data.charger);
   if (data.bms) updateBms(data.bms);
+  if (!$('battOverlay').classList.contains('hidden')) renderDeviceTiles(data);
   _syncWartungHeight();
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);

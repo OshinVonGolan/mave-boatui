@@ -393,6 +393,7 @@ function openBattDetail() {
   history.pushState({ overlay: 'battery' }, '', '#battery');
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
+  if (_lastData) renderDeviceTiles(_lastData);
   setTimeout(renderCharts, 50);
 }
 function closeBattDetail() {

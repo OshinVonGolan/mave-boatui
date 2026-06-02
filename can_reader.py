@@ -12,6 +12,7 @@ from nmea2000 import (
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_charger_status_pgn, parse_inverter_status, parse_ve_direct_ext,
+    parse_solar_ext, parse_dcdc_ext,
     parse_iso_address_claim, parse_product_info,
     parse_temperature,
     PGN_NAMES, RPI_SOURCE_ADDRESS,
@@ -38,7 +39,15 @@ class BoatState:
         }
         self.tanks  = {'tank1': None, 'tank2': None}
         self.lights = {'channels': [0] * 9}
-        self.solar      = {'power': None, 'current': None, 'voltage': None}
+        self.solar      = {
+            'power': None, 'current': None, 'voltage': None,
+            # MPPT 75/15 – aus PGN 130910 (type 3)
+            'cs': None, 'cs_label': None,
+            # MPPT 75/15 – aus PGN 130912
+            'vpv': None, 'ppv': None,
+            'yield_today_wh': None, 'max_power_today_w': None,
+            'mppt_mode': None, 'mppt_mode_label': None,
+        }
         self.alternator = {'power': None, 'current': None, 'voltage': None}
         self.bms = {
             'voltage': None, 'current_total': None,
@@ -60,8 +69,14 @@ class BoatState:
                          'err': None, 'warn': None}  # err = AR (Alarm Reason), warn = WARN
         self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'dc_voltage': None, 'dc_current': None, '_last_seen': 0.0}  # Smart IP43
-        self.orion    = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
-                         'dc_voltage': None, 'dc_current': None}   # Orion-XS DC-DC (inst 0)
+        self.orion    = {
+            'state': None, 'power': None, 'cs': None, 'cs_label': None,
+            'dc_voltage': None, 'dc_current': None,   # Ausgang (Batterieseite) aus PGN 130910
+            # Orion-XS erweitert – aus PGN 130913
+            'output_power': None,
+            'input_voltage': None, 'input_current': None, 'input_power': None,
+            'off_reason': None, 'off_reason_label': None,
+        }
 
     def to_dict(self) -> dict:
         charger_d = {k: v for k, v in self.charger.items() if k != '_last_seen'}
@@ -178,7 +193,7 @@ class CanInterface:
     # ── Empfangen ───────────────────────────────────────────────────────────
 
     # PGNs die eine Instanz im Payload haben — werden nach Payload-Assembly getrackt
-    _INSTANCE_PGNS = {127505, 127506, 127508, 130312, 130910}
+    _INSTANCE_PGNS = {127505, 127506, 127508, 130312, 130910, 130912, 130913}
 
     def _track_network(self, pgn: int, src: int, instance: int | None = None):
         now = time.monotonic()
@@ -249,7 +264,7 @@ class CanInterface:
 
         # Debug: letzten vollständigen Payload je (pgn, src, instance) merken
         _inst = None
-        if pgn in (127508, 130910) and payload:        _inst = payload[0]
+        if pgn in (127508, 130910, 130912, 130913) and payload:  _inst = payload[0]
         elif pgn in (127505, 130312) and payload:      _inst = payload[0] & 0x0F
         elif pgn == 127506 and len(payload) > 1:       _inst = payload[1]
         self._last_raw[(pgn, src, _inst)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
@@ -366,7 +381,17 @@ class CanInterface:
                         v = p.get(k)
                         if v is not None and target.get(k) != v:
                             target[k] = v; changed = True
-                elif p['type'] == 0:  # Lader (IP43 = inst 1, P5 = inst 2)
+                elif p['type'] == 3:  # Solar MPPT (inst 3)
+                    target = self.state.solar
+                    if p.get('cs_label'):
+                        p['state'] = p['cs_label']
+                    for k in ('cs', 'cs_label', 'dc_voltage', 'dc_current', 'power'):
+                        v = p.get(k)
+                        if v is not None and target.get(k) != v:
+                            target[k] = v; changed = True
+                    if p.get('mode') is not None and target.get('mppt_mode') != p['mode']:
+                        target['mppt_mode'] = p['mode']; changed = True
+                elif p['type'] == 0:  # Lader (IP43 = inst 1)
                     target = self.state.charger
                     target['_last_seen'] = time.time()
                     if p.get('cs_label'):
@@ -387,12 +412,42 @@ class CanInterface:
         elif pgn == 127507:
             p = parse_charger_status_pgn(payload)
             if p:
-                self._track_network(pgn, src, None)
-                self.state.charger['_last_seen'] = time.time()
+                self._track_network(pgn, src, p['instance'])
                 new_state = p.get('state')
-                if new_state and new_state != 'Unbekannt' and self.state.charger.get('state') != new_state:
-                    self.state.charger['state'] = new_state
-                    changed = True
+                inst = p['instance']
+                if inst == 1:  # Smart IP43
+                    self.state.charger['_last_seen'] = time.time()
+                    if new_state and new_state != 'Unbekannt' and self.state.charger.get('state') != new_state:
+                        self.state.charger['state'] = new_state; changed = True
+                elif inst == 0:  # Orion-XS
+                    if new_state and new_state != 'Unbekannt' and self.state.orion.get('state') != new_state:
+                        self.state.orion['state'] = new_state; changed = True
+                elif inst == 3:  # MPPT 75/15
+                    if new_state and new_state != 'Unbekannt' and self.state.solar.get('cs_label') != new_state:
+                        self.state.solar['cs_label'] = new_state; changed = True
+
+        elif pgn == 130912:
+            p = parse_solar_ext(payload)
+            if p:
+                self._track_network(pgn, src, p['instance'])
+                for k in ('vpv', 'ppv', 'yield_today_wh', 'max_power_today_w',
+                          'mppt_mode', 'mppt_mode_label'):
+                    v = p.get(k)
+                    if v is not None and self.state.solar.get(k) != v:
+                        self.state.solar[k] = v; changed = True
+                # ppv ist die direkte Solarleistung → auch in solar.power
+                if p.get('ppv') is not None and self.state.solar.get('power') != p['ppv']:
+                    self.state.solar['power'] = p['ppv']; changed = True
+
+        elif pgn == 130913:
+            p = parse_dcdc_ext(payload)
+            if p:
+                self._track_network(pgn, src, p['instance'])
+                for k in ('output_power', 'input_voltage', 'input_current',
+                          'input_power', 'off_reason', 'off_reason_label'):
+                    v = p.get(k)
+                    if v is not None and self.state.orion.get(k) != v:
+                        self.state.orion[k] = v; changed = True
 
         elif pgn == 60928:
             p = parse_iso_address_claim(payload)

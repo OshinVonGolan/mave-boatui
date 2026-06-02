@@ -312,139 +312,81 @@
     </button>
   </div>
   <div class="ov-body">
-  <div class="bd-pg">
 
-    <!-- ── Servicebatterie ── -->
-    <div class="bd-card bd-pg-batt" style="display:flex;flex-direction:column">
-      <div class="bd-card-hd">Servicebatterie</div>
-      <div class="bd-soc-block" style="margin-bottom:10px">
-        <div class="bd-soc-head">
-          <span class="bd-soc-num" id="dSoc">--</span><span class="bd-soc-pct-unit">%</span>
-        </div>
-        <div class="soc-bar-wrap"><div class="soc-bar-fill" id="dSocBar" style="width:0%"></div></div>
-        <div class="bd-soc-dir" id="dChargeDir"></div>
-        <div class="bd-soc-sec" id="dSocSec" style="display:none"></div>
-      </div>
-      <div class="bd-kv-grid">
-        <div class="bd-kv-item">
-          <div class="bd-kv-label">Spannung</div>
-          <div class="bd-kv-line"><span id="dV" class="bd-kv-val">--</span><span class="bd-kv-unit">V</span></div>
-          <div class="bd-kv-sec" id="dVSec" style="display:none"></div>
-        </div>
-        <div class="bd-kv-item">
-          <div class="bd-kv-label">Strom</div>
-          <div class="bd-kv-line"><span id="dI" class="bd-kv-val">--</span><span class="bd-kv-unit">A</span></div>
-          <div class="bd-kv-sec" id="dISec" style="display:none"></div>
-        </div>
-        <div class="bd-kv-item">
-          <div class="bd-kv-label">Leistung</div>
-          <div class="bd-kv-line"><span id="dP" class="bd-kv-val">--</span><span class="bd-kv-unit">W</span></div>
-        </div>
-        <div class="bd-kv-item">
-          <div class="bd-kv-label">Verbraucht</div>
-          <div class="bd-kv-line"><span id="dAh" class="bd-kv-val">--</span><span class="bd-kv-unit">Ah</span></div>
-        </div>
-      </div>
-      <div class="bd-mini-row" style="margin-top:10px">
-        <div class="bd-mini-item">
-          <div class="bd-label">Restkapazität</div>
-          <div class="bd-mini-val"><span id="dRemKwh">--</span> <span style="font-size:11px;color:var(--text3)">kWh</span></div>
-        </div>
-        <div class="bd-mini-item">
-          <div class="bd-label">Voll vor</div>
-          <div class="bd-mini-val"><span id="dFull">--</span></div>
-        </div>
-        <div class="bd-mini-item">
-          <div class="bd-label">Zyklen</div>
-          <div class="bd-mini-val"><span id="dCycles">--</span></div>
-        </div>
-      </div>
-      <div class="bd-minmax-row">
-        <span>↓ Min: <strong id="dMinV">--</strong> V</span>
-        <span>↑ Max: <strong id="dMaxV">--</strong> V</span>
-      </div>
-    </div>
+    <!-- ── Geräte-Kacheln (dynamisch via JS) ── -->
+    <div id="deviceTilesSection" class="dt-section"></div>
 
-    <!-- ── Zellen & BMS (Detail-Diagnose) ── -->
-    <div class="bd-card bd-pg-cells" id="bmsSection">
-      <div class="bd-card-hd">Zellen &amp; BMS</div>
-      <div id="bmsNoSignal" style="color:var(--text3);font-size:13px;padding:8px 0">Kein BMS-Signal — warte auf Daten…</div>
-      <div id="bmsDataWrap" style="display:none">
-        <div class="bms-pack-row" id="bmsPackRow"></div>
-        <div id="bmsDailyStats" style="display:none">
-          <div class="bms-pack-row">
-            <div class="bms-pack-item"><div class="bd-label">Heute geladen</div><div class="bms-pack-val val-green" id="bmsTodayCharge">-- Ah</div></div>
-            <div class="bms-pack-item"><div class="bd-label">Heute entladen</div><div class="bms-pack-val val-orange" id="bmsTodayDischarge">-- Ah</div></div>
-            <div class="bms-pack-item"><div class="bd-label">Lade-A</div><div class="bms-pack-val" id="bmsChargeA">-- A</div></div>
-            <div class="bms-pack-item"><div class="bd-label">Entlade-A</div><div class="bms-pack-val" id="bmsDischargeA">-- A</div></div>
+    <!-- ── Graphen ── -->
+    <div class="bd-pg bd-pg-charts-only">
+
+      <!-- Lade-Quellen (dynamisch) -->
+      <div id="chargeSourceCard" class="bd-card bd-pg-sources">
+        <div class="bd-card-hd-row">
+          <span>Lade-Quellen</span>
+          <div style="display:flex;gap:3px">
+            <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
+            <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
+            <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
           </div>
         </div>
-        <div class="bms-cell-grid" id="bmsCellGrid"></div>
-        <div class="bms-flags-row" id="bmsFlags"></div>
+        <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Keine aktive Lade-Quelle</div>
+        <div id="chargeSourceHasData" style="display:none">
+          <div class="charge-src-wrap">
+            <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
+            <div class="charge-src-legend" id="chargeSourceLegend"></div>
+          </div>
+        </div>
       </div>
+
+      <!-- Verlauf chart -->
+      <div class="bd-card bd-pg-chart">
+        <div class="bd-card-hd-row">
+          <span>Verlauf</span>
+          <div class="chart-range-group">
+            <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
+            <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
+            <button class="chart-range"        data-secs="43200"  onclick="setChartRange(this,43200)">12 Std</button>
+            <button class="chart-range"        data-secs="86400"  onclick="setChartRange(this,86400)">24 Std</button>
+            <button class="chart-range"        data-secs="604800" onclick="setChartRange(this,604800)">7 T</button>
+          </div>
+        </div>
+        <div class="chart-tog-group">
+          <button id="tog-voltage"  class="chart-tog"        onclick="toggleSeries('voltage')">Spannung</button>
+          <button id="tog-current"  class="chart-tog active" onclick="toggleSeries('current')">Strom</button>
+          <button id="tog-solar"    class="chart-tog"        onclick="toggleSeries('solar')">Solar</button>
+          <button id="tog-zelldiff" class="chart-tog"        onclick="toggleSeries('zelldiff')">Zelldiff.</button>
+        </div>
+        <div class="chart-legend" id="chartLegend"></div>
+        <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
+      </div>
+
+    </div><!-- bd-pg-charts-only -->
+
+    <!-- versteckte Elemente für JS-Kompatibilität (updateDualTiles, updateBattery) -->
+    <div style="display:none" aria-hidden="true">
+      <span id="dSoc"></span><div id="dSocBar" style="width:0%"></div>
+      <span id="dSocSec"></span><span id="dChargeDir"></span>
+      <span id="dV"></span><span id="dVSec"></span>
+      <span id="dI"></span><span id="dISec"></span>
+      <span id="dP"></span><span id="dAh"></span>
+      <span id="dStarter"></span><span id="dStarterMin"></span><span id="dStarterMax"></span>
+      <span id="dCycles"></span><span id="dMinV"></span><span id="dMaxV"></span>
+      <span id="dFull"></span><span id="dRemKwh"></span>
     </div>
 
-    <!-- ── Lade-Quellen (dynamisch) ── -->
-    <div id="chargeSourceCard" class="bd-card bd-pg-sources">
-      <div class="bd-card-hd-row">
-        <span>Lade-Quellen</span>
-        <div style="display:flex;gap:3px">
-          <button class="chart-range active" id="cpBtnLive" onclick="setChargeRange('live')">Live</button>
-          <button class="chart-range"        id="cpBtn24h"  onclick="setChargeRange('24h')">24 h</button>
-          <button class="chart-range"        id="cpBtn7d"   onclick="setChargeRange('7d')">7 T</button>
-        </div>
-      </div>
-      <div id="chargeSourceNoData" style="color:var(--text3);font-size:13px;padding:24px 0;text-align:center">Keine aktive Lade-Quelle</div>
-      <div id="chargeSourceHasData" style="display:none">
-        <div class="charge-src-wrap">
-          <canvas id="chargeSourceChart" style="width:88px;height:88px;flex-shrink:0"></canvas>
-          <div class="charge-src-legend" id="chargeSourceLegend"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Verlauf chart (volle Breite unten) ── -->
-    <div class="bd-card bd-pg-chart">
-      <div class="bd-card-hd-row">
-        <span>Verlauf</span>
-        <div class="chart-range-group">
-          <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
-          <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
-          <button class="chart-range"        data-secs="43200"  onclick="setChartRange(this,43200)">12 Std</button>
-          <button class="chart-range"        data-secs="86400"  onclick="setChartRange(this,86400)">24 Std</button>
-          <button class="chart-range"        data-secs="604800" onclick="setChartRange(this,604800)">7 T</button>
-        </div>
-      </div>
-      <div class="chart-tog-group">
-        <button id="tog-voltage"  class="chart-tog"        onclick="toggleSeries('voltage')">Spannung</button>
-        <button id="tog-current"  class="chart-tog active" onclick="toggleSeries('current')">Strom</button>
-        <button id="tog-solar"    class="chart-tog"        onclick="toggleSeries('solar')">Solar</button>
-        <button id="tog-zelldiff" class="chart-tog"        onclick="toggleSeries('zelldiff')">Zelldiff.</button>
-      </div>
-      <div class="chart-legend" id="chartLegend"></div>
-      <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
-    </div>
-
-    <!-- ── Starterbatterie ── -->
-    <div class="bd-card bd-pg-starter">
-      <div class="bd-card-hd">Starterbatterie</div>
-      <div class="bd-3col">
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">Aktuell</div>
-          <div class="bd-3col-val"><span id="dStarter">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
-        </div>
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">↓ Min</div>
-          <div class="bd-3col-val"><span id="dStarterMin">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
-        </div>
-        <div class="bd-3col-item">
-          <div class="bd-3col-label">↑ Max</div>
-          <div class="bd-3col-val"><span id="dStarterMax">--</span><span class="bd-kv-unit" style="font-size:14px">V</span></div>
+    <!-- BMS-Elemente für charts.js (bmsPackRow, bmsCellGrid, bmsFlags bleiben im DOM) -->
+    <div style="display:none" aria-hidden="true">
+      <div id="bmsSection"><div id="bmsNoSignal"></div>
+        <div id="bmsDataWrap"><div id="bmsPackRow"></div>
+          <div id="bmsDailyStats"><div class="bms-pack-row">
+            <div id="bmsTodayCharge"></div><div id="bmsTodayDischarge"></div>
+            <div id="bmsChargeA"></div><div id="bmsDischargeA"></div>
+          </div></div>
+          <div id="bmsCellGrid"></div><div id="bmsFlags"></div>
         </div>
       </div>
     </div>
 
-  </div><!-- bd-pg -->
   </div><!-- ov-body -->
 </div>
 
