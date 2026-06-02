@@ -18,8 +18,7 @@ sowie die PGNs des VE.Direct-NMEA2K-Gateways (Teensy 4.1).
 
 | Serial-Port | Gerät                  | VEDeviceType | deviceInstance |
 |-------------|------------------------|--------------|----------------|
-| Serial2     | Orion-XS DC-DC #1      | `VE_DCDC`    | 0              |
-| Serial3     | Orion-XS DC-DC #2      | `VE_DCDC`    | 2              |
+| Serial3     | Orion-XS DC-DC         | `VE_DCDC`    | 0              |
 | Serial4     | Phoenix Inverter 2000VA | `VE_INVERTER` | 0             |
 | Serial5     | Phoenix Smart IP43     | `VE_CHARGER` | 1              |
 | Serial6     | MPPT 75/15             | `VE_SOLAR`   | 3              |
@@ -133,7 +132,7 @@ VE.Direct-Frame empfangen wurde (Timeout-Schutz gegen veraltete Werte).
 
 | Feld            | Inhalt |
 |-----------------|--------|
-| deviceInstance  | 0 = Orion-XS #1, 1 = Smart IP43, 2 = Orion-XS #2, 3 = MPPT 75/15 |
+| deviceInstance  | 0 = Orion-XS, 1 = Smart IP43, 3 = MPPT 75/15 |
 | batteryInstance | 0 = Hausbatterie |
 | Charge State    | s. CS-Mapping unten |
 | Charger Mode    | `Standalone` |
@@ -312,10 +311,9 @@ Byte 3 enthält bei `VE_INVERTER` den rohen `MODE`-Wert, bei `VE_SOLAR` den MPPT
 
 | Instanz   | Gerät                      | Typ (Byte 1)          |
 |-----------|----------------------------|-----------------------|
-| 0 (Typ 1) | Orion-XS DC-DC #1          | DC-DC (`VE_DCDC`)     |
+| 0 (Typ 1) | Orion-XS DC-DC             | DC-DC (`VE_DCDC`)     |
 | 1 (Typ 0) | Phoenix Smart IP43         | Lader (`VE_CHARGER`)  |
 | 0 (Typ 2) | Phoenix Inverter 2000 VA   | Inverter (`VE_INVERTER`) |
-| 2 (Typ 1) | Orion-XS DC-DC #2          | DC-DC (`VE_DCDC`)     |
 | 3 (Typ 3) | MPPT 75/15                 | Solar (`VE_SOLAR`)    |
 
 ---
@@ -345,6 +343,35 @@ Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `V
 | 1    | Voltage or current limited |
 | 2    | MPPT aktiv (Maximum Power Point Tracking) |
 | 0xFF | N/A |
+
+---
+
+### PGN 130913 – DC-DC Extended *(Custom, VE.Direct Gateway – Orion-XS)*
+**Format:** Fast Packet, **21 Byte Payload** · **Quelle:** VE.Direct-Gateway (auto-address)
+
+Enthält vollständige Leistungsdaten des Orion-XS DC-DC-Wandlers (Ein- und Ausgangsseite).
+Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `VE_DCDC` hat.
+
+| Offset | Typ     | Inhalt                                        | Skalierung       |
+|--------|---------|-----------------------------------------------|------------------|
+| 0      | uint8   | Geräte-Instanz (0 = Orion-XS)                 | –                |
+| 1      | float32 | Ausgangsleistung P (W); NaN = N/A             | `P` direkt       |
+| 5      | float32 | Eingangsspannung DC_IN_V (V); NaN = N/A       | `DC_IN_V` ÷ 1000 |
+| 9      | float32 | Eingangsstrom DC_IN_I (A); NaN = N/A          | `DC_IN_I` ÷ 1000 |
+| 13     | float32 | Eingangsleistung DC_IN_P (W); NaN = N/A       | `DC_IN_P` direkt |
+| 17     | uint32  | Off Reason OR (Bitmask); 0xFFFFFFFF = N/A     | –                |
+
+**Off Reason Bitmask (Byte 17–20):**
+
+| Bit | Maske      | Bedeutung |
+|-----|------------|-----------|
+| 0   | 0x00000001 | Kein Eingang (No input power) |
+| 1   | 0x00000002 | Schalter aus |
+| 2   | 0x00000004 | Remote-Eingang |
+| 3   | 0x00000008 | Schutzschaltung aktiv |
+| 5   | 0x00000020 | Payload-Begrenzer |
+| 6   | 0x00000040 | BMS |
+| 7   | 0x00000080 | Engine-Shutdown-Erkennung / Schlaf |
 
 ---
 
@@ -456,7 +483,7 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | VE.Direct Data Timeout | 5000 ms |
 
 **Fast-Packet-PGNs (Pi):** `126720, 126996, 130900, 130901, 130902, 130910`
-**Fast-Packet-PGNs (Gateway):** `130910, 130912`
+**Fast-Packet-PGNs (Gateway):** `130910, 130912, 130913`
 
 ---
 
@@ -482,3 +509,4 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | 130910 | Gateway → Pi         | Gateway (auto) → Pi     | VE.Direct Extended (Custom) – alle 5 Geräte |
 | 130911 | Pi → Gateway         | Pi (100) → broadcast    | Inverter-Steuerung (veraltet, Fallback für 61184) |
 | 130912 | Gateway → Pi         | Gateway (auto) → Pi     | Solar Extended (Custom) – MPPT 75/15 |
+| 130913 | Gateway → Pi         | Gateway (auto) → Pi     | DC-DC Extended (Custom) – Orion-XS |
