@@ -342,6 +342,15 @@
     .dt-flag  { font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
     .dt-flag-warn { background: rgba(234,179,8,.18); color: var(--yellow); }
     .dt-flag-err  { background: rgba(239,68,68,.18);  color: var(--red); }
+    .dt-cell-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+    .dt-cell { background: var(--surface2,var(--border)); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; }
+    .dt-cell-nr  { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .dt-cell-v   { font-size: 15px; font-weight: 700; color: var(--text1); }
+    .dt-cell-t   { font-size: 10px; color: var(--text3); }
+    .dt-cell-lo  { border-color: var(--red);    background: rgba(239,68,68,.08); }
+    .dt-cell-lo .dt-cell-v { color: var(--red); }
+    .dt-cell-hi  { border-color: var(--green);  background: rgba(34,197,94,.08); }
+    .dt-cell-hi .dt-cell-v { color: var(--green); }
 
     /* Charts-only Grid (für battOverlay nach Umbau) */
     .bd-pg-charts-only {

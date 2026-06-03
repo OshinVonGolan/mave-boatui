@@ -165,6 +165,32 @@ VE.Direct sendet `OR = 0x00000080` als ASCII. `strtol(..., 10)` gibt 0! Richtig:
 uint32_t orVal = (uint32_t)strtoul(orStr, &end, 0);  // base 0 = auto-detect hex
 ```
 
+### PGN 127507 Byte-Layout — Nibble-Packing
+Byte 0 ist NICHT der volle device instance Wert:
+```
+byte 0 bits 0–3:  device instance   → data[0] & 0x0F
+byte 0 bits 4–7:  battery instance  → (data[0] >> 4) & 0x0F
+byte 1 bits 0–3:  charge state      → data[1] & 0x0F
+```
+Falsch: `inst = data[0]` (gibt 32, 64, ... statt 0, 1, 3 wenn battery instance ≠ 0).
+Richtig: `inst = data[0] & 0x0F`. Außerdem muss 127507 in `_INSTANCE_PGNS` stehen, sonst doppeltes Tracking (einmal mit `None`, einmal mit Instanz).
+
+### Inverter-Toggle — Optimistic UI
+Der Toggle soll sofort umschalten, nicht erst nach Bus-Bestätigung (~5–10 s).
+Pattern in `ws.js`:
+```js
+// 1. Sofort: _invCurrentState setzen + Lock für 20 s
+_invCurrentState = isOn ? 'Aus' : 'Aktiv';
+_invLockUntil    = Date.now() + 20000;
+_invPending      = !isOn;   // "Startet…"-Label solange Bus nicht bestätigt
+updateInverterCard({ state: _invCurrentState });  // sofort rendern
+// 2. API async senden
+setInverterMode(newMode);
+// 3. In updateInverterCard: _invPending = false sobald state === 'Aktiv' vom Bus
+// 4. Bei API-Fehler: optimistisches Update rückgängig machen
+```
+Lock-Zeit groß genug wählen (20 s) — der Inverter braucht ~5–10 s zum Hochfahren, erst dann kommt CS=9 per VE.Direct zurück.
+
 ### BoatState.to_dict() — `_last_seen` herausfiltern
 `charger._last_seen` ist ein internes float, darf nicht ins JSON:
 ```python

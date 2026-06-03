@@ -378,6 +378,27 @@ function _tileBms(bms) {
     bms.alarm_min_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu niedrig</span>' : '',
     bms.alarm_max_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu hoch</span>' : '',
   ].filter(Boolean).join('');
+
+  // Zellen-Grid: 2×2 (bzw. n×2) mit Spannung + optionaler Temperatur
+  const cells = bms.cells ?? [];
+  let cellGrid = '';
+  if (cells.length > 0) {
+    const lo = bms.lowest_cell_v, hi = bms.highest_cell_v;
+    const cellHtml = cells.map((c, i) => {
+      const v = c.voltage != null ? c.voltage.toFixed(3) : '--';
+      const t = c.temp    != null ? ` · ${c.temp.toFixed(1)}°` : '';
+      const isLo = lo != null && c.voltage != null && Math.abs(c.voltage - lo) < 0.001;
+      const isHi = hi != null && c.voltage != null && Math.abs(c.voltage - hi) < 0.001;
+      const cls  = isLo ? ' dt-cell-lo' : isHi ? ' dt-cell-hi' : '';
+      return `<div class="dt-cell${cls}">
+        <span class="dt-cell-nr">#${i + 1}</span>
+        <span class="dt-cell-v">${v}<span class="dt-unit"> V</span></span>
+        ${t ? `<span class="dt-cell-t">${t}</span>` : ''}
+      </div>`;
+    }).join('');
+    cellGrid = `<div class="dt-cell-grid">${cellHtml}</div>`;
+  }
+
   const body = `
     <div class="dt-kvgrid">
       ${_kv('Spannung',    bms.voltage       != null ? bms.voltage.toFixed(2) : null, 'V')}
@@ -387,11 +408,9 @@ function _tileBms(bms) {
       ${_kv('Verbleibend', bms.remaining_kwh != null ? (bms.remaining_kwh * 1000).toFixed(0) : null, 'Wh')}
       ${_kv('Lade-A',      bms.current_charge    != null ? bms.current_charge.toFixed(2) : null, 'A')}
       ${_kv('Entlade-A',   bms.current_discharge != null ? bms.current_discharge.toFixed(2) : null, 'A')}
-      ${_kv('Zellen',      bms.cell_count)}
-      ${bms.lowest_cell_v  != null ? _kv('Niedrigste Zelle', `${bms.lowest_cell_v.toFixed(3)} V (#${bms.lowest_cell_nr ?? '?'})`) : ''}
-      ${bms.highest_cell_v != null ? _kv('Höchste Zelle',    `${bms.highest_cell_v.toFixed(3)} V (#${bms.highest_cell_nr ?? '?'})`) : ''}
       ${bms.lowest_temp    != null ? _kv('Temp. min/max', `${bms.lowest_temp.toFixed(1)} / ${(bms.highest_temp??0).toFixed(1)} °C`) : ''}
     </div>
+    ${cellGrid}
     ${flags ? `<div class="dt-flags">${flags}</div>` : ''}`;
   const socTxt = bms.soc != null ? `SOC ${bms.soc}%` : '';
   return _tile('🔋', '123SmartBMS', socTxt, body, true);
