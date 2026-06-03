@@ -35,7 +35,7 @@
       <span class="topbar-batt-pct" id="topbarBattPct">--%</span>
     </div>
     <!-- Desktop: alle Buttons sichtbar -->
-    <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
+    <button class="icon-btn burger-hide-full" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M1.5 9a14 14 0 0 1 21 0"/>
@@ -69,7 +69,7 @@
         <path d="M9 12h6M9 16h4"/>
       </svg>
     </button>
-    <button class="icon-btn" id="settingsBtn" onclick="openSettings()" title="Einstellungen">
+    <button class="icon-btn burger-hide" id="settingsBtn" onclick="openSettings()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -103,6 +103,10 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
           Boot-Aufgaben
         </button>
+        <button class="burger-item" onclick="closeBurger();openSettings()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Einstellungen
+        </button>
       </div>
     </div>
   </div>
@@ -123,15 +127,15 @@
     <div class="gauge-wrap" style="position:relative">
       <div id="bmsRelayRow" style="display:none;position:absolute;top:8px;left:0;flex-direction:column;gap:5px;align-items:flex-start">
         <span style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:3px;width:100%;display:block;line-height:1">BMS</span>
-        <div style="display:flex;align-items:center;gap:5px;height:18px">
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="bmsRelayChargeDot" class="shore-dot"></div>
           <span style="font-size:11px;color:var(--text3);line-height:1">Laden</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px;height:18px">
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="bmsRelayDischargeDot" class="shore-dot"></div>
           <span style="font-size:11px;color:var(--text3);line-height:1">Entladen</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px;height:18px">
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="cellHealthDot" class="shore-dot"></div>
           <span style="font-size:11px;color:var(--text3);line-height:1">Zellen</span>
         </div>
@@ -140,15 +144,18 @@
         <span class="src-bar-hd">Quellen</span>
         <div class="src-bar" id="srcBarCharger">
           <div class="src-bar-fill" id="srcBarChargerFill"></div>
-          <span class="src-bar-text" id="srcBarChargerTxt">Lader</span>
+          <span class="src-bar-text" id="srcBarChargerTxt">Charger</span>
+          <span class="src-bar-text src-bar-text-dark">Charger</span>
         </div>
         <div class="src-bar" id="srcBarSolar">
           <div class="src-bar-fill" id="srcBarSolarFill"></div>
           <span class="src-bar-text" id="srcBarSolarTxt">Solar</span>
+          <span class="src-bar-text src-bar-text-dark">Solar</span>
         </div>
         <div class="src-bar" id="srcBarAlt">
           <div class="src-bar-fill" id="srcBarAltFill"></div>
-          <span class="src-bar-text" id="srcBarAltTxt">Alt.</span>
+          <span class="src-bar-text" id="srcBarAltTxt">Alternator</span>
+          <span class="src-bar-text src-bar-text-dark">Alternator</span>
         </div>
       </div>
       <svg class="gauge-svg" viewBox="0 0 160 112">

@@ -165,13 +165,19 @@ function _setSourceDot(dotId, active) {
 
 // maxA: Maximalstrom für die Bar (Lader/Orion=50A, Solar=30A, Alt.=80A)
 function _updateSrcBar(barId, fillId, txtId, currentA, maxA, label) {
-  const fill = $(fillId), txt = $(txtId);
-  if (!fill || !txt) return;
-  const a = currentA ?? 0;
+  const bar = $(barId), fill = $(fillId), txt = $(txtId);
+  if (!fill || !txt || !bar) return;
+  const a   = currentA ?? 0;
   const active = a > 0.2;
-  fill.style.width      = active ? Math.min(100, (a / maxA) * 100) + '%' : '0%';
+  const pct = active ? Math.min(100, (a / maxA) * 100) : 0;
+  fill.style.width      = pct + '%';
   fill.style.background = active ? 'var(--green)' : 'transparent';
-  txt.textContent       = label;
+  // Heller Text: sichtbar rechts vom Fill (auf dunklem Hintergrund)
+  txt.textContent  = label;
+  txt.style.clipPath = pct > 0 ? `inset(0 0 0 ${pct}%)` : '';
+  // Dunkler Text: sichtbar links vom Fill (auf grünem Hintergrund)
+  const dark = bar.querySelector('.src-bar-text-dark');
+  if (dark) { dark.textContent = label; dark.style.clipPath = `inset(0 ${100 - pct}% 0 0)`; }
 }
 
 function updatePowerSources(data) {
