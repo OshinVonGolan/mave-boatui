@@ -142,8 +142,8 @@ function updateWartungHomeTile() {
   const burgerWart = $('burgerWartungBtn');
   if (burgerWart) burgerWart.style.color = overdue > 0 ? 'var(--red)' : '';
   body.innerHTML = html;
-  // Nach dem Paint: abgeschnittene Zeilen entfernen und "+N weitere" anzeigen
-  requestAnimationFrame(() => _trimWartungRows(body, card));
+  // Doppeltes rAF: sicherstellt dass Layout vollständig berechnet ist
+  requestAnimationFrame(() => requestAnimationFrame(() => _trimWartungRows(body, card)));
 }
 
 async function openWartung() {
