@@ -122,21 +122,21 @@
 
     <div class="gauge-wrap" style="position:relative">
       <div id="bmsRelayRow" style="display:none;position:absolute;top:8px;left:0;flex-direction:column;gap:5px;align-items:flex-start">
-        <span style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:3px;width:100%;display:block">BMS</span>
-        <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:3px;width:100%;display:block;line-height:1">BMS</span>
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="bmsRelayChargeDot" class="shore-dot"></div>
-          <span style="font-size:11px;color:var(--text3)">Laden</span>
+          <span style="font-size:11px;color:var(--text3);line-height:1">Laden</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="bmsRelayDischargeDot" class="shore-dot"></div>
-          <span style="font-size:11px;color:var(--text3)">Entladen</span>
+          <span style="font-size:11px;color:var(--text3);line-height:1">Entladen</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
+        <div style="display:flex;align-items:center;gap:5px;height:15px">
           <div id="cellHealthDot" class="shore-dot"></div>
-          <span style="font-size:11px;color:var(--text3)">Zellen</span>
+          <span style="font-size:11px;color:var(--text3);line-height:1">Zellen</span>
         </div>
       </div>
-      <div id="srcDotsRow" style="position:absolute;top:8px;right:0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+      <div id="srcDotsRow" style="position:absolute;top:8px;right:0;display:flex;flex-direction:column;gap:5px;align-items:flex-end">
         <span class="src-bar-hd">Quellen</span>
         <div class="src-bar" id="srcBarCharger">
           <div class="src-bar-fill" id="srcBarChargerFill"></div>
