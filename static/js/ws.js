@@ -171,8 +171,7 @@ function _updateSrcBar(barId, fillId, txtId, currentA, maxA, label) {
   const active = a > 0.2;
   fill.style.width      = active ? Math.min(100, (a / maxA) * 100) + '%' : '0%';
   fill.style.background = active ? 'var(--green)' : 'transparent';
-  txt.textContent       = active ? `${label} ${a.toFixed(1)}A` : label;
-  txt.style.color       = active ? 'var(--text1)' : 'var(--text3)';
+  txt.textContent       = label;
 }
 
 function updatePowerSources(data) {
