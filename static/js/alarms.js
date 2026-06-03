@@ -159,6 +159,10 @@ function updateAlarmBadge(count) {
   const badge = $('alarmBadge');
   badge.textContent = count;
   badge.classList.toggle('hidden', count === 0);
+  // Burger-Menü: Alarm-Count + roter Punkt auf Burger-Button
+  const bc = $('burgerAlarmCount');
+  if (bc) { bc.textContent = count; bc.classList.toggle('hidden', count === 0); }
+  $('burgerBtn')?.classList.toggle('has-alarm', count > 0);
 }
 
 function timeAgo(ts) {

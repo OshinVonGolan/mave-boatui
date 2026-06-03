@@ -487,9 +487,9 @@ function _tileInverter(inv) {
   const body = `
     <div class="dt-kvgrid">
       ${_kv('Zustand',     inv.state)}
-      ${_kv('AC-Spannung', inv.ac_voltage != null ? inv.ac_voltage.toFixed(1) : null, 'V')}
-      ${_kv('AC-Strom',    inv.ac_current != null ? inv.ac_current.toFixed(1) : null, 'A')}
-      ${_kv('AC-Leistung', inv.power      != null ? Math.round(inv.power)     : null, 'W', isActive ? 'val-orange' : '')}
+      ${_kv('AC-Spannung', (isActive && inv.ac_voltage != null) ? inv.ac_voltage.toFixed(1) : null, 'V')}
+      ${_kv('AC-Strom',    (isActive && inv.ac_current != null) ? inv.ac_current.toFixed(1) : null, 'A')}
+      ${_kv('AC-Leistung', (isActive && inv.power != null) ? Math.round(inv.power) : null, 'W', 'val-orange')}
       ${_kv('DC-Spannung', inv.dc_voltage != null ? inv.dc_voltage.toFixed(3) : null, 'V')}
       ${_kv('DC-Strom',    inv.dc_current != null ? inv.dc_current.toFixed(3) : null, 'A')}
     </div>`;

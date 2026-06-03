@@ -349,7 +349,7 @@ function updateInverterCard(inv, charger) {
 
   // Tiles
   const vEl = $('invAcV');
-  if (vEl) vEl.textContent = inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) : '--';
+  if (vEl) vEl.textContent = (isActive && inv.ac_voltage != null) ? inv.ac_voltage.toFixed(0) : '--';
   const pwEl = $('invPowerVal');
   if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
 

@@ -64,6 +64,13 @@
       padding: 9px 12px; border-radius: 8px; font-size: 14px; text-align: left;
       display: flex; align-items: center; gap: 10px; transition: background .12s; }
     .burger-item:hover { background: var(--surface2); }
+    .burger-alarm-count { background: var(--red); color: #fff; border-radius: 999px;
+      font-size: 10px; font-weight: 700; padding: 1px 6px; margin-left: 4px; }
+    .burger-alarm-count.hidden { display: none; }
+    /* Roter Punkt auf dem Burger-Button wenn Alarme aktiv */
+    #burgerBtn.has-alarm::after { content: ''; position: absolute; top: 4px; right: 4px;
+      width: 7px; height: 7px; background: var(--red); border-radius: 50%; border: 1.5px solid var(--surface); }
+    #burgerBtn { position: relative; }
     @media (max-width: 600px) {
       .burger-hide { display: none !important; }
       .burger-wrap { display: block; }
