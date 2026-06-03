@@ -163,6 +163,18 @@ function _setSourceDot(dotId, active) {
   el.style.boxShadow   = active ? '0 0 4px var(--green)' : 'none';
 }
 
+// maxA: Maximalstrom für die Bar (Lader/Orion=50A, Solar=30A, Alt.=80A)
+function _updateSrcBar(barId, fillId, txtId, currentA, maxA, label) {
+  const fill = $(fillId), txt = $(txtId);
+  if (!fill || !txt) return;
+  const a = currentA ?? 0;
+  const active = a > 0.2;
+  fill.style.width      = active ? Math.min(100, (a / maxA) * 100) + '%' : '0%';
+  fill.style.background = active ? 'var(--green)' : 'transparent';
+  txt.textContent       = active ? `${label} ${a.toFixed(1)}A` : label;
+  txt.style.color       = active ? 'var(--text1)' : 'var(--text3)';
+}
+
 function updatePowerSources(data) {
   let anyVisible = false;
 
@@ -180,11 +192,13 @@ function updatePowerSources(data) {
 
   $('srcRow').classList.toggle('hidden', !anyVisible);
 
-  // Ladequellen-Dots rechts neben dem Gauge (immer sichtbar)
-  const solarPower = (data.solar?.power ?? 0) + (data.solar2?.power ?? 0) + (data.solar3?.power ?? 0);
-  _setSourceDot('srcDotCharger', (data.charger?.active === true) || (data.charger?.power ?? 0) > 0);
-  _setSourceDot('srcDotSolar',   solarPower > 5);
-  _setSourceDot('srcDotAlt',     (data.alternator?.power ?? 0) > 5);
+  // Progress-Bars rechts neben dem Gauge
+  _updateSrcBar('srcBarCharger', 'srcBarChargerFill', 'srcBarChargerTxt',
+    data.charger?.dc_current, 50, 'Lader');
+  _updateSrcBar('srcBarSolar',   'srcBarSolarFill',   'srcBarSolarTxt',
+    data.solar?.current,      30, 'Solar');
+  _updateSrcBar('srcBarAlt',     'srcBarAltFill',     'srcBarAltTxt',
+    data.alternator?.current, 80, 'Alt.');
 
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };

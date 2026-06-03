@@ -136,19 +136,19 @@
           <span style="font-size:11px;color:var(--text3)">Zellen</span>
         </div>
       </div>
-      <div id="srcDotsRow" style="display:flex;position:absolute;top:8px;right:0;flex-direction:column;gap:5px;align-items:flex-end">
-        <span style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:3px;width:100%;text-align:right;display:block">Quellen</span>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:11px;color:var(--text3)">Lader</span>
-          <div id="srcDotCharger" class="shore-dot"></div>
+      <div id="srcDotsRow" style="position:absolute;top:8px;right:0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        <span class="src-bar-hd">Quellen</span>
+        <div class="src-bar" id="srcBarCharger">
+          <div class="src-bar-fill" id="srcBarChargerFill"></div>
+          <span class="src-bar-text" id="srcBarChargerTxt">Lader</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:11px;color:var(--text3)">Solar</span>
-          <div id="srcDotSolar" class="shore-dot"></div>
+        <div class="src-bar" id="srcBarSolar">
+          <div class="src-bar-fill" id="srcBarSolarFill"></div>
+          <span class="src-bar-text" id="srcBarSolarTxt">Solar</span>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:11px;color:var(--text3)">Alt.</span>
-          <div id="srcDotAlt" class="shore-dot"></div>
+        <div class="src-bar" id="srcBarAlt">
+          <div class="src-bar-fill" id="srcBarAltFill"></div>
+          <span class="src-bar-text" id="srcBarAltTxt">Alt.</span>
         </div>
       </div>
       <svg class="gauge-svg" viewBox="0 0 160 112">
