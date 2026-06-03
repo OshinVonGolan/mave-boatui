@@ -53,6 +53,21 @@
     .icon-btn.nav-active { border-color: var(--accent2); color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent2); }
 
+    /* ── Burger-Menü (nur Mobile) ── */
+    .burger-wrap { position: relative; display: none; }
+    .burger-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 6px; min-width: 160px; display: flex; flex-direction: column; gap: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    .burger-menu.hidden { display: none; }
+    .burger-item { background: none; border: none; color: var(--text1); cursor: pointer;
+      padding: 9px 12px; border-radius: 8px; font-size: 14px; text-align: left;
+      display: flex; align-items: center; gap: 10px; transition: background .12s; }
+    .burger-item:hover { background: var(--surface2); }
+    @media (max-width: 600px) {
+      .burger-hide { display: none !important; }
+      .burger-wrap { display: block; }
+    }
     /* ── Main grid ── */
     main { display: grid; gap: var(--gap); padding: var(--gap);
       padding-top: calc(var(--header-h) + var(--gap));
@@ -318,7 +333,12 @@
       border-radius: var(--radius); padding: 14px 16px;
       min-width: 200px; flex: 1 1 200px; display: flex; flex-direction: column; gap: 10px;
     }
-    .dt-card-off { opacity: .65; }
+    /* Status-Farbe als linker Rand — ersetzt dt-card-off Opacity */
+    .dt-card      { border-left: 3px solid var(--border); }
+    .dt-card-ok   { border-left-color: var(--green); }
+    .dt-card-idle { border-left-color: var(--border); }
+    .dt-card-warn { border-left-color: var(--yellow); }
+    .dt-card-err  { border-left-color: var(--red); }
     .dt-head {
       display: flex; align-items: center; gap: 7px;
       font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;

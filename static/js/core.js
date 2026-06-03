@@ -41,3 +41,18 @@ function updateClock() {
 }
 updateClock();
 setInterval(updateClock, 10000);
+
+// ── Burger-Menü (Mobile) ───────────────────────────────────────────────────
+
+function toggleBurger(e) {
+  e?.stopPropagation();
+  $('burgerMenu')?.classList.toggle('hidden');
+}
+function closeBurger() {
+  $('burgerMenu')?.classList.add('hidden');
+}
+// Außerhalb klicken schließt das Menü
+document.addEventListener('click', e => {
+  const wrap = $('burgerWrap');
+  if (wrap && !wrap.contains(e.target)) closeBurger();
+});

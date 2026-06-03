@@ -327,20 +327,27 @@ function _kv(label, val, unit='', cls='') {
   return `<div class="dt-kv${cls ? ' ' + cls : ''}"><span class="dt-lbl">${label}</span><span class="dt-val">${v}</span></div>`;
 }
 
-function _statusDot(active) {
-  return `<span class="dt-dot" style="background:${active ? 'var(--green)' : 'var(--border)'}"></span>`;
-}
+// status: 'ok' | 'idle' | 'warn' | 'err'
+const _DOT_COLOR = { ok:'var(--green)', idle:'var(--border)', warn:'var(--yellow)', err:'var(--red)' };
 
-function _tile(icon, title, statusTxt, bodyHtml, active=true) {
-  return `<div class="dt-card${active ? '' : ' dt-card-off'}">
+function _tile(icon, title, statusTxt, bodyHtml, status='idle') {
+  const dotColor = _DOT_COLOR[status] ?? 'var(--border)';
+  return `<div class="dt-card dt-card-${status}">
     <div class="dt-head">
       <span class="dt-icon">${icon}</span>
       <span class="dt-title">${title}</span>
-      ${_statusDot(active)}
+      <span class="dt-dot" style="background:${dotColor}"></span>
       ${statusTxt ? `<span class="dt-status">${statusTxt}</span>` : ''}
     </div>
     <div class="dt-body">${bodyHtml}</div>
   </div>`;
+}
+
+function _chargerStatus(cs) {
+  if (cs == null) return 'idle';
+  if (cs === 2)  return 'err';   // Fault
+  if (cs === 0)  return 'idle';  // Off
+  return 'ok';                    // Bulk/Absorption/Float/etc.
 }
 
 function _tileBattBoard(b, bms) {
@@ -364,7 +371,8 @@ function _tileBattBoard(b, bms) {
       ${_kv('Starter',     b.starter_voltage != null ? b.starter_voltage.toFixed(2) : null, 'V')}
       ${_kv('Temp.',       b.temperature != null ? b.temperature.toFixed(1) : null, '°C')}
     </div>`;
-  return _tile('⚡', 'Servicebatterie / Shunt', socPct != null ? `${socPct}%` : '', body, true);
+  const shuntStatus = socPct != null && socPct < 20 ? 'warn' : 'ok';
+  return _tile('⚡', 'Servicebatterie / Shunt', socPct != null ? `${socPct}%` : '', body, shuntStatus);
 }
 
 function _tileBms(bms) {
@@ -413,7 +421,8 @@ function _tileBms(bms) {
     ${cellGrid}
     ${flags ? `<div class="dt-flags">${flags}</div>` : ''}`;
   const socTxt = bms.soc != null ? `SOC ${bms.soc}%` : '';
-  return _tile('🔋', '123SmartBMS', socTxt, body, true);
+  const bmsStatus = flags.length ? (bms.comm_error || bms.alarm_min_volt || bms.alarm_max_volt || bms.alarm_min_temp || bms.alarm_max_temp ? 'err' : 'warn') : 'ok';
+  return _tile('🔋', '123SmartBMS', socTxt, body, bmsStatus);
 }
 
 function _tileMppt(solar) {
@@ -433,7 +442,7 @@ function _tileMppt(solar) {
       ${_kv('Ertrag heute',   solar.yield_today_wh    != null ? solar.yield_today_wh    : null, 'Wh')}
       ${_kv('Max heute',      solar.max_power_today_w != null ? solar.max_power_today_w : null, 'W')}
     </div>`;
-  return _tile('☀️', 'MPPT 75/15', state, body, isActive);
+  return _tile('☀️', 'MPPT 75/15', state, body, _chargerStatus(solar.cs));
 }
 
 function _tileOrion(orion) {
@@ -452,7 +461,7 @@ function _tileOrion(orion) {
       ${_kv('Eingangsleistung',  orion.input_power   != null ? Math.round(orion.input_power) : null, 'W')}
       ${orLbl ? _kv('Off Reason', orLbl) : ''}
     </div>`;
-  return _tile('🔄', 'Orion-XS DC-DC', state, body, isActive);
+  return _tile('🔄', 'Orion-XS DC-DC', state, body, _chargerStatus(orion.cs));
 }
 
 function _tileCharger(charger) {
@@ -465,7 +474,8 @@ function _tileCharger(charger) {
       ${_kv('Strom',      charger.dc_current != null ? charger.dc_current.toFixed(3) : null, 'A', 'val-green')}
       ${_kv('Leistung',   charger.power      != null ? Math.round(charger.power)     : null, 'W', 'val-green')}
     </div>`;
-  return _tile('🔌', 'Smart IP43', charger.state ?? '', body, isActive);
+  const chargerCs = charger.cs ?? (charger.state === 'Aus' ? 0 : charger.state ? 1 : null);
+  return _tile('🔌', 'Smart IP43', charger.state ?? '', body, _chargerStatus(chargerCs));
 }
 
 function _tileInverter(inv) {
@@ -480,7 +490,8 @@ function _tileInverter(inv) {
       ${_kv('DC-Spannung', inv.dc_voltage != null ? inv.dc_voltage.toFixed(3) : null, 'V')}
       ${_kv('DC-Strom',    inv.dc_current != null ? inv.dc_current.toFixed(3) : null, 'A')}
     </div>`;
-  return _tile('⚡', 'Inverter 2000VA', inv.state ?? '', body, isActive);
+  const invStatus = inv.state === 'Fehler' ? 'err' : isActive ? 'ok' : 'idle';
+  return _tile('⚡', 'Inverter 2000VA', inv.state ?? '', body, invStatus);
 }
 
 function _tileStarter(b) {
@@ -491,7 +502,7 @@ function _tileStarter(b) {
       ${_kv('Min',      _starterMin != null ? _starterMin.toFixed(2) : null, 'V')}
       ${_kv('Max',      _starterMax != null ? _starterMax.toFixed(2) : null, 'V')}
     </div>`;
-  return _tile('🚗', 'Starterbatterie', '', body, true);
+  return _tile('🚗', 'Starterbatterie', '', body, 'ok');
 }
 
 function renderDeviceTiles(data) {

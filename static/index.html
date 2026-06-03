@@ -34,7 +34,8 @@
       </svg>
       <span class="topbar-batt-pct" id="topbarBattPct">--%</span>
     </div>
-    <button class="icon-btn" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
+    <!-- Desktop: alle Buttons sichtbar -->
+    <button class="icon-btn burger-hide" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <path d="M1.5 9a14 14 0 0 1 21 0"/>
@@ -45,7 +46,7 @@
         <div class="conn-inet-dot" id="connInetDot"></div>
       </div>
     </button>
-    <button class="icon-btn" id="wartungTopBtn" onclick="openWartung()" title="Wartungsplan" style="color:var(--text3)">
+    <button class="icon-btn burger-hide" id="wartungTopBtn" onclick="openWartung()" title="Wartungsplan" style="color:var(--text3)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
       </svg>
@@ -56,12 +57,12 @@
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
     </button>
-    <button class="icon-btn" id="stauplanBtn" onclick="openStauplan()" title="Stauplan">
+    <button class="icon-btn burger-hide" id="stauplanBtn" onclick="openStauplan()" title="Stauplan">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
       </svg>
     </button>
-    <button class="icon-btn" onclick="openMonday()" title="Boot-Aufgaben" id="mondayBtn">
+    <button class="icon-btn burger-hide" onclick="openMonday()" title="Boot-Aufgaben" id="mondayBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
         <rect x="9" y="3" width="6" height="4" rx="1"/>
@@ -74,6 +75,32 @@
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
     </button>
+    <!-- Burger-Button: nur auf Mobile sichtbar -->
+    <div class="burger-wrap" id="burgerWrap">
+      <button class="icon-btn" id="burgerBtn" onclick="toggleBurger(event)" title="Menü">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div class="burger-menu hidden" id="burgerMenu">
+        <button class="burger-item" onclick="closeBurger();openConnectivity()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1.5 9a14 14 0 0 1 21 0"/><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a6 6 0 0 1 7 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/></svg>
+          Internet
+        </button>
+        <button class="burger-item" id="burgerWartungBtn" onclick="closeBurger();openWartung()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          Wartungsplan
+        </button>
+        <button class="burger-item" onclick="closeBurger();openStauplan()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Stauplan
+        </button>
+        <button class="burger-item" onclick="closeBurger();openMonday()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+          Boot-Aufgaben
+        </button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -150,19 +177,16 @@
       </div>
     </div>
 
-    <!-- Solar & Lichtmaschine — nur sichtbar wenn Daten ankommen -->
+    <!-- Lichtmaschine — nur sichtbar wenn Daten ankommen (Solar separat im Detail) -->
     <div class="src-row hidden" id="srcRow">
-      <div class="src-item src-solar" id="srcSolar">
-        <span class="src-icon">☀</span>
-        <span class="src-val" id="solarW">--</span>
-        <span>W Solar</span>
-      </div>
       <div class="src-item src-alt" id="srcAlt">
         <span class="src-icon">⚡</span>
         <span class="src-val" id="altW">--</span>
         <span>W Lichtmaschine</span>
       </div>
     </div>
+    <!-- solarW bleibt im DOM für ws.js Kompatibilität -->
+    <span id="srcSolar" style="display:none"><span id="solarW"></span></span>
 
     <div class="batt-sub">
       <div class="batt-sub-item">Starter <b id="battStarter">--</b> V</div>
