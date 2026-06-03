@@ -67,6 +67,7 @@
     @media (max-width: 600px) {
       .burger-hide { display: none !important; }
       .burger-wrap { display: block; }
+      .header-right { justify-content: flex-end; margin-left: auto; }
     }
     /* ── Main grid ── */
     main { display: grid; gap: var(--gap); padding: var(--gap);

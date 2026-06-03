@@ -391,13 +391,16 @@ function _tileBms(bms) {
   const cells = bms.cells ?? [];
   let cellGrid = '';
   if (cells.length > 0) {
+    const hasMinAlarm = bms.alarm_min_volt;
+    const hasMaxAlarm = bms.alarm_max_volt;
     const lo = bms.lowest_cell_v, hi = bms.highest_cell_v;
     const cellHtml = cells.map((c, i) => {
       const v = c.voltage != null ? c.voltage.toFixed(3) : '--';
       const t = c.temp    != null ? ` · ${c.temp.toFixed(1)}°` : '';
-      const isLo = lo != null && c.voltage != null && Math.abs(c.voltage - lo) < 0.001;
-      const isHi = hi != null && c.voltage != null && Math.abs(c.voltage - hi) < 0.001;
-      const cls  = isLo ? ' dt-cell-lo' : isHi ? ' dt-cell-hi' : '';
+      // Nur Farbe wenn wirklich ein Alarm aktiv ist
+      const isAlarmLo = hasMinAlarm && lo != null && c.voltage != null && Math.abs(c.voltage - lo) < 0.001;
+      const isAlarmHi = hasMaxAlarm && hi != null && c.voltage != null && Math.abs(c.voltage - hi) < 0.001;
+      const cls = isAlarmLo ? ' dt-cell-lo' : isAlarmHi ? ' dt-cell-hi' : '';
       return `<div class="dt-cell${cls}">
         <span class="dt-cell-nr">#${i + 1}</span>
         <span class="dt-cell-v">${v}<span class="dt-unit"> V</span></span>

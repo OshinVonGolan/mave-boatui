@@ -127,11 +127,7 @@ function updateWartungHomeTile() {
   if (dueSoon > 0) html += `<span class="w-badge-pill" style="background:#f59e0b1a;color:#f59e0b">${dueSoon} demnächst</span>`;
   html += '</div>';
 
-  // Max. 4 Tasks anzeigen damit nichts abgeschnitten wird; Rest als "+N weitere" Hinweis
-  const MAX_ROWS = 4;
-  const visible = pending.slice(0, MAX_ROWS);
-  const hidden  = pending.length - visible.length;
-  visible.forEach(({ t, s }) => {
+  pending.forEach(({ t, s }) => {
     html += `<div class="w-home-row">
       <span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
         <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
@@ -141,15 +137,13 @@ function updateWartungHomeTile() {
       <span style="color:${s.color};font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px">${s.label}</span>
     </div>`;
   });
-  if (hidden > 0) {
-    html += `<div style="font-size:11px;color:var(--text3);padding:2px 0 0;text-align:right">+${hidden} weitere →</div>`;
-  }
 
   if (card) card.style.borderColor = overdue > 0 ? '#ef4444' : '#f59e0b';
-  // Burger-Menü-Button: roten Punkt wenn überfällig
   const burgerWart = $('burgerWartungBtn');
   if (burgerWart) burgerWart.style.color = overdue > 0 ? 'var(--red)' : '';
   body.innerHTML = html;
+  // Nach dem Paint: abgeschnittene Zeilen entfernen und "+N weitere" anzeigen
+  requestAnimationFrame(() => _trimWartungRows(body, card));
 }
 
 async function openWartung() {
@@ -420,4 +414,30 @@ function deleteWartungCat(catId) {
   WARTUNG_DATA = WARTUNG_DATA.filter(c => c.id !== catId);
   _wartungSave();
   renderWartung();
+}
+
+function _trimWartungRows(body, card) {
+  if (!body || !card) return;
+  const rows = [...body.querySelectorAll('.w-home-row')];
+  if (!rows.length) return;
+
+  // Unterkante der Kachel (card hat overflow:hidden + max-height)
+  const cardBottom = card.getBoundingClientRect().bottom;
+
+  let cutFrom = rows.length;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].getBoundingClientRect().bottom > cardBottom) {
+      cutFrom = i;
+      break;
+    }
+  }
+
+  if (cutFrom < rows.length) {
+    const hidden = rows.length - cutFrom;
+    for (let i = cutFrom; i < rows.length; i++) rows[i].remove();
+    const el = document.createElement('div');
+    el.style.cssText = 'font-size:11px;color:var(--text3);padding:4px 0 0;text-align:right';
+    el.textContent = `+${hidden} weitere →`;
+    body.appendChild(el);
+  }
 }
