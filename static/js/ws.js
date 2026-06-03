@@ -194,11 +194,11 @@ function updatePowerSources(data) {
 
   // Progress-Bars rechts neben dem Gauge
   _updateSrcBar('srcBarCharger', 'srcBarChargerFill', 'srcBarChargerTxt',
-    data.charger?.dc_current, 50, 'Lader');
+    data.charger?.dc_current, 50, 'Charger');
   _updateSrcBar('srcBarSolar',   'srcBarSolarFill',   'srcBarSolarTxt',
     data.solar?.current,      30, 'Solar');
   _updateSrcBar('srcBarAlt',     'srcBarAltFill',     'srcBarAltTxt',
-    data.alternator?.current, 80, 'Alt.');
+    data.alternator?.current, 80, 'Alternator');
 
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };
