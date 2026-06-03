@@ -49,6 +49,7 @@ let _starterMin = null, _starterMax = null;
 let _serviceMin = null, _serviceMax = null;
 let _lastZelldiff = null;
 let _lastBattery = null;
+let _minConsumedAh = null;  // Shunt consumed_ah: nur kleiner werden erlaubt (mehr verbraucht)
 
 // ── Heute entnommene Energie (aus Shunt-Leistung akkumuliert) ──────────────
 
@@ -226,6 +227,8 @@ function recomputeDailyAhFromHist() {
   }
 
   // Shunt-Ah/Wh aus history.current + history.voltage
+  // Vorgänger-Werte merken — Zähler darf nie rückwärts laufen
+  const prevAh = _todayAhDrawn, prevWh = _todayWhDrawn;
   _todayAhDrawn = 0; _todayWhDrawn = 0;
   const todayShunt = histData.filter(e => e.ts >= midnightTs && e.current != null);
   for (let i = 1; i < todayShunt.length; i++) {
@@ -239,6 +242,10 @@ function recomputeDailyAhFromHist() {
   }
   // _lastShuntTs auf letzten History-Eintrag setzen, oder auf jetzt wenn leer –
   // so wird der nächste _accumTodayWh-Aufruf nicht fälschlich zurückgesetzt.
+  // Nie rückwärts: lokalen Wert beibehalten wenn History nach Reconnect unvollständig
+  _todayAhDrawn = Math.max(_todayAhDrawn, prevAh);
+  _todayWhDrawn = Math.max(_todayWhDrawn, prevWh);
+
   _lastShuntTs = todayShunt.length
     ? todayShunt[todayShunt.length - 1].ts
     : Date.now() / 1000;
@@ -254,6 +261,9 @@ function updateBattery(b) {
   $('battCard').style.display = hasData ? '' : 'none';
   if (!hasData) return;
   _lastBattery = b;
+  // consumed_ah ist negativ (Shunt-Zähler); nur updaten wenn Wert kleiner wird (mehr verbraucht)
+  if (b.consumed_ah != null && (_minConsumedAh === null || b.consumed_ah < _minConsumedAh))
+    _minConsumedAh = b.consumed_ah;
   updateChargeStatus(b);
   const vEl = $('battV'); vEl.textContent = fmtV(b.voltage); vEl.className = colorClass(b.voltage, 12.6, 12.0);
   $('battStarter').textContent = fmtV(b.starter_voltage);
@@ -363,7 +373,7 @@ function _tileBattBoard(b, bms) {
       ${_kv('Spannung',    b.voltage    != null ? b.voltage.toFixed(2) : null, 'V')}
       ${_kv('Strom',       b.current    != null ? b.current.toFixed(1) : null, 'A', b.current < 0 ? 'val-orange' : 'val-green')}
       ${_kv('Leistung',    b.power      != null ? Math.round(b.power)  : null, 'W', b.power < 0 ? 'val-orange' : 'val-green')}
-      ${_kv('Verbraucht',  b.consumed_ah != null ? b.consumed_ah.toFixed(1) : null, 'Ah')}
+      ${_kv('Verbraucht',  _minConsumedAh != null ? _minConsumedAh.toFixed(1) : null, 'Ah')}
       ${_kv('Min',         b.min_voltage != null ? b.min_voltage.toFixed(3) : null, 'V')}
       ${_kv('Max',         b.max_voltage != null ? b.max_voltage.toFixed(3) : null, 'V')}
       ${_kv('Zyklen',      b.cycles)}
