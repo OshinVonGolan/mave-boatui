@@ -192,10 +192,9 @@ function updatePowerSources(data) {
     }
   }
 
-  const _altPower   = data.alternator?.power   ?? data.orion?.output_power;
   const _altCurrent = data.alternator?.current ?? data.orion?.dc_current;
-  if (data.solar?.power != null) showSource('srcSolar', 'solarW', data.solar.power);
-  if (_altPower != null)         showSource('srcAlt',   'altW',   _altPower);
+  if (data.solar?.power != null)      showSource('srcSolar', 'solarW', data.solar.power);
+  if (data.alternator?.power != null) showSource('srcAlt',   'altW',   data.alternator.power);
 
   $('srcRow').classList.toggle('hidden', !anyVisible);
 
@@ -205,7 +204,7 @@ function updatePowerSources(data) {
   _updateSrcBar('srcBarSolar',   'srcBarSolarFill',   'srcBarSolarTxt',
     data.solar?.current,      30, 'Solar');
   _updateSrcBar('srcBarAlt',     'srcBarAltFill',     'srcBarAltTxt',
-    _altCurrent, 80, 'Alternator');
+    _altCurrent, 50, 'Alternator');
 
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };
