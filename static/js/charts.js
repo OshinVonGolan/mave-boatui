@@ -378,22 +378,31 @@ function renderCharts() {
   }
 }
 
-// Scroll-Lock: position:fixed verhindert Background-Scroll auf iOS
-// ohne touch-events zu blockieren (overflow:hidden auf body tut das)
+// Scroll-Lock: position:fixed verhindert Background-Scroll ohne touch-events
+// zu blockieren (overflow:hidden auf body killt Touch auf Mobile).
+// MutationObserver reagiert automatisch auf jede Overlay-Änderung —
+// kein Patchen der einzelnen openXxx()-Funktionen nötig.
 let _scrollLockY = 0;
 function _scrollLock(lock) {
-  if (lock) {
+  if (lock && document.body.style.position !== 'fixed') {
     _scrollLockY = window.scrollY;
-    document.body.style.position  = 'fixed';
-    document.body.style.top       = `-${_scrollLockY}px`;
-    document.body.style.width     = '100%';
-  } else {
-    document.body.style.position  = '';
-    document.body.style.top       = '';
-    document.body.style.width     = '';
+    document.body.style.position = 'fixed';
+    document.body.style.top      = `-${_scrollLockY}px`;
+    document.body.style.width    = '100%';
+  } else if (!lock && document.body.style.position === 'fixed') {
+    document.body.style.position = '';
+    document.body.style.top      = '';
+    document.body.style.width    = '';
     window.scrollTo(0, _scrollLockY);
   }
 }
+
+// Beobachte alle .overlay-Elemente auf class-Änderungen
+new MutationObserver(() => {
+  const anyOpen = [...document.querySelectorAll('.overlay')]
+    .some(el => !el.classList.contains('hidden'));
+  _scrollLock(anyOpen);
+}).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
 function _closeAllOverlays() {
   document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
