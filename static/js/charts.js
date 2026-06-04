@@ -378,6 +378,23 @@ function renderCharts() {
   }
 }
 
+// Scroll-Lock: position:fixed verhindert Background-Scroll auf iOS
+// ohne touch-events zu blockieren (overflow:hidden auf body tut das)
+let _scrollLockY = 0;
+function _scrollLock(lock) {
+  if (lock) {
+    _scrollLockY = window.scrollY;
+    document.body.style.position  = 'fixed';
+    document.body.style.top       = `-${_scrollLockY}px`;
+    document.body.style.width     = '100%';
+  } else {
+    document.body.style.position  = '';
+    document.body.style.top       = '';
+    document.body.style.width     = '';
+    window.scrollTo(0, _scrollLockY);
+  }
+}
+
 function _closeAllOverlays() {
   document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
   clearInterval(netTimer);           netTimer = null;
@@ -386,7 +403,7 @@ function _closeAllOverlays() {
   lightDetailOpen = false;
   closePresetSave();
   _navActive(null);
-  _overlayScrollLock(false);
+  _scrollLock(false);
 }
 
 let _weekData = null;
