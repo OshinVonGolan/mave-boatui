@@ -418,11 +418,14 @@ function deleteWartungCat(catId) {
 
 function _trimWartungRows(body, card) {
   if (!body || !card) return;
+  const cardRect = card.getBoundingClientRect();
+  // Karte noch nicht korrekt gerendert (z.B. Mobile vor erstem Paint)
+  if (cardRect.height < 20) return;
   const rows = [...body.querySelectorAll('.w-home-row')];
   if (!rows.length) return;
 
-  // Unterkante der Kachel (card hat overflow:hidden + max-height)
-  const cardBottom = card.getBoundingClientRect().bottom;
+  // 2px Buffer: verhindert dass minimal überstehende Zeilen sichtbar bleiben
+  const cardBottom = cardRect.bottom - 2;
 
   let cutFrom = rows.length;
   for (let i = 0; i < rows.length; i++) {
