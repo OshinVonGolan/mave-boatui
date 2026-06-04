@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.86'
+VERSION  = _git_semver() or '1.16.87'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -98,7 +98,8 @@ STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 
 state   = BoatState()
-can_if  = CanInterface(channel='can0', state=state)
+can_if  = CanInterface(channel='can0', state=state,
+                       stats_path=BASE_DIR / 'daily_stats.json')
 alarms  = AlarmEngine()
 
 _CONN_FILE = BASE_DIR / 'connectivity.json'
@@ -294,6 +295,11 @@ async def get_history():
 @app.get('/api/status')
 async def get_status():
     return state.to_dict()
+
+
+@app.get('/api/daily-stats')
+async def get_daily_stats(days: int = 7):
+    return can_if.get_daily_stats(min(days, 30))
 
 
 @app.get('/api/network')

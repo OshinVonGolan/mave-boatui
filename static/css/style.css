@@ -414,21 +414,29 @@
       max-width: 1500px; margin: 0 auto; padding: 0 16px 16px; box-sizing: border-box;
     }
     .bd-pg-charts-only .bd-pg-chart { grid-column: 1 / -1; }
+    /* ── 7-Tage-Chart Wrapper ── */
+    .bd-week-wrap { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin: 0 16px 12px; overflow: hidden; }
+
+    /* ── Mobile Zellen (nur auf Mobile sichtbar) ── */
+    .bd-mobile-cells { display: none; }
+
     @media (max-width: 639px) {
       .bd-pg-charts-only { grid-template-columns: 1fr; padding: 0 10px 12px; }
-      /* Mobile: Device-Tiles 2-spaltig, kompakter */
+      /* Mobile Battery-Detail: nur Graph + 7-Tage + Pie + Zellen */
+      #deviceTilesSection { display: none; }
+      .bd-mobile-cells    { display: block; }
+      .bd-week-wrap { margin: 0 8px 10px; }
+      /* Device-Tiles auf Desktop: 2-spaltig, kompakter */
       .dt-section { padding: 10px 10px 4px; gap: 8px;
         display: grid; grid-template-columns: 1fr 1fr; }
       .dt-card { min-width: 0; padding: 10px 11px; gap: 7px; font-size: 13px; }
       .dt-kvgrid { grid-template-columns: 1fr; gap: 3px 8px; }
       .dt-val { font-size: 13px; }
       .dt-lbl { font-size: 9px; }
-      /* Servicebatterie und BMS bekommen volle Breite (mehr Inhalt) */
       .dt-card:nth-child(1), .dt-card:nth-child(2) { grid-column: 1 / -1; }
-      /* Zellen-Grid bleibt 2×2 aber kompakter */
       .dt-cell { padding: 4px 7px; }
       .dt-cell-v { font-size: 13px; }
-      .dt-soc-num { font-size: 18px; }
     }
 
     /* Altes Grid (nicht mehr für battOverlay genutzt, kann bleiben) */

@@ -2,8 +2,11 @@
 import asyncio
 import logging
 import time
+from pathlib import Path
 
 import can
+
+from daily_stats import DailyStatsTracker
 
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
@@ -97,7 +100,7 @@ class BoatState:
 class CanInterface:
     """Verwaltet den CAN-Bus in einem eigenen Thread und benachrichtigt asyncio."""
 
-    def __init__(self, channel: str, state: BoatState):
+    def __init__(self, channel: str, state: BoatState, stats_path: Path | None = None):
         self.channel      = channel
         self.state        = state
         self._bus         = None
@@ -114,6 +117,7 @@ class CanInterface:
         self._device_addrclaim: dict = {}  # src → name_bytes (aus PGN 60928)
         self._service_instance: int = 0
         self._starter_instance: int = 1
+        self._daily = DailyStatsTracker(stats_path or Path('daily_stats.json'))
 
     def set_battery_instances(self, service: int, starter: int):
         self._service_instance = service
@@ -325,6 +329,12 @@ class CanInterface:
                     if self.state.battery.get(k) != v:
                         self.state.battery[k] = v
                         changed = True
+                # Tägliche Energie aus Shunt-Strom (genauer als BMS)
+                self._daily.update(
+                    current_a=self.state.battery.get('current'),
+                    soc=p.get('soc'),
+                    ts=time.time(),
+                )
 
         elif pgn == 130312:
             p = parse_temperature(payload)
@@ -337,6 +347,7 @@ class CanInterface:
         elif pgn == 130901:
             p = parse_bms_pack(payload)
             if p:
+                p = self._correct_bms_currents(p)
                 for k, v in p.items():
                     if self.state.bms.get(k) != v:
                         self.state.bms[k] = v
@@ -462,6 +473,46 @@ class CanInterface:
 
         if changed:
             self._schedule_broadcast()
+
+    def get_daily_stats(self, n: int = 7) -> list[dict]:
+        return self._daily.get_last_n_days(n)
+
+    def _correct_bms_currents(self, p: dict) -> dict:
+        """Korrigiert BMS-Lade-/Entladestrom proportional anhand des genaueren Shunt-Stroms.
+
+        Wenn BMS-Netto und Shunt um mehr als 5 A abweichen, wird der BMS-Wert
+        so skaliert, dass die Differenz (charge − discharge) dem Shunt entspricht.
+        Das BMS-Verhältnis (wie viel Laden vs. Entladen) bleibt erhalten.
+        """
+        shunt = self.state.battery.get('current')
+        if shunt is None:
+            return p
+        charge    = p.get('current_charge')    or 0.0
+        discharge = p.get('current_discharge') or 0.0
+        bms_net   = charge - discharge   # positiv = Laden
+
+        # Beide nahe Null → kein Handlungsbedarf
+        if abs(bms_net) < 0.5 and abs(shunt) < 0.5:
+            return p
+
+        diff = abs(bms_net - shunt)
+        if diff <= 5.0:
+            return p   # Abweichung akzeptabel
+
+        p = dict(p)    # Kopie — Original nicht ändern
+        if abs(bms_net) > 0.1:
+            # Proportionale Skalierung: Verhältnis charge/discharge bleibt gleich
+            factor = shunt / bms_net
+            p['current_charge']    = round(max(0.0, charge    * factor), 2)
+            p['current_discharge'] = round(max(0.0, discharge * factor), 2)
+        else:
+            # BMS meldet ~0, Shunt sagt etwas anderes → direkt aus Shunt ableiten
+            if shunt > 0:
+                p['current_charge'],    p['current_discharge'] = round(shunt, 2), 0.0
+            else:
+                p['current_charge'],    p['current_discharge'] = 0.0, round(abs(shunt), 2)
+        p['current_total'] = round(shunt, 2)
+        return p
 
     def _schedule_broadcast(self):
         """Sendet state-Update an alle WS-Clients (debounced, max 20/s)."""

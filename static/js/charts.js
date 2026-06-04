@@ -389,13 +389,133 @@ function _closeAllOverlays() {
   _overlayScrollLock(false);
 }
 
+let _weekData = null;
+
 function openBattDetail() {
   _closeAllOverlays();
   history.pushState({ overlay: 'battery' }, '', '#battery');
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
   if (_lastData) renderDeviceTiles(_lastData);
-  setTimeout(renderCharts, 50);
+  _renderMobileCells();
+  // Graph erst nach zwei Frames — Canvas hat dann korrekte clientWidth/clientHeight
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    renderCharts();
+    _loadAndRenderWeekChart();
+  }));
+}
+
+function _loadAndRenderWeekChart() {
+  fetch('/api/daily-stats?days=7', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(data => { _weekData = data; _renderWeekChart(data); })
+    .catch(() => {});
+}
+
+function _renderWeekChart(data) {
+  const canvas = $('weekChart');
+  if (!canvas || !data || !data.length) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W   = canvas.clientWidth;
+  const H   = canvas.clientHeight;
+  if (!W || !H) return;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const PAD = { t: 8, r: 12, b: 28, l: 36 };
+  const CW = W - PAD.l - PAD.r;
+  const CH = H - PAD.t - PAD.b;
+
+  // Maximalwert für Ah-Achse
+  const maxAh = Math.max(
+    ...data.map(d => Math.max(d.charged_ah || 0, d.discharged_ah || 0)), 1
+  );
+  const yAh  = v  => PAD.t + CH * (1 - v / maxAh);
+  const ySoc = v  => PAD.t + CH * (1 - v / 100);
+
+  // Hintergrund
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, W, H);
+
+  // Y-Achsen-Ticks (Ah links)
+  ctx.fillStyle = '#475569'; ctx.font = `${9 * dpr / dpr}px sans-serif`; ctx.textAlign = 'right';
+  const ahTicks = [0, maxAh * 0.5, maxAh];
+  ahTicks.forEach(v => {
+    const y = yAh(v);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(PAD.l, y, CW, 0.5);
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(Math.round(v) + ' Ah', PAD.l - 3, y + 3);
+  });
+
+  const barW   = CW / data.length;
+  const bW     = Math.max(3, barW * 0.22);  // Breite je Balken
+  const radius = 2;
+
+  function roundedBar(x, y, w, h) {
+    if (h < 1) return;
+    const r = Math.min(radius, h / 2, w / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  data.forEach((d, i) => {
+    const cx = PAD.l + i * barW + barW / 2;
+
+    // Geladene Ah (grün)
+    if (d.charged_ah > 0) {
+      const bh = Math.max(1, yAh(0) - yAh(d.charged_ah));
+      ctx.fillStyle = '#22c55e';
+      roundedBar(cx - bW * 1.5, yAh(d.charged_ah), bW, bh);
+    }
+    // Entladene Ah (orange)
+    if (d.discharged_ah > 0) {
+      const bh = Math.max(1, yAh(0) - yAh(d.discharged_ah));
+      ctx.fillStyle = '#f97316';
+      roundedBar(cx - bW * 0.15, yAh(d.discharged_ah), bW, bh);
+    }
+    // Ø SOC (blau, halbtransparent)
+    if (d.avg_soc != null) {
+      const bh = Math.max(1, ySoc(0) - ySoc(d.avg_soc));
+      ctx.fillStyle = 'rgba(59,130,246,0.4)';
+      roundedBar(cx + bW * 1.2, ySoc(d.avg_soc), bW, bh);
+    }
+
+    // Tag-Beschriftung
+    const label = new Date(d.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short' });
+    ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(label, cx, PAD.t + CH + 14);
+  });
+}
+
+function _renderMobileCells() {
+  const wrap = $('bdMobileCells');
+  if (!wrap) return;
+  const bms = _lastBms;
+  if (!bms || !bms.cells || !bms.cells.length) { wrap.innerHTML = ''; return; }
+  const cells = bms.cells.slice(0, 8);
+  const rows = cells.map((c, i) => {
+    const v = c.voltage != null ? c.voltage.toFixed(3) : '--';
+    const t = c.temp    != null ? ` · ${c.temp.toFixed(1)}°` : '';
+    return `<div class="dt-cell">
+      <span class="dt-cell-nr">#${i+1}</span>
+      <span class="dt-cell-v">${v}<span class="dt-unit"> V</span></span>
+      ${t ? `<span class="dt-cell-t">${t}</span>` : ''}
+    </div>`;
+  }).join('');
+  wrap.innerHTML = `<div class="dt-cell-grid" style="padding:0 12px 12px">${rows}</div>`;
 }
 function closeBattDetail() {
   $('battOverlay').classList.add('hidden');
