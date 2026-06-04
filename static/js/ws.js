@@ -16,7 +16,7 @@ const CHARGE_SOURCES = [
   { key: 'solar1',     label: 'Solar 1',       color: '#eab308', get: d => d.solar?.power },
   { key: 'solar2',     label: 'Solar 2',       color: '#f97316', get: d => d.solar2?.power },
   { key: 'solar3',     label: 'Solar 3',       color: '#f59e0b', get: d => d.solar3?.power },
-  { key: 'alternator', label: 'Lichtmaschine', color: '#06b6d4', get: d => d.alternator?.power },
+  { key: 'alternator', label: 'Lichtmaschine', color: '#06b6d4', get: d => d.alternator?.power ?? d.orion?.output_power },
   { key: 'wind',       label: 'Wind / Hydro',  color: '#22c55e', get: d => d.wind?.power },
 ];
 
@@ -192,8 +192,10 @@ function updatePowerSources(data) {
     }
   }
 
-  if (data.solar?.power != null)      showSource('srcSolar', 'solarW', data.solar.power);
-  if (data.alternator?.power != null) showSource('srcAlt',   'altW',   data.alternator.power);
+  const _altPower   = data.alternator?.power   ?? data.orion?.output_power;
+  const _altCurrent = data.alternator?.current ?? data.orion?.dc_current;
+  if (data.solar?.power != null) showSource('srcSolar', 'solarW', data.solar.power);
+  if (_altPower != null)         showSource('srcAlt',   'altW',   _altPower);
 
   $('srcRow').classList.toggle('hidden', !anyVisible);
 
@@ -203,7 +205,7 @@ function updatePowerSources(data) {
   _updateSrcBar('srcBarSolar',   'srcBarSolarFill',   'srcBarSolarTxt',
     data.solar?.current,      30, 'Solar');
   _updateSrcBar('srcBarAlt',     'srcBarAltFill',     'srcBarAltTxt',
-    data.alternator?.current, 80, 'Alternator');
+    _altCurrent, 80, 'Alternator');
 
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };
