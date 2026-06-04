@@ -454,6 +454,8 @@
     .bd-pg-chart   { grid-area: chart; }
     .bd-pg-cells   { grid-area: cells; }
     .bd-pg-sources { grid-area: sources; }
+    /* Im bd-bottom-row: grid-area überschreiben damit auto-placement greift */
+    .bd-bottom-row > .bd-pg-sources { grid-area: auto; }
     .bd-pg-starter { grid-area: starter; }
     @media (max-width: 1023px) {
       .bd-pg {
