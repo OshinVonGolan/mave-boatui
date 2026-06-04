@@ -182,14 +182,15 @@ function renderCharts() {
   const cutoff = now - chartRangeSec;
   const pts    = _decimate(histData.filter(d => d.ts >= cutoff), 2000);
 
-  const dpr  = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  if (!rect.width) return;
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
+  const dpr = window.devicePixelRatio || 1;
+  // offsetWidth ist immer ein Integer → kein Sub-Pixel-Wachstum beim Hover
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  if (!W || !H) return;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
-  const W = rect.width, H = rect.height;
 
   const PAD_L = CHART_PAD_L, PAD_R = CHART_PAD_R, PAD_B = 20, PAD_T = 8;
   const CW = W - PAD_L - PAD_R, CH = H - PAD_B - PAD_T;
@@ -443,8 +444,8 @@ function _renderWeekChart(data) {
   if (!canvas || !data || !data.length) return;
 
   const dpr = window.devicePixelRatio || 1;
-  const W   = canvas.clientWidth;
-  const H   = canvas.clientHeight;
+  const W   = canvas.offsetWidth;
+  const H   = canvas.offsetHeight;
   if (!W || !H) return;
   canvas.width  = W * dpr;
   canvas.height = H * dpr;
