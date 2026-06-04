@@ -386,6 +386,7 @@ function _closeAllOverlays() {
   lightDetailOpen = false;
   closePresetSave();
   _navActive(null);
+  _overlayScrollLock(false);
 }
 
 function openBattDetail() {

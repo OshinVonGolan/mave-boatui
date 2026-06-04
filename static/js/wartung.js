@@ -418,18 +418,21 @@ function deleteWartungCat(catId) {
 
 function _trimWartungRows(body, card) {
   if (!body || !card) return;
-  const cardRect = card.getBoundingClientRect();
-  // Karte noch nicht korrekt gerendert (z.B. Mobile vor erstem Paint)
-  if (cardRect.height < 20) return;
+  // clientHeight ist relativ zur Karte selbst — kein Viewport-/Scroll-Problem
+  const cardH = card.clientHeight;
+  if (cardH < 20) return;  // noch nicht gerendert
   const rows = [...body.querySelectorAll('.w-home-row')];
   if (!rows.length) return;
 
-  // 2px Buffer: verhindert dass minimal überstehende Zeilen sichtbar bleiben
-  const cardBottom = cardRect.bottom - 2;
+  const cardTop = card.getBoundingClientRect().top;
+  // 6px Buffer: entfernt Zeilen die auch nur minimal aus dem sichtbaren Bereich ragen
+  const maxBottom = cardH - 6;
 
   let cutFrom = rows.length;
   for (let i = 0; i < rows.length; i++) {
-    if (rows[i].getBoundingClientRect().bottom > cardBottom) {
+    const r = rows[i].getBoundingClientRect();
+    // Position relativ zur Kartenkante (unabhängig vom Scroll)
+    if ((r.top - cardTop) + r.height > maxBottom) {
       cutFrom = i;
       break;
     }
@@ -437,7 +440,7 @@ function _trimWartungRows(body, card) {
 
   if (cutFrom < rows.length) {
     const hidden = rows.length - cutFrom;
-    for (let i = cutFrom; i < rows.length; i++) rows[i].remove();
+    for (let i = rows.length - 1; i >= cutFrom; i--) rows[i].remove();
     const el = document.createElement('div');
     el.style.cssText = 'font-size:11px;color:var(--text3);padding:4px 0 0;text-align:right';
     el.textContent = `+${hidden} weitere →`;
