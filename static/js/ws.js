@@ -405,40 +405,50 @@ function handleData(data) {
   }
 }
 
+let _lastWartMaxH = '';
 function _syncWartungHeight() {
   const inv  = document.getElementById('inverterCard');
   const wart = document.getElementById('wartungCard');
   if (!inv || !wart) return;
-  if (window.innerWidth >= 1024) {
-    wart.style.maxHeight = inv.offsetHeight + 'px';
-  } else {
-    wart.style.maxHeight = '';
-  }
+  const newH = window.innerWidth >= 1024 ? inv.offsetHeight + 'px' : '';
+  if (newH === _lastWartMaxH) return;
+  _lastWartMaxH = newH;
+  wart.style.maxHeight = newH;
+  // Height changed — re-render home tile so trim uses correct card size
+  if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
 }
 window.addEventListener('resize', _syncWartungHeight);
 
+let _histFetchPending = false;
+
+function _fetchHistory() {
+  if (histData.length > 0 || _histFetchPending) return;
+  _histFetchPending = true;
+  fetch('/api/history').then(r => r.json()).then(hist => {
+    if (histData.length > 0) return;
+    hist.forEach(e => {
+      histData.push(e);
+      const ce = { ts: e.ts };
+      ['solar1','solar2','solar3','charger','alternator','wind'].forEach(k => {
+        if (e[k] != null) ce[k] = e[k];
+      });
+      if (Object.keys(ce).length > 1) chargeHist.push(ce);
+    });
+    histData.sort((a, b) => a.ts - b.ts);
+    recomputeDailyAhFromHist();
+    if (!$('battOverlay').classList.contains('hidden')) renderCharts();
+    reRenderChargePie();
+  }).catch(() => {}).finally(() => { _histFetchPending = false; });
+}
+
 function connect() {
   setConnState('warn');
+  _fetchHistory(); // startet parallel zum WS-Aufbau damit Daten früher da sind
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen    = () => {
     setConnState('ok'); clearTimeout(reconnectTimer);
-    if (histData.length === 0) {
-      fetch('/api/history').then(r => r.json()).then(hist => {
-        hist.forEach(e => {
-          histData.push(e);
-          const ce = { ts: e.ts };
-          ['solar1','solar2','solar3','charger','alternator','wind'].forEach(k => {
-            if (e[k] != null) ce[k] = e[k];
-          });
-          if (Object.keys(ce).length > 1) chargeHist.push(ce);
-        });
-        histData.sort((a, b) => a.ts - b.ts);
-        recomputeDailyAhFromHist();
-        if (!$('battOverlay').classList.contains('hidden')) renderCharts();
-        reRenderChargePie();
-      }).catch(() => {});
-    }
+    _fetchHistory(); // Fallback falls connect() vor Auth aufgerufen wurde
   };
   ws.onmessage = ev => { try { handleData(JSON.parse(ev.data)); } catch(_) {} };
   ws.onclose = ws.onerror = () => {

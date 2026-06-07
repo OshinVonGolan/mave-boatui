@@ -55,7 +55,7 @@ let _minConsumedAh = null;  // Shunt consumed_ah: nur kleiner werden erlaubt (me
 
 let _todayWhDrawn = 0;
 let _todayAhDrawn = 0;
-let _lastShuntTs  = null;
+let _lastShuntTs  = Date.now() / 1000;
 let _battEnergyUnit = 'ah';
 
 function toggleBattUnit(e) {
@@ -128,13 +128,14 @@ function _renderTodayTile() {
 function _accumTodayWh(power, current) {
   const now      = Date.now() / 1000;
   const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
-  if (_lastShuntTs === null || _lastShuntTs < midnight) {
+  if (_lastShuntTs < midnight) {
     _todayWhDrawn = 0;
     _todayAhDrawn = 0;
     _lastShuntTs  = now;
     return;
   }
-  const dtH = (now - _lastShuntTs) / 3600;
+  // Max 30 s Zeitsprung — verhindert Doppelzählung nach Reconnect
+  const dtH = Math.min(now - _lastShuntTs, 30) / 3600;
   if (power   != null && power   < 0) _todayWhDrawn += Math.abs(power)   * dtH;
   if (current != null && current < 0) _todayAhDrawn += Math.abs(current) * dtH;
   _lastShuntTs = now;
@@ -250,8 +251,9 @@ function recomputeDailyAhFromHist() {
     ? todayShunt[todayShunt.length - 1].ts
     : Date.now() / 1000;
 
-  // Sofort rendern, nicht auf nächste WS-Nachricht warten.
+  // Sofort alle Batterie-Kacheln rendern, nicht auf nächste WS-Nachricht warten.
   _renderTodayTile();
+  if (_lastBattery) _renderBattGrid();
 }
 
 // ── Battery update ─────────────────────────────────────────────────────────
