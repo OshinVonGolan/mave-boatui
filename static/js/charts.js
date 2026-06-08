@@ -381,22 +381,27 @@ function renderCharts() {
 
 // Scroll-Lock: position:fixed verhindert Background-Scroll ohne touch-events
 // zu blockieren (overflow:hidden auf body killt Touch auf Mobile).
-// MutationObserver reagiert automatisch auf jede Overlay-Änderung —
-// kein Patchen der einzelnen openXxx()-Funktionen nötig.
+// Boolean-Flag _scrollLocked ist Source of Truth — nicht CSS-State abfragen,
+// da body.style.position in Edge Cases inkonsistent sein kann.
 let _scrollLockY = 0;
+let _scrollLocked = false;
 function _scrollLock(lock) {
-  if (lock && document.body.style.position !== 'fixed') {
+  if (lock && !_scrollLocked) {
     _scrollLockY = window.scrollY;
+    _scrollLocked = true;
     document.body.style.position = 'fixed';
     document.body.style.top      = `-${_scrollLockY}px`;
     document.body.style.width    = '100%';
-  } else if (!lock && document.body.style.position === 'fixed') {
+  } else if (!lock && _scrollLocked) {
+    _scrollLocked = false;
     document.body.style.position = '';
     document.body.style.top      = '';
     document.body.style.width    = '';
     window.scrollTo(0, _scrollLockY);
   }
 }
+// Sicherheits-Reset beim Seitenstart — stellt sicher dass kein Altstand vorliegt.
+document.addEventListener('DOMContentLoaded', () => { _scrollLocked = false; });
 
 // Beobachte alle .overlay-Elemente auf class-Änderungen
 new MutationObserver(() => {
@@ -411,8 +416,8 @@ function _closeAllOverlays() {
   clearInterval(_settingsNetTimer);  _settingsNetTimer = null;
   clearInterval(_connOverlayTimer);  _connOverlayTimer = null;
   lightDetailOpen = false;
-  closePresetSave();
-  _navActive(null);
+  try { closePresetSave(); } catch(_) {}
+  try { _navActive(null); } catch(_) {}
   _scrollLock(false);
 }
 

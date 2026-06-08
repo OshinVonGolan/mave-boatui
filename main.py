@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.99'
+VERSION  = _git_semver() or '1.16.100'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -318,6 +318,26 @@ async def get_daily_stats(days: int = 7):
 async def get_network():
     return can_if.get_network_stats()
 
+
+_js_errors: list[dict] = []
+
+@app.post('/api/jserror')
+async def post_jserror(request: Request):
+    """Empfängt JS-Fehler vom Frontend und speichert sie im RAM-Log."""
+    try:
+        entry = await request.json()
+        _js_errors.append(entry)
+        if len(_js_errors) > 50:
+            _js_errors.pop(0)
+        logging.error('JS-FEHLER: %s @ %s:%s', entry.get('msg','?'), entry.get('src','?'), entry.get('line','?'))
+    except Exception:
+        pass
+    return {'ok': True}
+
+@app.get('/api/jserrors')
+async def get_jserrors():
+    """Gibt die gesammelten JS-Fehler zurück."""
+    return _js_errors
 
 @app.get('/api/debug/bms')
 async def debug_bms():

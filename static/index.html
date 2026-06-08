@@ -1543,5 +1543,26 @@
 <script src="/static/js/monday.js"></script>
 <script src="/static/js/flow.js"></script>
 <script src="/static/js/init.js"></script>
+<script>
+// JS-Fehler-Sammler — sendet Fehler an /api/jserror und zeigt sie im Debug-Banner.
+(function() {
+  var _errs = [];
+  function _report(msg, src, line, col, err) {
+    var entry = { msg: msg, src: src, line: line, col: col, stack: err?.stack, ts: new Date().toISOString() };
+    _errs.push(entry);
+    try { fetch('/api/jserror', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(entry) }); } catch(_){}
+    var banner = document.getElementById('_jserrBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = '_jserrBanner';
+      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ef4444;color:#fff;font-size:11px;padding:6px 10px;z-index:9999;white-space:pre-wrap;max-height:120px;overflow:auto;';
+      document.body.appendChild(banner);
+    }
+    banner.textContent += '[JS-FEHLER] ' + msg + ' @ ' + src + ':' + line + '\n';
+  }
+  window.onerror = _report;
+  window.addEventListener('unhandledrejection', function(e) { _report('Unhandled: ' + (e.reason?.message || e.reason), '', 0, 0, e.reason); });
+})();
+</script>
 </body>
 </html>
