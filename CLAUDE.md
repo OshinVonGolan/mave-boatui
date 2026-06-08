@@ -30,14 +30,20 @@ git push
 ```
 Der Pi nutzt den **Aktualisieren**-Button im UI um `git pull` von GitHub zu machen. Ohne Push findet der Pi den neuen Commit nicht. **Immer direkt nach `git commit` auch `git push` ausführen.**
 
-### 3. JS-Syntax-Check vor jedem Commit
+### 3. PROTOCOL.md bei neuen PGNs aktualisieren
+Bei jeder Änderung am Kommunikationsprotokoll (neues PGN, neuer commandType, neue Register, geändertes Payload-Layout):
+- Neue PGN-Sektion in `PROTOCOL.md` anlegen (Format, Payload-Tabelle, Beispiele)
+- PGN-Übersichtstabelle am Ende ergänzen
+- Fast-Packet-PGN-Liste im CAN-Konfiguration-Block aktualisieren
+
+### 4. JS-Syntax-Check vor jedem Commit
 Doppelte `let`/`const`/`var`-Deklarationen in einer Datei töten die **gesamte Datei** still (kein Fehler sichtbar, alles bricht). Prüfen mit:
 ```bash
 node --check static/js/*.js
 ```
 Oder manuell: grep nach doppelten `let foo` / `const foo` in der geänderten Datei.
 
-### 4. VE.Direct-Gateway: nach Teensy-Änderungen flashen
+### 5. VE.Direct-Gateway: nach Teensy-Änderungen flashen
 ```bash
 cd "Dokumente/PlatformIO/Projects/VE.Direct - NMEA2K Gateway"
 ~/.platformio/penv/bin/pio run -e teensy41 -t upload

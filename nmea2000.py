@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910, 130912, 130913}
+FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910, 130912, 130913, 130914}
 
 
 class FastPacketReassembler:
@@ -289,6 +289,7 @@ PGN_NAMES: dict[int, str] = {
     130910: 'VE.Direct Extended (Custom)',
     130912: 'Solar Extended (Custom)',
     130913: 'DC-DC Extended (Custom)',
+    130914: 'Charger Config (Custom)',
     61184:  'VE.Direct Control (Custom)',
     130911: 'VE.Direct Control (Custom, alt)',
     127507: 'Charger Status',
@@ -704,3 +705,48 @@ def build_brightness_frames(values: list[int], seq_id: int = 0) -> list[tuple]:
         (can_id, bytes([s | 0, len(payload)]) + pad(payload[0:6], 6)),
         (can_id, bytes([s | 1])               + pad(payload[6:],  7)),
     ]
+
+
+def build_charger_setpoints_frame(absorption_mv: int, float_mv: int,
+                                   instance: int = 1,
+                                   dst: int = 0xFF) -> tuple[int, bytes]:
+    """PGN 61184 – VE.Direct Charger Setpoints (commandType=1).
+    Sendet Absorptions- und Float-Spannungsziele an den VE.Direct-Gateway.
+    absorption_mv / float_mv: Spannungen in Millivolt (z.B. 13800, 13300)
+    instance: Geräte-Instanz (1 = Smart IP43)
+    """
+    payload = struct.pack('<BBhh',
+                          instance, 1,
+                          max(0, min(32767, absorption_mv)),
+                          max(0, min(32767, float_mv)))
+    can_id  = make_can_id(61184, RPI_SOURCE_ADDRESS, dst=dst, priority=3)
+    return can_id, payload
+
+
+def build_charger_config_request(dst: int = 0xFF) -> tuple[int, bytes]:
+    """PGN 59904 – ISO Request für PGN 130914 (aktuelle IP43-Setpoints abfragen)."""
+    return build_iso_request(130914, RPI_SOURCE_ADDRESS, dst)
+
+
+def parse_charger_config_pgn(payload: bytes) -> dict | None:
+    """PGN 130914 – Charger Config (Fast Packet, 11 Byte Payload).
+    Enthält die vom Teensy aus dem IP43 gelesenen Spannungs-Sollwerte.
+    Wird vom VE.Direct-Gateway als Antwort auf einen ISO-Request gesendet.
+    """
+    if not payload or len(payload) < 9:
+        return None
+    try:
+        instance  = payload[0]
+        abs_v     = struct.unpack_from('<f', payload, 1)[0]
+        flt_v     = struct.unpack_from('<f', payload, 5)[0]
+        mode_raw  = payload[9] if len(payload) > 9 else 0xFF
+        if math.isnan(abs_v): abs_v = None
+        if math.isnan(flt_v): flt_v = None
+        return {
+            'instance':     instance,
+            'absorption_v': abs_v,
+            'float_v':      flt_v,
+            'mode_raw':     mode_raw,
+        }
+    except Exception:
+        return None

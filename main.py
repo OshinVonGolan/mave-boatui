@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
+from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 
 def _git_semver() -> str:
@@ -42,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.97'
+VERSION  = _git_semver() or '1.16.98'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -97,10 +98,12 @@ STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 
-state   = BoatState()
-can_if  = CanInterface(channel='can0', state=state,
-                       stats_path=BASE_DIR / 'daily_stats.json')
-alarms  = AlarmEngine()
+state       = BoatState()
+can_if      = CanInterface(channel='can0', state=state,
+                           stats_path=BASE_DIR / 'daily_stats.json')
+alarms      = AlarmEngine()
+charge_ctrl = ChargeController()
+can_if._charger_config_cb = charge_ctrl.update_actual_setpoints
 
 _CONN_FILE = BASE_DIR / 'connectivity.json'
 if _CONN_FILE.exists():
@@ -176,6 +179,14 @@ can_if.on_change(broadcast)
 
 
 
+async def _charger_poll_loop():
+    """Fragt alle 5 Minuten die aktuellen Setpoints vom IP43 ab (via Teensy PGN 130914)."""
+    await asyncio.sleep(30)   # erster Poll nach 30 s (Teensy braucht Zeit zum Hochfahren)
+    while True:
+        can_if.send_charger_config_request()
+        await asyncio.sleep(300)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     loop = asyncio.get_event_loop()
@@ -187,6 +198,7 @@ async def lifespan(_app: FastAPI):
         conn_mon.start()
         log.info("Connectivity-Monitor gestartet")
     threading.Thread(target=_remote_version_loop, daemon=True, name='version-check').start()
+    asyncio.create_task(_charger_poll_loop())
     yield
     can_if.stop()
     log.info("CAN-Reader gestoppt")
@@ -558,3 +570,28 @@ async def update_settings(body: dict):
             data.setdefault('wartung', {})['due_soon_days'] = days
     write_json(PRESETS_FILE, data)
     return data
+
+
+# ── Ladesteuerung ────────────────────────────────────────────────────────────
+
+@app.get('/api/charger')
+async def get_charger():
+    return charge_ctrl.status()
+
+
+@app.post('/api/charger/mode')
+async def set_charger_mode(body: dict):
+    mode = body.get('mode', '')
+    try:
+        status = charge_ctrl.set_mode(mode)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+    sp = charge_ctrl.target_setpoints()
+    can_if.send_charger_setpoints(sp['absorption_v'], sp['float_v'])
+    log.info("Lademodus → %s  (Abs %.2fV / Float %.2fV)", mode, sp['absorption_v'], sp['float_v'])
+    return status
+
+
+@app.patch('/api/charger/settings')
+async def update_charger_settings(body: dict):
+    return charge_ctrl.update_settings(body)

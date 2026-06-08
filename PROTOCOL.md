@@ -375,6 +375,56 @@ Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `V
 
 ---
 
+### PGN 130914 – Charger Config *(Custom, VE.Direct Gateway ↔ Pi)*
+**Format:** Fast Packet, **11 Byte Payload**
+
+Enthält die aktuellen Spannungs-Sollwerte des Smart IP43.
+**Pi → Gateway:** Wird durch einen ISO-Request (59904) angefordert; Pi sendet diesen Request alle 5 Minuten.
+**Gateway → Pi:** Antwort nach ISO-Request — Teensy liest die Register 0xEDF0 (Absorption) und 0xEDE0 (Float) via VE.Direct HEX GET-Command aus dem IP43 und sendet das Ergebnis zurück.
+
+> ⚠ Erfordert aktualisierte VE.Direct-Gateway-Firmware (Teensy 4.1) mit HEX-Protokoll-Unterstützung.
+
+| Offset | Typ     | Inhalt                                              |
+|--------|---------|-----------------------------------------------------|
+| 0      | uint8   | Geräte-Instanz (1 = Smart IP43)                     |
+| 1      | float32 | Absorptionsspannung (V); NaN = nicht verfügbar      |
+| 5      | float32 | Floatspannung (V); NaN = nicht verfügbar            |
+| 9      | uint8   | Modus-Raw (1 = Lader, 240 = PSU; 0xFF = unbekannt) |
+| 10     | uint8   | Reserviert                                          |
+
+**Dazugehöriger VE.Direct HEX GET-Command (Teensy → IP43):**
+
+| Register | Hex    | Beschreibung          | Format       |
+|----------|--------|-----------------------|--------------|
+| 0xEDF0   | F0 ED  | Absorptionsspannung   | uint16, mV   |
+| 0xEDE0   | E0 ED  | Floatspannung         | uint16, mV   |
+
+Beispiel GET Absorption: `:7F0ED0071\n` (Checksum 0x71)
+Beispiel Response:       `:5F0ED0040387A\n` (Wert 0x3840 = 14400 mV = 14,4 V)
+
+---
+
+### PGN 61184 – VE.Direct Control *(commandType=1: Charger Setpoints)*
+**Format:** Single Frame, **6 Byte Payload** · Erweiterung zu commandType=0 (Inverter-Modus)
+
+Pi setzt Absorptions- und Float-Spannungsziele im Gateway; Gateway schreibt sie via VE.Direct HEX SET-Command in den IP43.
+
+| Byte | Typ    | Inhalt                                           |
+|------|--------|--------------------------------------------------|
+| 0    | uint8  | Geräte-Instanz (1 = Smart IP43)                 |
+| 1    | uint8  | commandType = 1                                  |
+| 2–3  | int16 LE | Absorptionsspannung (mV, z.B. 13800 = 13,8 V) |
+| 4–5  | int16 LE | Floatspannung (mV, z.B. 13300 = 13,3 V)       |
+
+**Dazugehöriger VE.Direct HEX SET-Command (Teensy → IP43):**
+
+Beispiel SET Absorption 14,4 V: `:8F0ED00403838\n`
+Beispiel SET Float 13,5 V:      `:8E0ED00F83488\n`
+
+> ⚠ Erfordert aktualisierte Teensy-Firmware.
+
+---
+
 ## Gesendete PGNs (Pi / mave-boatui)
 
 ### PGN 59904 – ISO Request *(Startup)*
@@ -483,7 +533,7 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | VE.Direct Data Timeout | 5000 ms |
 
 **Fast-Packet-PGNs (Pi):** `126720, 126996, 130900, 130901, 130902, 130910`
-**Fast-Packet-PGNs (Gateway):** `130910, 130912, 130913`
+**Fast-Packet-PGNs (Gateway):** `130910, 130912, 130913, 130914`
 
 ---
 
@@ -493,7 +543,7 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 |--------|-----------------------|-------------------------|--------|
 | 59904  | Pi → alle            | Pi (100) → broadcast    | ISO Request (fordert PGN 126996 an) |
 | 60928  | alle → alle          | jedes Gerät             | ISO Address Claim (Adressvergabe) |
-| 61184  | Pi → Gateway         | Pi (100) → Gateway (auto) | VE.Direct Control / Inverter-Modus (PDU1) |
+| 61184  | Pi → Gateway         | Pi (100) → Gateway (auto) | VE.Direct Control: commandType=0 Inverter-Modus, commandType=1 Charger Setpoints (PDU1) |
 | 126720 | Pi ↔ andere          | Pi (100) ↔ alle         | Licht-Helligkeit setzen / empfangen |
 | 126992 | Pi → alle            | Pi (100) → broadcast    | Systemzeit |
 | 126996 | Geräte → Pi          | alle → Pi               | Produktinformation / Gerätename |
@@ -510,3 +560,4 @@ sodass der Pi keine veralteten Werte mehr empfängt.
 | 130911 | Pi → Gateway         | Pi (100) → broadcast    | Inverter-Steuerung (veraltet, Fallback für 61184) |
 | 130912 | Gateway → Pi         | Gateway (auto) → Pi     | Solar Extended (Custom) – MPPT 75/15 |
 | 130913 | Gateway → Pi         | Gateway (auto) → Pi     | DC-DC Extended (Custom) – Orion-XS |
+| 130914 | Pi ↔ Gateway         | Pi (100) ↔ Gateway (auto) | Charger Config (Custom) – IP43 Setpoints lesen/schreiben |

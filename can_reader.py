@@ -11,9 +11,10 @@ from daily_stats import DailyStatsTracker
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
-    build_brightness_frames, build_inverter_mode_frame, build_iso_request, build_time_frame, make_can_id,
+    build_brightness_frames, build_charger_config_request, build_charger_setpoints_frame,
+    build_inverter_mode_frame, build_iso_request, build_time_frame, make_can_id,
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
-    parse_can_id, parse_dc_detailed, parse_dc_status, parse_fluid_level,
+    parse_can_id, parse_charger_config_pgn, parse_dc_detailed, parse_dc_status, parse_fluid_level,
     parse_charger_status_pgn, parse_inverter_status, parse_ve_direct_ext,
     parse_solar_ext, parse_dcdc_ext,
     parse_iso_address_claim, parse_product_info,
@@ -117,6 +118,7 @@ class CanInterface:
         self._device_addrclaim: dict = {}  # src → name_bytes (aus PGN 60928)
         self._service_instance: int = 0
         self._starter_instance: int = 1
+        self._charger_config_cb = None   # optional: callback(absorption_v, float_v)
         self._daily = DailyStatsTracker(stats_path or Path('daily_stats.json'))
 
     def set_battery_instances(self, service: int, starter: int):
@@ -169,6 +171,36 @@ class CanInterface:
                      mode, instance, dst)
         except can.CanError as e:
             log.error("CAN-Sendefehler Inverter: %s", e)
+
+    def send_charger_setpoints(self, absorption_v: float, float_v: float, instance: int = 1):
+        """Setzt Absorptions- und Float-Spannung des IP43 via PGN 61184 (commandType=1).
+        Benötigt aktualisierte VE.Direct-Gateway-Firmware um wirksam zu sein.
+        """
+        if self._bus is None:
+            log.warning("CAN nicht verbunden – Charger-Setpoints nicht gesendet")
+            return
+        dst    = self._find_vedirect_gateway_src()
+        abs_mv = round(absorption_v * 1000)
+        flt_mv = round(float_v * 1000)
+        can_id, data = build_charger_setpoints_frame(abs_mv, flt_mv, instance, dst)
+        try:
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.info("Charger Setpoints → Abs %.2fV / Float %.2fV → Inst %d → Gw Adr.%d",
+                     absorption_v, float_v, instance, dst)
+        except can.CanError as e:
+            log.error("CAN-Sendefehler Charger Setpoints: %s", e)
+
+    def send_charger_config_request(self):
+        """Sendet ISO Request für PGN 130914 → Teensy liest IP43-Setpoints und antwortet."""
+        if self._bus is None:
+            return
+        dst = self._find_vedirect_gateway_src()
+        try:
+            can_id, data = build_charger_config_request(dst)
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.debug("Charger Config Request → Gateway Adr.%d", dst)
+        except can.CanError as e:
+            log.warning("Charger Config Request Fehler: %s", e)
 
     def request_product_info(self):
         """Sendet PGN 59904 ISO Request für PGN 126996 (Produktinfo) an alle Geräte."""
@@ -459,6 +491,15 @@ class CanInterface:
                     v = p.get(k)
                     if v is not None and self.state.orion.get(k) != v:
                         self.state.orion[k] = v; changed = True
+
+        elif pgn == 130914:
+            p = parse_charger_config_pgn(payload)
+            if p and p.get('instance') == 1:   # Smart IP43
+                self._track_network(pgn, src, p['instance'])
+                av = p.get('absorption_v')
+                fv = p.get('float_v')
+                if av is not None and fv is not None and self._charger_config_cb:
+                    self._charger_config_cb(av, fv)
 
         elif pgn == 60928:
             p = parse_iso_address_claim(payload)

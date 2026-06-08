@@ -123,6 +123,7 @@
       Batterie
       <span class="card-link">Details →</span>
     </div>
+    <div id="chgModeBadge" style="display:none;margin:-4px 0 8px;font-size:11px;font-weight:600;letter-spacing:.04em"></div>
 
     <div class="gauge-wrap" style="position:relative">
       <div id="bmsRelayRow" style="display:none;position:absolute;top:8px;left:0;flex-direction:column;gap:5px;align-items:flex-start">
@@ -504,6 +505,7 @@
     <div class="set-nav" id="setNav">
       <button class="set-nav-btn active" data-cat="tanks"   onclick="switchSettingsCat('tanks')">💧 Tanks</button>
       <button class="set-nav-btn"        data-cat="batt"    onclick="switchSettingsCat('batt')">🔋 Batterien</button>
+      <button class="set-nav-btn"        data-cat="laden"   onclick="switchSettingsCat('laden')">⚡ Laden</button>
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')">🔧 Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
       <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')">⚙️ System</button>
@@ -581,6 +583,87 @@
       </div>
       <div class="settings-actions">
         <button class="btn-primary" onclick="saveSettings()">Speichern</button>
+      </div>
+    </div>
+
+    <!-- Kategorie: Laden -->
+    <div class="set-pane" id="setPane-laden">
+
+      <!-- Status-Karte: aktueller Modus + IP43 Ist-Zustand -->
+      <div class="set-card" id="chgStatusCard">
+        <div class="set-card-hd">Ladestatus</div>
+        <div id="chgStatusBody" style="font-size:13px;color:var(--text2)">Lade…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn-primary" onclick="setChargerMode('harbor')"
+            style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
+            ⚓ Hafen
+          </button>
+          <button class="btn-primary" onclick="setChargerMode('full')"
+            style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
+            ⚡ Vollladung
+          </button>
+          <button class="btn-primary" onclick="setChargerMode('balance')"
+            style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
+            ⚖ Balancing
+          </button>
+        </div>
+      </div>
+
+      <!-- Hafen-Modus Spannungen -->
+      <div class="set-card">
+        <div class="set-card-hd">Hafen-Modus (80 %)</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Tagein-Tagaus-Lademodus im Hafen. Schont die Zellen durch niedrigere Absorption.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgHarborAbs">Absorption</label>
+          <input class="settings-input narrow" id="sChgHarborAbs" type="number" min="12.0" max="14.6" step="0.05" placeholder="13.80" />
+          <span style="font-size:13px;color:var(--text2)">V</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgHarborFloat">Float</label>
+          <input class="settings-input narrow" id="sChgHarborFloat" type="number" min="12.0" max="14.0" step="0.05" placeholder="13.30" />
+          <span style="font-size:13px;color:var(--text2)">V</span>
+        </div>
+      </div>
+
+      <!-- Vollladung / Balancing Spannungen -->
+      <div class="set-card">
+        <div class="set-card-hd">Vollladung &amp; Balancing</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Vor der Ausfahrt oder beim monatlichen Balance-Zyklus. Beide Modi nutzen dieselben Spannungen.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgFullAbs">Absorption</label>
+          <input class="settings-input narrow" id="sChgFullAbs" type="number" min="12.0" max="14.6" step="0.05" placeholder="14.40" />
+          <span style="font-size:13px;color:var(--text2)">V</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgFullFloat">Float</label>
+          <input class="settings-input narrow" id="sChgFullFloat" type="number" min="12.0" max="14.0" step="0.05" placeholder="13.50" />
+          <span style="font-size:13px;color:var(--text2)">V</span>
+        </div>
+      </div>
+
+      <!-- Balance-Automatik -->
+      <div class="set-card">
+        <div class="set-card-hd">Balance-Automatik</div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgBalInterval">Intervall</label>
+          <input class="settings-input narrow" id="sChgBalInterval" type="number" min="1" max="365" step="1" placeholder="30" />
+          <span style="font-size:13px;color:var(--text2)">Tage</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgBalMinHours">Mindestdauer</label>
+          <input class="settings-input narrow" id="sChgBalMinHours" type="number" min="0.5" max="24" step="0.5" placeholder="2" />
+          <span style="font-size:13px;color:var(--text2)">Stunden</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgBalEndA">Endstrom</label>
+          <input class="settings-input narrow" id="sChgBalEndA" type="number" min="0.1" max="20" step="0.1" placeholder="1.0" />
+          <span style="font-size:13px;color:var(--text2)">A</span>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <span class="settings-feedback" id="settingsFeedbackLaden"></span>
+        <button class="btn-primary" onclick="saveChargerSettings()">Speichern</button>
       </div>
     </div>
 

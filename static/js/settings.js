@@ -26,7 +26,7 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'wartung', 'netz', 'system'].forEach(c =>
+  ['tanks', 'batt', 'laden', 'wartung', 'netz', 'system'].forEach(c =>
     $(`setPane-${c}`)?.classList.toggle('active', c === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
@@ -39,6 +39,7 @@ function switchSettingsCat(cat) {
     clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   }
   if (cat === 'system') refreshVersion();
+  if (cat === 'laden')  refreshChargerStatus();
 }
 
 async function fetchSettingsNetwork() {
@@ -141,6 +142,8 @@ function _showSettingsPanel(tab) {
   $('settingsFeedback').textContent = '';
   $('settingsFeedbackWartung').className = 'settings-feedback';
   $('settingsFeedbackWartung').textContent = '';
+  $('settingsFeedbackLaden').className = 'settings-feedback';
+  $('settingsFeedbackLaden').textContent = '';
   $('updateFeedback').textContent = '';
   $('updateBtn').disabled = false;
   renderVersionInfo();   // sofort aus Cache anzeigen
@@ -227,4 +230,145 @@ async function saveSettings() {
     fb.textContent = 'Fehler beim Speichern';
   }
   btn.disabled = false;
+}
+
+// ── Ladesteuerung ─────────────────────────────────────────────────────────────
+
+let _chargerStatus = null;
+
+async function refreshChargerStatus() {
+  try {
+    _chargerStatus = await fetch('/api/charger').then(r => r.json());
+  } catch(_) { return; }
+  _renderChargerStatus();
+  _populateChargerInputs();
+}
+
+function _renderChargerStatus() {
+  const d = _chargerStatus;
+  if (!d) return;
+
+  // Badge auf der Batterie-Kachel
+  const badge = $('chgModeBadge');
+  if (badge) {
+    const modeLabel = { harbor: '⚓ Hafen', full: '⚡ Vollladung', balance: '⚖ Balancing' }[d.mode] || d.mode;
+    const modeColor = { harbor: 'var(--text3)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
+    badge.textContent = modeLabel;
+    badge.style.color = modeColor;
+    badge.style.display = '';
+  }
+
+  // Status-Karte im Settings-Tab
+  const body = $('chgStatusBody');
+  if (!body) return;
+
+  const fmtV = v => v != null ? v.toFixed(2) + ' V' : '—';
+  const av = d.actual_absorption_v;
+  const fv = d.actual_float_v;
+  const lastRead = d.actual_last_read ? new Date(d.actual_last_read).toLocaleString('de-DE') : null;
+
+  let matchHtml = '';
+  if (d.preset_match === null) {
+    matchHtml = '<span style="color:var(--text3)">Noch nicht abgefragt</span>';
+  } else if (d.preset_match === 'custom') {
+    matchHtml = '<span style="color:#f59e0b;font-weight:600">⚠ Extern geändert — kein Preset aktiv</span>';
+  } else {
+    const presetLabel = { harbor: 'Hafen', full: 'Vollladung', balance: 'Balancing' }[d.preset_match] || d.preset_match;
+    matchHtml = `<span style="color:var(--green);font-weight:600">✓ Preset: ${presetLabel}</span>`;
+  }
+
+  const modeLabel = { harbor: '⚓ Hafen', full: '⚡ Vollladung', balance: '⚖ Balancing' }[d.mode] || d.mode;
+  const modeColor = { harbor: 'var(--text2)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
+
+  const balDue  = d.balance_due;
+  const balDays = d.days_until_balance;
+  const balInfo = d.last_balance
+    ? `Letztes Balancing: ${d.last_balance} · ${balDue ? '<span style="color:#ef4444;font-weight:600">Jetzt fällig</span>' : `in ${balDays} T`}`
+    : '<span style="color:#ef4444">Noch nie balanciert</span>';
+
+  body.innerHTML = `
+    <div style="display:grid;gap:7px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text3)">Aktiver Modus</span>
+        <span style="color:${modeColor};font-weight:600">${modeLabel}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text3)">IP43 Absorption</span>
+        <span>${fmtV(av)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text3)">IP43 Float</span>
+        <span>${fmtV(fv)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text3)">Preset-Übereinstimmung</span>
+        <span>${matchHtml}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:6px;margin-top:2px">
+        ${balInfo}
+        ${lastRead ? `<br>Zuletzt abgefragt: ${lastRead}` : ''}
+      </div>
+    </div>`;
+}
+
+function _populateChargerInputs() {
+  const s = _chargerStatus?.settings;
+  if (!s) return;
+  if ($('sChgHarborAbs'))    $('sChgHarborAbs').value   = s.harbor?.absorption_v  ?? 13.8;
+  if ($('sChgHarborFloat'))  $('sChgHarborFloat').value = s.harbor?.float_v        ?? 13.3;
+  if ($('sChgFullAbs'))      $('sChgFullAbs').value     = s.full?.absorption_v     ?? 14.4;
+  if ($('sChgFullFloat'))    $('sChgFullFloat').value   = s.full?.float_v           ?? 13.5;
+  if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
+  if ($('sChgBalMinHours'))  $('sChgBalMinHours').value = s.balance_min_hours       ?? 2;
+  if ($('sChgBalEndA'))      $('sChgBalEndA').value     = s.balance_end_current_a  ?? 1.0;
+}
+
+async function saveChargerSettings() {
+  const fb = $('settingsFeedbackLaden');
+  const body = {
+    harbor:  {
+      absorption_v: parseFloat($('sChgHarborAbs').value) || 13.8,
+      float_v:      parseFloat($('sChgHarborFloat').value) || 13.3,
+    },
+    full:    {
+      absorption_v: parseFloat($('sChgFullAbs').value) || 14.4,
+      float_v:      parseFloat($('sChgFullFloat').value) || 13.5,
+    },
+    balance: {
+      absorption_v: parseFloat($('sChgFullAbs').value) || 14.4,
+      float_v:      parseFloat($('sChgFullFloat').value) || 13.5,
+    },
+    balance_interval_days:  parseInt($('sChgBalInterval').value) || 30,
+    balance_min_hours:      parseFloat($('sChgBalMinHours').value) || 2,
+    balance_end_current_a:  parseFloat($('sChgBalEndA').value) || 1.0,
+  };
+  try {
+    const data = await fetch('/api/charger/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    _chargerStatus = data;
+    _renderChargerStatus();
+    fb.className = 'settings-feedback show';
+    fb.textContent = 'Gespeichert ✓';
+    setTimeout(() => fb.classList.remove('show'), 2500);
+  } catch(e) {
+    fb.className = 'settings-feedback error show';
+    fb.textContent = 'Fehler beim Speichern';
+  }
+}
+
+async function setChargerMode(mode) {
+  try {
+    _chargerStatus = await fetch('/api/charger/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }).then(r => r.json());
+    _renderChargerStatus();
+  } catch(e) {
+    const fb = $('settingsFeedbackLaden');
+    if (fb) { fb.className = 'settings-feedback error show'; fb.textContent = 'Fehler'; }
+  }
 }
