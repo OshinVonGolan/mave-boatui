@@ -271,10 +271,10 @@ function _renderChargerStatus() {
   if (d.preset_match === null) {
     matchHtml = '<span style="color:var(--text3)">Noch nicht abgefragt</span>';
   } else if (d.preset_match === 'custom') {
-    matchHtml = '<span style="color:#f59e0b;font-weight:600">⚠ Extern geändert — kein Preset aktiv</span>';
+    matchHtml = '<span style="color:#f59e0b;font-weight:600">⚠ Extern geändert</span>';
   } else {
     const presetLabel = { harbor: 'Hafen', full: 'Vollladung', balance: 'Balancing' }[d.preset_match] || d.preset_match;
-    matchHtml = `<span style="color:var(--green);font-weight:600">✓ Preset: ${presetLabel}</span>`;
+    matchHtml = `<span style="color:var(--green);font-weight:600">✓ ${presetLabel}</span>`;
   }
 
   const modeLabel = { harbor: '⚓ Hafen', full: '⚡ Vollladung', balance: '⚖ Balancing' }[d.mode] || d.mode;
@@ -286,25 +286,32 @@ function _renderChargerStatus() {
     ? `Letztes Balancing: ${d.last_balance} · ${balDue ? '<span style="color:#ef4444;font-weight:600">Jetzt fällig</span>' : `in ${balDays} T`}`
     : '<span style="color:#ef4444">Noch nie balanciert</span>';
 
+  // Per-Gerät Soll-Werte
+  let devRows = '';
+  if (d.device_setpoints && d.device_setpoints.length > 0) {
+    devRows = d.device_setpoints.map(dev =>
+      `<div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text3)">${dev.label}${dev.is_solar ? ' ☀' : ''}</span>
+        <span style="font-size:12px">${dev.absorption_v.toFixed(2)} / ${dev.float_v.toFixed(2)} V</span>
+      </div>`
+    ).join('');
+  } else {
+    devRows = `<div style="color:var(--text3);font-size:12px">Keine Geräte ausgewählt</div>`;
+  }
+
   body.innerHTML = `
     <div style="display:grid;gap:7px">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="color:var(--text3)">Aktiver Modus</span>
         <span style="color:${modeColor};font-weight:600">${modeLabel}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="color:var(--text3)">IP43 Absorption</span>
-        <span>${fmtV(av)}</span>
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Soll-Werte (Abs / Float)</div>
+      ${devRows}
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:6px;margin-top:2px">
+        <span style="color:var(--text3)">IP43 Ist-Werte</span>
+        <span style="font-size:12px">${fmtV(av)} / ${fmtV(fv)} · ${matchHtml}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="color:var(--text3)">IP43 Float</span>
-        <span>${fmtV(fv)}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="color:var(--text3)">Preset-Übereinstimmung</span>
-        <span>${matchHtml}</span>
-      </div>
-      <div style="font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:6px;margin-top:2px">
+      <div style="font-size:12px;color:var(--text3)">
         ${balInfo}
         ${lastRead ? `<br>Zuletzt abgefragt: ${lastRead}` : ''}
       </div>
@@ -321,6 +328,27 @@ function _populateChargerInputs() {
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
   if ($('sChgBalMinHours'))  $('sChgBalMinHours').value = s.balance_min_hours       ?? 2;
   if ($('sChgBalEndA'))      $('sChgBalEndA').value     = s.balance_end_current_a  ?? 1.0;
+  if ($('sChgDevIp43'))      $('sChgDevIp43').checked  = s.devices?.ip43?.enabled  ?? true;
+  if ($('sChgDevMppt'))      $('sChgDevMppt').checked  = s.devices?.mppt?.enabled  ?? true;
+  if ($('sChgDevOrion'))     $('sChgDevOrion').checked = s.devices?.orion?.enabled ?? false;
+  if ($('sChgSolarOffset'))  $('sChgSolarOffset').value = s.solar_priority_offset_v ?? 0.3;
+  // live preview — einmalig Listener anhängen
+  ['sChgSolarOffset', 'sChgHarborAbs'].forEach(id => {
+    const el = $(id);
+    if (el && !el.dataset.previewBound) {
+      el.dataset.previewBound = '1';
+      el.addEventListener('input', _updateOffsetPreview);
+    }
+  });
+  _updateOffsetPreview();
+}
+
+function _updateOffsetPreview() {
+  const el = $('sChgOffsetPreview');
+  if (!el) return;
+  const harborAbs = parseFloat($('sChgHarborAbs')?.value) || 13.8;
+  const offset    = parseFloat($('sChgSolarOffset')?.value) ?? 0.3;
+  el.textContent  = `Solar: ${harborAbs.toFixed(2)} V · Nicht-Solar: ${(harborAbs - offset).toFixed(2)} V (nur Hafen-Modus)`;
 }
 
 async function saveChargerSettings() {
@@ -341,6 +369,12 @@ async function saveChargerSettings() {
     balance_interval_days:  parseInt($('sChgBalInterval').value) || 30,
     balance_min_hours:      parseFloat($('sChgBalMinHours').value) || 2,
     balance_end_current_a:  parseFloat($('sChgBalEndA').value) || 1.0,
+    solar_priority_offset_v: parseFloat($('sChgSolarOffset')?.value) ?? 0.3,
+    devices: {
+      ip43:  { enabled: $('sChgDevIp43')?.checked  ?? true  },
+      mppt:  { enabled: $('sChgDevMppt')?.checked  ?? true  },
+      orion: { enabled: $('sChgDevOrion')?.checked ?? false },
+    },
   };
   try {
     const data = await fetch('/api/charger/settings', {

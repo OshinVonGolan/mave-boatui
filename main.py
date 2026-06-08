@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.98'
+VERSION  = _git_semver() or '1.16.99'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -586,9 +586,10 @@ async def set_charger_mode(body: dict):
         status = charge_ctrl.set_mode(mode)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
-    sp = charge_ctrl.target_setpoints()
-    can_if.send_charger_setpoints(sp['absorption_v'], sp['float_v'])
-    log.info("Lademodus → %s  (Abs %.2fV / Float %.2fV)", mode, sp['absorption_v'], sp['float_v'])
+    for dev in charge_ctrl.device_setpoints():
+        can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], dev['instance'])
+        log.info("Lademodus %s → %s (Inst %d): Abs %.2fV / Float %.2fV",
+                 mode, dev['label'], dev['instance'], dev['absorption_v'], dev['float_v'])
     return status
 
 
