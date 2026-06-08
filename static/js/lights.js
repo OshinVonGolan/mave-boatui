@@ -36,6 +36,7 @@ async function loadPresets() {
     if (data.tanks)     tanksConfig     = data.tanks;
     if (data.devices)   devicesConfig   = data.devices;
     if (data.batteries) batteriesConfig = data.batteries;
+    if (data.wartung)   wartungConfig   = { ...wartungConfig, ...data.wartung };
     // Apply tank names from config
     $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
     $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';

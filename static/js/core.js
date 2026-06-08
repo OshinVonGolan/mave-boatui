@@ -29,6 +29,7 @@ function _navActive(btnId) {
 let tanksConfig    = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name: 'Tank 2', capacity_l: 120 } };
 let devicesConfig  = {};
 let batteriesConfig = { service_instance: 0, starter_instance: 1, primary_source: 'shunt' };
+let wartungConfig  = { due_soon_days: 7 };
 let state = { lights: { channels: Array(9).fill(0) } };
 
 // ── Clock ──────────────────────────────────────────────────────────────────

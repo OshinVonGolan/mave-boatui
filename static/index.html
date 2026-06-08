@@ -502,10 +502,11 @@
   <div class="ov-body" style="padding:0">
 
     <div class="set-nav" id="setNav">
-      <button class="set-nav-btn active" data-cat="tanks"  onclick="switchSettingsCat('tanks')">💧 Tanks</button>
-      <button class="set-nav-btn"        data-cat="batt"   onclick="switchSettingsCat('batt')">🔋 Batterien</button>
-      <button class="set-nav-btn"        data-cat="netz"   onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
-      <button class="set-nav-btn"        data-cat="system" onclick="switchSettingsCat('system')">⚙️ System</button>
+      <button class="set-nav-btn active" data-cat="tanks"   onclick="switchSettingsCat('tanks')">💧 Tanks</button>
+      <button class="set-nav-btn"        data-cat="batt"    onclick="switchSettingsCat('batt')">🔋 Batterien</button>
+      <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')">🔧 Wartung</button>
+      <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
+      <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')">⚙️ System</button>
     </div>
 
     <!-- Kategorie: Tanks -->
@@ -580,6 +581,26 @@
       </div>
       <div class="settings-actions">
         <button class="btn-primary" onclick="saveSettings()">Speichern</button>
+      </div>
+    </div>
+
+    <!-- Kategorie: Wartung -->
+    <div class="set-pane" id="setPane-wartung">
+      <div class="set-card">
+        <div class="set-card-hd">Demnächst-Schwelle</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Ab wie vielen Tagen bis zur Fälligkeit eine Wartungsaufgabe als <span style="color:#f59e0b;font-weight:600">demnächst</span> markiert wird.</div>
+        <div class="settings-row" style="align-items:center;gap:12px">
+          <label class="settings-label" for="sWartDueSoon">Schwelle</label>
+          <input type="range" id="sWartDueSoon" min="1" max="14" step="1" value="7"
+            style="flex:1;max-width:200px;accent-color:#f59e0b"
+            oninput="$('sWartDueSoonVal').textContent = this.value" />
+          <span id="sWartDueSoonVal" style="font-size:15px;font-weight:700;color:#f59e0b;min-width:18px;text-align:right">7</span>
+          <span style="font-size:13px;color:var(--text2)">Tage</span>
+        </div>
+      </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="settingsFeedbackWartung"></span>
+        <button class="btn-primary" onclick="saveWartungSettings()">Speichern</button>
       </div>
     </div>
 

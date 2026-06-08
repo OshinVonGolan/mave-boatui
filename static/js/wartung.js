@@ -38,7 +38,7 @@ function getWartungStatus(task) {
   const diffMs = next - today;
   const days   = Math.round(diffMs / 86400000);
   if (days < 0)   return { status: 'overdue',  color: '#ef4444', label: `${Math.abs(days)} T überfällig`, days };
-  if (days <= 30) return { status: 'due_soon', color: '#f59e0b', label: `in ${days} T`,                   days };
+  if (days <= (wartungConfig.due_soon_days ?? 7)) return { status: 'due_soon', color: '#f59e0b', label: `in ${days} T`, days };
   return              { status: 'ok',       color: '#22c55e', label: `in ${days} T`,                   days };
 }
 

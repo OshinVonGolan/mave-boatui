@@ -42,7 +42,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.96'
+VERSION  = _git_semver() or '1.16.97'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -551,5 +551,10 @@ async def update_settings(body: dict):
     if 'batteries' in body:
         data.setdefault('batteries', {}).update(body['batteries'])
         _apply_presets_config()
+    if 'wartung' in body:
+        w = body['wartung']
+        if 'due_soon_days' in w:
+            days = max(1, min(14, int(w['due_soon_days'])))
+            data.setdefault('wartung', {})['due_soon_days'] = days
     write_json(PRESETS_FILE, data)
     return data

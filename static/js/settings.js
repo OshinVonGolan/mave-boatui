@@ -26,7 +26,7 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'netz', 'system'].forEach(c =>
+  ['tanks', 'batt', 'wartung', 'netz', 'system'].forEach(c =>
     $(`setPane-${c}`)?.classList.toggle('active', c === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
@@ -134,8 +134,13 @@ function _showSettingsPanel(tab) {
   $('sBattStarter').value  = batteriesConfig.starter_instance ?? 1;
   $('sBattCapacity').value = batteriesConfig.capacity_ah ?? '';
   const psEl = $('sBattPrimary'); if (psEl) psEl.value = batteriesConfig.primary_source ?? 'shunt';
+  const dueDays = wartungConfig.due_soon_days ?? 7;
+  const slEl = $('sWartDueSoon'); if (slEl) slEl.value = dueDays;
+  const valEl = $('sWartDueSoonVal'); if (valEl) valEl.textContent = dueDays;
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
+  $('settingsFeedbackWartung').className = 'settings-feedback';
+  $('settingsFeedbackWartung').textContent = '';
   $('updateFeedback').textContent = '';
   $('updateBtn').disabled = false;
   renderVersionInfo();   // sofort aus Cache anzeigen
@@ -154,6 +159,27 @@ function closeSettings() {
   clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   $('settingsOverlay').classList.add('hidden');
   history.replaceState(null, '', location.pathname);
+}
+
+async function saveWartungSettings() {
+  const fb  = $('settingsFeedbackWartung');
+  const days = Math.max(1, Math.min(14, parseInt($('sWartDueSoon')?.value) || 7));
+  try {
+    const data = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wartung: { due_soon_days: days } }),
+    }).then(r => r.json());
+    if (data.wartung) wartungConfig = { ...wartungConfig, ...data.wartung };
+    updateWartungTopbar();
+    updateWartungHomeTile();
+    fb.className = 'settings-feedback show';
+    fb.textContent = 'Gespeichert ✓';
+    setTimeout(() => fb.classList.remove('show'), 2500);
+  } catch(e) {
+    fb.className = 'settings-feedback error show';
+    fb.textContent = 'Fehler beim Speichern';
+  }
 }
 
 async function saveSettings() {
