@@ -19,14 +19,15 @@ _DEFAULT_SETTINGS: dict = {
         'orion': {'enabled': False, 'is_solar': False, 'label': 'Orion XS',    'instance': 0},
     },
     'harbor':  {
-        'absorption_v':   13.8,
-        'float_v':        13.3,
-        'target_soc':     80,    # Ziel-SOC im Hafen-Modus (%)
-        'soc_hysteresis': 3,     # Laden startet bei target_soc − hysteresis
-        'off_voltage':    11.5,  # Spannung zum Abschalten: unter Batterieruhespannung → 0 A
+        'absorption_v':  13.8,   # Maximalspannung beim Laden
+        'float_v':       13.3,   # Float (nur für Preset-Match-Erkennung)
+        'hold_voltage':  13.2,   # P-Regler-Nullpunkt: Ruhespannung bei Ziel-SOC (LiFePO4 ~13.2 V)
+        'soc_ramp_pct':  15,     # % SOC unter Ziel bis volle Absorption einsetzt
+        'target_soc':    80,     # Ziel-SOC (%)
+        'off_voltage':   11.5,   # Spannung wenn SOC ≥ Ziel → 0 A (unter Batterieruhespannung)
     },
     'full':    {'absorption_v': 14.4, 'float_v': 13.5},
-    'balance': {'absorption_v': 14.4, 'float_v': 13.5},
+    'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
 }
 
 _DEFAULT_STATE: dict = {
@@ -41,8 +42,8 @@ _DEFAULT_STATE: dict = {
 
 class ChargeController:
     def __init__(self):
-        self._harbor_charging: bool = True  # True = laden, False = halten (Spannung abgesenkt)
         self._last_soc: float | None = None
+        self._last_applied_soc: float | None = None   # SOC bei letztem Setpoint-Senden
         self._load()
 
     # ── Persistenz ──────────────────────────────────────────────────────────
@@ -61,9 +62,7 @@ class ChargeController:
 
     @staticmethod
     def _deep_merge(base: dict, overlay: dict) -> dict:
-        """Zweistufiger Merge: Schlüssel der zweiten Ebene werden pro Eintrag gemergt.
-        Bewahrt unveränderliche Felder wie is_solar/label/instance in devices-Einträgen.
-        """
+        """Zweistufiger Merge: Schlüssel der zweiten Ebene werden pro Eintrag gemergt."""
         result = {}
         for k, v in base.items():
             if k not in overlay:
@@ -71,7 +70,6 @@ class ChargeController:
                 continue
             ov = overlay[k]
             if isinstance(v, dict) and isinstance(ov, dict):
-                # Zweite Ebene: jeden Unter-Schlüssel einzeln mergen
                 inner = {}
                 for ik, iv in v.items():
                     if ik in ov:
@@ -92,12 +90,36 @@ class ChargeController:
             json.dumps({'state': self._state, 'settings': self._settings}, indent=2)
         )
 
+    # ── P-Regler Hafen-Modus ────────────────────────────────────────────────
+
+    def _harbor_voltage(self, soc: float) -> float:
+        """P-Regler: berechnet Absorptionsspannung basierend auf SOC.
+
+        SOC ≥ Ziel          → off_voltage (unter Ruhespannung → 0 A)
+        Ziel-ramp ≤ SOC < Ziel → linearer Anstieg hold_voltage → absorption_v
+        SOC < Ziel-ramp     → absorption_v (volle Ladung)
+        """
+        h      = self._settings.get('harbor', {})
+        target = h.get('target_soc',    80)
+        abs_v  = h.get('absorption_v', 13.8)
+        hold_v = h.get('hold_voltage', 13.2)
+        off_v  = h.get('off_voltage',  11.5)
+        ramp   = max(1, h.get('soc_ramp_pct', 15))
+
+        if soc >= target:
+            return off_v
+        t = min(1.0, (target - soc) / ramp)   # 0 bei Ziel, 1 bei Ziel−ramp
+        return round(hold_v + t * (abs_v - hold_v), 3)
+
     # ── Lese-API ────────────────────────────────────────────────────────────
 
     def status(self) -> dict:
+        harbor_v = None
+        if self._state['mode'] == 'harbor' and self._last_soc is not None:
+            harbor_v = self._harbor_voltage(self._last_soc)
         return {
             'mode':                self._state['mode'],
-            'harbor_charging':     self._harbor_charging,
+            'harbor_voltage':      harbor_v,
             'last_balance':        self._state['last_balance'],
             'balance_start':       self._state['balance_start'],
             'actual_absorption_v': self._state['actual_absorption_v'],
@@ -113,72 +135,71 @@ class ChargeController:
 
     def device_setpoints(self) -> list[dict]:
         """Gibt pro aktiviertem Gerät die effektiven Spannungs-Sollwerte zurück.
-        Hafen-Modus + Halten: off_voltage an alle Geräte → kein Ladestrom.
-        Hafen-Modus + Laden: MPPT voll, Nicht-Solar minus solar_priority_offset_v.
+
+        Hafen-Modus: P-Regler-Spannung, Solar-Priorität nur beim aktiven Laden.
+        Balance-Modus: Float = Absorption → Konstantspannung (CV).
         """
         mode   = self._state['mode']
         preset = self._settings.get(mode, self._settings['harbor'])
 
-        # Hafen-Modus im Halte-Zustand: Spannung weit unter Batterieruhespannung → 0 A
-        if mode == 'harbor' and not self._harbor_charging:
+        if mode == 'harbor':
+            soc   = self._last_soc
+            eff_v = self._harbor_voltage(soc) if soc is not None else preset['absorption_v']
             off_v = self._settings['harbor'].get('off_voltage', 11.5)
-            return [
-                {
+            holding = eff_v <= off_v + 0.01   # SOC über Ziel → Halten
+            offset  = self._settings.get('solar_priority_offset_v', 0.3) if not holding else 0.0
+            result  = []
+            for dev_id, dev in self._settings.get('devices', {}).items():
+                if not dev.get('enabled', False):
+                    continue
+                is_solar = dev.get('is_solar', False)
+                v = round(eff_v - (0.0 if is_solar else offset), 3)
+                result.append({
                     'id':           dev_id,
                     'label':        dev.get('label', dev_id),
                     'instance':     dev.get('instance', 1),
-                    'is_solar':     dev.get('is_solar', False),
-                    'absorption_v': off_v,
-                    'float_v':      off_v,
-                }
-                for dev_id, dev in self._settings.get('devices', {}).items()
-                if dev.get('enabled', False)
-            ]
+                    'is_solar':     is_solar,
+                    'absorption_v': v,
+                    'float_v':      v,
+                })
+            return result
 
         abs_v  = preset['absorption_v']
         flt_v  = preset['float_v']
-        offset = self._settings.get('solar_priority_offset_v', 0.3) if mode == 'harbor' else 0.0
-
+        # Kein Solar-Offset außerhalb des Hafen-Modus
         result = []
         for dev_id, dev in self._settings.get('devices', {}).items():
             if not dev.get('enabled', False):
                 continue
-            is_solar = dev.get('is_solar', False)
-            eff_abs  = round(abs_v - (0.0 if is_solar else offset), 3)
-            eff_flt  = round(flt_v - (0.0 if is_solar else offset), 3)
             result.append({
                 'id':           dev_id,
                 'label':        dev.get('label', dev_id),
                 'instance':     dev.get('instance', 1),
-                'is_solar':     is_solar,
-                'absorption_v': eff_abs,
-                'float_v':      eff_flt,
+                'is_solar':     dev.get('is_solar', False),
+                'absorption_v': abs_v,
+                'float_v':      flt_v,
             })
         return result
 
     # ── Schreibe-API ─────────────────────────────────────────────────────────
 
     def update_soc(self, soc: float | None) -> bool:
-        """Aktualisiert SOC-basierte Hafen-Regelung. Gibt True zurück wenn sich der
-        Ladezustand geändert hat → Caller soll sofort neue Setpoints senden."""
+        """Aktualisiert SOC. Gibt True zurück wenn neue Setpoints gesendet werden sollen.
+
+        Im Hafen-Modus: bei jeder SOC-Änderung ≥ 0.5 % → P-Regler neu berechnen.
+        """
         if soc is None:
             return False
         self._last_soc = soc
         if self._state['mode'] != 'harbor':
             return False
-        harbor  = self._settings.get('harbor', {})
-        target  = harbor.get('target_soc', 80)
-        hyst    = harbor.get('soc_hysteresis', 3)
-        was     = self._harbor_charging
-        if soc >= target:
-            self._harbor_charging = False        # Ziel erreicht → nicht laden
-        elif soc < target - hyst:
-            self._harbor_charging = True         # unter Schwelle → laden
-        # Im Hysterese-Band: Zustand beibehalten
-        if self._harbor_charging != was:
-            log.info('Hafen-Regelung: %s → %s (SOC=%.1f%%)',
-                     'Laden' if was else 'Halten',
-                     'Laden' if self._harbor_charging else 'Halten', soc)
+        if self._last_applied_soc is None or abs(soc - self._last_applied_soc) >= 0.5:
+            old_v = (self._harbor_voltage(self._last_applied_soc)
+                     if self._last_applied_soc is not None else None)
+            new_v = self._harbor_voltage(soc)
+            self._last_applied_soc = soc
+            if old_v is None or abs(new_v - old_v) >= 0.01:
+                log.info('Hafen-P-Regler: SOC=%.1f%% → %.3f V', soc, new_v)
             return True
         return False
 
@@ -190,11 +211,8 @@ class ChargeController:
             self._state['balance_start'] = datetime.now().isoformat()
         else:
             self._state['balance_start'] = None
-        # Bei Wechsel in Hafen-Modus: SOC-Zustand sofort anwenden wenn bekannt
         if mode == 'harbor':
-            self.update_soc(self._last_soc)
-        else:
-            self._harbor_charging = True   # Vollladung/Balance: immer laden
+            self._last_applied_soc = None   # sofort neu berechnen bei nächstem SOC
         self._save()
         return self.status()
 
@@ -203,6 +221,7 @@ class ChargeController:
         self._state['last_balance']  = date.today().isoformat()
         self._state['balance_start'] = None
         self._state['mode']          = 'harbor'
+        self._last_applied_soc       = None
         self._save()
 
     def update_actual_setpoints(self, absorption_v: float, float_v: float):
@@ -232,10 +251,17 @@ class ChargeController:
         return max(0, self._settings['balance_interval_days'] - ds)
 
     def _preset_match(self) -> str | None:
-        av = self._state.get('actual_absorption_v')
-        fv = self._state.get('actual_float_v')
+        mode = self._state['mode']
+        av   = self._state.get('actual_absorption_v')
+        fv   = self._state.get('actual_float_v')
         if av is None or fv is None:
             return None
+        # Hafen-Modus: Soll-Spannung ändert sich kontinuierlich → P-Regler-Wert prüfen
+        if mode == 'harbor' and self._last_soc is not None:
+            harbor_v = self._harbor_voltage(self._last_soc)
+            if abs(av - harbor_v) < 0.1 and abs(fv - harbor_v) < 0.1:
+                return 'harbor'
+            return 'custom'
         for name in ('harbor', 'full', 'balance'):
             p = self._settings.get(name, {})
             if (abs(av - p.get('absorption_v', 0)) < 0.06 and

@@ -653,11 +653,16 @@
           <span style="font-size:13px;color:var(--text2)">%</span>
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sChgSocHyst">Hysterese</label>
-          <input class="settings-input narrow" id="sChgSocHyst" type="number" min="1" max="15" step="1" placeholder="3" />
+          <label class="settings-label" for="sChgHoldV">Haltespannung</label>
+          <input class="settings-input narrow" id="sChgHoldV" type="number" min="12.0" max="14.0" step="0.05" placeholder="13.20" />
+          <span style="font-size:13px;color:var(--text2)">V</span>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="sChgSocRamp">Rampe</label>
+          <input class="settings-input narrow" id="sChgSocRamp" type="number" min="1" max="30" step="1" placeholder="15" />
           <span style="font-size:13px;color:var(--text2)">%</span>
         </div>
-        <div style="font-size:12px;color:var(--text3);margin:8px 0 10px">Laden beginnt erneut bei Ziel − Hysterese.</div>
+        <div style="font-size:12px;color:var(--text3);margin:8px 0 10px">P-Regler: bei Ziel-SOC liegt die Spannung auf Haltespannung (≈ Ruhespannung), fällt dann linear auf volle Absorption innerhalb der Rampe.</div>
         <div class="settings-row">
           <label class="settings-label" for="sChgHarborAbs">Absorption</label>
           <input class="settings-input narrow" id="sChgHarborAbs" type="number" min="12.0" max="14.6" step="0.05" placeholder="13.80" />

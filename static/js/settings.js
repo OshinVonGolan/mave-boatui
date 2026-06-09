@@ -278,8 +278,10 @@ function _renderChargerStatus() {
   }
 
   let modeLabel = { harbor: '⚓ Hafen', full: '⚡ Vollladung', balance: '⚖ Balancing' }[d.mode] || d.mode;
-  if (d.mode === 'harbor') {
-    modeLabel += d.harbor_charging === false ? ' · Halten' : ' · Laden';
+  if (d.mode === 'harbor' && d.harbor_voltage != null) {
+    const hv = d.harbor_voltage.toFixed(2);
+    const offV = d.settings?.harbor?.off_voltage ?? 11.5;
+    modeLabel += d.harbor_voltage <= offV + 0.05 ? ` · Halten (${hv} V)` : ` · Laden (${hv} V)`;
   }
   const modeColor = { harbor: 'var(--text2)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
 
@@ -326,8 +328,9 @@ function _populateChargerInputs() {
   if (!s) return;
   if ($('sChgHarborAbs'))    $('sChgHarborAbs').value   = s.harbor?.absorption_v  ?? 13.8;
   if ($('sChgHarborFloat'))  $('sChgHarborFloat').value = s.harbor?.float_v        ?? 13.3;
-  if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc     ?? 80;
-  if ($('sChgSocHyst'))      $('sChgSocHyst').value     = s.harbor?.soc_hysteresis ?? 3;
+  if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
+  if ($('sChgHoldV'))        $('sChgHoldV').value       = s.harbor?.hold_voltage  ?? 13.2;
+  if ($('sChgSocRamp'))      $('sChgSocRamp').value     = s.harbor?.soc_ramp_pct  ?? 15;
   if ($('sChgFullAbs'))      $('sChgFullAbs').value     = s.full?.absorption_v     ?? 14.4;
   if ($('sChgFullFloat'))    $('sChgFullFloat').value   = s.full?.float_v           ?? 13.5;
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
@@ -360,10 +363,11 @@ async function saveChargerSettings() {
   const fb = $('settingsFeedbackLaden');
   const body = {
     harbor:  {
-      absorption_v:   parseFloat($('sChgHarborAbs').value)  || 13.8,
-      float_v:        parseFloat($('sChgHarborFloat').value) || 13.3,
-      target_soc:     parseInt($('sChgTargetSoc')?.value)   || 80,
-      soc_hysteresis: parseInt($('sChgSocHyst')?.value)     || 3,
+      absorption_v: parseFloat($('sChgHarborAbs').value)  || 13.8,
+      float_v:      parseFloat($('sChgHarborFloat').value) || 13.3,
+      target_soc:   parseInt($('sChgTargetSoc')?.value)   || 80,
+      hold_voltage: parseFloat($('sChgHoldV')?.value)     || 13.2,
+      soc_ramp_pct: parseInt($('sChgSocRamp')?.value)     || 15,
     },
     full:    {
       absorption_v: parseFloat($('sChgFullAbs').value) || 14.4,
