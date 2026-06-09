@@ -1,7 +1,7 @@
 // ── Connectivity ───────────────────────────────────────────────────────────
 
 let _connData = {};
-let _connOverlayTimer = null;
+var _connOverlayTimer = null;
 
 function fmtUptime(s) {
   if (!s) return '--';

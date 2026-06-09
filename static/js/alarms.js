@@ -1,6 +1,6 @@
 // ── Network overlay ────────────────────────────────────────────────────────
 
-let netTimer = null;
+var netTimer = null;
 let _lastNetEntries = [];
 
 function openNetwork() {

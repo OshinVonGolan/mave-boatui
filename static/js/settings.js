@@ -1,6 +1,6 @@
 // ── Settings ───────────────────────────────────────────────────────────────
 
-let _settingsNetTimer = null;
+var _settingsNetTimer = null;
 let _versionInfo = null;   // gecachte Versions-Info (periodisch aktualisiert)
 
 async function refreshVersion() {

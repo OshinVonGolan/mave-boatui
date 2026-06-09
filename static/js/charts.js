@@ -411,13 +411,15 @@ new MutationObserver(() => {
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
 function _closeAllOverlays() {
-  document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
-  clearInterval(netTimer);           netTimer = null;
-  clearInterval(_settingsNetTimer);  _settingsNetTimer = null;
-  clearInterval(_connOverlayTimer);  _connOverlayTimer = null;
-  lightDetailOpen = false;
-  try { closePresetSave(); } catch(_) {}
-  try { _navActive(null); } catch(_) {}
+  try {
+    document.querySelectorAll('.overlay').forEach(el => el.classList.add('hidden'));
+    clearInterval(netTimer);           netTimer = null;
+    clearInterval(_settingsNetTimer);  _settingsNetTimer = null;
+    clearInterval(_connOverlayTimer);  _connOverlayTimer = null;
+    lightDetailOpen = false;
+    closePresetSave();
+    _navActive(null);
+  } catch(e) { console.warn('_closeAllOverlays:', e); }
   _scrollLock(false);
 }
 
