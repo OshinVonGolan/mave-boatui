@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.103'
+VERSION  = _git_semver() or '1.16.104'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -144,6 +144,11 @@ async def broadcast(data: dict):
     global _hist_last_ts
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
     alarms.check(check_data)
+    # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
+    soc = data.get('battery', {}).get('soc')
+    if charge_ctrl.update_soc(soc):
+        for dev in charge_ctrl.device_setpoints():
+            can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], dev['instance'])
     batt = data.get('battery', {})
     now = time.time()
     entry: dict = {'ts': now}
