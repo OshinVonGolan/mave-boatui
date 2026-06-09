@@ -354,7 +354,7 @@ function _tile(icon, title, statusTxt, bodyHtml, status='idle') {
   </div>`;
 }
 
-function _chargerStatus(cs) {
+function _chgCsState(cs) {
   if (cs == null) return 'idle';
   if (cs === 2)  return 'err';   // Fault
   if (cs === 0)  return 'idle';  // Off
@@ -456,7 +456,7 @@ function _tileMppt(solar) {
       ${_kv('Ertrag heute',   solar.yield_today_wh    != null ? solar.yield_today_wh    : null, 'Wh')}
       ${_kv('Max heute',      solar.max_power_today_w != null ? solar.max_power_today_w : null, 'W')}
     </div>`;
-  return _tile('☀️', 'MPPT 75/15', state, body, _chargerStatus(solar.cs));
+  return _tile('☀️', 'MPPT 75/15', state, body, _chgCsState(solar.cs));
 }
 
 function _tileOrion(orion) {
@@ -475,7 +475,7 @@ function _tileOrion(orion) {
       ${_kv('Eingangsleistung',  orion.input_power   != null ? Math.round(orion.input_power) : null, 'W')}
       ${orLbl ? _kv('Off Reason', orLbl) : ''}
     </div>`;
-  return _tile('🔄', 'Orion-XS DC-DC', state, body, _chargerStatus(orion.cs));
+  return _tile('🔄', 'Orion-XS DC-DC', state, body, _chgCsState(orion.cs));
 }
 
 function _tileCharger(charger) {
@@ -489,7 +489,7 @@ function _tileCharger(charger) {
       ${_kv('Leistung',   charger.power      != null ? Math.round(charger.power)     : null, 'W', 'val-green')}
     </div>`;
   const chargerCs = charger.cs ?? (charger.state === 'Aus' ? 0 : charger.state ? 1 : null);
-  return _tile('🔌', 'Smart IP43', charger.state ?? '', body, _chargerStatus(chargerCs));
+  return _tile('🔌', 'Smart IP43', charger.state ?? '', body, _chgCsState(chargerCs));
 }
 
 function _tileInverter(inv) {
