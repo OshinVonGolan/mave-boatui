@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.106'
+VERSION  = _git_semver() or '1.16.107'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -140,6 +140,31 @@ history: deque[dict] = deque(maxlen=10800)   # 10800 × 5 s ≈ 15 h
 _hist_last_ts: float = 0.0
 
 
+_REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
+
+
+def _apply_charger_setpoints(setpoints: list):
+    """Sendet Spannung + DeviceMode an alle aktivierten Ladegeräte.
+    Im Hafen-Modus Halten (on=False) → DeviceMode=0 zuerst senden, keine Spannungsänderung.
+    Im Hafen-Modus Laden (on=True) → DeviceMode=1 dann Spannungs-Setpoints.
+    Vollladung/Balance (kein 'on' Feld) → nur Spannungen.
+    """
+    for dev in setpoints:
+        inst = dev['instance']
+        on_flag = dev.get('on')   # None = kein Toggle (Vollladung/Balance), True/False = Hafen
+        if on_flag is False:
+            # Lader ausschalten (SOC ≥ Ziel im Hafen-Modus)
+            can_if.send_charger_register(_REG_DEVICE_MODE, 0, inst)
+            log.info("Lader aus → Inst %d (%s)", inst, dev['label'])
+        else:
+            # Einschalten: immer bei True (Hafen laden) und bei None (Vollladung/Balance),
+            # da der Lader nach einem Hafen-Halt evtl. noch aus sein könnte
+            can_if.send_charger_register(_REG_DEVICE_MODE, 1, inst)
+            can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], inst)
+            log.info("Lader %s Inst %d: %.2f/%.2f V (on=%s)",
+                     dev['label'], inst, dev['absorption_v'], dev['float_v'], on_flag)
+
+
 async def broadcast(data: dict):
     global _hist_last_ts
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
@@ -147,8 +172,7 @@ async def broadcast(data: dict):
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
     soc = data.get('battery', {}).get('soc')
     if charge_ctrl.update_soc(soc):
-        for dev in charge_ctrl.device_setpoints():
-            can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], dev['instance'])
+        _apply_charger_setpoints(charge_ctrl.device_setpoints())
     batt = data.get('battery', {})
     now = time.time()
     entry: dict = {'ts': now}
@@ -611,10 +635,7 @@ async def set_charger_mode(body: dict):
         status = charge_ctrl.set_mode(mode)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
-    for dev in charge_ctrl.device_setpoints():
-        can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], dev['instance'])
-        log.info("Lademodus %s → %s (Inst %d): Abs %.2fV / Float %.2fV",
-                 mode, dev['label'], dev['instance'], dev['absorption_v'], dev['float_v'])
+    _apply_charger_setpoints(charge_ctrl.device_setpoints())
     return status
 
 

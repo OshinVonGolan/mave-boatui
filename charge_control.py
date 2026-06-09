@@ -146,14 +146,16 @@ class ChargeController:
             soc   = self._last_soc
             eff_v = self._harbor_voltage(soc) if soc is not None else preset['absorption_v']
             off_v = self._settings['harbor'].get('off_voltage', 11.5)
-            holding = eff_v <= off_v + 0.01   # SOC über Ziel → Halten
+            holding = eff_v <= off_v + 0.01   # SOC über Ziel → Lader ausschalten
             offset  = self._settings.get('solar_priority_offset_v', 0.3) if not holding else 0.0
+            # Normaler Charge-Voltage wenn eingeschaltet, sonst Referenzwert (spielt keine Rolle)
+            charge_v = preset['absorption_v'] if holding else eff_v
             result  = []
             for dev_id, dev in self._settings.get('devices', {}).items():
                 if not dev.get('enabled', False):
                     continue
                 is_solar = dev.get('is_solar', False)
-                v = round(eff_v - (0.0 if is_solar else offset), 3)
+                v = round(charge_v - (0.0 if is_solar else offset), 3) if not holding else charge_v
                 result.append({
                     'id':           dev_id,
                     'label':        dev.get('label', dev_id),
@@ -161,6 +163,7 @@ class ChargeController:
                     'is_solar':     is_solar,
                     'absorption_v': v,
                     'float_v':      v,
+                    'on':           not holding,   # False → DeviceMode=0 (aus), True → DeviceMode=1 (ein)
                 })
             return result
 

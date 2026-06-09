@@ -723,6 +723,18 @@ def build_charger_setpoints_frame(absorption_mv: int, float_mv: int,
     return can_id, payload
 
 
+def build_charger_register_frame(reg: int, val: int,
+                                  instance: int = 1,
+                                  dst: int = 0xFF) -> tuple[int, bytes]:
+    """PGN 61184 – VE.Direct Register Write (commandType=2).
+    Schreibt ein beliebiges 16-Bit-Register an ein VE.Direct-Gerät.
+    reg=0x0200, val=0 → Lader aus; val=1 → Lader ein (DeviceMode).
+    """
+    payload = struct.pack('<BBHH', instance, 2, reg, val)
+    can_id  = make_can_id(61184, RPI_SOURCE_ADDRESS, dst=dst, priority=3)
+    return can_id, payload
+
+
 def build_charger_config_request(dst: int = 0xFF) -> tuple[int, bytes]:
     """PGN 59904 – ISO Request für PGN 130914 (aktuelle IP43-Setpoints abfragen)."""
     return build_iso_request(130914, RPI_SOURCE_ADDRESS, dst)

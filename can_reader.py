@@ -11,7 +11,8 @@ from daily_stats import DailyStatsTracker
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
-    build_brightness_frames, build_charger_config_request, build_charger_setpoints_frame,
+    build_brightness_frames, build_charger_config_request, build_charger_register_frame,
+    build_charger_setpoints_frame,
     build_inverter_mode_frame, build_iso_request, build_time_frame, make_can_id,
     parse_battery_stats, parse_bms_cells, parse_bms_pack, parse_brightness,
     parse_can_id, parse_charger_config_pgn, parse_dc_detailed, parse_dc_status, parse_fluid_level,
@@ -189,6 +190,20 @@ class CanInterface:
                      absorption_v, float_v, instance, dst)
         except can.CanError as e:
             log.error("CAN-Sendefehler Charger Setpoints: %s", e)
+
+    def send_charger_register(self, reg: int, val: int, instance: int = 1):
+        """Schreibt ein beliebiges 16-Bit-Register via PGN 61184 (cmdType=2).
+        Wichtigstes Beispiel: reg=0x0200, val=0 → Lader aus; val=1 → Lader ein.
+        """
+        if self._bus is None:
+            return
+        dst = self._find_vedirect_gateway_src()
+        try:
+            can_id, data = build_charger_register_frame(reg, val, instance, dst)
+            self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
+            log.info("Charger Register 0x%04X = %d → Inst %d → Gw Adr.%d", reg, val, instance, dst)
+        except can.CanError as e:
+            log.error("CAN-Sendefehler Register Write: %s", e)
 
     def send_charger_config_request(self):
         """Sendet ISO Request für PGN 130914 → Teensy liest IP43-Setpoints und antwortet."""
