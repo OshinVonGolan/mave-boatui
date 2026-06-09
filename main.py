@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.105'
+VERSION  = _git_semver() or '1.16.106'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -621,3 +621,10 @@ async def set_charger_mode(body: dict):
 @app.patch('/api/charger/settings')
 async def update_charger_settings(body: dict):
     return charge_ctrl.update_settings(body)
+
+
+@app.post('/api/charger/poll')
+async def poll_charger():
+    """Sofortiger ISO-Request für PGN 130914 → liest aktuelle Setpoints vom IP43."""
+    can_if.send_charger_config_request()
+    return {'ok': True}
