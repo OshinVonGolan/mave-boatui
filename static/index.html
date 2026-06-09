@@ -12,6 +12,40 @@
   <link rel="apple-touch-icon" href="/static/icon-192.png" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f172a'/><text x='16' y='23' text-anchor='middle' font-size='18'>⚓</text></svg>">
   <link rel="stylesheet" href="/static/css/style.css">
+  <script>
+  // Frühes Fehler-Logging — läuft vor allen defer-Scripts.
+  (function() {
+    function _report(msg, src, line, col, err) {
+      var entry = { msg: msg, src: src, line: line, col: col, stack: err?.stack, ts: new Date().toISOString() };
+      try { fetch('/api/jserror', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(entry) }); } catch(_){}
+      var banner = document.getElementById('_jserrBanner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = '_jserrBanner';
+        banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ef4444;color:#fff;font-size:11px;padding:6px 10px;z-index:9999;white-space:pre-wrap;max-height:120px;overflow:auto;';
+        document.body && document.body.appendChild(banner);
+      }
+      banner && (banner.textContent += '[JS-FEHLER] ' + msg + ' @ ' + src + ':' + line + '\n');
+    }
+    window.onerror = _report;
+    window.addEventListener('unhandledrejection', function(e) { _report('Unhandled: ' + (e.reason?.message || e.reason), '', 0, 0, e.reason); });
+  })();
+  </script>
+  <script defer src="/static/js/core.js"></script>
+  <script defer src="/static/js/battery.js"></script>
+  <script defer src="/static/js/tanks.js"></script>
+  <script defer src="/static/js/lights.js"></script>
+  <script defer src="/static/js/charts.js"></script>
+  <script defer src="/static/js/alarms.js"></script>
+  <script defer src="/static/js/settings.js"></script>
+  <script defer src="/static/js/connectivity.js"></script>
+  <script defer src="/static/js/ws.js"></script>
+  <script defer src="/static/js/lightdetail.js"></script>
+  <script defer src="/static/js/wartung.js"></script>
+  <script defer src="/static/js/stauplan.js"></script>
+  <script defer src="/static/js/monday.js"></script>
+  <script defer src="/static/js/flow.js"></script>
+  <script defer src="/static/js/init.js"></script>
 </head>
 <body>
 
@@ -1349,10 +1383,6 @@
   <div class="preset-save-grid" id="presetEditList"></div>
 </div>
 
-<script src="/static/js/core.js"></script>
-<script src="/static/js/battery.js"></script>
-<script src="/static/js/tanks.js"></script>
-<script src="/static/js/lights.js"></script>
 <!-- ── Update-Ladebildschirm ──────────────────────────────────────────────── -->
 <div id="updateScreen" style="display:none;position:fixed;inset:0;z-index:9999;
   background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px">
@@ -1532,37 +1562,5 @@
   </div>
 </div>
 
-<script src="/static/js/charts.js"></script>
-<script src="/static/js/alarms.js"></script>
-<script src="/static/js/settings.js"></script>
-<script src="/static/js/connectivity.js"></script>
-<script src="/static/js/ws.js"></script>
-<script src="/static/js/lightdetail.js"></script>
-<script src="/static/js/wartung.js"></script>
-<script src="/static/js/stauplan.js"></script>
-<script src="/static/js/monday.js"></script>
-<script src="/static/js/flow.js"></script>
-<script src="/static/js/init.js"></script>
-<script>
-// JS-Fehler-Sammler — sendet Fehler an /api/jserror und zeigt sie im Debug-Banner.
-(function() {
-  var _errs = [];
-  function _report(msg, src, line, col, err) {
-    var entry = { msg: msg, src: src, line: line, col: col, stack: err?.stack, ts: new Date().toISOString() };
-    _errs.push(entry);
-    try { fetch('/api/jserror', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(entry) }); } catch(_){}
-    var banner = document.getElementById('_jserrBanner');
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = '_jserrBanner';
-      banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ef4444;color:#fff;font-size:11px;padding:6px 10px;z-index:9999;white-space:pre-wrap;max-height:120px;overflow:auto;';
-      document.body.appendChild(banner);
-    }
-    banner.textContent += '[JS-FEHLER] ' + msg + ' @ ' + src + ':' + line + '\n';
-  }
-  window.onerror = _report;
-  window.addEventListener('unhandledrejection', function(e) { _report('Unhandled: ' + (e.reason?.message || e.reason), '', 0, 0, e.reason); });
-})();
-</script>
 </body>
 </html>
