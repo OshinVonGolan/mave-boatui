@@ -43,7 +43,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.107'
+VERSION  = _git_semver() or '1.16.108'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -153,13 +153,13 @@ def _apply_charger_setpoints(setpoints: list):
         inst = dev['instance']
         on_flag = dev.get('on')   # None = kein Toggle (Vollladung/Balance), True/False = Hafen
         if on_flag is False:
-            # Lader ausschalten (SOC ≥ Ziel im Hafen-Modus)
-            can_if.send_charger_register(_REG_DEVICE_MODE, 0, inst)
+            # Lader ausschalten (SOC ≥ Ziel im Hafen-Modus); DeviceMode ist un8 → size=1
+            can_if.send_charger_register(_REG_DEVICE_MODE, 0, inst, size=1)
             log.info("Lader aus → Inst %d (%s)", inst, dev['label'])
         else:
             # Einschalten: immer bei True (Hafen laden) und bei None (Vollladung/Balance),
             # da der Lader nach einem Hafen-Halt evtl. noch aus sein könnte
-            can_if.send_charger_register(_REG_DEVICE_MODE, 1, inst)
+            can_if.send_charger_register(_REG_DEVICE_MODE, 1, inst, size=1)
             can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], inst)
             log.info("Lader %s Inst %d: %.2f/%.2f V (on=%s)",
                      dev['label'], inst, dev['absorption_v'], dev['float_v'], on_flag)

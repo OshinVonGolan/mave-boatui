@@ -191,17 +191,20 @@ class CanInterface:
         except can.CanError as e:
             log.error("CAN-Sendefehler Charger Setpoints: %s", e)
 
-    def send_charger_register(self, reg: int, val: int, instance: int = 1):
-        """Schreibt ein beliebiges 16-Bit-Register via PGN 61184 (cmdType=2).
-        Wichtigstes Beispiel: reg=0x0200, val=0 → Lader aus; val=1 → Lader ein.
+    def send_charger_register(self, reg: int, val: int, instance: int = 1, size: int = 2):
+        """Schreibt ein Register via PGN 61184 (cmdType=2).
+        size=1 für 8-Bit-Register (z.B. DeviceMode 0x0200).
+        size=2 für 16-Bit-Register (Standard).
         """
         if self._bus is None:
             return
         dst = self._find_vedirect_gateway_src()
         try:
-            can_id, data = build_charger_register_frame(reg, val, instance, dst)
+            can_id, data = build_charger_register_frame(reg, val, size=size,
+                                                         instance=instance, dst=dst)
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
-            log.info("Charger Register 0x%04X = %d → Inst %d → Gw Adr.%d", reg, val, instance, dst)
+            log.info("Charger Register 0x%04X = %d (size=%d) → Inst %d → Gw Adr.%d",
+                     reg, val, size, instance, dst)
         except can.CanError as e:
             log.error("CAN-Sendefehler Register Write: %s", e)
 
