@@ -1,6 +1,10 @@
 // ── Init ───────────────────────────────────────────────────────────────────
 
 loadPresets();
+
+// Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern
+fetch('/api/status').then(r => r.ok ? r.json() : null).then(d => { if (d) handleData(d); }).catch(() => {});
+
 connect();
 fetchConnectivity();
 setInterval(fetchConnectivity, 25000);

@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -43,7 +44,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.108'
+VERSION  = _git_semver() or '1.16.109'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -243,6 +244,7 @@ class _NoCacheStatic(StaticFiles):
 
 
 app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
 
 
