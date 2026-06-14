@@ -8,8 +8,10 @@ import signal
 import subprocess
 import threading
 import time
+import urllib.request
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -44,7 +46,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.109'
+VERSION  = _git_semver() or '1.16.110'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -651,3 +653,56 @@ async def poll_charger():
     """Sofortiger ISO-Request für PGN 130914 → liest aktuelle Setpoints vom IP43."""
     can_if.send_charger_config_request()
     return {'ok': True}
+
+
+# ── Wasserstand Travemünde (pegelonline.wsv.de) ──────────────────────────────
+
+_wl_cache: dict = {'data': None, 'ts': 0.0}
+_WL_URL = ('https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/'
+           'TRAVEM%C3%BCNDE/W/measurements.json?start=P1DT0H&includeCurrentMeasurement=true')
+
+
+def _fetch_waterlevel() -> dict:
+    with urllib.request.urlopen(_WL_URL, timeout=10) as r:
+        measurements = json.loads(r.read())
+    if not measurements:
+        return {}
+    current = measurements[-1]['value']
+    now_ts  = time.time()
+    past_v  = None
+    for m in reversed(measurements):
+        dt = datetime.fromisoformat(m['timestamp'])
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt.timestamp() <= now_ts - 1800:
+            past_v = m['value']
+            break
+    delta  = round(current - past_v, 1) if past_v is not None else None
+    trend  = ('rising' if delta and delta > 2 else
+              'falling' if delta and delta < -2 else 'stable')
+    step   = max(1, len(measurements) // 120)
+    chart  = [{'ts': m['timestamp'], 'v': m['value']} for m in measurements[::step]]
+    return {
+        'current_cm': current,
+        'trend':      trend,
+        'delta_cm':   delta,
+        'measurements': chart,
+        'forecast_img': 'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png',
+    }
+
+
+@app.get('/api/waterlevel')
+async def get_waterlevel():
+    now = time.time()
+    if _wl_cache['data'] and now - _wl_cache['ts'] < 300:
+        return _wl_cache['data']
+    try:
+        data = await asyncio.get_event_loop().run_in_executor(None, _fetch_waterlevel)
+        _wl_cache['data'] = data
+        _wl_cache['ts']   = now
+        return data
+    except Exception as e:
+        log.warning('Wasserstand-Fetch fehlgeschlagen: %s', e)
+        if _wl_cache['data']:
+            return _wl_cache['data']
+        raise HTTPException(503, detail='Wasserstand nicht verfügbar')

@@ -45,6 +45,7 @@
   <script defer src="/static/js/stauplan.js"></script>
   <script defer src="/static/js/monday.js"></script>
   <script defer src="/static/js/flow.js"></script>
+  <script defer src="/static/js/waterlevel.js"></script>
   <script defer src="/static/js/init.js"></script>
 </head>
 <body>
@@ -54,6 +55,13 @@
 
   <!-- Clock — centered via grid -->
   <span id="topbarClock" style="font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.04em;text-align:center">00:00</span>
+
+  <!-- Wasserstand-Chip -->
+  <button class="wl-chip" id="wlChip" onclick="openWaterLevel()" title="Wasserstand Travemünde" style="display:none">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" opacity=".3"/><path d="M2 12h20M12 2c-4 4-4 16 0 20M12 2c4 4 4 16 0 20"/></svg>
+    <span id="wlValue">-- cm</span>
+    <span id="wlTrend"></span>
+  </button>
 
   <div class="header-right">
     <div class="conn-badge">
@@ -1575,6 +1583,29 @@
       </g>
 
     </svg>
+  </div>
+</div>
+
+<!-- ── Wasserstand Overlay ──────────────────────────────────────────────────── -->
+<div id="wlOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <button class="ov-back" onclick="closeWaterLevel()">&#8592;</button>
+    <span class="ov-title">Wasserstand Travemünde</span>
+    <div class="ov-header-spacer"></div>
+  </div>
+  <div style="padding:16px;max-width:700px;margin:0 auto">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
+      <span id="wlDetailValue" style="font-size:2.2rem;font-weight:700;font-variant-numeric:tabular-nums">-- cm</span>
+      <span id="wlDetailTrend" style="font-size:1.1rem;font-weight:600"></span>
+      <span id="wlDetailDelta" style="font-size:0.85rem;color:var(--text3)"></span>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text3);margin-bottom:16px">Pegel Travemünde · Messung WSV · cm über Pegelnull</div>
+    <canvas id="wlCanvas" style="width:100%;height:180px;display:block"></canvas>
+    <div style="margin-top:24px">
+      <div style="font-size:0.8rem;color:var(--text3);margin-bottom:8px;font-weight:600">Prognose BSH (Lübecker Bucht)</div>
+      <img id="wlForecastImg" src="" style="width:100%;border-radius:8px;display:block" alt="BSH Wasserstandsprognose">
+      <div style="font-size:0.7rem;color:var(--text3);margin-top:6px">Quelle: Bundesamt für Seeschifffahrt und Hydrographie — keine offizielle Vorhersage</div>
+    </div>
   </div>
 </div>
 
