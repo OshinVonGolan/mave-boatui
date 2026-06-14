@@ -46,7 +46,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.16.110'
+VERSION  = _git_semver() or '1.16.111'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -660,6 +660,7 @@ async def poll_charger():
 _wl_cache: dict = {'data': None, 'ts': 0.0}
 _WL_URL = ('https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/'
            'TRAVEM%C3%BCNDE/W/measurements.json?start=P1DT0H&includeCurrentMeasurement=true')
+_WL_PNP_M = -5.025   # Pegelnullpunkt Travemünde in m über NHN (Stand 2019-11-01)
 
 
 def _fetch_waterlevel() -> dict:
@@ -668,6 +669,7 @@ def _fetch_waterlevel() -> dict:
     if not measurements:
         return {}
     current = measurements[-1]['value']
+    nhn_cm  = round(current / 100 * 100 + _WL_PNP_M * 100)   # cm über NHN
     now_ts  = time.time()
     past_v  = None
     for m in reversed(measurements):
@@ -683,11 +685,12 @@ def _fetch_waterlevel() -> dict:
     step   = max(1, len(measurements) // 120)
     chart  = [{'ts': m['timestamp'], 'v': m['value']} for m in measurements[::step]]
     return {
-        'current_cm': current,
-        'trend':      trend,
-        'delta_cm':   delta,
-        'measurements': chart,
-        'forecast_img': 'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png',
+        'current_cm':     current,
+        'current_nhn_cm': nhn_cm,
+        'trend':          trend,
+        'delta_cm':       delta,
+        'measurements':   chart,
+        'forecast_img':   'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png',
     }
 
 

@@ -14,16 +14,22 @@ function _trendColor(trend) {
   return 'var(--text3)';
 }
 
+function _nhnLabel(data) {
+  if (data.current_nhn_cm == null) return null;
+  const cm = data.current_nhn_cm;
+  const sign = cm >= 0 ? '+' : '';
+  return `${sign}${cm} cm NHN`;
+}
+
 function _updateTopbarChip(data) {
   const chip  = $('wlChip');
   const val   = $('wlValue');
   const trend = $('wlTrend');
   if (!chip || !data || data.current_cm == null) return;
   chip.style.display = '';
-  val.textContent  = Math.round(data.current_cm) + ' cm';
-  const arrow = _trendArrow(data.trend);
-  trend.textContent  = arrow;
-  trend.style.color  = _trendColor(data.trend);
+  val.textContent = _nhnLabel(data) ?? (Math.round(data.current_cm) + ' cm');
+  trend.textContent = _trendArrow(data.trend);
+  trend.style.color = _trendColor(data.trend);
 }
 
 function _renderWlChart(measurements) {
@@ -102,14 +108,17 @@ function _updateWlOverlay(data) {
   const delta = $('wlDetailDelta');
   const img   = $('wlForecastImg');
   if (!data) return;
-  if (val)   val.textContent   = data.current_cm != null ? Math.round(data.current_cm) + ' cm' : '-- cm';
+  if (val) {
+    const nhn = _nhnLabel(data);
+    val.textContent = nhn ?? (data.current_cm != null ? Math.round(data.current_cm) + ' cm' : '-- cm');
+  }
   if (trend) {
     trend.textContent = _trendArrow(data.trend);
     trend.style.color = _trendColor(data.trend);
   }
   if (delta && data.delta_cm != null) {
     const sign = data.delta_cm >= 0 ? '+' : '';
-    delta.textContent = `${sign}${data.delta_cm} cm (30 min)`;
+    delta.textContent = `${sign}${data.delta_cm} cm · Pegel ${Math.round(data.current_cm)} cm (30 min)`;
   }
   if (img && data.forecast_img) {
     img.src = data.forecast_img + '?t=' + Math.floor(Date.now() / 300000);
