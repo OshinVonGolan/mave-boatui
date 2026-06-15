@@ -248,16 +248,18 @@ const _KIOSK_TABS = [
 let _kioskReady = false;
 
 function _kioskNavInit() {
-  const nav = $('kioskNav');
-  if (!nav || _kioskReady) return;
+  if (_kioskReady) return;
   _kioskReady = true;
-  nav.innerHTML = _KIOSK_TABS.map(t => `
-    <button class="kiosk-tab" id="kTab-${t.id}" onclick="_kioskTab('${t.id}')">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
-      <span>${t.label}</span>
-    </button>
-  `).join('');
+  const side = $('kioskSidebar');
+  if (side) {
+    side.innerHTML = _KIOSK_TABS.map(t => `
+      <button class="kiosk-side-btn" data-kt="${t.id}" onclick="_kioskTab('${t.id}')">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg>
+        <span>${t.label}</span>
+      </button>`).join('');
+  }
   _kioskSetActive('home');
+  _kioskQuickInit();
 }
 
 function _kioskTab(id) {
@@ -266,9 +268,111 @@ function _kioskTab(id) {
 }
 
 function _kioskSetActive(id) {
-  document.querySelectorAll('.kiosk-tab').forEach(b =>
-    b.classList.toggle('active', b.id === `kTab-${id}`)
+  document.querySelectorAll('.kiosk-side-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.kt === id)
   );
+}
+
+// ── Slide-down Topbar mit Quick-Einstellungen ───────────────────────────────
+
+function _kioskToggleTop() {
+  const t = $('kioskTop');
+  if (!t) return;
+  t.classList.toggle('open');
+  if (t.classList.contains('open')) _kioskInvSync();
+}
+
+async function _kioskQuickInit() {
+  const q = $('ktpQuick');
+  if (!q) return;
+  let cap = { power_available: false, brightness_available: false, brightness: 50 };
+  try { cap = await fetch('/api/display/state').then(r => r.json()); } catch (_) {}
+  const bri = cap.brightness ?? 50;
+
+  q.innerHTML = `
+    <div class="ktp-tile">
+      <span class="ktp-tile-lbl">Inverter</span>
+      <button class="ktp-toggle" id="ktpInvBtn" onclick="_kioskQuickInverter()">–</button>
+    </div>
+    <div class="ktp-tile${cap.power_available ? '' : ' disabled'}">
+      <span class="ktp-tile-lbl">Display</span>
+      <button class="ktp-toggle" id="ktpDispBtn" ${cap.power_available ? '' : 'disabled'} onclick="_kioskDisplayOff()">Ausschalten</button>
+    </div>
+    <div class="ktp-tile${cap.brightness_available ? '' : ' disabled'}">
+      <span class="ktp-tile-lbl">Helligkeit${cap.brightness_available ? '' : ' · n/v'}</span>
+      <input type="range" class="ktp-range" min="10" max="100" value="${bri}"
+        ${cap.brightness_available ? '' : 'disabled'} oninput="_kioskBrightness(this.value)">
+    </div>
+    <div class="ktp-tile disabled">
+      <span class="ktp-tile-lbl">Gas · bald</span>
+      <button class="ktp-toggle" disabled>—</button>
+    </div>
+    <div class="ktp-tile disabled">
+      <span class="ktp-tile-lbl">Starlink · bald</span>
+      <button class="ktp-toggle" disabled>—</button>
+    </div>
+  `;
+  _kioskInvSync();
+}
+
+function _kioskInvSync() {
+  const btn = $('ktpInvBtn');
+  if (!btn) return;
+  const on = (typeof _invCurrentState !== 'undefined') &&
+             (_invCurrentState === 'Aktiv' || _invCurrentState === 'Eco');
+  btn.textContent = on ? 'An' : 'Aus';
+  btn.classList.toggle('on', on);
+}
+
+function _kioskQuickInverter() {
+  if (typeof toggleInverter === 'function') toggleInverter();
+  setTimeout(_kioskInvSync, 60);
+}
+
+function _kioskDisplayOff() {
+  fetch('/api/display/power', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ on: false }),
+  }).then(r => { if (!r.ok) _toast('Display-Steuerung (noch) nicht verfügbar'); })
+    .catch(() => _toast('Display-Steuerung (noch) nicht verfügbar'));
+}
+
+let _briTimer = null;
+function _kioskBrightness(v) {
+  clearTimeout(_briTimer);
+  _briTimer = setTimeout(() => {
+    fetch('/api/display/brightness', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: +v }),
+    }).catch(() => {});
+  }, 140);
+}
+
+// Aktualisiert die Mini-Batterie in der Slide-down Topbar (vom Batterie-Update).
+function _kioskUpdateBatt(soc) {
+  const fill = $('ktpBattFill'), pct = $('ktpBattPct'), wrap = $('ktpBatt');
+  if (!fill) return;
+  if (soc == null) { fill.setAttribute('width', '0'); if (pct) pct.textContent = '--%'; return; }
+  const v = Math.max(0, Math.min(100, soc));
+  fill.setAttribute('width', String((v / 100 * 16).toFixed(1)));
+  const color = v >= 50 ? 'var(--green)' : v >= 20 ? 'var(--yellow)' : 'var(--red)';
+  if (wrap) wrap.style.color = color;
+  if (pct)  pct.textContent = Math.round(v) + '%';
+}
+
+// Mini-Toast
+let _toastTimer = null;
+function _toast(msg) {
+  let el = $('miniToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'miniToast'; el.className = 'mini-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
 // ── Display-Einstellungen ───────────────────────────────────────────────────

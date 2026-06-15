@@ -318,6 +318,7 @@ function updateBattery(b) {
 }
 
 function updateTopbarBatt(soc) {
+  if (typeof _kioskUpdateBatt === 'function') _kioskUpdateBatt(soc);  // Kiosk Slide-down
   const fill = $('topbarBattFill');
   const pct  = $('topbarBattPct');
   const wrap = $('topbarBatt');

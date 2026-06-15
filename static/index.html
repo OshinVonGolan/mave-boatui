@@ -136,6 +136,28 @@
   </div>
 </header>
 
+<!-- ── Kiosk-Chrome (nur im Kiosk-Profil sichtbar) ───────────────────────── -->
+<aside id="kioskSidebar" class="kiosk-sidebar"></aside>
+<div id="kioskTop" class="kiosk-top">
+  <div class="kiosk-top-panel">
+    <div class="ktp-status">
+      <span class="ktp-clock" id="ktpClock">00:00</span>
+      <span class="ktp-batt" id="ktpBatt" title="Servicebatterie">
+        <svg width="26" height="14" viewBox="0 0 24 13" fill="none">
+          <rect x="0.75" y="0.75" width="19.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="20.75" y="4" width="2.5" height="5" rx="1" fill="currentColor"/>
+          <rect x="2.5" y="2.5" width="0" height="8" rx="1" fill="currentColor" id="ktpBattFill"/>
+        </svg>
+        <span id="ktpBattPct">--%</span>
+      </span>
+    </div>
+    <div class="ktp-quick" id="ktpQuick"></div>
+  </div>
+  <button class="kiosk-top-handle" id="kioskTopHandle" onclick="_kioskToggleTop()" aria-label="Quick-Einstellungen">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+  </button>
+</div>
+
 <main>
 
   <!-- ── Batterie ── -->

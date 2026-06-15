@@ -35,10 +35,9 @@ let state = { lights: { channels: Array(9).fill(0) } };
 // ── Clock ──────────────────────────────────────────────────────────────────
 
 function updateClock() {
-  const el = $('topbarClock');
-  if (!el) return;
-  const d = new Date();
-  el.textContent = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const el = $('topbarClock'); if (el) el.textContent = t;
+  const k = $('ktpClock');     if (k)  k.textContent = t;   // Kiosk Slide-down
 }
 updateClock();
 setInterval(updateClock, 10000);

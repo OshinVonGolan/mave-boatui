@@ -818,3 +818,76 @@ async def get_waterlevel():
     _wl_cache['data'] = wl_data
     _wl_cache['ts']   = now
     return wl_data
+
+
+# ── Display-Steuerung (fester Kiosk-Bildschirm) ──────────────────────────────
+# Vorbereitet für einen später angeschlossenen Display. Power über `vcgencmd
+# display_power`, Helligkeit über /sys/class/backlight (falls vorhanden).
+# Der State-Endpoint meldet ehrlich, was die Hardware/Rechte erlauben — die UI
+# deaktiviert Regler, die (noch) nicht funktionieren. Kein Crash ohne Display.
+from glob import glob as _glob
+
+
+def _backlight_dir():
+    dirs = sorted(_glob('/sys/class/backlight/*'))
+    return dirs[0] if dirs else None
+
+
+def _display_state() -> dict:
+    bl = _backlight_dir()
+    brightness, bright_avail = None, False
+    if bl:
+        try:
+            cur = int((Path(bl) / 'brightness').read_text().strip())
+            mx  = int((Path(bl) / 'max_brightness').read_text().strip())
+            brightness   = round(cur / mx * 100) if mx else None
+            bright_avail = os.access(str(Path(bl) / 'brightness'), os.W_OK)
+        except Exception:
+            pass
+    power, power_avail = None, False
+    try:
+        r = subprocess.run(['vcgencmd', 'display_power', '-1'],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and '=' in r.stdout:
+            power       = r.stdout.strip().split('=')[-1] == '1'
+            power_avail = True
+    except Exception:
+        pass
+    return {'power': power, 'power_available': power_avail,
+            'brightness': brightness, 'brightness_available': bright_avail}
+
+
+@app.get('/api/display/state')
+async def display_state():
+    return _display_state()
+
+
+@app.post('/api/display/power')
+async def display_power(body: dict):
+    on = bool(body.get('on', True))
+    try:
+        r = subprocess.run(['vcgencmd', 'display_power', '1' if on else '0'],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            raise HTTPException(503, detail=f'Display-Steuerung nicht verfügbar: '
+                                            f'{(r.stderr or r.stdout).strip()}')
+    except FileNotFoundError:
+        raise HTTPException(503, detail='vcgencmd nicht gefunden')
+    return {'ok': True, 'power': on}
+
+
+@app.post('/api/display/brightness')
+async def display_brightness(body: dict):
+    val = max(0, min(100, int(body.get('value', 50))))
+    bl  = _backlight_dir()
+    if not bl:
+        raise HTTPException(503, detail='Kein Backlight-Gerät (Display ohne Helligkeitssteuerung)')
+    try:
+        mx  = int((Path(bl) / 'max_brightness').read_text().strip())
+        raw = max(1, round(val / 100 * mx))   # nie ganz aus über die Helligkeit
+        (Path(bl) / 'brightness').write_text(str(raw))
+    except PermissionError:
+        raise HTTPException(503, detail='Keine Schreibrechte auf Backlight (udev-Regel nötig)')
+    except Exception as e:
+        raise HTTPException(503, detail=f'Helligkeit fehlgeschlagen: {e}')
+    return {'ok': True, 'brightness': val}

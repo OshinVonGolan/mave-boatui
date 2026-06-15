@@ -84,25 +84,86 @@
         box-shadow: none !important; padding: 4px 2px; }
       .topbar-batt { cursor: default; }
     }
-    /* ── Kiosk Bottom-Nav ── */
-    :root { --kiosk-nav-h: 72px; }
-    .kiosk-nav {
-      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
-      height: var(--kiosk-nav-h); background: var(--surface);
-      border-top: 1px solid var(--border); align-items: stretch;
-      padding-bottom: env(safe-area-inset-bottom, 0);
+    /* ── Kiosk-Chrome (fester Display): linke Sidebar + Slide-down Topbar ──
+       Im Kiosk-Modus werden Header (oben) und alte Bottom-Nav entfernt. */
+    :root { --kiosk-side-w: 84px; --kiosk-handle-h: 22px; }
+    .kiosk-nav { display: none; }                 /* alte Bottom-Nav: aus */
+
+    .kiosk-mode header { display: none; }
+
+    /* Linke Sidebar */
+    .kiosk-sidebar { display: none; }
+    .kiosk-mode .kiosk-sidebar {
+      display: flex; flex-direction: column; gap: 6px;
+      position: fixed; top: 0; left: 0; bottom: 0; width: var(--kiosk-side-w);
+      background: var(--surface); border-right: 1px solid var(--border);
+      padding: 12px 8px; z-index: 60;
     }
-    .kiosk-mode .kiosk-nav { display: flex; }
-    .kiosk-tab {
-      flex: 1; display: flex; flex-direction: column; align-items: center;
-      justify-content: center; gap: 4px; background: none; border: none;
-      color: var(--text3); cursor: pointer; font-size: 11px; font-weight: 500;
-      padding: 8px 4px; transition: color .15s; -webkit-tap-highlight-color: transparent;
+    .kiosk-side-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 14px 4px; border: none; background: none; color: var(--text3);
+      border-radius: 14px; cursor: pointer; font-size: 11px; font-weight: 600;
+      transition: background .15s, color .15s; -webkit-tap-highlight-color: transparent;
     }
-    .kiosk-tab:hover, .kiosk-tab.active { color: var(--accent); }
-    .kiosk-tab.active svg { filter: drop-shadow(0 0 4px var(--accent)); }
-    .kiosk-mode main { padding-bottom: calc(var(--kiosk-nav-h) + var(--gap)); }
-    .kiosk-mode .overlay { padding-bottom: var(--kiosk-nav-h); }
+    .kiosk-side-btn:hover  { background: var(--surface2); color: var(--accent); }
+    .kiosk-side-btn.active { background: var(--surface2); color: var(--accent); }
+    .kiosk-side-btn.active svg { filter: drop-shadow(0 0 4px var(--accent)); }
+
+    .kiosk-mode main {
+      padding-left: calc(var(--kiosk-side-w) + var(--gap));
+      padding-top: calc(var(--gap) + var(--kiosk-handle-h));
+      padding-bottom: var(--gap);
+    }
+    .kiosk-mode .overlay { padding-left: var(--kiosk-side-w); padding-bottom: 0; }
+
+    /* Slide-down Topbar */
+    .kiosk-top { display: none; }
+    .kiosk-mode .kiosk-top {
+      display: block; position: fixed; top: 0; left: var(--kiosk-side-w); right: 0;
+      z-index: 65; pointer-events: none;
+    }
+    .kiosk-top-panel {
+      pointer-events: auto; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      border-bottom-left-radius: 18px; border-bottom-right-radius: 18px;
+      padding: 16px 22px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.4);
+      transform: translateY(-100%); transition: transform .32s cubic-bezier(.4,0,.2,1);
+    }
+    .kiosk-top.open .kiosk-top-panel { transform: translateY(0); }
+    .kiosk-top-handle {
+      pointer-events: auto; position: absolute; top: 0; left: 50%;
+      transform: translateX(-50%); width: 72px; height: var(--kiosk-handle-h);
+      background: var(--surface); border: 1px solid var(--border); border-top: none;
+      border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
+      color: var(--text3); cursor: pointer; display: flex; align-items: center;
+      justify-content: center; transition: color .15s;
+    }
+    .kiosk-top-handle:hover { color: var(--accent); }
+    .kiosk-top-handle svg { transition: transform .32s; }
+    .kiosk-top.open .kiosk-top-handle svg { transform: rotate(180deg); }
+
+    .ktp-status { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .ktp-clock  { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+    .ktp-batt   { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--text3); }
+    .ktp-quick  { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+    .ktp-tile   { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; min-height: 78px; justify-content: space-between; }
+    .ktp-tile.disabled { opacity: .45; }
+    .ktp-tile-lbl { font-size: 11px; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .ktp-toggle { border: 1px solid var(--border); background: var(--surface); color: var(--text2);
+      border-radius: 10px; padding: 9px; font-size: 14px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: all .15s; }
+    .ktp-toggle:hover:not(:disabled) { border-color: var(--accent2); }
+    .ktp-toggle:disabled { cursor: not-allowed; }
+    .ktp-toggle.on  { background: #22c55e22; border-color: #22c55e; color: #22c55e; }
+    .ktp-range { width: 100%; accent-color: var(--accent2); cursor: pointer; }
+
+    /* Mini-Toast */
+    .mini-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      padding: 10px 18px; border-radius: 10px; font-size: 13px; z-index: 9998;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4); opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
+    .mini-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
     /* ── Kachel-Engine (Grid) ───────────────────────────────────────────────
        Eine Basis-Einheit: normale Kachel = Quadrat (Breite == Höhe).
