@@ -84,6 +84,27 @@
         box-shadow: none !important; padding: 4px 2px; }
       .topbar-batt { cursor: default; }
     }
+    /* ── Kiosk Bottom-Nav ── */
+    :root { --kiosk-nav-h: 72px; }
+    .kiosk-nav {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      height: var(--kiosk-nav-h); background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: none; align-items: stretch;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .kiosk-mode .kiosk-nav { display: flex; }
+    .kiosk-tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 4px; background: none; border: none;
+      color: var(--text3); cursor: pointer; font-size: 11px; font-weight: 500;
+      padding: 8px 4px; transition: color .15s; -webkit-tap-highlight-color: transparent;
+    }
+    .kiosk-tab:hover, .kiosk-tab.active { color: var(--accent); }
+    .kiosk-tab.active svg { filter: drop-shadow(0 0 4px var(--accent)); }
+    .kiosk-mode main { padding-bottom: calc(var(--kiosk-nav-h) + var(--gap)); }
+    .kiosk-mode .overlay { padding-bottom: var(--kiosk-nav-h); }
+
     /* ── Main grid ── */
     main { display: grid; gap: var(--gap); padding: var(--gap);
       padding-top: calc(var(--header-h) + var(--gap));

@@ -26,7 +26,7 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'laden', 'wartung', 'netz', 'system'].forEach(c =>
+  ['tanks', 'batt', 'laden', 'wartung', 'netz', 'system', 'display'].forEach(c =>
     $(`setPane-${c}`)?.classList.toggle('active', c === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
@@ -38,8 +38,9 @@ function switchSettingsCat(cat) {
   } else {
     clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   }
-  if (cat === 'system') refreshVersion();
-  if (cat === 'laden')  refreshChargerStatus();
+  if (cat === 'system')  refreshVersion();
+  if (cat === 'laden')   refreshChargerStatus();
+  if (cat === 'display') openDisplaySettings();
 }
 
 async function fetchSettingsNetwork() {

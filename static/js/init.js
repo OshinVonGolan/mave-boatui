@@ -1,5 +1,6 @@
 // ── Init ───────────────────────────────────────────────────────────────────
 
+applyDisplayConfig();
 loadPresets();
 
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern

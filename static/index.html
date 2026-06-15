@@ -45,6 +45,7 @@
   <script defer src="/static/js/stauplan.js"></script>
   <script defer src="/static/js/monday.js"></script>
   <script defer src="/static/js/flow.js"></script>
+  <script defer src="/static/js/display.js"></script>
   <script defer src="/static/js/waterlevel.js"></script>
   <script defer src="/static/js/init.js"></script>
 </head>
@@ -548,6 +549,7 @@
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')">🔧 Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
       <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')">⚙️ System</button>
+      <button class="set-nav-btn"        data-cat="display" onclick="switchSettingsCat('display')">🖥 Anzeige</button>
     </div>
 
     <!-- Kategorie: Tanks -->
@@ -797,6 +799,11 @@
           <span id="timeSyncFeedback" style="font-size:13px;color:var(--text2)"></span>
         </div>
       </div>
+    </div>
+
+    <!-- Kategorie: Anzeige -->
+    <div class="set-pane" id="setPane-display">
+      <div style="color:var(--text3);font-size:13px;padding:20px">Lade…</div>
     </div>
 
   </div>
@@ -1610,6 +1617,9 @@
     </div>
   </div>
 </div>
+
+<!-- ── Kiosk Bottom-Nav (nur im Kiosk-Profil sichtbar) ───────────────────── -->
+<nav id="kioskNav" class="kiosk-nav"></nav>
 
 </body>
 </html>
