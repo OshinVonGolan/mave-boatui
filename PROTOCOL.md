@@ -490,6 +490,42 @@ Wird beim Start und auf Anfrage (`/api/system/time-sync`) gesendet.
 
 ---
 
+### PGN 126983 – Alert *(kritischer Alarm → NMEA-2000-Buzzer)*
+**Format:** Fast Packet, **28 Byte Payload** · **Richtung:** Pi (Adr. 100) → broadcast · **Prio 6**
+
+Wird gesendet, wenn ein Alarm mit `severity == 'critical'` aktiv wird, und erneut
+mit *Alert State = Normal*, sobald er aufgelöst oder quittiert wird. Ein
+Standard-Buzzer (z.B. Digital Yacht NAValarm) reagiert auf Standard-Alert-PGNs.
+Der Callback `AlarmEngine.set_alert_callback` ruft `can_if.send_alert(...)`; die
+Engine sendet selbst kein CAN. Die 16-Bit `Alert ID` ist `crc32(rule_key) & 0xFFFF`
+(stabil pro Regel).
+
+| Byte(s) | Feld                              | Wert |
+|---------|-----------------------------------|------|
+| 0       | Alert Type (Bit0-3) / Category (Bit4-7) | 1 = Emergency / 1 = Technical |
+| 1       | Alert System                      | 0 |
+| 2       | Alert Sub-System                  | 0 |
+| 3-4     | Alert ID (LE)                     | crc32(key) & 0xFFFF |
+| 5-12    | Data Source Network ID NAME       | 0xFF… (unbekannt) |
+| 13      | Data Source Instance              | 0 |
+| 14      | Data Source Index-Source          | 0 |
+| 15      | Alert Occurrence Number           | 1 |
+| 16      | Status-Flags (Bit4 = Acknowledge Support) | 0x10 |
+| 17-24   | Acknowledge Source Network ID NAME | 0xFF… |
+| 25      | Trigger Condition / Threshold Status | 0 |
+| 26      | Alert Priority                    | 0 |
+| 27      | Alert State                       | **2 = Active** (auslösen) / **1 = Normal** (Entwarnung) |
+
+### PGN 126984 – Alert Response *(Quittierung empfangen)*
+**Format:** Fast Packet · **Richtung:** Buzzer/MFD → Pi *(geplant)*
+
+Ein Buzzer/MFD quittiert über 126984. Aktuell wird die Quittierung im UI bzw.
+über `AlarmEngine.acknowledge()` ausgelöst, was den Alert via 126983
+(State = Normal) zurücknimmt. Hardware-Quittierung über 126984 ist vorgesehen,
+sobald ein Buzzer am Bus hängt.
+
+---
+
 ## VE.Direct-HEX-Steuerung (Gateway-intern)
 
 Wenn das Gateway PGN 61184 empfängt, sendet es auf dem UART des Zielgeräts

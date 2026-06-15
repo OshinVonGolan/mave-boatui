@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import urllib.request
+import zlib
 from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -46,7 +47,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.19.0'
+VERSION  = _git_semver() or '1.20.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -107,6 +108,14 @@ can_if      = CanInterface(channel='can0', state=state,
 alarms      = AlarmEngine()
 charge_ctrl = ChargeController()
 can_if._charger_config_cb = charge_ctrl.update_actual_setpoints
+
+
+def _alarm_alert(key: str, active: bool):
+    """Kritischer Alarm → PGN 126983 Alert auf den Bus (NMEA-2000-Buzzer)."""
+    alert_id = (zlib.crc32(key.encode()) & 0xFFFF) or 1   # stabile 16-Bit-ID pro Regel
+    can_if.send_alert(alert_id, active, priority=0)
+
+alarms.set_alert_callback(_alarm_alert)
 
 _CONN_FILE = BASE_DIR / 'connectivity.json'
 if _CONN_FILE.exists():

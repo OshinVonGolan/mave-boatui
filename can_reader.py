@@ -11,6 +11,7 @@ from daily_stats import DailyStatsTracker
 from nmea2000 import (
     DC_TYPE_ALTERNATOR, DC_TYPE_SOLAR,
     FAST_PACKET_PGNS, FastPacketReassembler,
+    build_alert_frame,
     build_brightness_frames, build_charger_config_request, build_charger_register_frame,
     build_charger_setpoints_frame,
     build_inverter_mode_frame, build_iso_request, build_time_frame, make_can_id,
@@ -243,6 +244,22 @@ class CanInterface:
                     arbitration_id=can_id, data=data, is_extended_id=True))
             except can.CanError as e:
                 log.error("CAN-Sendefehler: %s", e)
+
+    def send_alert(self, alert_id: int, active: bool, priority: int = 0):
+        """Sendet PGN 126983 (Alert) als Fast-Packet — löst einen NMEA-2000-Buzzer
+        aus (active=True) bzw. nimmt den Alarm zurück (active=False)."""
+        if self._bus is None:
+            log.warning("CAN nicht verbunden – Alert nicht gesendet")
+            return
+        frames = build_alert_frame(alert_id, active, priority=priority, seq=self._seq_id)
+        self._seq_id = (self._seq_id + 1) & 0x07
+        for can_id, data in frames:
+            try:
+                self._bus.send(can.Message(
+                    arbitration_id=can_id, data=data, is_extended_id=True))
+            except can.CanError as e:
+                log.error("CAN-Sendefehler Alert: %s", e)
+        log.info("Alert 126983 id=%d active=%s (%d Frames) gesendet", alert_id, active, len(frames))
 
     # ── Empfangen ───────────────────────────────────────────────────────────
 

@@ -28,7 +28,7 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 126996, 130900, 130901, 130902, 130910, 130912, 130913, 130914}
+FAST_PACKET_PGNS = {126720, 126983, 126984, 126996, 130900, 130901, 130902, 130910, 130912, 130913, 130914}
 
 
 class FastPacketReassembler:
@@ -258,6 +258,8 @@ PGN_NAMES: dict[int, str] = {
     65240:  'ISO Commanded Address',
     126208: 'NMEA Request/Command',
     126720: 'Proprietary Fast-Packet',
+    126983: 'Alert',
+    126984: 'Alert Response',
     126992: 'System Time',
     126996: 'Product Information',
     127245: 'Rudder',
@@ -738,6 +740,48 @@ def build_charger_register_frame(reg: int, val: int, size: int = 2,
 def build_charger_config_request(dst: int = 0xFF) -> tuple[int, bytes]:
     """PGN 59904 – ISO Request für PGN 130914 (aktuelle IP43-Setpoints abfragen)."""
     return build_iso_request(130914, RPI_SOURCE_ADDRESS, dst)
+
+
+def _fast_packet_frames(pgn: int, payload: bytes, src: int,
+                        priority: int = 6, dst: int = 0xFF, seq: int = 0) -> list:
+    """Zerlegt eine Payload (>8 Byte) in NMEA-2000 Fast-Packet-Frames.
+    Frame 0: [seq|0, len, 6 Datenbytes]; Folgeframes: [seq|n, 7 Datenbytes]."""
+    can_id = make_can_id(pgn, src, dst=dst, priority=priority)
+    s = (seq & 0x07) << 5
+    frames = [(can_id, bytes([s | 0, len(payload)]) + payload[0:6].ljust(6, b'\xff'))]
+    idx, fn = 6, 1
+    while idx < len(payload):
+        frames.append((can_id, bytes([s | fn]) + payload[idx:idx + 7].ljust(7, b'\xff')))
+        idx += 7
+        fn += 1
+    return frames
+
+
+def build_alert_frame(alert_id: int, active: bool, *, alert_type: int = 1,
+                      category: int = 1, priority: int = 0, occurrence: int = 1,
+                      seq: int = 0) -> list:
+    """PGN 126983 (Alert) als Fast-Packet (28-Byte-Layout nach NMEA-2000-Spec).
+    active=True  → Alert State = Active (löst z.B. einen NMEA-Buzzer aus),
+    active=False → Alert State = Normal (Entwarnung).
+    alert_type: 1 = Emergency Alarm. category: 1 = Technical.
+    Quelle = Pi (Adresse 100). Eigener/Acknowledge-NAME unbekannt → all-ones.
+    """
+    NAME = 0xFFFFFFFFFFFFFFFF
+    b = bytearray(28)
+    b[0] = (alert_type & 0x0F) | ((category & 0x0F) << 4)   # Alert Type | Alert Category
+    b[1] = 0                                                 # Alert System
+    b[2] = 0                                                 # Alert Sub-System
+    struct.pack_into('<H', b, 3, alert_id & 0xFFFF)          # Alert ID
+    struct.pack_into('<Q', b, 5, NAME)                       # Data Source Network ID NAME
+    b[13] = 0                                                # Data Source Instance
+    b[14] = 0                                                # Data Source Index-Source
+    b[15] = occurrence & 0xFF                                # Alert Occurrence Number
+    b[16] = (1 << 4)                                         # Acknowledge Support = 1
+    struct.pack_into('<Q', b, 17, NAME)                      # Acknowledge Source Network ID NAME
+    b[25] = 0                                                # Trigger Condition | Threshold Status
+    b[26] = priority & 0xFF                                  # Alert Priority
+    b[27] = 0x02 if active else 0x01                         # Alert State: 2=Active, 1=Normal
+    return _fast_packet_frames(126983, bytes(b), RPI_SOURCE_ADDRESS, priority=6, seq=seq)
 
 
 def parse_charger_config_pgn(payload: bytes) -> dict | None:

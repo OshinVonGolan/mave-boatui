@@ -22,6 +22,7 @@ class AlarmEngine:
         self._alarms:     list = []   # alle nicht gelöschten Alarme
         self._active:     dict = {}   # key → alarm-id (aktuell ausgelöste Bedingungen)
         self._data_seen:  set  = set()   # keys die mindestens einmal Daten hatten
+        self._alert_cb         = None    # Callback(key, active) für kritische Alarme (NMEA-Buzzer)
         self._load()
 
     def _load(self):
@@ -30,6 +31,21 @@ class AlarmEngine:
 
     def _save(self):
         ALARMS_FILE.write_text(json.dumps({'rules': self._rules}, indent=2, ensure_ascii=False))
+
+    # ── Kritischer-Alarm-Hook (NMEA-2000-Buzzer via main.py) ─────────────────
+
+    def set_alert_callback(self, cb):
+        """cb(key:str, active:bool) wird bei kritischen Alarmen aufgerufen
+        (active=True auslösen, active=False zurücknehmen). Die Engine sendet
+        selbst KEIN CAN — main.py verdrahtet den Callback mit can_if.send_alert."""
+        self._alert_cb = cb
+
+    def _fire_alert(self, key: str, active: bool):
+        if self._alert_cb:
+            try:
+                self._alert_cb(key, active)
+            except Exception:
+                pass
 
     # ── Regeln ──────────────────────────────────────────────────────────────
 
@@ -91,6 +107,8 @@ class AlarmEngine:
                 self._alarms.append(alarm)
                 self._active[key] = alarm['id']
                 changed = True
+                if rule.get('severity') == 'critical':
+                    self._fire_alert(key, True)
 
             elif not triggered and key in self._active:
                 aid = self._active.pop(key)
@@ -99,6 +117,8 @@ class AlarmEngine:
                         a['resolved'] = True
                         break
                 changed = True
+                if rule.get('severity') == 'critical':
+                    self._fire_alert(key, False)
 
             elif triggered and key in self._active:
                 aid = self._active[key]
@@ -127,12 +147,16 @@ class AlarmEngine:
         for a in self._alarms:
             if a['id'] == alarm_id:
                 a['acknowledged'] = True
+                if a.get('severity') == 'critical' and not a.get('resolved'):
+                    self._fire_alert(a['key'], False)   # Buzzer quittieren
                 return True
         return False
 
     def acknowledge_all(self):
         for a in self._alarms:
             a['acknowledged'] = True
+            if a.get('severity') == 'critical' and not a.get('resolved'):
+                self._fire_alert(a['key'], False)
 
     def delete(self, alarm_id: str) -> bool:
         before = len(self._alarms)
