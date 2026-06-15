@@ -655,12 +655,77 @@ async def poll_charger():
     return {'ok': True}
 
 
-# ── Wasserstand Travemünde (pegelonline.wsv.de) ──────────────────────────────
+# ── Wasserstand Travemünde (pegelonline.wsv.de + BSH-Prognose) ───────────────
 
-_wl_cache: dict = {'data': None, 'ts': 0.0}
+_wl_cache: dict  = {'data': None, 'ts': 0.0}
+_bsh_cache: dict = {'data': None, 'ts': 0.0}
+
 _WL_URL = ('https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/'
            'TRAVEM%C3%BCNDE/W/measurements.json?start=P1DT0H&includeCurrentMeasurement=true')
-_WL_PNP_M = -5.025   # Pegelnullpunkt Travemünde in m über NHN (Stand 2019-11-01)
+_BSH_URL = 'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png'
+_WL_PNP_M = -5.025          # Pegelnullpunkt Travemünde in m über NHN (Stand 2019-11-01)
+_WL_ALARM_NHN_CM = -60      # Alarm wenn Prognose-Minimum unter diesem Wert
+
+
+def _parse_bsh_forecast(img_bytes: bytes) -> dict | None:
+    """Parst das BSH-Prognose-PNG und gibt den minimalen NHN-Prognosewert zurück."""
+    try:
+        import io
+        import numpy as np
+        from PIL import Image as PILImage
+    except ImportError:
+        log.debug("PIL/numpy fehlt — BSH-Prognose-Parsing nicht verfügbar")
+        return None
+    img = PILImage.open(io.BytesIO(img_bytes)).convert('RGB')
+    arr = np.array(img)
+    w, h = img.size
+    # Horizontale Grid-Linien finden (grau, >300 solcher Pixel in chart-Breite)
+    gm = ((arr[:,:,0] > 210) & (arr[:,:,0] < 235) &
+          (arr[:,:,1] > 210) & (arr[:,:,1] < 235) &
+          (arr[:,:,2] > 210) & (arr[:,:,2] < 235))
+    raw_ys: list[int] = []
+    for y in range(50, h - 50):
+        if np.sum(gm[y, 200:w-30]) > 300:
+            if not raw_ys or y - raw_ys[-1] > 5:
+                raw_ys.append(y)
+    if len(raw_ys) < 4:
+        return None
+    # Nur regelmäßig verteilte Linien behalten (Median-Abstand)
+    sps = [raw_ys[i+1] - raw_ys[i] for i in range(len(raw_ys)-1)]
+    med = sorted(sps)[len(sps)//2]
+    if med < 30:
+        return None
+    grid_ys: list[int] = []
+    for i, y in enumerate(raw_ys):
+        if i < len(raw_ys) - 1 and abs(raw_ys[i+1] - y - med) / med < 0.3:
+            grid_ys.append(y)
+        elif i > 0 and abs(y - raw_ys[i-1] - med) / med < 0.3 and y not in grid_ys:
+            grid_ys.append(y)
+    if len(grid_ys) < 3:
+        return None
+    # Linien-Typ: negatives Label wenn linkster dunkler Pixel < x=45 (Minus-Zeichen)
+    n_nonneg = 0
+    for y_g in grid_ys:
+        region = arr[max(0, y_g-18):y_g+18, 40:75, 0]
+        x_min_local = next((x for x in range(region.shape[1])
+                            if np.any(region[:, x] < 100)), None)
+        if x_min_local is None or (40 + x_min_local) >= 45:
+            n_nonneg += 1
+    top_value = (n_nonneg - 1) * 10   # cm NHN an oberster Grid-Linie
+    # Farbige Prognose-Pixel (gesättigte Farbe, nicht weiß/schwarz)
+    sat = np.max(arr, axis=2).astype(int) - np.min(arr, axis=2).astype(int)
+    colored = (sat > 40) & (arr[:,:,0] > 30) & (arr[:,:,0] < 250)
+    ys_c = np.where(colored)[0]
+    if len(ys_c) == 0:
+        return None
+    max_y_c = int(ys_c.max())
+    min_nhn = round(top_value - (max_y_c - grid_ys[0]) * (10 / med))
+    return {'min_nhn_cm': min_nhn}
+
+
+def _fetch_bsh_forecast() -> dict | None:
+    with urllib.request.urlopen(_BSH_URL, timeout=15) as r:
+        return _parse_bsh_forecast(r.read())
 
 
 def _fetch_waterlevel() -> dict:
@@ -690,7 +755,7 @@ def _fetch_waterlevel() -> dict:
         'trend':          trend,
         'delta_cm':       delta,
         'measurements':   chart,
-        'forecast_img':   'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png',
+        'forecast_img':   _BSH_URL,
     }
 
 
@@ -699,13 +764,26 @@ async def get_waterlevel():
     now = time.time()
     if _wl_cache['data'] and now - _wl_cache['ts'] < 300:
         return _wl_cache['data']
+    loop = asyncio.get_event_loop()
     try:
-        data = await asyncio.get_event_loop().run_in_executor(None, _fetch_waterlevel)
-        _wl_cache['data'] = data
-        _wl_cache['ts']   = now
-        return data
+        wl_data = await loop.run_in_executor(None, _fetch_waterlevel)
     except Exception as e:
         log.warning('Wasserstand-Fetch fehlgeschlagen: %s', e)
         if _wl_cache['data']:
             return _wl_cache['data']
         raise HTTPException(503, detail='Wasserstand nicht verfügbar')
+    # BSH-Prognose: eigener Cache mit 30-Minuten TTL (Bild aktualisiert ~1x/h)
+    bsh = _bsh_cache['data']
+    if bsh is None or now - _bsh_cache['ts'] >= 1800:
+        try:
+            bsh = await loop.run_in_executor(None, _fetch_bsh_forecast)
+            _bsh_cache['data'] = bsh
+            _bsh_cache['ts']   = now
+        except Exception as e:
+            log.warning('BSH-Prognose-Fetch fehlgeschlagen: %s', e)
+    if isinstance(bsh, dict) and 'min_nhn_cm' in bsh:
+        wl_data['forecast_min_nhn_cm'] = bsh['min_nhn_cm']
+        wl_data['forecast_alarm']      = bsh['min_nhn_cm'] < _WL_ALARM_NHN_CM
+    _wl_cache['data'] = wl_data
+    _wl_cache['ts']   = now
+    return wl_data

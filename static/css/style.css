@@ -36,7 +36,9 @@
       letter-spacing: .04em; margin-left: 10px; }
     .header-right { display: flex; align-items: center; gap: 10px; justify-self: end; grid-column: 3; }
     .conn-badge { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); }
-    .wl-chip { display: flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; }
+    .wl-chip { display: flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; transition: border-color .3s, color .3s; }
+    .wl-chip.wl-alarm { border-color: var(--red); color: var(--red); animation: wl-pulse 1.5s ease-in-out infinite; }
+    @keyframes wl-pulse { 0%,100% { opacity:1 } 50% { opacity:.6 } }
     .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); transition: background .4s; }
     .conn-dot.ok   { background: var(--green); }
     .conn-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }

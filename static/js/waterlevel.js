@@ -30,6 +30,11 @@ function _updateTopbarChip(data) {
   val.textContent = _nhnLabel(data) ?? (Math.round(data.current_cm) + ' cm');
   trend.textContent = _trendArrow(data.trend);
   trend.style.color = _trendColor(data.trend);
+  if (data.forecast_alarm) {
+    chip.classList.add('wl-alarm');
+  } else {
+    chip.classList.remove('wl-alarm');
+  }
 }
 
 function _renderWlChart(measurements) {
@@ -107,6 +112,7 @@ function _updateWlOverlay(data) {
   const trend = $('wlDetailTrend');
   const delta = $('wlDetailDelta');
   const img   = $('wlForecastImg');
+  const fcmin = $('wlForecastMin');
   if (!data) return;
   if (val) {
     const nhn = _nhnLabel(data);
@@ -119,6 +125,16 @@ function _updateWlOverlay(data) {
   if (delta && data.delta_cm != null) {
     const sign = data.delta_cm >= 0 ? '+' : '';
     delta.textContent = `${sign}${data.delta_cm} cm · Pegel ${Math.round(data.current_cm)} cm (30 min)`;
+  }
+  if (fcmin) {
+    if (data.forecast_min_nhn_cm != null) {
+      const s = data.forecast_min_nhn_cm >= 0 ? '+' : '';
+      fcmin.textContent = `Prognose Min: ${s}${data.forecast_min_nhn_cm} cm NHN`;
+      fcmin.style.color = data.forecast_alarm ? 'var(--red)' : 'var(--text2)';
+      fcmin.style.display = '';
+    } else {
+      fcmin.style.display = 'none';
+    }
   }
   if (img && data.forecast_img) {
     img.src = data.forecast_img + '?t=' + Math.floor(Date.now() / 300000);
