@@ -262,8 +262,15 @@
     .inv-half-pct     { font-size: 32px; font-weight: 700; color: var(--text); }
     .inv-half-sep     { color: var(--text3); margin: 0 4px; }
 
-    /* ── Wartung ── (IMMER einspaltig — auch bei doppelter Breite) ─────────── */
-    .card-wartung .tile-content { justify-content: flex-start; }
+    /* ── Wartung ── (Ring + IMMER einspaltige Liste — auch bei doppelter Breite) ── */
+    .w-home-wrap { display: flex; gap: 18px; flex: 1; min-height: 0; align-items: flex-start; }
+    #wartungHomeBody { flex: 1; min-width: 0; }
+    .w-home-ring { width: 104px; height: 104px; flex-shrink: 0; align-self: center; }
+    .tile--wide.card-wartung .w-home-ring { width: 150px; height: 150px; }
+    .tile--half.card-wartung .w-home-ring { width: 74px; height: 74px; }
+    .w-ring-svg { width: 100%; height: 100%; display: block; }
+    .w-ring-big { font-size: 30px; font-weight: 800; }
+    .w-ring-lbl { font-size: 10px; fill: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
 
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }

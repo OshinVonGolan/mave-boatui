@@ -94,23 +94,50 @@ function updateWartungTopbar() {
   }
 }
 
+// Kreis-Fortschritt: grün = aktuell, gelb = demnächst, rot = überfällig.
+function _wartungRingSVG(ok, dueSoon, overdue) {
+  const total = ok + dueSoon + overdue;
+  const C = 2 * Math.PI * 42;
+  let off = 0;
+  let arcs = `<circle cx="50" cy="50" r="42" fill="none" stroke="var(--surface2)" stroke-width="11"/>`;
+  for (const s of [{ n: ok, c: '#22c55e' }, { n: dueSoon, c: '#f59e0b' }, { n: overdue, c: '#ef4444' }]) {
+    if (total === 0 || s.n <= 0) continue;
+    const len = s.n / total * C;
+    arcs += `<circle cx="50" cy="50" r="42" fill="none" stroke="${s.c}" stroke-width="11"`
+         +  ` stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}"`
+         +  ` stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 50 50)"/>`;
+    off += len;
+  }
+  let big, lbl, col;
+  if (overdue > 0)      { big = overdue; lbl = 'überfällig'; col = '#ef4444'; }
+  else if (dueSoon > 0) { big = dueSoon; lbl = 'demnächst';  col = '#f59e0b'; }
+  else                  { big = '✓';     lbl = 'aktuell';    col = '#22c55e'; }
+  return `<svg viewBox="0 0 100 100" class="w-ring-svg">${arcs}`
+       + `<text x="50" y="50" text-anchor="middle" dominant-baseline="central" class="w-ring-big" fill="${col}">${big}</text>`
+       + `<text x="50" y="72" text-anchor="middle" class="w-ring-lbl">${lbl}</text></svg>`;
+}
+
 function updateWartungHomeTile() {
   const body = $('wartungHomeBody');
   if (!body) return;
+  const ring = $('wartungRing');
 
   const tasks = [];
   WARTUNG_DATA.forEach(cat => {
     cat.tasks.forEach(t => tasks.push({ ...t, catColor: cat.color, catName: cat.name }));
   });
 
-  // Nur anstehende: überfällig + bald fällig, nach Dringlichkeit sortiert
-  const pending = tasks
-    .map(t => ({ t, s: getWartungStatus(t) }))
+  const withStatus = tasks.map(t => ({ t, s: getWartungStatus(t) }));
+  const scheduled  = withStatus.filter(x => x.s.status !== 'manual');
+  const overdue    = scheduled.filter(x => x.s.status === 'overdue').length;
+  const dueSoon    = scheduled.filter(x => x.s.status === 'due_soon').length;
+  const okCount    = scheduled.filter(x => x.s.status === 'ok').length;
+  const pending    = scheduled
     .filter(x => x.s.status === 'overdue' || x.s.status === 'due_soon')
     .sort((a, b) => (a.s.days ?? Infinity) - (b.s.days ?? Infinity));
 
-  const overdue = pending.filter(x => x.s.status === 'overdue').length;
-  const dueSoon = pending.filter(x => x.s.status === 'due_soon').length;
+  if (ring) ring.innerHTML = _wartungRingSVG(okCount, dueSoon, overdue);
+
   const card = $('wartungCard');
 
   if (!pending.length) {
