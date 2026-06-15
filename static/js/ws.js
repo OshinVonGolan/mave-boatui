@@ -378,6 +378,11 @@ function updateInverterCard(inv, charger) {
   if (vEl) vEl.textContent = (isActive && inv.ac_voltage != null) ? inv.ac_voltage.toFixed(0) : '--';
   const pwEl = $('invPowerVal');
   if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
+  // 2×2-Grid: Landstrom + Inverter-Status (Home-Kachel)
+  const shEl = $('invShoreVal');
+  if (shEl) { shEl.textContent = shoreActive ? 'Aktiv' : 'Inaktiv'; shEl.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
+  const stEl = $('invStateVal');
+  if (stEl) { stEl.textContent = inv.state ?? '--'; stEl.style.color = isActive ? 'var(--green)' : 'var(--text3)'; }
 
   // Halbe-Höhe-Zusammenfassung
   const _si = (id, v) => { const el = $(id); if (el) el.textContent = v; };

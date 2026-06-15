@@ -263,26 +263,17 @@
 
     </div><!-- /.tile-main -->
     <div class="tile-wide-side" id="battWideSrc">
-      <div class="batt-wide-hd">Einspeiser</div>
-      <div class="batt-wide-row">
-        <span class="batt-wide-lbl">Ladegerät</span>
-        <span><b id="battWideSrcCharger">--</b> <span class="unit">W</span></span>
-      </div>
-      <div class="batt-wide-row">
-        <span class="batt-wide-lbl">Solar</span>
-        <span><b id="battWideSrcSolar">--</b> <span class="unit">W</span></span>
-      </div>
-      <div class="batt-wide-row">
-        <span class="batt-wide-lbl">Alternator</span>
-        <span><b id="battWideSrcAlt">--</b> <span class="unit">W</span></span>
-      </div>
-      <div class="batt-wide-row" style="border-top:1px solid var(--surface2);margin-top:4px">
-        <span class="batt-wide-lbl">Starter</span>
-        <span><b id="battWideStarter">--</b> <span class="unit">V</span></span>
-      </div>
-      <div class="batt-wide-row">
-        <span class="batt-wide-lbl">Zyklen</span>
-        <span><b id="battWideCycles">--</b></span>
+      <div class="batt-wide-hd">SOC-Verlauf · 6 h</div>
+      <canvas id="battWideChart" class="batt-wide-chart"></canvas>
+      <div class="batt-wide-foot">
+        <div class="batt-wide-stat">
+          <span class="batt-wide-lbl">Leistung</span>
+          <b id="battWidePower">--</b> <span class="unit">W</span>
+        </div>
+        <div class="batt-wide-stat">
+          <span class="batt-wide-lbl">Restkapazität</span>
+          <b id="battWideRem">--</b> <span class="unit">Ah</span>
+        </div>
       </div>
     </div><!-- /.tile-wide-side -->
     </div><!-- /.tile-content -->
@@ -393,9 +384,17 @@
       </svg>
     </div>
 
-    <div class="batt-grid" style="margin-bottom:10px">
+    <div class="batt-grid" style="grid-template-columns:1fr 1fr">
       <div class="batt-item">
-        <div class="label">Spannung</div>
+        <div class="label">Landstrom</div>
+        <div class="value" id="invShoreVal" style="font-size:16px">--</div>
+      </div>
+      <div class="batt-item">
+        <div class="label">Inverter</div>
+        <div class="value" id="invStateVal" style="font-size:16px">--</div>
+      </div>
+      <div class="batt-item">
+        <div class="label">AC Spannung</div>
         <div class="value"><span id="invAcV">--</span><span class="unit">V</span></div>
       </div>
       <div class="batt-item">

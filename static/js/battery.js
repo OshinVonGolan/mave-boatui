@@ -123,8 +123,50 @@ function _renderBattHalfWide(b) {
   const capAh = batteriesConfig.capacity_ah ?? null;
   const rem = (capAh != null && b.consumed_ah != null) ? Math.max(0, capAh + b.consumed_ah).toFixed(0) : '--';
   st('battHalfRem', rem);
-  st('battWideStarter', fmtV(b.starter_voltage));
-  st('battWideCycles', b.cycles ?? '--');
+  // Wide-Variante: Leistung + Restkapazität + SOC-Verlauf-Graph
+  const pw = b.power != null ? Math.round(b.power)
+           : (b.current != null && b.voltage != null ? Math.round(b.current * b.voltage) : null);
+  st('battWidePower', pw == null ? '--' : pw);
+  st('battWideRem', rem);
+  _renderBattWideChart();
+}
+
+// SOC-Verlauf der letzten 6 h für die Wide-Kachel (nur sichtbar im wide-Modus).
+function _renderBattWideChart() {
+  const canvas = $('battWideChart');
+  if (!canvas) return;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  if (!W || !H) return;                         // nicht sichtbar -> überspringen
+  const src = (typeof histData !== 'undefined') ? histData : [];
+  const cutoff = Date.now() / 1000 - 6 * 3600;
+  const pts = src.filter(d => d.ts >= cutoff && d.soc != null);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+  if (pts.length < 2) return;
+
+  let lo = Math.min(...pts.map(p => p.soc));
+  let hi = Math.max(...pts.map(p => p.soc));
+  if (hi - lo < 5) { const m = (hi + lo) / 2; lo = m - 2.5; hi = m + 2.5; }
+  lo = Math.max(0, lo - 2); hi = Math.min(100, hi + 2);
+  const pad = 6;
+  const t0 = pts[0].ts, t1 = pts[pts.length - 1].ts || (t0 + 1);
+  const xOf = t => pad + (t - t0) / ((t1 - t0) || 1) * (W - 2 * pad);
+  const yOf = v => pad + (1 - (v - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(34,197,94,0.30)');
+  grad.addColorStop(1, 'rgba(34,197,94,0.00)');
+  ctx.beginPath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(xOf(p.ts), yOf(p.soc)) : ctx.lineTo(xOf(p.ts), yOf(p.soc)));
+  ctx.lineTo(xOf(pts[pts.length - 1].ts), H); ctx.lineTo(xOf(pts[0].ts), H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(xOf(p.ts), yOf(p.soc)) : ctx.lineTo(xOf(p.ts), yOf(p.soc)));
+  ctx.stroke();
 }
 
 function _renderTodayTile() {
