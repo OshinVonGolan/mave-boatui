@@ -130,6 +130,7 @@
     .tile--half .tile-main { justify-content: center; }
 
     /* Größen-Sichtbarkeit */
+    .tile-hidden { display: none !important; }   /* schlägt inline display aus Daten-Updates */
     .tile-show-half, .tile-show-wide { display: none; }
     .tile--half .tile-show-half { display: block; }
     .tile--wide .tile-show-wide { display: block; }
@@ -169,6 +170,11 @@
     .tile--half.card-lights .channels-block,
     .tile--half.card-lights .divider { display: none; }
     .card-lights .presets-grid { flex: 1; grid-auto-rows: 1fr; }   /* Buttons füllen Höhe */
+    /* half: kompakte Buttons, die in die halbe Höhe passen (nicht abschneiden) */
+    .tile--half.card-lights .presets-grid { gap: 6px; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+    .tile--half.card-lights .preset-btn { padding: 4px 6px; gap: 2px; min-height: 0; overflow: hidden; }
+    .tile--half.card-lights .preset-emoji { font-size: 16px; }
+    .tile--half.card-lights .preset-name  { font-size: 10px; }
     .tile--wide.card-lights .presets-grid { grid-template-columns: repeat(3, 1fr); }
     .lights-wide-sliders { display: flex; justify-content: space-around; align-items: flex-end;
       height: 100%; padding: 6px 0; gap: 4px; }

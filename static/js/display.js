@@ -156,16 +156,22 @@ function _applyGrid() {
     if (!el) continue;
     const sz = tileCfg[t.id] ?? 'normal';
     if (sz === 'hidden') {
-      el.style.display = 'none';
-      el.style.gridColumn = el.style.gridRow = '';
+      // Klasse mit !important — schlägt inline display:'' aus Daten-Updates
+      // (updateBattery/updateTanks), damit ausgeblendet wirklich weg bleibt.
+      el.classList.add('tile-hidden');
+      el.style.gridColumn = el.style.gridRow = el.style.order = '';
       continue;
     }
+    el.classList.remove('tile-hidden');
     el.style.display = '';
     if (cols === 1) {
-      el.style.gridColumn = el.style.gridRow = '';
+      el.style.gridColumn = el.style.gridRow = el.style.order = '';
     } else {
       el.style.gridColumn = `span ${(sz === 'wide') ? Math.min(2, cols) : 1}`;
       el.style.gridRow    = `span ${(sz === 'half') ? 1 : 2}`;
+      // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder
+      // statt halber Kacheln, die sich oben zwischen die vollen mischen.
+      el.style.order      = (sz === 'half') ? '1' : '0';
     }
   }
 }
