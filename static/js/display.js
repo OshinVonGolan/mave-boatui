@@ -3,12 +3,21 @@
 const _DSP_KEY = 'mave_display_cfg';
 
 const _TILES = [
-  { id: 'battery',  label: 'Batterie',     sel: '#battCard' },
-  { id: 'tanks',    label: 'Tanks',        sel: '#tankCard' },
-  { id: 'lights',   label: 'Beleuchtung',  sel: '#lightsCard' },
-  { id: 'inverter', label: '230V',         sel: '#inverterCard' },
-  { id: 'wartung',  label: 'Wartungsplan', sel: '#wartungCard' },
+  { id: 'battery',  label: 'Batterie'    },
+  { id: 'tanks',    label: 'Tanks'       },
+  { id: 'lights',   label: 'Beleuchtung' },
+  { id: 'inverter', label: '230V'        },
+  { id: 'wartung',  label: 'Wartungsplan'},
 ];
+
+// Selector for each tile element
+const _TILE_SEL = {
+  battery: '#battCard',
+  tanks:   '#tankCard',
+  lights:  '#lightsCard',
+  inverter:'#inverterCard',
+  wartung: '#wartungCard',
+};
 
 const _PROFILES = [
   { id: 'kiosk',  label: 'Kiosk (Touch-Display)' },
@@ -16,12 +25,14 @@ const _PROFILES = [
   { id: 'mobile', label: 'Mobil' },
 ];
 
+// Tile values: 'normal' | 'half' | 'wide' | 'hidden'
+// 'wide' = 2 columns, 'half' = reduced height, 'hidden' = not shown
 const _DSP_DEFAULTS = {
   activeProfile: 'auto',
   tiles: {
-    kiosk:  { battery: true, tanks: true, lights: true, inverter: true, wartung: false },
-    laptop: { battery: true, tanks: true, lights: true, inverter: true, wartung: true  },
-    mobile: { battery: true, tanks: true, lights: true, inverter: true, wartung: false },
+    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wartung:'hidden' },
+    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wartung:'wide'   },
+    mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wartung:'hidden' },
   },
 };
 
@@ -31,12 +42,18 @@ function _dspLoad() {
   try {
     const raw = localStorage.getItem(_DSP_KEY);
     const saved = raw ? JSON.parse(raw) : {};
-    _dsp = {
-      activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile,
-      tiles: {},
-    };
+    _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile, tiles: {} };
     for (const p of _PROFILES) {
-      _dsp.tiles[p.id] = { ..._DSP_DEFAULTS.tiles[p.id], ...(saved.tiles?.[p.id] ?? {}) };
+      const savedTiles = saved.tiles?.[p.id] ?? {};
+      const defTiles   = _DSP_DEFAULTS.tiles[p.id];
+      _dsp.tiles[p.id] = {};
+      for (const t of _TILES) {
+        const sv = savedTiles[t.id];
+        if (sv === true)              _dsp.tiles[p.id][t.id] = 'normal'; // migrate old bool
+        else if (sv === false)        _dsp.tiles[p.id][t.id] = 'hidden'; // migrate old bool
+        else if (typeof sv === 'string') _dsp.tiles[p.id][t.id] = sv;
+        else                          _dsp.tiles[p.id][t.id] = defTiles[t.id];
+      }
     }
   } catch (_) {
     _dsp = JSON.parse(JSON.stringify(_DSP_DEFAULTS));
@@ -52,58 +69,57 @@ function _dspActiveProfile() {
   return window.innerWidth < 640 ? 'mobile' : 'laptop';
 }
 
-// ── Grid-Areas dynamisch aufbauen ───────────────────────────────────────────
+// ── Grid dynamisch aufbauen ─────────────────────────────────────────────────
+// Packt sichtbare Kacheln in Zeilen, berücksichtigt 'wide' (span=2).
+// Erzeugt grid-template-areas direkt auf <main> – keine festen CSS-Bereiche nötig.
 
 function _rebuildGrid() {
+  if (!_dsp) _dspLoad();
   const main = document.querySelector('main');
   if (!main) return;
 
-  const vis = _TILES
-    .filter(t => { const el = document.querySelector(t.sel); return el && el.style.display !== 'none'; })
-    .map(t => t.id);
+  const profile  = _dspActiveProfile();
+  const tileCfg  = _dsp.tiles[profile] ?? {};
+  const w        = window.innerWidth;
+  const cols     = w < 640 ? 1 : w < 1024 ? 2 : 3;
 
-  if (!vis.length) return;
+  const vis = _TILES.filter(t => (tileCfg[t.id] ?? 'normal') !== 'hidden');
+  if (!vis.length) { main.style.gridTemplateAreas = ''; return; }
 
-  const w = window.innerWidth;
-  let areas;
-
-  if (w < 640) {
-    areas = vis.map(id => `"${id}"`).join(' ');
-  } else if (w < 1024) {
-    const nw = vis.filter(id => id !== 'wartung');
-    const rows = [];
-    for (let i = 0; i < nw.length; i += 2) {
-      const a = nw[i], b = nw[i + 1] ?? a;
-      rows.push(`"${a} ${b}"`);
-    }
-    if (vis.includes('wartung')) rows.push('"wartung wartung"');
-    areas = rows.join(' ');
-  } else {
-    const nw = vis.filter(id => id !== 'wartung');
-    const hasW = vis.includes('wartung');
-    const rows = [];
-    for (let i = 0; i < nw.length; i += 3) {
-      const a = nw[i], b = nw[i + 1], c = nw[i + 2];
-      const isLast = i + 3 >= nw.length;
-      if (isLast && hasW) {
-        if (!b)      rows.push(`"${a} wartung wartung"`);
-        else if (!c) rows.push(`"${a} ${b} wartung"`);
-        else       { rows.push(`"${a} ${b} ${c}"`); rows.push('"wartung wartung wartung"'); }
-      } else {
-        const f = c ?? b ?? a;
-        rows.push(`"${a} ${b ?? f} ${c ?? f}"`);
-      }
-    }
-    if (!nw.length && hasW) rows.push('"wartung wartung wartung"');
-    areas = rows.join(' ');
+  if (cols === 1) {
+    main.style.gridTemplateAreas = vis.map(t => `"${t.id}"`).join(' ');
+    return;
   }
 
-  main.style.gridTemplateAreas = areas;
+  const rows   = [];
+  let   row    = [];
+  let   used   = 0;
+
+  for (const t of vis) {
+    const span = (tileCfg[t.id] === 'wide') ? Math.min(2, cols) : 1;
+
+    if (used + span > cols) {
+      while (row.length < cols) row.push('.');
+      rows.push(row);
+      row  = [];
+      used = 0;
+    }
+
+    for (let i = 0; i < span; i++) row.push(t.id);
+    used += span;
+  }
+
+  if (row.length > 0) {
+    while (row.length < cols) row.push('.');
+    rows.push(row);
+  }
+
+  main.style.gridTemplateAreas = rows.map(r => `"${r.join(' ')}"`).join(' ');
 }
 
 window.addEventListener('resize', _rebuildGrid);
 
-// ── Kachelsichtbarkeit anwenden ─────────────────────────────────────────────
+// ── Kachelsichtbarkeit & Größe anwenden ────────────────────────────────────
 
 function applyDisplayConfig() {
   if (!_dsp) _dspLoad();
@@ -111,8 +127,11 @@ function applyDisplayConfig() {
   const tileCfg = _dsp.tiles[profile] ?? {};
 
   for (const t of _TILES) {
-    const el = document.querySelector(t.sel);
-    if (el) el.style.display = tileCfg[t.id] !== false ? '' : 'none';
+    const el = document.querySelector(_TILE_SEL[t.id]);
+    if (!el) continue;
+    const sz = tileCfg[t.id] ?? 'normal';
+    el.style.display = sz === 'hidden' ? 'none' : '';
+    el.classList.toggle('tile--half', sz === 'half');
   }
 
   _rebuildGrid();
@@ -123,6 +142,11 @@ function applyDisplayConfig() {
   } else {
     document.body.classList.remove('kiosk-mode');
   }
+
+  // Höhen-Sync nach Layout-Neuberechnung
+  requestAnimationFrame(() => {
+    if (typeof _syncWartungHeight === 'function') _syncWartungHeight();
+  });
 }
 
 // ── Kiosk Bottom-Nav ────────────────────────────────────────────────────────
@@ -183,10 +207,22 @@ function _kioskSetActive(id) {
 
 // ── Display-Einstellungen ───────────────────────────────────────────────────
 
+const _SIZE_OPTS = [
+  { value: 'hidden', label: 'Ausgeblendet' },
+  { value: 'normal', label: 'Normal'       },
+  { value: 'half',   label: 'Halbe Höhe'  },
+  { value: 'wide',   label: 'Doppelte Breite' },
+];
+
 function openDisplaySettings() {
   if (!_dsp) _dspLoad();
   const pane = $('setPane-display');
   if (!pane) return;
+
+  const sizeSelect = (pid, tid, cur) =>
+    `<select class="settings-input" id="dsp_${pid}_${tid}" style="max-width:180px;cursor:pointer">
+      ${_SIZE_OPTS.map(o => `<option value="${o.value}"${cur === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
+    </select>`;
 
   pane.innerHTML = `
     <div class="set-card">
@@ -212,9 +248,7 @@ function openDisplaySettings() {
         ${_TILES.map(t => `
           <div class="settings-row" style="align-items:center">
             <label class="settings-label" for="dsp_${p.id}_${t.id}">${t.label}</label>
-            <input type="checkbox" id="dsp_${p.id}_${t.id}"
-              style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer"
-              ${_dsp.tiles[p.id]?.[t.id] !== false ? 'checked' : ''} />
+            ${sizeSelect(p.id, t.id, _dsp.tiles[p.id]?.[t.id] ?? 'normal')}
           </div>
         `).join('')}
       </div>
@@ -233,7 +267,8 @@ function saveDisplaySettings() {
   _dsp.activeProfile = $('dspProfileSel').value;
   for (const p of _PROFILES) {
     for (const t of _TILES) {
-      _dsp.tiles[p.id][t.id] = !!$(`dsp_${p.id}_${t.id}`)?.checked;
+      const el = $(`dsp_${p.id}_${t.id}`);
+      if (el) _dsp.tiles[p.id][t.id] = el.value;
     }
   }
   _dspSave();

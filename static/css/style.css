@@ -120,6 +120,7 @@
         max-width: 1200px; margin: 0 auto; }
       /* max-height at desktop set via JS (_syncWartungHeight) to match inverterCard */ }
     .card-wartung { grid-area: wartung; }
+    .tile--half { max-height: 160px; overflow: hidden; }
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
     .shore-dot.on { background: var(--green); box-shadow: 0 0 4px var(--green); }
