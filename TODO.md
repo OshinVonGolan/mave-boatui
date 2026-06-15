@@ -107,3 +107,22 @@ Left-Bar** mit den Navigations-Buttons und eine **von oben einfahrbare** Topbar
 Bar; normaler (Handy-)Modus unverändert. Tabs/`_kioskSetActive` funktionieren weiter.
 
 **Abhängig von:** —
+
+---
+
+## #5 — Batterie-Kachel: Wert-Zellen flacher
+
+**Ziel:** Die Zellen auf der Batterie-Kachel, in denen die Werte stehen, dürfen
+ruhig etwas niedriger sein — aktuell ist sehr viel Leerraum über und unter der Zahl.
+
+**Dateien:**
+- `static/css/style.css` — Höhe/Padding der `.dt-kv` / `.dt-val` / `.dt-kvgrid`
+  reduzieren (vertikales Padding bzw. `line-height` der Zahl verringern, ggf.
+  geringere Mindesthöhe der Grid-Zellen).
+- ggf. `static/js/battery.js` — nur falls die Höhe dort inline gesetzt wird
+  (Wert-Zellen werden in `_kv()` / `renderDeviceTiles()` erzeugt, Zeile ~355).
+
+**Akzeptanz:** Zahl bleibt zentriert und gut lesbar, aber der Leerraum ober-/
+unterhalb ist sichtbar reduziert; Layout in `half`/`normal`/`wide` bleibt intakt.
+
+**Abhängig von:** —
