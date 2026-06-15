@@ -204,13 +204,19 @@ class ConnectivityMonitor:
             if fld is None or fld.message_type is None:
                 return {'ok': False, 'error': 'dish_power_save von der Dish-API nicht unterstützt'}
             PsType = ref.message_class(fld.message_type.full_name)
-            # Dish verlangt start+duration <= 1440 und duration >= 1 (auch beim
-            # Deaktivieren). Ganztags-Fenster ab Mitternacht -> jetzt immer aktiv,
-            # wenn enable=True; enable=False schaltet Power-Save ab.
+            # Dish verlangt 1 <= duration <= 720 (Minuten). enable=True: Fenster
+            # ab jetzt für bis zu 12 h (innerhalb des Tages), sodass sofort
+            # gespart wird. enable=False: Power-Save aus (Dish wach).
+            now_min = datetime.now().hour * 60 + datetime.now().minute
+            if enable:
+                start = now_min
+                dur   = max(1, min(720, 1439 - now_min))
+            else:
+                start, dur = 0, 1
             ps = PsType(
                 enable_power_save=enable,
-                power_save_start_minutes=0,
-                power_save_duration_minutes=1439,
+                power_save_start_minutes=start,
+                power_save_duration_minutes=dur,
             )
             stub = ref.service_stub_class('SpaceX.API.Device.Device')(ch)
             stub.Handle(Req(dish_power_save=ps), timeout=8)
