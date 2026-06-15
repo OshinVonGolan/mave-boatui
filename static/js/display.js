@@ -311,9 +311,9 @@ async function _kioskQuickInit() {
       <span class="ktp-tile-lbl">Gas · bald</span>
       <button class="ktp-toggle" disabled>—</button>
     </div>
-    <div class="ktp-tile disabled">
-      <span class="ktp-tile-lbl">Starlink · bald</span>
-      <button class="ktp-toggle" disabled>—</button>
+    <div class="ktp-tile">
+      <span class="ktp-tile-lbl">Starlink</span>
+      <button class="ktp-toggle" onclick="if(typeof starlinkSleep==='function')starlinkSleep(true)">Schlafen</button>
     </div>
   `;
   _kioskInvSync();

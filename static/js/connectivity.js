@@ -3,6 +3,25 @@
 let _connData = {};
 var _connOverlayTimer = null;
 
+// Starlink Mini schlafen legen / aufwecken (dish_power_save).
+function starlinkSleep(enable) {
+  const msg = enable
+    ? 'Starlink schlafen legen? Das Internet wird unterbrochen, bis sie wieder aufwacht.'
+    : 'Starlink aufwecken?';
+  if (!confirm(msg)) return;
+  fetch('/api/connectivity/starlink/sleep', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enable }),
+  })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      const t = ok ? (enable ? 'Starlink schläft' : 'Starlink aufgeweckt')
+                   : ('Starlink: ' + (j.detail || 'Fehler'));
+      if (typeof _toast === 'function') _toast(t); else alert(t);
+    })
+    .catch(() => { if (typeof _toast === 'function') _toast('Starlink-Steuerung fehlgeschlagen'); });
+}
+
 function fmtUptime(s) {
   if (!s) return '--';
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
@@ -156,6 +175,10 @@ function renderConnectivity(d) {
             </div>
           </div>
           <div class="bms-flags-row">${alertHtml}</div>
+          <div class="sl-sleep-row">
+            <button class="btn-secondary" onclick="starlinkSleep(true)">😴 Schlafen legen</button>
+            <button class="btn-secondary" onclick="starlinkSleep(false)">☀️ Aufwecken</button>
+          </div>
         </div>
       </div>
 
