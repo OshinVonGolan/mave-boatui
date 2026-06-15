@@ -157,6 +157,41 @@ function _updateWlTile(data) {
 
   const card = $('wlCard');
   if (card) card.style.borderColor = data.forecast_alarm ? 'var(--red)' : '';
+
+  _renderWlSpark(data.measurements);
+}
+
+// Mini-Verlaufsgrafik in der Home-Kachel (füllt das Quadrat, ohne Achsen).
+function _renderWlSpark(measurements) {
+  const canvas = $('wlTileSpark');
+  if (!canvas || !measurements || measurements.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  if (!W || !H) return;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const vals = measurements.map(m => m.v);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const rng = (max - min) || 1;
+  const pad = 6;
+  const xOf = i => (i / (measurements.length - 1)) * W;
+  const yOf = v => pad + (1 - (v - min) / rng) * (H - 2 * pad);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(59,130,246,0.30)');
+  grad.addColorStop(1, 'rgba(59,130,246,0.00)');
+  ctx.beginPath();
+  measurements.forEach((m, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v)));
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  measurements.forEach((m, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v)));
+  ctx.stroke();
 }
 
 function fetchWaterLevel() {
