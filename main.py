@@ -16,7 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
@@ -248,6 +248,37 @@ class _NoCacheStatic(StaticFiles):
 app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
+
+# JS files in dependency order — concatenated into one request on /js-bundle.js
+_JS_FILES = [
+    'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
+    'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
+    'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
+    'waterlevel.js', 'init.js',
+]
+_js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+
+
+@app.get('/js-bundle.js', include_in_schema=False)
+async def js_bundle(req: Request):
+    js_dir = STATIC_DIR / 'js'
+    latest = max((js_dir / f).stat().st_mtime for f in _JS_FILES if (js_dir / f).exists())
+    if _js_bundle['mtime'] < latest:
+        parts = []
+        for f in _JS_FILES:
+            p = js_dir / f
+            if p.exists():
+                parts.append(p.read_text(encoding='utf-8'))
+        _js_bundle['data'] = ('\n;// ---\n'.join(parts)).encode()
+        _js_bundle['mtime'] = latest
+        _js_bundle['etag'] = f'"{int(latest)}"'
+    if req.headers.get('if-none-match') == _js_bundle['etag']:
+        return Response(status_code=304)
+    return Response(
+        content=_js_bundle['data'],
+        media_type='application/javascript',
+        headers={'Cache-Control': 'no-cache', 'ETag': _js_bundle['etag']},
+    )
 
 
 @app.get('/', include_in_schema=False)
