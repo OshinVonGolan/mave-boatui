@@ -445,6 +445,7 @@ function deleteWartungCat(catId) {
 
 function _trimWartungRows(body, card) {
   if (!body || !card) return;
+  if (card.classList.contains('tile--half')) return;  // half: CSS begrenzt auf 1 Zeile
   // clientHeight ist relativ zur Karte selbst — kein Viewport-/Scroll-Problem
   const cardH = card.clientHeight;
   if (cardH < 20) return;  // noch nicht gerendert

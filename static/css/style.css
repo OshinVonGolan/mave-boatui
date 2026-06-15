@@ -274,9 +274,10 @@
     /* wide: nebeneinander, vertikal zentriert */
     .tile--wide.card-wartung .w-home-wrap { flex-direction: row; gap: 24px; align-items: center; }
     .tile--wide.card-wartung .w-home-ring { width: 150px; height: 150px; }
-    /* half: kleiner Ring links neben kompakter Liste */
+    /* half: kleiner Ring links + Badge und nur die nächste Aufgabe */
     .tile--half.card-wartung .w-home-wrap { flex-direction: row; gap: 14px; align-items: center; }
-    .tile--half.card-wartung .w-home-ring { width: 70px; height: 70px; }
+    .tile--half.card-wartung .w-home-ring { width: 68px; height: 68px; }
+    .tile--half.card-wartung .w-home-row ~ .w-home-row { display: none; }
 
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
