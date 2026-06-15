@@ -8,6 +8,7 @@ const _TILES = [
   { id: 'lights',   label: 'Beleuchtung',  sizes: ['hidden','normal','half','wide'] },
   { id: 'inverter', label: '230V',         sizes: ['hidden','normal','half']        },
   { id: 'wl',       label: 'Wasserstand',  sizes: ['hidden','normal','half']        },
+  { id: 'weather',  label: 'Wetter',       sizes: ['hidden','normal','half']        },
   { id: 'wartung',  label: 'Wartungsplan', sizes: ['hidden','normal','half','wide'] },
 ];
 
@@ -18,6 +19,7 @@ const _TILE_SEL = {
   lights:  '#lightsCard',
   inverter:'#inverterCard',
   wl:      '#wlCard',
+  weather: '#wxCard',
   wartung: '#wartungCard',
 };
 
@@ -32,9 +34,9 @@ const _PROFILES = [
 const _DSP_DEFAULTS = {
   activeProfile: 'auto',
   tiles: {
-    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  wartung:'hidden' },
-    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  wartung:'normal' },
-    mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'hidden',  wartung:'hidden' },
+    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'hidden' },
+    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'normal' },
+    mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'hidden',  weather:'half',   wartung:'hidden' },
   },
 };
 

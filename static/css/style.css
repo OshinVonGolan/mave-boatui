@@ -315,6 +315,20 @@
     .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
     .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
 
+    /* ── Wetter tile ── */
+    .card-wx .wx-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .wx-day { background: var(--surface2); border-radius: 12px; padding: 10px 4px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+    .wx-day-name { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
+    .wx-icon { font-size: 30px; line-height: 1; }
+    .wx-temp b { font-size: 18px; font-weight: 700; color: var(--text); }
+    .wx-temp span { font-size: 13px; color: var(--text3); }
+    .wx-row { font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .wx-half { flex: 1; display: flex; align-items: center; gap: 18px; }
+    .wx-half-icon { font-size: 46px; line-height: 1; }
+    .wx-half-temp { font-size: 36px; font-weight: 800; color: var(--text); line-height: 1; }
+    .wx-half-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
     /* ── Wasserstand tile ── */
     .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .wl-tile-spark { flex: 1; width: 100%; min-height: 48px; display: block; }

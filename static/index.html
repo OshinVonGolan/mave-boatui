@@ -461,6 +461,27 @@
     </div>
   </section>
 
+  <!-- ── Wetter Kachel (Lübeck + Lübecker Bucht) ── -->
+  <section class="card card-wx" id="wxCard">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/>
+      </svg>
+      Wetter
+      <span class="card-link" style="cursor:default">Lübeck · Bucht</span>
+    </div>
+    <!-- Normal: 3-Tage-Trend -->
+    <div class="wx-grid tile-hide-half" id="wxGrid"></div>
+    <!-- Half: heute -->
+    <div class="tile-show-half wx-half">
+      <span class="wx-half-icon" id="wxHalfIcon">·</span>
+      <div class="wx-half-main">
+        <span class="wx-half-temp" id="wxHalfTemp">--°</span>
+        <div class="wx-half-sub">🌬️ <span id="wxHalfWind">-- kn</span> · 💧 <span id="wxHalfPop">--%</span></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Wartungsplan Kachel ── -->
   <section class="card card-wartung" id="wartungCard" onclick="openWartung()" style="cursor:pointer">
     <div class="card-title">

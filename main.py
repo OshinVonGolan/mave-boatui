@@ -46,7 +46,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.17.0'
+VERSION  = _git_semver() or '1.18.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -254,7 +254,7 @@ _JS_FILES = [
     'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'init.js',
+    'waterlevel.js', 'weather.js', 'init.js',
 ]
 _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
@@ -891,3 +891,83 @@ async def display_brightness(body: dict):
     except Exception as e:
         raise HTTPException(503, detail=f'Helligkeit fehlgeschlagen: {e}')
     return {'ok': True, 'brightness': val}
+
+
+# ── Wetter (Lübeck + Lübecker Bucht, 3-Tage-Trend) ───────────────────────────
+# Quelle: Open-Meteo (kostenlos, kein API-Key). DMI wäre möglich, braucht aber
+# eine Schlüssel-Registrierung — daher Open-Meteo. Struktur ist quellen-agnostisch,
+# ein späterer Wechsel auf DMI betrifft nur _fetch_weather().
+_WX_LAND = (53.87, 10.69)   # Lübeck (Stadt)
+_WX_SEA  = (54.10, 11.00)   # Lübecker Bucht (außen)
+_WX_STORM_CODES = {95, 96, 99}
+_wx_cache = {'data': None, 'ts': 0.0}
+
+
+def _http_json(url, timeout=15):
+    req = urllib.request.Request(url, headers={'User-Agent': 'mave-boatui'})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def _fetch_weather() -> dict:
+    base = 'https://api.open-meteo.com/v1/forecast'
+    land = _http_json(f'{base}?latitude={_WX_LAND[0]}&longitude={_WX_LAND[1]}'
+                      '&daily=weathercode,temperature_2m_max,temperature_2m_min,'
+                      'precipitation_sum,precipitation_probability_max'
+                      '&timezone=Europe%2FBerlin&forecast_days=3')
+    sea = _http_json(f'{base}?latitude={_WX_SEA[0]}&longitude={_WX_SEA[1]}'
+                     '&daily=weathercode,windspeed_10m_max,windgusts_10m_max,'
+                     'winddirection_10m_dominant'
+                     '&timezone=Europe%2FBerlin&forecast_days=3&windspeed_unit=kn')
+    try:
+        marine = _http_json('https://marine-api.open-meteo.com/v1/marine'
+                            f'?latitude={_WX_SEA[0]}&longitude={_WX_SEA[1]}'
+                            '&daily=wave_height_max,wave_direction_dominant'
+                            '&timezone=Europe%2FBerlin&forecast_days=3')
+    except Exception:
+        marine = {}
+
+    ld, sd, md = land.get('daily', {}), sea.get('daily', {}), marine.get('daily', {})
+    dates = ld.get('time', [])
+
+    def g(d, k, i):
+        a = d.get(k)
+        return a[i] if isinstance(a, list) and i < len(a) else None
+
+    land_days, sea_days = [], []
+    for i, date in enumerate(dates):
+        wmo = g(ld, 'weathercode', i)
+        land_days.append({
+            'date': date, 'wmo': wmo,
+            'tmax': g(ld, 'temperature_2m_max', i), 'tmin': g(ld, 'temperature_2m_min', i),
+            'precip': g(ld, 'precipitation_sum', i), 'pop': g(ld, 'precipitation_probability_max', i),
+            'storm': wmo in _WX_STORM_CODES,
+        })
+        swmo = g(sd, 'weathercode', i)
+        sea_days.append({
+            'date': date,
+            'wind': g(sd, 'windspeed_10m_max', i), 'gust': g(sd, 'windgusts_10m_max', i),
+            'dir': g(sd, 'winddirection_10m_dominant', i), 'wave': g(md, 'wave_height_max', i),
+            'storm': swmo in _WX_STORM_CODES,
+        })
+    return {'updated': time.time(), 'source': 'open-meteo',
+            'land': {'name': 'Lübeck', 'days': land_days},
+            'sea':  {'name': 'Lübecker Bucht', 'days': sea_days}}
+
+
+@app.get('/api/weather')
+async def get_weather():
+    now = time.time()
+    if _wx_cache['data'] and now - _wx_cache['ts'] < 1800:
+        return _wx_cache['data']
+    loop = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(None, _fetch_weather)
+    except Exception as e:
+        log.warning('Wetter-Fetch fehlgeschlagen: %s', e)
+        if _wx_cache['data']:
+            return _wx_cache['data']
+        raise HTTPException(503, detail='Wetter nicht verfügbar')
+    _wx_cache['data'] = data
+    _wx_cache['ts'] = now
+    return data
