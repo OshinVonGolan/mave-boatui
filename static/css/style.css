@@ -198,12 +198,12 @@
     .tile--half .tile-hide-half { display: none !important; }
 
     /* ── Batterie ─────────────────────────────────────────────────────────── */
-    /* Inhalt füllt das Quadrat über größere Gauge + mitwachsendes Werte-Grid
-       (statt gestreckter Lücken). */
-    .card-battery .gauge-wrap { margin-bottom: 2px; }
-    .card-battery .gauge-svg  { width: 188px; height: 132px; }
-    .card-battery .batt-grid  { flex: 1; grid-template-rows: 1fr 1fr; }
-    .card-battery .batt-grid .batt-item { display: flex; flex-direction: column; justify-content: center; }
+    /* Gauge nimmt den vertikalen Slack (zentriert), Wert-Zellen bleiben flach
+       (TODO #5: wenig Leerraum über/unter der Zahl). */
+    .card-battery .gauge-wrap { flex: 1; justify-content: center; margin: 0; min-height: 132px; }
+    .card-battery .gauge-svg  { width: 184px; height: 129px; }
+    .card-battery .batt-grid .batt-item { padding: 7px 10px; }
+    .card-battery .batt-sub { margin-top: 2px; }
     /* half: kompakte Schlüsselwerte (SOC · Spannung · Strom · Restkap.) */
     .tile--half.card-battery .gauge-wrap,
     .tile--half.card-battery .batt-grid,
