@@ -226,10 +226,28 @@
     <!-- solarW bleibt im DOM für ws.js Kompatibilität -->
     <span id="srcSolar" style="display:none"><span id="solarW"></span></span>
 
-    <div class="batt-sub">
+    <div class="batt-sub tile-hide-half">
       <div class="batt-sub-item">Starter <b id="battStarter">--</b> V</div>
       <div class="batt-sub-item">Zyklen <b id="battCycles">--</b></div>
       <div class="batt-sub-item">Voll vor <b id="battFull">--</b></div>
+    </div>
+
+    <!-- Doppelte Breite: Einspeiser-Leistung -->
+    <div id="battWideSrc" class="tile-show-wide">
+      <div class="divider"></div>
+      <div class="batt-wide-hd">Einspeiser</div>
+      <div class="batt-wide-row">
+        <span class="batt-wide-lbl">Ladegerät</span>
+        <span><b id="battWideSrcCharger">--</b> <span class="unit">W</span></span>
+      </div>
+      <div class="batt-wide-row">
+        <span class="batt-wide-lbl">Solar</span>
+        <span><b id="battWideSrcSolar">--</b> <span class="unit">W</span></span>
+      </div>
+      <div class="batt-wide-row">
+        <span class="batt-wide-lbl">Alternator</span>
+        <span><b id="battWideSrcAlt">--</b> <span class="unit">W</span></span>
+      </div>
     </div>
   </section>
 
@@ -305,7 +323,14 @@
       230V
     </div>
 
-    <div class="gauge-wrap" style="position:relative">
+    <!-- Halbe Höhe: kompakte Zusammenfassung statt Gauge -->
+    <div class="inv-half-summary tile-show-half">
+      <span class="inv-half-pct" id="invHalfPct">--%</span>
+      <span class="inv-half-sep"> · </span>
+      <span id="invHalfW">--</span><span class="unit"> W</span>
+    </div>
+
+    <div class="gauge-wrap tile-hide-half" style="position:relative">
       <div id="invIndicatorRow" style="display:none;position:absolute;top:14px;left:0;flex-direction:column;gap:6px;align-items:flex-start">
         <div style="display:flex;align-items:center;gap:5px">
           <div id="shoreIndicator" class="shore-dot"></div>
@@ -339,6 +364,25 @@
       <div class="inv-pill-thumb" id="invSlideThumb"></div>
       <span class="inv-pill-label left" id="invSlideOff">Inverter Aus</span>
       <span class="inv-pill-label right" id="invSlideOn">Inverter An</span>
+    </div>
+
+    <!-- Doppelte Breite: Status-Detail -->
+    <div id="invWidePanel" class="tile-show-wide">
+      <div class="divider"></div>
+      <div class="batt-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="batt-item">
+          <div class="label">Landstrom</div>
+          <div class="value" id="invWideShore" style="font-size:13px">--</div>
+        </div>
+        <div class="batt-item">
+          <div class="label">Inverter</div>
+          <div class="value" id="invWideState" style="font-size:13px">--</div>
+        </div>
+        <div class="batt-item">
+          <div class="label">AC Spannung</div>
+          <div class="value"><span id="invWideAcV">--</span><span class="unit"> V</span></div>
+        </div>
+      </div>
     </div>
   </section>
 

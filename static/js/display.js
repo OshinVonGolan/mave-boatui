@@ -3,11 +3,11 @@
 const _DSP_KEY = 'mave_display_cfg';
 
 const _TILES = [
-  { id: 'battery',  label: 'Batterie'    },
-  { id: 'tanks',    label: 'Tanks'       },
-  { id: 'lights',   label: 'Beleuchtung' },
-  { id: 'inverter', label: '230V'        },
-  { id: 'wartung',  label: 'Wartungsplan'},
+  { id: 'battery',  label: 'Batterie',     sizes: ['hidden','normal','half','wide'] },
+  { id: 'tanks',    label: 'Tanks',        sizes: ['hidden','normal','half']        },
+  { id: 'lights',   label: 'Beleuchtung',  sizes: ['hidden','normal','half','wide'] },
+  { id: 'inverter', label: '230V',         sizes: ['hidden','normal','half','wide'] },
+  { id: 'wartung',  label: 'Wartungsplan', sizes: ['hidden','normal','half','wide'] },
 ];
 
 // Selector for each tile element
@@ -132,6 +132,7 @@ function applyDisplayConfig() {
     const sz = tileCfg[t.id] ?? 'normal';
     el.style.display = sz === 'hidden' ? 'none' : '';
     el.classList.toggle('tile--half', sz === 'half');
+    el.classList.toggle('tile--wide', sz === 'wide');
   }
 
   _rebuildGrid();
@@ -219,10 +220,12 @@ function openDisplaySettings() {
   const pane = $('setPane-display');
   if (!pane) return;
 
-  const sizeSelect = (pid, tid, cur) =>
-    `<select class="settings-input" id="dsp_${pid}_${tid}" style="max-width:180px;cursor:pointer">
-      ${_SIZE_OPTS.map(o => `<option value="${o.value}"${cur === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
+  const sizeSelect = (pid, t, cur) => {
+    const opts = _SIZE_OPTS.filter(o => (t.sizes ?? _SIZE_OPTS.map(x => x.value)).includes(o.value));
+    return `<select class="settings-input" id="dsp_${pid}_${t.id}" style="max-width:180px;cursor:pointer">
+      ${opts.map(o => `<option value="${o.value}"${cur === o.value ? ' selected' : ''}>${o.label}</option>`).join('')}
     </select>`;
+  };
 
   pane.innerHTML = `
     <div class="set-card">
@@ -248,7 +251,7 @@ function openDisplaySettings() {
         ${_TILES.map(t => `
           <div class="settings-row" style="align-items:center">
             <label class="settings-label" for="dsp_${p.id}_${t.id}">${t.label}</label>
-            ${sizeSelect(p.id, t.id, _dsp.tiles[p.id]?.[t.id] ?? 'normal')}
+            ${sizeSelect(p.id, t, _dsp.tiles[p.id]?.[t.id] ?? 'normal')}
           </div>
         `).join('')}
       </div>

@@ -206,6 +206,12 @@ function updatePowerSources(data) {
   _updateSrcBar('srcBarAlt',     'srcBarAltFill',     'srcBarAltTxt',
     _altCurrent, 50, 'Alternator');
 
+  // Batterie-Kachel: Breite-Variante Einspeiser-Werte
+  const _w = (id, v) => { const el = $(id); if (el) el.textContent = v != null ? Math.round(v) : '--'; };
+  _w('battWideSrcCharger', data.charger?.power);
+  _w('battWideSrcSolar', (data.solar?.power ?? 0) + (data.solar2?.power ?? 0) + (data.solar3?.power ?? 0) || null);
+  _w('battWideSrcAlt',   data.alternator?.power ?? data.orion?.output_power);
+
   // History aufzeichnen
   const entry = { ts: Date.now() / 1000 };
   CHARGE_SOURCES.forEach(s => { entry[s.key] = s.get(data) ?? 0; });
@@ -372,6 +378,19 @@ function updateInverterCard(inv, charger) {
   if (vEl) vEl.textContent = (isActive && inv.ac_voltage != null) ? inv.ac_voltage.toFixed(0) : '--';
   const pwEl = $('invPowerVal');
   if (pwEl) pwEl.textContent = isActive && power != null ? Math.round(power) : (shoreActive ? '--' : '--');
+
+  // Halbe-Höhe-Zusammenfassung
+  const _si = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  _si('invHalfPct', isActive ? displayPct + '%' : '--%');
+  _si('invHalfW',   isActive && power != null ? Math.round(power) : '--');
+
+  // Breite-Variante: Status-Detail
+  const _v = $('invWideAcV');
+  if (_v) _v.textContent = isActive && inv.ac_voltage != null ? inv.ac_voltage.toFixed(0) : '--';
+  const _sh = $('invWideShore');
+  if (_sh) { _sh.textContent = shoreActive ? 'Aktiv' : 'Inaktiv'; _sh.style.color = shoreActive ? 'var(--green)' : 'var(--text3)'; }
+  const _st = $('invWideState');
+  if (_st) { _st.textContent = inv.state ?? '--'; _st.style.color = isActive ? 'var(--green)' : 'var(--text3)'; }
 
   // Pill-Toggle
   $('invSlideTrack')?.classList.toggle('on', isActive);

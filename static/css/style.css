@@ -120,7 +120,50 @@
         max-width: 1200px; margin: 0 auto; }
       /* max-height at desktop set via JS (_syncWartungHeight) to match inverterCard */ }
     .card-wartung { grid-area: wartung; }
-    .tile--half { max-height: 160px; overflow: hidden; }
+    /* ── Tile size: utility ── */
+    .tile-show-half, .tile-show-wide { display: none; }
+    .tile--half .tile-show-half { display: block; }
+    .tile--wide .tile-show-wide { display: block; }
+    .tile--half .tile-hide-half { display: none !important; }
+
+    /* ── Battery half ── */
+    .tile--half.card-battery .src-row { display: none; }
+    .tile--half.card-battery .batt-sub { display: none; }
+    .tile--half.card-battery .batt-grid .batt-item:nth-child(n+3) { display: none; }
+    .tile--half.card-battery #chgModeBadge { display: none !important; }
+
+    /* ── Battery wide ── */
+    .batt-wide-hd { font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text3); margin: 4px 0 6px; }
+    .batt-wide-row { display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid var(--surface2); font-size: 13px; }
+    .batt-wide-row:last-child { border-bottom: none; }
+    .batt-wide-lbl { color: var(--text3); }
+
+    /* ── Tanks half ── */
+    .tile--half.card-tanks .tank-pct-below { display: none; }
+    .tile--half.card-tanks .tank-name      { font-size: 10px; margin-bottom: 2px; }
+
+    /* ── Lights half ── */
+    .tile--half.card-lights .divider      { display: none; }
+    .tile--half.card-lights .presets-grid { display: none; }
+
+    /* ── Lights wide ── */
+    .tile--wide.card-lights .presets-grid { grid-template-columns: repeat(4, 1fr); }
+
+    /* ── Inverter half ── */
+    .tile--half#inverterCard .gauge-wrap { display: none; }
+    .tile--half#inverterCard .batt-grid  { display: none; }
+    .inv-half-summary { padding: 10px 0 6px; }
+    .inv-half-pct     { font-size: 28px; font-weight: 700; color: var(--text); }
+    .inv-half-sep     { color: var(--text3); margin: 0 4px; }
+
+    /* ── Wartung half ── */
+    .tile--half.card-wartung .w-home-row { display: none; }
+
+    /* ── Wartung wide ── */
+    .tile--wide.card-wartung { max-height: none !important; }
+
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
     .shore-dot.on { background: var(--green); box-shadow: 0 0 4px var(--green); }
