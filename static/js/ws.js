@@ -424,19 +424,9 @@ function handleData(data) {
   }
 }
 
-let _lastWartMaxH = '';
 function _syncWartungHeight() {
-  const inv  = document.getElementById('inverterCard');
   const wart = document.getElementById('wartungCard');
-  if (!inv || !wart) return;
-  const invVisible = inv.style.display !== 'none';
-  const newH = window.innerWidth >= 1024
-    ? (invVisible ? inv.offsetHeight + 'px' : 'none')
-    : '';
-  if (newH === _lastWartMaxH) return;
-  _lastWartMaxH = newH;
-  wart.style.maxHeight = newH;
-  // Height changed — re-render home tile so trim uses correct card size
+  if (wart) wart.style.maxHeight = '';
   if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
 }
 window.addEventListener('resize', _syncWartungHeight);
