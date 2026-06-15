@@ -213,7 +213,7 @@
     .tile--half.card-battery .batt-half { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
     .batt-half-soc  { font-size: 46px; font-weight: 800; line-height: 1; }
     .batt-half-stat { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
-    .batt-half-stat b { display: block; color: var(--text); font-size: 19px; font-weight: 700; margin-top: 3px; }
+    .batt-half-stat b { display: block; color: var(--text); font-size: 19px; font-weight: 700; margin-top: 3px; text-transform: none; }
     /* wide: rechts SOC-Verlauf (Graph) + Kennzahlen */
     .tile--wide.card-battery .tile-wide-side { justify-content: flex-start; gap: 12px; }
     .batt-wide-hd { font-size: 11px; font-weight: 700; text-transform: uppercase;
