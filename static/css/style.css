@@ -126,6 +126,14 @@
     .tile--wide .tile-show-wide { display: block; }
     .tile--half .tile-hide-half { display: none !important; }
 
+    /* ── Wide tile: links = normal, rechts = extra content ── */
+    .tile-main { display: flex; flex-direction: column; gap: 16px; }
+    .tile-wide-side { display: none; flex-direction: column; gap: 12px;
+      width: 160px; flex-shrink: 0; border-left: 1px solid var(--surface2); padding-left: 16px; }
+    .tile--wide { flex-direction: row !important; align-items: stretch; }
+    .tile--wide .tile-main { flex: 1; min-width: 0; }
+    .tile--wide .tile-wide-side { display: flex; }
+
     /* ── Battery half ── */
     .tile--half.card-battery .src-row { display: none; }
     .tile--half.card-battery .batt-sub { display: none; }
@@ -169,8 +177,7 @@
     /* ── Wartung half ── */
     .tile--half.card-wartung .w-home-row { display: none; }
 
-    /* ── Wartung wide ── */
-    .tile--wide.card-wartung { max-height: none !important; }
+    /* ── Wartung wide ── (gleiche Höhe wie normal, kein max-height override) */
 
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
