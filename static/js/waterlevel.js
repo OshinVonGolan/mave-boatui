@@ -142,6 +142,23 @@ function _updateWlOverlay(data) {
   _renderWlChart(data.measurements);
 }
 
+function _updateWlTile(data) {
+  if (!data) return;
+  const nhn  = data.current_nhn_cm;
+  const sign = nhn != null && nhn >= 0 ? '+' : '';
+  const val  = nhn != null ? `${sign}${nhn}` : (data.current_cm != null ? Math.round(data.current_cm) : '--');
+  const arrow = _trendArrow(data.trend);
+  const color = _trendColor(data.trend);
+
+  const _s = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  const _c = (id, c) => { const el = $(id); if (el) el.style.color  = c; };
+  _s('wlTileVal',    val);   _s('wlTileTrend',  arrow);  _c('wlTileTrend',  color);
+  _s('wlTileValH',   val);   _s('wlTileTrendH', arrow);  _c('wlTileTrendH', color);
+
+  const card = $('wlCard');
+  if (card) card.style.borderColor = data.forecast_alarm ? 'var(--red)' : '';
+}
+
 function fetchWaterLevel() {
   fetch('/api/waterlevel')
     .then(r => r.ok ? r.json() : null)
@@ -149,6 +166,7 @@ function fetchWaterLevel() {
       if (!d) return;
       _wlData = d;
       _updateTopbarChip(d);
+      _updateWlTile(d);
     })
     .catch(() => {});
 }

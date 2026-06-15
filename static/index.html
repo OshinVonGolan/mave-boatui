@@ -304,13 +304,17 @@
       Beleuchtung
       <span class="card-link">Steuern →</span>
     </div>
-    <div>
+    <div class="channels-block">
       <div class="channels-row" id="channelsRow"></div>
       <div class="channels-label" id="channelsLabel"></div>
     </div>
     <div class="divider"></div>
     <div class="presets-grid" id="presetsGrid">
       <div style="color:var(--text3);font-size:13px">Lade…</div>
+    </div>
+    <div class="tile-show-wide lights-wide-panel" onclick="event.stopPropagation()">
+      <div class="divider"></div>
+      <div class="lights-wide-sliders" id="lightsWideSliders"></div>
     </div>
   </section>
 
@@ -382,6 +386,37 @@
           <div class="label">AC Spannung</div>
           <div class="value"><span id="invWideAcV">--</span><span class="unit"> V</span></div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Wasserstand Kachel ── -->
+  <section class="card card-wl" id="wlCard" onclick="openWaterLevel()"
+           style="cursor:pointer;transition:border-color .2s"
+           onmouseenter="this.style.borderColor='var(--accent2)'"
+           onmouseleave="this.style.borderColor=''">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/>
+      </svg>
+      Wasserstand
+      <span class="card-link">Details →</span>
+    </div>
+    <!-- Normal: full info -->
+    <div class="wl-tile-body tile-hide-half">
+      <div class="wl-tile-main">
+        <span id="wlTileVal" class="wl-tile-big">--</span>
+        <span class="unit">cm NHN</span>
+        <span id="wlTileTrend" class="wl-tile-trend"></span>
+      </div>
+      <div class="wl-tile-station">Travemünde</div>
+    </div>
+    <!-- Half: compact -->
+    <div class="tile-show-half">
+      <div class="wl-tile-compact">
+        <span id="wlTileValH" class="wl-tile-big">--</span>
+        <span class="unit">cm</span>
+        <span id="wlTileTrendH" class="wl-tile-trend"></span>
       </div>
     </div>
   </section>

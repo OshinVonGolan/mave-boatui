@@ -23,6 +23,70 @@ function updateChannels(channels) {
     bar.style.height  = (i < 8 ? v/255*100 : v>0?100:0) + '%';
     bar.style.opacity = v > 0 ? '0.9' : '0.2';
   });
+  updateWideSliders(channels);
+}
+
+// ── Wide tile: vertical zone sliders ────────────────────────────────────────
+
+function buildWideSliders() {
+  const wrap = $('lightsWideSliders');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  VISIBLE_CH.forEach(i => {
+    const isRelay = i >= 8;
+    const item = document.createElement('div');
+    item.className = 'lights-slider-item';
+    if (isRelay) {
+      item.innerHTML = `<button class="lights-relay-btn" id="wideRelayBtn"
+        onclick="event.stopPropagation();_toggleRelayFromWide()">R</button>
+        <span class="lights-slider-lbl">R</span>`;
+    } else {
+      item.innerHTML = `<input type="range" class="lights-vslider" id="wideSlider${i}"
+        min="0" max="255" value="0"
+        oninput="event.stopPropagation();_setChannelFromSlider(${i},+this.value)"
+        onclick="event.stopPropagation()">
+        <span class="lights-slider-lbl">${i + 1}</span>`;
+    }
+    wrap.appendChild(item);
+  });
+}
+buildWideSliders();
+
+function updateWideSliders(channels) {
+  VISIBLE_CH.forEach(i => {
+    if (i >= 8) {
+      const btn = $('wideRelayBtn');
+      if (btn) btn.classList.toggle('active', (channels[i] ?? 0) > 0);
+    } else {
+      const sl = $(`wideSlider${i}`);
+      if (sl && document.activeElement !== sl) sl.value = channels[i] ?? 0;
+    }
+  });
+}
+
+let _wideDebounce = null;
+function _setChannelFromSlider(ch, val) {
+  liveChannels[ch] = val;
+  checkPresetMatch(liveChannels);
+  clearTimeout(_wideDebounce);
+  _wideDebounce = setTimeout(() => {
+    fetch('/api/lights/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: liveChannels }),
+    }).catch(() => {});
+  }, 80);
+}
+
+function _toggleRelayFromWide() {
+  liveChannels[8] = liveChannels[8] > 0 ? 0 : 1;
+  checkPresetMatch(liveChannels);
+  updateChannels(liveChannels);
+  fetch('/api/lights/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: liveChannels }),
+  }).catch(() => {});
 }
 
 // ── Presets ────────────────────────────────────────────────────────────────
