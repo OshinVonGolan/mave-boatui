@@ -89,8 +89,7 @@
     .kiosk-nav {
       display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
       height: var(--kiosk-nav-h); background: var(--surface);
-      border-top: 1px solid var(--border);
-      display: none; align-items: stretch;
+      border-top: 1px solid var(--border); align-items: stretch;
       padding-bottom: env(safe-area-inset-bottom, 0);
     }
     .kiosk-mode .kiosk-nav { display: flex; }

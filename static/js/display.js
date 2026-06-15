@@ -52,6 +52,57 @@ function _dspActiveProfile() {
   return window.innerWidth < 640 ? 'mobile' : 'laptop';
 }
 
+// ── Grid-Areas dynamisch aufbauen ───────────────────────────────────────────
+
+function _rebuildGrid() {
+  const main = document.querySelector('main');
+  if (!main) return;
+
+  const vis = _TILES
+    .filter(t => { const el = document.querySelector(t.sel); return el && el.style.display !== 'none'; })
+    .map(t => t.id);
+
+  if (!vis.length) return;
+
+  const w = window.innerWidth;
+  let areas;
+
+  if (w < 640) {
+    areas = vis.map(id => `"${id}"`).join(' ');
+  } else if (w < 1024) {
+    const nw = vis.filter(id => id !== 'wartung');
+    const rows = [];
+    for (let i = 0; i < nw.length; i += 2) {
+      const a = nw[i], b = nw[i + 1] ?? a;
+      rows.push(`"${a} ${b}"`);
+    }
+    if (vis.includes('wartung')) rows.push('"wartung wartung"');
+    areas = rows.join(' ');
+  } else {
+    const nw = vis.filter(id => id !== 'wartung');
+    const hasW = vis.includes('wartung');
+    const rows = [];
+    for (let i = 0; i < nw.length; i += 3) {
+      const a = nw[i], b = nw[i + 1], c = nw[i + 2];
+      const isLast = i + 3 >= nw.length;
+      if (isLast && hasW) {
+        if (!b)      rows.push(`"${a} wartung wartung"`);
+        else if (!c) rows.push(`"${a} ${b} wartung"`);
+        else       { rows.push(`"${a} ${b} ${c}"`); rows.push('"wartung wartung wartung"'); }
+      } else {
+        const f = c ?? b ?? a;
+        rows.push(`"${a} ${b ?? f} ${c ?? f}"`);
+      }
+    }
+    if (!nw.length && hasW) rows.push('"wartung wartung wartung"');
+    areas = rows.join(' ');
+  }
+
+  main.style.gridTemplateAreas = areas;
+}
+
+window.addEventListener('resize', _rebuildGrid);
+
 // ── Kachelsichtbarkeit anwenden ─────────────────────────────────────────────
 
 function applyDisplayConfig() {
@@ -63,6 +114,8 @@ function applyDisplayConfig() {
     const el = document.querySelector(t.sel);
     if (el) el.style.display = tileCfg[t.id] !== false ? '' : 'none';
   }
+
+  _rebuildGrid();
 
   if (profile === 'kiosk') {
     document.body.classList.add('kiosk-mode');

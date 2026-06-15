@@ -410,7 +410,10 @@ function _syncWartungHeight() {
   const inv  = document.getElementById('inverterCard');
   const wart = document.getElementById('wartungCard');
   if (!inv || !wart) return;
-  const newH = window.innerWidth >= 1024 ? inv.offsetHeight + 'px' : '';
+  const invVisible = inv.style.display !== 'none';
+  const newH = window.innerWidth >= 1024
+    ? (invVisible ? inv.offsetHeight + 'px' : 'none')
+    : '';
   if (newH === _lastWartMaxH) return;
   _lastWartMaxH = newH;
   wart.style.maxHeight = newH;
