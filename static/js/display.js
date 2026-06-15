@@ -66,60 +66,118 @@ function _dspSave() {
   localStorage.setItem(_DSP_KEY, JSON.stringify(_dsp));
 }
 
+// ── Benannte Konfigurationen ────────────────────────────────────────────────
+const _DSP_CFG_KEY = 'mave_display_configs';
+
+function _dspConfigsLoad() {
+  try { return JSON.parse(localStorage.getItem(_DSP_CFG_KEY)) || {}; }
+  catch (_) { return {}; }
+}
+function _dspConfigsSave(obj) {
+  localStorage.setItem(_DSP_CFG_KEY, JSON.stringify(obj));
+}
+function _dspFeedback(msg) {
+  const fb = $('dspFeedback');
+  if (fb) { fb.textContent = msg; setTimeout(() => { if (fb.textContent === msg) fb.textContent = ''; }, 2500); }
+}
+function saveDisplayConfig() {
+  const inp  = $('dspCfgName');
+  const name = (inp?.value || '').trim();
+  if (!name) { _dspFeedback('Bitte Namen eingeben'); return; }
+  saveDisplaySettings(true);                 // aktuelle Auswahl übernehmen
+  const cfgs = _dspConfigsLoad();
+  cfgs[name] = JSON.parse(JSON.stringify({ activeProfile: _dsp.activeProfile, tiles: _dsp.tiles }));
+  _dspConfigsSave(cfgs);
+  openDisplaySettings();
+  _dspFeedback('„' + name + '" gespeichert ✓');
+}
+function loadDisplayConfig(name) {
+  const cfg = _dspConfigsLoad()[name];
+  if (!cfg) return;
+  _dsp = JSON.parse(JSON.stringify(cfg));
+  _dspSave();
+  applyDisplayConfig();
+  openDisplaySettings();
+  _dspFeedback('„' + name + '" geladen ✓');
+}
+function deleteDisplayConfig(name) {
+  const cfgs = _dspConfigsLoad();
+  delete cfgs[name];
+  _dspConfigsSave(cfgs);
+  openDisplaySettings();
+}
+
 function _dspActiveProfile() {
   if (_dsp.activeProfile !== 'auto') return _dsp.activeProfile;
   return window.innerWidth < 640 ? 'mobile' : 'laptop';
 }
 
-// ── Grid dynamisch aufbauen ─────────────────────────────────────────────────
-// Packt sichtbare Kacheln in Zeilen, berücksichtigt 'wide' (span=2).
-// Erzeugt grid-template-areas direkt auf <main> – keine festen CSS-Bereiche nötig.
+// ── Grid-Engine ──────────────────────────────────────────────────────────────
+// Eine Basis-Einheit: normale Kachel = Quadrat (Breite == Höhe).
+//   normal = 1 Spalte × 2 Zeilen   half = 1 Spalte × 1 Zeile (halbe Höhe)
+//   wide   = 2 Spalten × 2 Zeilen (doppelte Breite, gleiche Höhe)
+// Zeilenhöhe = (Spaltenbreite − gap) / 2, damit 2 Zeilen exakt 1 Spaltenbreite
+// ergeben (Quadrat). grid-auto-flow:dense packt automatisch ohne Lücken oben.
 
-function _rebuildGrid() {
+function _cols() {
+  const w = window.innerWidth;
+  if (w < 640)  return 1;
+  if (w < 1024) return 2;
+  if (w < 1600) return 3;
+  return 4;
+}
+
+function _applyGrid() {
   if (!_dsp) _dspLoad();
   const main = document.querySelector('main');
   if (!main) return;
 
-  const profile  = _dspActiveProfile();
-  const tileCfg  = _dsp.tiles[profile] ?? {};
-  const w        = window.innerWidth;
-  const cols     = w < 640 ? 1 : w < 1024 ? 2 : 3;
+  const profile = _dspActiveProfile();
+  const tileCfg = _dsp.tiles[profile] ?? {};
+  const cols    = _cols();
 
-  const vis = _TILES.filter(t => (tileCfg[t.id] ?? 'normal') !== 'hidden');
-  if (!vis.length) { main.style.gridTemplateAreas = ''; return; }
+  main.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
   if (cols === 1) {
-    main.style.gridTemplateAreas = vis.map(t => `"${t.id}"`).join(' ');
-    return;
+    main.style.gridAutoRows = 'auto';
+  } else {
+    const cs    = getComputedStyle(main);
+    const gap   = parseFloat(cs.columnGap)    || 16;
+    const padL  = parseFloat(cs.paddingLeft)  || 0;
+    const padR  = parseFloat(cs.paddingRight) || 0;
+    const inner = main.clientWidth - padL - padR;
+    const colW  = (inner - (cols - 1) * gap) / cols;
+    const rowH  = Math.max(70, (colW - gap) / 2);
+    main.style.gridAutoRows = rowH + 'px';
   }
 
-  const rows   = [];
-  let   row    = [];
-  let   used   = 0;
-
-  for (const t of vis) {
-    const span = (tileCfg[t.id] === 'wide') ? Math.min(2, cols) : 1;
-
-    if (used + span > cols) {
-      while (row.length < cols) row.push('.');
-      rows.push(row);
-      row  = [];
-      used = 0;
+  for (const t of _TILES) {
+    const el = document.querySelector(_TILE_SEL[t.id]);
+    if (!el) continue;
+    const sz = tileCfg[t.id] ?? 'normal';
+    if (sz === 'hidden') {
+      el.style.display = 'none';
+      el.style.gridColumn = el.style.gridRow = '';
+      continue;
     }
-
-    for (let i = 0; i < span; i++) row.push(t.id);
-    used += span;
+    el.style.display = '';
+    if (cols === 1) {
+      el.style.gridColumn = el.style.gridRow = '';
+    } else {
+      el.style.gridColumn = `span ${(sz === 'wide') ? Math.min(2, cols) : 1}`;
+      el.style.gridRow    = `span ${(sz === 'half') ? 1 : 2}`;
+    }
   }
-
-  if (row.length > 0) {
-    while (row.length < cols) row.push('.');
-    rows.push(row);
-  }
-
-  main.style.gridTemplateAreas = rows.map(r => `"${r.join(' ')}"`).join(' ');
 }
 
-window.addEventListener('resize', _rebuildGrid);
+let _resizeRaf = null;
+window.addEventListener('resize', () => {
+  if (_resizeRaf) cancelAnimationFrame(_resizeRaf);
+  _resizeRaf = requestAnimationFrame(() => {
+    _applyGrid();
+    if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
+  });
+});
 
 // ── Kachelsichtbarkeit & Größe anwenden ────────────────────────────────────
 
@@ -132,12 +190,11 @@ function applyDisplayConfig() {
     const el = document.querySelector(_TILE_SEL[t.id]);
     if (!el) continue;
     const sz = tileCfg[t.id] ?? 'normal';
-    el.style.display = sz === 'hidden' ? 'none' : '';
     el.classList.toggle('tile--half', sz === 'half');
     el.classList.toggle('tile--wide', sz === 'wide');
   }
 
-  _rebuildGrid();
+  _applyGrid();
 
   if (profile === 'kiosk') {
     document.body.classList.add('kiosk-mode');
@@ -146,9 +203,9 @@ function applyDisplayConfig() {
     document.body.classList.remove('kiosk-mode');
   }
 
-  // Höhen-Sync nach Layout-Neuberechnung
+  // Größenabhängige Inhalte neu rendern
   requestAnimationFrame(() => {
-    if (typeof _syncWartungHeight === 'function') _syncWartungHeight();
+    if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
   });
 }
 
@@ -229,7 +286,30 @@ function openDisplaySettings() {
     </select>`;
   };
 
+  const cfgs  = _dspConfigsLoad();
+  const names = Object.keys(cfgs);
+  const esc   = s => s.replace(/'/g, "\\'");
+  const cfgList = names.length
+    ? names.map(n => `
+        <div class="settings-row" style="align-items:center">
+          <label class="settings-label" style="min-width:0;flex:1">${n}</label>
+          <span style="display:flex;gap:8px">
+            <button class="btn-secondary" onclick="loadDisplayConfig('${esc(n)}')">Laden</button>
+            <button class="btn-secondary" onclick="deleteDisplayConfig('${esc(n)}')" style="color:var(--red)">Löschen</button>
+          </span>
+        </div>`).join('')
+    : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Noch keine Konfiguration gespeichert.</div>';
+
   pane.innerHTML = `
+    <div class="set-card">
+      <div class="set-card-hd">Konfigurationen</div>
+      ${cfgList}
+      <div class="settings-row" style="align-items:center;gap:10px;border-bottom:none;padding-top:12px">
+        <input class="settings-input" id="dspCfgName" placeholder="Name der Konfiguration…" style="flex:1;max-width:none">
+        <button class="btn-secondary" onclick="saveDisplayConfig()">Aktuelle speichern</button>
+      </div>
+    </div>
+
     <div class="set-card">
       <div class="set-card-hd">Geräte-Profil</div>
       <div class="settings-row">
@@ -268,7 +348,7 @@ function openDisplaySettings() {
   $('dspProfileSel').value = _dsp.activeProfile;
 }
 
-function saveDisplaySettings() {
+function saveDisplaySettings(silent) {
   _dsp.activeProfile = $('dspProfileSel').value;
   for (const p of _PROFILES) {
     for (const t of _TILES) {
@@ -278,6 +358,5 @@ function saveDisplaySettings() {
   }
   _dspSave();
   applyDisplayConfig();
-  const fb = $('dspFeedback');
-  if (fb) { fb.textContent = 'Gespeichert ✓'; setTimeout(() => fb.textContent = '', 2000); }
+  if (!silent) _dspFeedback('Gespeichert ✓');
 }

@@ -140,13 +140,21 @@
 
   <!-- ── Batterie ── -->
   <section class="card card-battery" id="battCard" onclick="openBattDetail()">
-    <div class="tile-main">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/><path d="M7 7V4"/><path d="M11 7V4"/>
       </svg>
       Batterie
       <span class="card-link">Details →</span>
+    </div>
+    <div class="tile-content">
+    <div class="tile-main">
+    <!-- Halbe Höhe: kompakte Schlüsselwerte -->
+    <div class="batt-half">
+      <span class="batt-half-soc" id="battHalfSoc">--%</span>
+      <div class="batt-half-stat">Spannung<b><span id="battHalfV">--</span> V</b></div>
+      <div class="batt-half-stat">Strom<b><span id="battHalfA">--</span> A</b></div>
+      <div class="batt-half-stat">Restkap.<b><span id="battHalfRem">--</span> Ah</b></div>
     </div>
     <div class="gauge-wrap" style="position:relative">
       <div id="bmsRelayRow" style="display:none;position:absolute;top:8px;left:0;flex-direction:column;gap:5px;align-items:flex-start">
@@ -246,7 +254,16 @@
         <span class="batt-wide-lbl">Alternator</span>
         <span><b id="battWideSrcAlt">--</b> <span class="unit">W</span></span>
       </div>
+      <div class="batt-wide-row" style="border-top:1px solid var(--surface2);margin-top:4px">
+        <span class="batt-wide-lbl">Starter</span>
+        <span><b id="battWideStarter">--</b> <span class="unit">V</span></span>
+      </div>
+      <div class="batt-wide-row">
+        <span class="batt-wide-lbl">Zyklen</span>
+        <span><b id="battWideCycles">--</b></span>
+      </div>
     </div><!-- /.tile-wide-side -->
+    </div><!-- /.tile-content -->
   </section>
 
   <!-- ── Tanks ── -->
@@ -294,31 +311,33 @@
            onclick="openLightDetail()"
            onmouseenter="this.style.borderColor='var(--accent2)'"
            onmouseleave="this.style.borderColor=''">
-    <div class="tile-main">
-      <div class="card-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <circle cx="12" cy="12" r="5"/>
-          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
-        Beleuchtung
-        <span class="card-link">Steuern →</span>
-      </div>
-      <div class="channels-block">
-        <div class="channels-row" id="channelsRow"></div>
-        <div class="channels-label" id="channelsLabel"></div>
-      </div>
-      <div class="divider"></div>
-      <div class="presets-grid" id="presetsGrid">
-        <div style="color:var(--text3);font-size:13px">Lade…</div>
-      </div>
-    </div><!-- /.tile-main -->
-    <div class="tile-wide-side" onclick="event.stopPropagation()">
-      <div class="lights-wide-sliders" id="lightsWideSliders"></div>
-    </div><!-- /.tile-wide-side -->
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      Beleuchtung
+      <span class="card-link">Steuern →</span>
+    </div>
+    <div class="tile-content">
+      <div class="tile-main">
+        <div class="channels-block">
+          <div class="channels-row" id="channelsRow"></div>
+          <div class="channels-label" id="channelsLabel"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="presets-grid" id="presetsGrid">
+          <div style="color:var(--text3);font-size:13px">Lade…</div>
+        </div>
+      </div><!-- /.tile-main -->
+      <div class="tile-wide-side" onclick="event.stopPropagation()">
+        <div class="lights-wide-sliders" id="lightsWideSliders"></div>
+      </div><!-- /.tile-wide-side -->
+    </div><!-- /.tile-content -->
   </section>
 
   <!-- ── 230V / Inverter Kachel ── -->
-  <section class="card" id="inverterCard" style="grid-area:inverter">
+  <section class="card" id="inverterCard">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>

@@ -418,6 +418,8 @@ function deleteWartungCat(catId) {
 
 function _trimWartungRows(body, card) {
   if (!body || !card) return;
+  // Wide-Modus: Liste läuft in zwei Spalten (CSS column-count) — kein Trim.
+  if (card.classList.contains('tile--wide')) return;
   // clientHeight ist relativ zur Karte selbst — kein Viewport-/Scroll-Problem
   const cardH = card.clientHeight;
   if (cardH < 20) return;  // noch nicht gerendert

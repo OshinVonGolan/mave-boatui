@@ -111,6 +111,22 @@ function _renderBattGrid() {
   _renderTodayTile();
 }
 
+// Speist die kompakten (halbe Höhe) und erweiterten (doppelte Breite) Varianten.
+function _renderBattHalfWide(b) {
+  const st = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  const soc = b.soc;
+  st('battHalfSoc', soc == null ? '--%' : Math.round(soc) + '%');
+  const hs = $('battHalfSoc');
+  if (hs) hs.style.color = soc == null ? 'var(--text)' : soc >= 50 ? 'var(--green)' : soc >= 20 ? 'var(--yellow)' : 'var(--red)';
+  st('battHalfV', fmtV(b.voltage));
+  st('battHalfA', b.current == null ? '--' : fmt(b.current));
+  const capAh = batteriesConfig.capacity_ah ?? null;
+  const rem = (capAh != null && b.consumed_ah != null) ? Math.max(0, capAh + b.consumed_ah).toFixed(0) : '--';
+  st('battHalfRem', rem);
+  st('battWideStarter', fmtV(b.starter_voltage));
+  st('battWideCycles', b.cycles ?? '--');
+}
+
 function _renderTodayTile() {
   const el   = $('battTodayWh');
   const unit = $('battTodayUnit');
@@ -273,6 +289,7 @@ function updateBattery(b) {
 
   _accumTodayWh(b.power, b.current);
   _renderBattGrid();
+  _renderBattHalfWide(b);
 
   // Detail-Overlay-Felder (non-dual)
   $('dP').textContent   = fmt(b.power, 0);

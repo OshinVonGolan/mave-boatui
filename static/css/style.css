@@ -104,81 +104,94 @@
     .kiosk-mode main { padding-bottom: calc(var(--kiosk-nav-h) + var(--gap)); }
     .kiosk-mode .overlay { padding-bottom: var(--kiosk-nav-h); }
 
-    /* ── Main grid ── */
+    /* ── Kachel-Engine (Grid) ───────────────────────────────────────────────
+       Eine Basis-Einheit: normale Kachel = Quadrat (Breite == Höhe).
+       half = halbe Höhe · wide = doppelte Breite (gleiche Höhe).
+       Spaltenzahl + Zeilenhöhe setzt JS (_applyGrid in display.js);
+       grid-auto-flow:dense packt automatisch — keine Lücken oben. */
     main { display: grid; gap: var(--gap); padding: var(--gap);
       padding-top: calc(var(--header-h) + var(--gap));
-      grid-template-columns: 1fr;
-      grid-template-areas: "battery" "tanks" "lights" "inverter" "wl" "wartung"; }
-    @media (min-width: 640px) {
-      main { grid-template-columns: 1fr 1fr;
-        grid-template-areas: "battery tanks" "lights inverter" "wl ." "wartung wartung"; } }
-    .card-wartung { overflow:hidden; }
-    #wartungHomeBody { overflow:hidden; }
-    @media (min-width: 1024px) {
-      main { grid-template-columns: 1fr 1fr 1fr;
-        grid-template-areas: "battery tanks lights" "inverter wl wartung";
-        max-width: 1200px; margin: 0 auto; }
-      /* max-height at desktop set via JS (_syncWartungHeight) to match inverterCard */ }
-    .card-wartung { grid-area: wartung; }
-    /* ── Tile size: utility ── */
+      grid-template-columns: 1fr;          /* ab 640px von JS gesetzt */
+      grid-auto-flow: row dense; }
+    @media (min-width: 1024px) { main { max-width: 1240px; margin: 0 auto; } }
+    @media (min-width: 1600px) { main { max-width: 1660px; } }
+    #wartungHomeBody { overflow: hidden; }
+
+    /* Innenaufbau: Titel immer oben, Inhalt füllt den Rest der Kachel.
+       Bei wide wird .tile-content zur Zeile: links normal, rechts Extra. */
+    .tile-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+    .tile-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+      gap: 14px; justify-content: space-between; }
+    .tile-wide-side { display: none; }
+    .tile--wide .tile-content { flex-direction: row; align-items: stretch; gap: 22px; }
+    .tile--wide .tile-main { flex: 1 1 0; }
+    .tile--wide .tile-wide-side { display: flex; flex: 1 1 0; min-width: 0; flex-direction: column;
+      gap: 10px; justify-content: center; border-left: 1px solid var(--surface2); padding-left: 22px; }
+
+    /* Größen-Sichtbarkeit */
     .tile-show-half, .tile-show-wide { display: none; }
     .tile--half .tile-show-half { display: block; }
     .tile--wide .tile-show-wide { display: block; }
     .tile--half .tile-hide-half { display: none !important; }
 
-    /* ── Wide tile: links = normal, rechts = extra content ── */
-    .tile-main { display: flex; flex-direction: column; gap: 16px; }
-    .tile-wide-side { display: none; flex-direction: column; gap: 12px;
-      width: 160px; flex-shrink: 0; border-left: 1px solid var(--surface2); padding-left: 16px; }
-    .tile--wide { flex-direction: row !important; align-items: stretch; }
-    .tile--wide .tile-main { flex: 1; min-width: 0; }
-    .tile--wide .tile-wide-side { display: flex; }
-
-    /* ── Battery half ── */
+    /* ── Batterie ─────────────────────────────────────────────────────────── */
+    .card-battery .tile-content { justify-content: space-between; }
+    .card-battery .gauge-wrap { flex: 1; justify-content: center; }
+    /* half: Gauge/Grid/Details weg, kompakte Schlüsselwerte (SOC · V · A · Ah) */
+    .tile--half.card-battery .gauge-wrap,
+    .tile--half.card-battery .batt-grid,
+    .tile--half.card-battery .batt-sub,
     .tile--half.card-battery .src-row { display: none; }
-    .tile--half.card-battery .batt-sub { display: none; }
-    .tile--half.card-battery .batt-grid .batt-item:nth-child(n+3) { display: none; }
-    /* card-battery: normaler Abstand zum Titel */
-    .card-battery .tile-main { gap: 12px; }
-
-    /* ── Battery wide ── */
+    .batt-half { display: none; }
+    .tile--half.card-battery .batt-half { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+    .batt-half-soc  { font-size: 40px; font-weight: 800; line-height: 1; }
+    .batt-half-stat { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+    .batt-half-stat b { display: block; color: var(--text); font-size: 18px; font-weight: 700; margin-top: 2px; }
+    /* wide: rechts Einspeiser + Kennzahlen */
     .batt-wide-hd { font-size: 11px; font-weight: 700; text-transform: uppercase;
-      letter-spacing: .08em; color: var(--text3); margin: 4px 0 6px; }
+      letter-spacing: .08em; color: var(--text3); margin: 0 0 4px; }
     .batt-wide-row { display: flex; justify-content: space-between; align-items: center;
-      padding: 5px 0; border-bottom: 1px solid var(--surface2); font-size: 13px; }
+      padding: 7px 0; border-bottom: 1px solid var(--surface2); font-size: 13px; }
     .batt-wide-row:last-child { border-bottom: none; }
     .batt-wide-lbl { color: var(--text3); }
 
-    /* ── Tanks half ── */
+    /* ── Tanks ────────────────────────────────────────────────────────────── */
+    /* half: Balken niedriger, %-Untertitel weg, Name kompakt */
+    .tile--half.card-tanks .tank-bar-wrap { min-height: 0; }
     .tile--half.card-tanks .tank-pct-below { display: none; }
-    .tile--half.card-tanks .tank-name      { font-size: 10px; margin-bottom: 2px; }
+    .tile--half.card-tanks .tank-name      { font-size: 10px; margin: 0; }
 
-    /* ── Lights half (nur Preset-Buttons) ── */
-    .tile--half.card-lights .channels-block { display: none; }
-    .tile--half.card-lights .divider        { display: none; }
-
-    /* ── Lights wide ── */
-    .tile--wide.card-lights .presets-grid { grid-template-columns: repeat(4, 1fr); }
-    .lights-wide-panel { } /* contains slider panel, click propagation stopped in JS */
-    .lights-wide-sliders { display: flex; justify-content: space-around; align-items: flex-end; padding: 6px 0; gap: 4px; }
-    .lights-slider-item { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-    .lights-vslider { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 80px; cursor: pointer; accent-color: var(--accent2); }
-    .lights-relay-btn { width: 32px; height: 32px; border-radius: 6px; border: 1.5px solid var(--border);
+    /* ── Beleuchtung ──────────────────────────────────────────────────────── */
+    /* half: nur Preset-Buttons */
+    .tile--half.card-lights .channels-block,
+    .tile--half.card-lights .divider { display: none; }
+    /* wide: rechts vertikale Zonen-Slider */
+    .tile--wide.card-lights .presets-grid { grid-template-columns: repeat(3, 1fr); }
+    .lights-wide-sliders { display: flex; justify-content: space-around; align-items: flex-end;
+      height: 100%; padding: 6px 0; gap: 4px; }
+    .lights-slider-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .lights-vslider { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 130px;
+      cursor: pointer; accent-color: var(--accent2); }
+    .lights-relay-btn { width: 34px; height: 34px; border-radius: 7px; border: 1.5px solid var(--border);
       background: var(--surface2); color: var(--text2); cursor: pointer; font-size: 11px; font-weight: 700; transition: background .15s; }
     .lights-relay-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
     .lights-slider-lbl { font-size: 11px; color: var(--text3); font-weight: 600; }
 
-    /* ── Inverter half ── */
-    .tile--half#inverterCard .gauge-wrap { display: none; }
-    .tile--half#inverterCard .batt-grid  { display: none; }
-    .inv-half-summary { padding: 10px 0 6px; }
-    .inv-half-pct     { font-size: 28px; font-weight: 700; color: var(--text); }
+    /* ── 230V ─────────────────────────────────────────────────────────────── */
+    #inverterCard .gauge-wrap { flex: 1; justify-content: center; }
+    .tile--half#inverterCard .gauge-wrap,
+    .tile--half#inverterCard .batt-grid { display: none; }
+    .inv-half-summary { padding: 4px 0; }
+    .tile--half#inverterCard .inv-half-summary { flex: 1; display: flex; align-items: center; }
+    .inv-half-pct     { font-size: 30px; font-weight: 700; color: var(--text); }
     .inv-half-sep     { color: var(--text3); margin: 0 4px; }
 
-    /* ── Wartung half ── */
-    .tile--half.card-wartung .w-home-row { display: none; }
-
-    /* ── Wartung wide ── (gleiche Höhe wie normal, kein max-height override) */
+    /* ── Wartung ──────────────────────────────────────────────────────────── */
+    .card-wartung .tile-content { justify-content: flex-start; }
+    /* wide: Liste in zwei Spalten, Titel bleibt oben (Engine-Standard) */
+    .tile--wide.card-wartung #wartungHomeBody { column-count: 2; column-gap: 28px; }
+    .tile--wide.card-wartung .w-home-badge { column-span: all; }
+    .tile--wide.card-wartung .w-home-row { break-inside: avoid; }
 
     /* Inverter-Button-Gruppe */
     .shore-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
@@ -215,19 +228,15 @@
       display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
     .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
     .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
-    .card-battery { grid-area: battery; }
-    .card-tanks   { grid-area: tanks; }
-    .card-lights  { grid-area: lights; }
-    .card-wartung { grid-area: wartung; }
-    .card-wl      { grid-area: wl; }
 
     /* ── Wasserstand tile ── */
-    .wl-tile-body { padding-top: 2px; }
-    .wl-tile-main { display: flex; align-items: baseline; gap: 4px; padding: 6px 0 2px; }
-    .wl-tile-big  { font-size: 28px; font-weight: 700; color: var(--text); }
-    .wl-tile-trend { font-size: 22px; margin-left: 2px; }
-    .wl-tile-station { font-size: 12px; color: var(--text3); margin-top: 2px; }
-    .wl-tile-compact { display: flex; align-items: baseline; gap: 4px; padding: 10px 0 4px; }
+    .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+    .tile--half.card-wl .tile-show-half { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .wl-tile-main { display: flex; align-items: baseline; gap: 6px; }
+    .wl-tile-big  { font-size: 44px; font-weight: 800; color: var(--text); line-height: 1; }
+    .wl-tile-trend { font-size: 26px; margin-left: 2px; }
+    .wl-tile-station { font-size: 13px; color: var(--text3); margin-top: 6px; }
+    .wl-tile-compact { display: flex; align-items: baseline; gap: 6px; }
 
     /* ── Wartungsplan ── */
     @keyframes wblink { 0%,100%{opacity:1} 50%{opacity:.2} }
@@ -835,6 +844,12 @@
     }
     .btn-primary:hover { background: var(--accent2); }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background .15s, border-color .15s; font-family: inherit;
+    }
+    .btn-secondary:hover { background: var(--surface); border-color: var(--accent2); }
     .settings-feedback {
       font-size: 13px; color: var(--green); margin-right: auto;
       align-self: center; opacity: 0; transition: opacity .3s;
