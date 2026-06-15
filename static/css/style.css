@@ -138,11 +138,8 @@
     .tile--half.card-battery .src-row { display: none; }
     .tile--half.card-battery .batt-sub { display: none; }
     .tile--half.card-battery .batt-grid .batt-item:nth-child(n+3) { display: none; }
-    /* card-battery: Spalt zwischen Titel und BMS schließen */
-    .card-battery .tile-main { gap: 0; }
-    .card-battery .batt-grid { margin-top: 12px; }
-    .card-battery .batt-sub  { margin-top: 8px; }
-    .card-battery .src-row   { margin-top: 8px; }
+    /* card-battery: normaler Abstand zum Titel */
+    .card-battery .tile-main { gap: 12px; }
 
     /* ── Battery wide ── */
     .batt-wide-hd { font-size: 11px; font-weight: 700; text-transform: uppercase;
@@ -216,12 +213,6 @@
     .card { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px;
       display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
-    /* Feste Kachelgrößen ab 640 px: Normal=1:1, Halb=2:1, Doppelt=2:1 (doppelte Breite) */
-    @media (min-width: 640px) {
-      .card { aspect-ratio: 1; }
-      .tile--half { aspect-ratio: 2 !important; }
-      .tile--wide { aspect-ratio: 2 !important; }
-    }
     .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
     .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
     .card-battery { grid-area: battery; }
