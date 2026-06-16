@@ -1,0 +1,15 @@
+{
+  "name": "signalk",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "signalk-server": "^2.23.0"
+  }
+}

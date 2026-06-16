@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "id": "mave",
+    "name": "Mave",
+    "type": "sailboat",
+    "shipyard": null,
+    "mainUnit": { "current": "rpi-zero-w", "target": "rpi4-1gb" },
+    "timezone": "Europe/Berlin"
+  },
+
+  "dataSources": {
+    "signalk":   { "type": "signalk", "url": "http://localhost:3000",
+                   "note": "NMEA2000 via canboat; später Victron Cerbo via signalk-venus-plugin" },
+    "lightsIO":  { "type": "n2k-custom", "txPgn": 126720, "ctrlPgn": 61184,
+                   "note": "VE.Direct/PWM-Gateway (Teensy), eigene Licht-/Relais-Ausgänge" },
+    "router":    { "type": "http", "host": "https://192.168.1.1", "vendor": "Teltonika RUTX50" },
+    "starlink":  { "type": "grpc", "host": "192.168.100.1:9200", "model": "Starlink Mini" },
+    "waterlevel":{ "type": "http", "provider": "pegelonline+BSH", "station": "Travemünde" },
+    "weather":   { "type": "http", "provider": "open-meteo",
+                   "land": { "name": "Lübeck", "lat": 53.87, "lon": 10.69 },
+                   "sea":  { "name": "Lübecker Bucht", "lat": 54.10, "lon": 11.00 } }
+  },
+
+  "tanks": [
+    { "id": "freshWater", "instance": 0, "name": "Wasser", "type": "freshWater",
+      "capacity_l": 200, "color": "#22c55e", "signalkPath": "tanks/freshWater/0/currentLevel" },
+    { "id": "fuel", "instance": 1, "name": "Diesel", "type": "fuel",
+      "capacity_l": 120, "color": "#3b82f6", "signalkPath": "tanks/fuel/1/currentLevel" }
+  ],
+
+  "electrical": {
+    "batteries": [
+      { "id": "service", "instance": 0, "name": "Servicebatterie", "capacity_ah": 900,
+        "signalkPath": "electrical/batteries/service" },
+      { "id": "starter", "instance": 1, "name": "Starterbatterie",
+        "signalkPath": "electrical/batteries/starter" }
+    ],
+    "victron": {
+      "variant": "C-nmea2000",
+      "note": "aktuell via eigene VE.Direct→N2K-Gateways; Variante A (Cerbo) / B (direkt) per Profil umschaltbar",
+      "devices": [
+        { "type": "inverter", "model": "Phoenix Inverter 2000VA", "instance": 0 },
+        { "type": "charger",  "model": "Phoenix Smart IP43",      "instance": 1 },
+        { "type": "solar",    "model": "MPPT 75/15",              "instance": 3 },
+        { "type": "dcdc",     "model": "Orion-XS 12/12-30A",      "instance": 0 }
+      ]
+    }
+  },
+
+  "lighting": {
+    "zones": [
+      { "id": "kueche",       "name": "Küche",            "channel": 0, "dimmable": true },
+      { "id": "kartentisch",  "name": "Kartentisch",      "channel": 1, "dimmable": true },
+      { "id": "salon",        "name": "Salon",            "channel": 2, "dimmable": true },
+      { "id": "achterkabine", "name": "Achterkabine stb", "channel": 3, "dimmable": true },
+      { "id": "relais",       "name": "Relais",           "channel": 8, "dimmable": false }
+    ],
+    "presetsRef": "presets.json"
+  },
+
+  "modules": {
+    "battery":      { "enabled": true },
+    "tanks":        { "enabled": true },
+    "lights":       { "enabled": true },
+    "inverter":     { "enabled": true },
+    "waterlevel":   { "enabled": true },
+    "weather":      { "enabled": true },
+    "wartung":      { "enabled": true },
+    "connectivity": { "enabled": true },
+    "stauplan":     { "enabled": true },
+    "monday":       { "enabled": true }
+  },
+
+  "ui": {
+    "layouts": {
+      "laptop": { "tiles": [
+        { "id": "battery", "size": "normal" }, { "id": "tanks", "size": "normal" },
+        { "id": "lights", "size": "normal" },  { "id": "inverter", "size": "normal" },
+        { "id": "wl", "size": "normal" },      { "id": "weather", "size": "normal" },
+        { "id": "wartung", "size": "normal" }
+      ]},
+      "kiosk": { "chrome": "sidebar+slidedown", "tiles": [
+        { "id": "battery", "size": "normal" }, { "id": "tanks", "size": "normal" },
+        { "id": "lights", "size": "normal" },  { "id": "inverter", "size": "normal" },
+        { "id": "wl", "size": "normal" },      { "id": "weather", "size": "normal" },
+        { "id": "wartung", "size": "hidden" }
+      ]},
+      "mobile": { "tiles": [
+        { "id": "battery", "size": "normal" }, { "id": "tanks", "size": "normal" },
+        { "id": "lights", "size": "normal" },  { "id": "inverter", "size": "normal" },
+        { "id": "wl", "size": "hidden" },      { "id": "weather", "size": "half" },
+        { "id": "wartung", "size": "hidden" }
+      ]}
+    }
+  },
+
+  "alarmsRef": "alarms.json"
+}
