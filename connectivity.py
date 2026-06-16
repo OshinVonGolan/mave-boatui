@@ -56,7 +56,9 @@ class ConnectivityMonitor:
 
     def _http(self, url, data=None, headers=None):
         req = urllib.request.Request(url, data=data, headers=headers or {})
-        with urllib.request.urlopen(req, context=_ssl_ctx, timeout=6) as r:
+        # 15 s: /api/interfaces/status auf dem RUTX50 braucht je nach Router-Last
+        # bis ~10 s; 6 s war zu knapp und ließ den ganzen Router-Poll scheitern.
+        with urllib.request.urlopen(req, context=_ssl_ctx, timeout=15) as r:
             return json.loads(r.read())
 
     def _token_headers(self):
