@@ -1,0 +1,18 @@
+# cloudflared Named-Tunnel — pro Boot eine Konfiguration.
+# Erzeugt mit:  cloudflared tunnel create mave-<boatid>
+# Werte unten ersetzen (UUID + Hostname). Danach via systemd-Service laufen lassen.
+
+tunnel: REPLACE_WITH_TUNNEL_UUID
+credentials-file: /etc/cloudflared/REPLACE_WITH_TUNNEL_UUID.json
+
+# Robust hinter CGNAT/Starlink:
+protocol: quic
+no-autoupdate: true
+
+ingress:
+  # boatX.<deine-domain>  ->  lokale Plattform-UI auf dem Pi.
+  # Offline-first: das lokale UI ist im Bootsnetz IMMER direkt erreichbar,
+  # unabhaengig von diesem Tunnel. Der Tunnel ist rein additiv fuer Remote.
+  - hostname: REPLACE_WITH_HOSTNAME   # z.B. mave-01.example.com
+    service: http://localhost:8080
+  - service: http_status:404

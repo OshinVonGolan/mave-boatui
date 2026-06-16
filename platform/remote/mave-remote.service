@@ -1,0 +1,13 @@
+[Unit]
+Description=Mave Remote Agent (Cloudflare Tunnel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared --config /etc/cloudflared/config.yml tunnel run
+Restart=always
+RestartSec=10
+# Nur ausgehende Verbindung -> kein offener Port am Boot, CGNAT-tauglich.
+
+[Install]
+WantedBy=multi-user.target

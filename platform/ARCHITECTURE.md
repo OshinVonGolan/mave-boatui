@@ -61,6 +61,17 @@ platform/
 - **P2 (Produkt):** Geräte-Discovery, Modul-/Plugin-Loader, Cloud-Relay-Fernzugriff
   mit Mandanten/Rollen, A/B-Update + Recovery-Layer + Watchdog (Konzept §13).
 
+## Remote-Zugriff (Konzept §8)
+
+Boot hängt hinter **CGNAT** (Starlink/Mobilfunk) → keine eingehende Verbindung
+möglich, ein Rendezvous-Punkt ist Pflicht. **Entscheidung: Cloudflare Tunnel +
+Access** (kein eigener Server nötig, kein Port-Forwarding; TLS/Login/Rollen/Audit
+inklusive). Boot-seitig gekapselt in `platform/remote/` (cloudflared-Config,
+systemd-Unit, Install-Skript, `SETUP.md`). **Migrationspfad** zu Self-Host
+(VPS + WireGuard + Caddy) ohne App-Änderung möglich. **Offline-first:** lokales UI
+im Bootsnetz immer direkt erreichbar, unabhängig vom Tunnel. Mechanismus per
+TryCloudflare-Quick-Tunnel end-to-end verifiziert (öffentliche URL → lokaler Server).
+
 ## Designprinzipien (nicht verhandelbar — Konzept §2)
 
 1. Konfiguration statt Code  2. Datengetriebene UI  3. Quellen-Abstraktion
