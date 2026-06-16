@@ -267,12 +267,12 @@
       <canvas id="battWideChart" class="batt-wide-chart"></canvas>
       <div class="batt-wide-foot">
         <div class="batt-wide-stat">
-          <span class="batt-wide-lbl">Leistung</span>
-          <b id="battWidePower">--</b> <span class="unit">W</span>
+          <span class="batt-wide-lbl">SOC Min · 6h</span>
+          <b id="battWideMin">--</b> <span class="unit">%</span>
         </div>
         <div class="batt-wide-stat">
-          <span class="batt-wide-lbl">Restkapazität</span>
-          <b id="battWideRem">--</b> <span class="unit">Ah</span>
+          <span class="batt-wide-lbl">SOC Max · 6h</span>
+          <b id="battWideMax">--</b> <span class="unit">%</span>
         </div>
       </div>
     </div><!-- /.tile-wide-side -->
@@ -344,7 +344,10 @@
         </div>
       </div><!-- /.tile-main -->
       <div class="tile-wide-side" onclick="event.stopPropagation()">
-        <div class="lights-wide-sliders" id="lightsWideSliders"></div>
+        <div class="lights-wide">
+          <div class="lights-wide-hd">Zonen</div>
+          <div class="lights-wide-sliders" id="lightsWideSliders"></div>
+        </div>
       </div><!-- /.tile-wide-side -->
     </div><!-- /.tile-content -->
   </section>
@@ -491,10 +494,8 @@
       Wartungsplan
       <span class="card-link">Details →</span>
     </div>
-    <div class="w-home-wrap">
-      <div class="w-home-ring" id="wartungRing"></div>
-      <div id="wartungHomeBody" style="color:var(--text3);font-size:13px">Lade…</div>
-    </div>
+    <div class="w-progress" id="wartungProgress"></div>
+    <div id="wartungHomeBody" style="color:var(--text3);font-size:13px">Lade…</div>
   </section>
 
 </main>

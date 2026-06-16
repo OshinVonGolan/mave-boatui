@@ -232,22 +232,29 @@
     /* ── Beleuchtung ──────────────────────────────────────────────────────── */
     .tile--half.card-lights .channels-block,
     .tile--half.card-lights .divider { display: none; }
-    .card-lights .presets-grid { flex: 1; grid-auto-rows: 1fr; }   /* Buttons füllen Höhe */
+    /* Kanal-Balken füllen den oberen Bereich, Preset-Buttons bleiben normal groß */
+    .card-lights .channels-block { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+    .card-lights .channels-row { flex: 1; min-height: 36px; }
+    .card-lights .presets-grid { flex: 0 0 auto; }
+    .preset-btn { justify-content: center; }
     /* half: kompakte Buttons, die in die halbe Höhe passen (nicht abschneiden) */
     .tile--half.card-lights .presets-grid { gap: 6px; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
-    .tile--half.card-lights .preset-btn { padding: 4px 6px; gap: 2px; min-height: 0; overflow: hidden; }
-    .tile--half.card-lights .preset-emoji { font-size: 16px; }
+    .tile--half.card-lights .preset-btn { padding: 6px; gap: 3px; min-height: 0; overflow: hidden; }
+    .tile--half.card-lights .preset-emoji { font-size: 18px; }
     .tile--half.card-lights .preset-name  { font-size: 10px; }
-    .tile--wide.card-lights .presets-grid { grid-template-columns: repeat(3, 1fr); }
-    .lights-wide-sliders { display: flex; justify-content: space-around; align-items: flex-end;
-      height: 100%; padding: 6px 0; gap: 4px; }
-    .lights-slider-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    .lights-vslider { writing-mode: vertical-lr; direction: rtl; width: 28px; height: 130px;
+    /* wide: rechte Spalte = Zonen-Slider, füllt das Panel */
+    .lights-wide { display: flex; flex-direction: column; height: 100%; gap: 10px; }
+    .lights-wide-hd { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text3); }
+    .lights-wide-sliders { display: flex; justify-content: space-around; align-items: stretch;
+      flex: 1; min-height: 0; gap: 6px; }
+    .lights-slider-item { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+    .lights-vslider { writing-mode: vertical-lr; direction: rtl; width: 30px; flex: 1; min-height: 90px;
       cursor: pointer; accent-color: var(--accent2); }
-    .lights-relay-btn { width: 34px; height: 34px; border-radius: 7px; border: 1.5px solid var(--border);
-      background: var(--surface2); color: var(--text2); cursor: pointer; font-size: 11px; font-weight: 700; transition: background .15s; }
+    .lights-relay-btn { width: 44px; height: 44px; border-radius: 10px; border: 1.5px solid var(--border);
+      background: var(--surface2); color: var(--text2); cursor: pointer; font-size: 18px; transition: background .15s; }
     .lights-relay-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
-    .lights-slider-lbl { font-size: 11px; color: var(--text3); font-weight: 600; }
+    .lights-slider-lbl { font-size: 10px; color: var(--text3); font-weight: 600; text-align: center;
+      line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ── 230V ─────────────────────────────────────────────────────────────── */
     /* Inhalt gleichmäßig verteilen statt großer Lücken; 2×2-Grid füllt unten. */
@@ -262,21 +269,11 @@
     .inv-half-pct     { font-size: 32px; font-weight: 700; color: var(--text); }
     .inv-half-sep     { color: var(--text3); margin: 0 4px; }
 
-    /* ── Wartung ── (Ring + IMMER einspaltige Liste) ──────────────────────────
-       normal: Ring oben über voller Liste · wide: Ring links neben Liste ·
-       half: kleiner Ring links neben kompakter Liste. */
-    .w-home-wrap { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+    /* ── Wartung ── (Fortschrittsleiste unter dem Titel + einspaltige Liste) ── */
+    .w-progress { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; }
+    .w-prog-seg { border-radius: 3px; }
     #wartungHomeBody { flex: 1; min-width: 0; }
-    .w-home-ring { width: 92px; height: 92px; flex-shrink: 0; align-self: center; }
-    .w-ring-svg { width: 100%; height: 100%; display: block; }
-    .w-ring-big { font-size: 30px; font-weight: 800; }
-    .w-ring-lbl { font-size: 9px; fill: var(--text3); text-transform: uppercase; letter-spacing: .04em; }
-    /* wide: nebeneinander, vertikal zentriert */
-    .tile--wide.card-wartung .w-home-wrap { flex-direction: row; gap: 24px; align-items: center; }
-    .tile--wide.card-wartung .w-home-ring { width: 150px; height: 150px; }
-    /* half: kleiner Ring links + Badge und nur die nächste Aufgabe */
-    .tile--half.card-wartung .w-home-wrap { flex-direction: row; gap: 14px; align-items: center; }
-    .tile--half.card-wartung .w-home-ring { width: 68px; height: 68px; }
+    /* half: nur die nächste Aufgabe */
     .tile--half.card-wartung .w-home-row ~ .w-home-row { display: none; }
 
     /* Inverter-Button-Gruppe */

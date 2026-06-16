@@ -16,6 +16,10 @@ function buildChannelBars() {
 }
 buildChannelBars();
 
+// Aktueller Kanal-Zustand für die Wide-Slider (mit echtem Gerätezustand synchron,
+// damit ein Slider-Move nicht das Relais oder andere Kanäle überschreibt).
+let _wideCh = Array(9).fill(0);
+
 function updateChannels(channels) {
   VISIBLE_CH.forEach(i => {
     const v = channels[i] ?? 0, bar = $(`chBar${i}`);
@@ -23,10 +27,20 @@ function updateChannels(channels) {
     bar.style.height  = (i < 8 ? v/255*100 : v>0?100:0) + '%';
     bar.style.opacity = v > 0 ? '0.9' : '0.2';
   });
+  // _wideCh mit echtem Zustand abgleichen — außer dem gerade gezogenen Slider
+  for (let i = 0; i < 9; i++) {
+    if (channels[i] == null) continue;
+    const sl = $(`wideSlider${i}`);
+    if (sl && document.activeElement === sl) continue;
+    _wideCh[i] = channels[i];
+  }
   updateWideSliders(channels);
 }
 
 // ── Wide tile: vertical zone sliders ────────────────────────────────────────
+
+// Kurze Zonen-Labels (CH_NAMES sind teils zu lang für die schmale Spalte)
+const _WIDE_LABELS = { 0: 'Küche', 1: 'Kartent.', 2: 'Salon', 3: 'Kabine', 8: 'Relais' };
 
 function buildWideSliders() {
   const wrap = $('lightsWideSliders');
@@ -34,18 +48,19 @@ function buildWideSliders() {
   wrap.innerHTML = '';
   VISIBLE_CH.forEach(i => {
     const isRelay = i >= 8;
+    const lbl = _WIDE_LABELS[i] ?? (i + 1);
     const item = document.createElement('div');
     item.className = 'lights-slider-item';
     if (isRelay) {
       item.innerHTML = `<button class="lights-relay-btn" id="wideRelayBtn"
-        onclick="event.stopPropagation();_toggleRelayFromWide()">R</button>
-        <span class="lights-slider-lbl">R</span>`;
+        onclick="event.stopPropagation();_toggleRelayFromWide()" title="Relais">⏻</button>
+        <span class="lights-slider-lbl">${lbl}</span>`;
     } else {
       item.innerHTML = `<input type="range" class="lights-vslider" id="wideSlider${i}"
         min="0" max="255" value="0"
         oninput="event.stopPropagation();_setChannelFromSlider(${i},+this.value)"
         onclick="event.stopPropagation()">
-        <span class="lights-slider-lbl">${i + 1}</span>`;
+        <span class="lights-slider-lbl">${lbl}</span>`;
     }
     wrap.appendChild(item);
   });
@@ -66,26 +81,26 @@ function updateWideSliders(channels) {
 
 let _wideDebounce = null;
 function _setChannelFromSlider(ch, val) {
-  liveChannels[ch] = val;
-  checkPresetMatch(liveChannels);
+  _wideCh[ch] = val;
+  if (typeof checkPresetMatch === 'function') checkPresetMatch(_wideCh);
   clearTimeout(_wideDebounce);
   _wideDebounce = setTimeout(() => {
     fetch('/api/lights/channels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: liveChannels }),
+      body: JSON.stringify({ values: _wideCh }),
     }).catch(() => {});
   }, 80);
 }
 
 function _toggleRelayFromWide() {
-  liveChannels[8] = liveChannels[8] > 0 ? 0 : 1;
-  checkPresetMatch(liveChannels);
-  updateChannels(liveChannels);
+  _wideCh[8] = _wideCh[8] > 0 ? 0 : 1;
+  if (typeof checkPresetMatch === 'function') checkPresetMatch(_wideCh);
+  updateChannels(_wideCh);
   fetch('/api/lights/channels', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values: liveChannels }),
+    body: JSON.stringify({ values: _wideCh }),
   }).catch(() => {});
 }
 

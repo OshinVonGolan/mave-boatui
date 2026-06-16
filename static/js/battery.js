@@ -123,11 +123,7 @@ function _renderBattHalfWide(b) {
   const capAh = batteriesConfig.capacity_ah ?? null;
   const rem = (capAh != null && b.consumed_ah != null) ? Math.max(0, capAh + b.consumed_ah).toFixed(0) : '--';
   st('battHalfRem', rem);
-  // Wide-Variante: Leistung + Restkapazität + SOC-Verlauf-Graph
-  const pw = b.power != null ? Math.round(b.power)
-           : (b.current != null && b.voltage != null ? Math.round(b.current * b.voltage) : null);
-  st('battWidePower', pw == null ? '--' : pw);
-  st('battWideRem', rem);
+  // Wide-Variante: SOC-Verlauf-Graph (Min/Max werden dort gesetzt)
   _renderBattWideChart();
 }
 
@@ -146,8 +142,12 @@ function _renderBattWideChart() {
   ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
   if (pts.length < 2) return;
 
-  let lo = Math.min(...pts.map(p => p.soc));
-  let hi = Math.max(...pts.map(p => p.soc));
+  const socs = pts.map(p => p.soc);
+  let lo = Math.min(...socs);
+  let hi = Math.max(...socs);
+  const setT = (id, v) => { const e = $(id); if (e) e.textContent = v; };
+  setT('battWideMin', Math.round(lo));
+  setT('battWideMax', Math.round(hi));
   if (hi - lo < 5) { const m = (hi + lo) / 2; lo = m - 2.5; hi = m + 2.5; }
   lo = Math.max(0, lo - 2); hi = Math.min(100, hi + 2);
   const pad = 6;
