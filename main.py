@@ -52,7 +52,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.22.0'
+VERSION  = _git_semver() or '1.22.1'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -86,7 +86,11 @@ def _refresh_remote_version() -> bool:
 # Krypto-Beschleunigung teuer, und das auf dem einzigen Kern. Ohne Netz laeuft
 # jeder Versuch stur in seine Timeouts (bis zu 50 s), deshalb faellt die
 # Wartezeit bei Fehlschlag jeweils aufs Doppelte zurueck, hoechstens 2 Stunden.
-_VERSION_CHECK_INTERVAL = 1800   # Normalfall: alle 30 min
+# 30 min waren zu traege: nach einem Push dauerte es gefuehlt ewig, bis die App
+# ueberhaupt anbot zu aktualisieren. Der teure Teil ist nicht die Haeufigkeit,
+# sondern ein haengender git fetch ohne Netz — dagegen hilft der Rueckfall unten,
+# nicht ein langes Grundintervall.
+_VERSION_CHECK_INTERVAL = 300    # Normalfall: alle 5 min
 _VERSION_CHECK_MAX      = 7200   # Rueckfall offline: hoechstens alle 2 h
 
 def _remote_version_loop():
@@ -247,6 +251,14 @@ async def broadcast(data: dict):
         v = bms.get(bms_key)
         if v is not None:
             entry[bms_key] = v
+    # Zelldifferenz gehoert in den Server-Verlauf, nicht nur in den Browser.
+    # Vorher rechnete sie ausschliesslich charts.js aus den Live-Daten — die
+    # aus der Datei geladenen aelteren Punkte hatten das Feld deshalb nie und
+    # der Anfang der Kurve fehlte, waehrend alle anderen Serien vollstaendig
+    # waren.
+    hoch, tief = bms.get('highest_cell_v'), bms.get('lowest_cell_v')
+    if hoch is not None and tief is not None:
+        entry['zelldiff'] = round(hoch - tief, 4)
     mono = time.monotonic()
     if len(entry) > 1 and mono - _hist_last_mono >= 5.0:
         history.append(entry)
