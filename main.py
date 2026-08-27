@@ -1,5 +1,6 @@
 """Mave Boat Monitor — FastAPI Backend."""
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -11,19 +12,22 @@ import time
 import urllib.request
 import zlib
 from collections import deque
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
 from can_reader import BoatState, CanInterface
 from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
+from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
+from history_store import HistoryStore
+from jsonio import read_json, write_json
 
 def _git_semver() -> str:
     """Returns semver tag (e.g. '1.5.3') if HEAD is exactly on a tag, else ''."""
@@ -47,7 +51,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.20.1'
+VERSION  = _git_semver() or '1.21.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -79,16 +83,15 @@ def _remote_version_loop():
         time.sleep(300)
 
 
-def read_json(path: Path, default=None):
-    """JSON-Datei laden; default zurückgeben wenn nicht vorhanden."""
-    if path.exists():
-        return json.loads(path.read_text())
-    return default
+async def _run_blocking(fn, *args, **kwargs):
+    """Führt eine blockierende Funktion im Thread-Pool aus.
 
-
-def write_json(path: Path, data) -> None:
-    """JSON-Datei hübsch + UTF-8 schreiben."""
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    Auf dem Pi Zero (ein Kern) legt jede blockierende Zeile im Event-Loop den
+    ganzen Server lahm — Datei-Schreibvorgänge (fsync auf SD-Karte),
+    Unterprozesse und HTTP-Aufrufe gehören deshalb konsequent hier hinein.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, functools.partial(fn, *args, **kwargs))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -101,6 +104,7 @@ PRESETS_FILE  = BASE_DIR / 'presets.json'
 STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
+HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 
 state       = BoatState()
 can_if      = CanInterface(channel='can0', state=state,
@@ -138,18 +142,36 @@ else:
     log.warning('monday.json nicht gefunden — Monday-Integration deaktiviert')
 
 def _apply_presets_config():
-    data = read_json(PRESETS_FILE)
-    batt = data.get('batteries', {})
-    can_if.set_battery_instances(
-        service=int(batt.get('service_instance', 0)),
-        starter=int(batt.get('starter_instance', 1)),
-    )
+    """Übernimmt die Batterie-Instanzen aus presets.json in den CAN-Reader.
+
+    Fehlt die Datei oder ist sie beschädigt, laufen wir mit den Vorgabewerten
+    weiter — ein kaputtes presets.json darf den Dienst nicht am Start hindern.
+    """
+    data = read_json(PRESETS_FILE, {}) or {}
+    batt = data.get('batteries') or {}
+    try:
+        service = int(batt.get('service_instance', 0))
+        starter = int(batt.get('starter_instance', 1))
+    except (TypeError, ValueError):
+        log.warning('presets.json: unbrauchbare Batterie-Instanzen — nutze 0/1')
+        service, starter = 0, 1
+    can_if.set_battery_instances(service=service, starter=starter)
 
 _apply_presets_config()
 
-ws_clients: set[WebSocket] = set()
+ws_clients: set['_WsClient'] = set()
 history: deque[dict] = deque(maxlen=10800)   # 10800 × 5 s ≈ 15 h
 _hist_last_ts: float = 0.0
+# Die 5-s-Drossel MUSS auf der monotonen Uhr laufen. Der Pi hat keine RTC:
+# steht die Wanduhr nach einem Stromausfall hinter dem letzten gespeicherten
+# Zeitstempel, wuerde eine Wanduhr-Drossel gar nichts mehr aufzeichnen, bis
+# NTP aufgeholt hat. Der Wanduhr-Wert bleibt nur der Anzeige-Zeitstempel.
+_hist_last_mono: float = 0.0
+
+# Der Verlauf überlebt jetzt den Neustart: NDJSON-Datei, gepuffert im eigenen
+# Thread geschrieben (SD-Karte), beim Start wird das Zeitfenster nachgeladen.
+hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
+                          max_entries=history.maxlen or 10800)
 
 
 _REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
@@ -178,7 +200,7 @@ def _apply_charger_setpoints(setpoints: list):
 
 
 async def broadcast(data: dict):
-    global _hist_last_ts
+    global _hist_last_ts, _hist_last_mono
     check_data = {**data, '_network_age': can_if.time_since_last_message()}
     alarms.check(check_data)
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
@@ -192,6 +214,9 @@ async def broadcast(data: dict):
         v = batt.get(key)
         if v is not None:
             entry[key] = v
+    # solar2/solar3/wind sind VORBEREITUNG für Hardware, die noch nicht verbaut
+    # ist. Sie kosten nichts: fehlt die Quelle im State, liefert .get() None und
+    # es wird nichts geschrieben. NICHT entfernen — sie gehören zum Ausbauplan.
     for src_key, field in (('solar', 'solar1'), ('alternator', 'alternator'),
                             ('solar2', 'solar2'), ('solar3', 'solar3'),
                             ('charger', 'charger'), ('wind', 'wind')):
@@ -203,17 +228,17 @@ async def broadcast(data: dict):
         v = bms.get(bms_key)
         if v is not None:
             entry[bms_key] = v
-    if len(entry) > 1 and now - _hist_last_ts >= 5.0:
+    mono = time.monotonic()
+    if len(entry) > 1 and mono - _hist_last_mono >= 5.0:
         history.append(entry)
-        _hist_last_ts = now
+        hist_store.append(entry)      # gepuffert, eigener Thread — blockiert nicht
+        _hist_last_ts  = now
+        _hist_last_mono = mono
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
-    dead = set()
-    for ws in list(ws_clients):
-        try:
-            await ws.send_json(payload)
-        except Exception:
-            dead.add(ws)
-    ws_clients.difference_update(dead)
+    # Nur einreihen — der Sender-Task jedes Clients schickt selbststaendig.
+    # Kein await auf einen einzelnen Client mehr, also auch kein Einfrieren.
+    for client in list(ws_clients):
+        client.send(payload)
 
 
 can_if.on_change(broadcast)
@@ -240,8 +265,24 @@ async def lifespan(_app: FastAPI):
         log.info("Connectivity-Monitor gestartet")
     threading.Thread(target=_remote_version_loop, daemon=True, name='version-check').start()
     asyncio.create_task(_charger_poll_loop())
+
+    # Verlauf von der Platte in die Deque zurückholen, damit die Graphen nach
+    # einem Neustart nicht bei null anfangen. Das Lesen läuft im Executor —
+    # sonst steht der Server beim Hochfahren mehrere Sekunden.
+    try:
+        geladen = await loop.run_in_executor(None, hist_store.load)
+        history.extend(geladen)
+        # _hist_last_mono bewusst NICHT vorbelegen: die Drossel laeuft auf der
+        # monotonen Uhr, die bei jedem Start bei 0 beginnt. Aufzeichnung soll
+        # sofort wieder anlaufen, unabhaengig davon, was in der Datei steht.
+        log.info("Verlauf geladen: %d Einträge", len(geladen))
+    except Exception as e:
+        log.warning("Verlauf konnte nicht geladen werden: %s", e)
+    hist_store.start()
+
     yield
     can_if.stop()
+    hist_store.close()
     log.info("CAN-Reader gestoppt")
 
 
@@ -255,11 +296,14 @@ class _NoCacheStatic(StaticFiles):
 
 
 app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# compresslevel=6 statt der Vorgabe 9: auf ARMv6 deutlich billiger,
+# die Antworten werden dabei nur wenige Prozent groesser.
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
 
 # JS files in dependency order — concatenated into one request on /js-bundle.js
 _JS_FILES = [
+    'icons.js',
     'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
@@ -290,47 +334,129 @@ async def js_bundle(req: Request):
     )
 
 
+_index_cache: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+
+
 @app.get('/', include_in_schema=False)
-async def root():
-    return FileResponse(
-        STATIC_DIR / 'index.html',
-        headers={'Cache-Control': 'no-cache, no-store, must-revalidate',
-                 'Pragma': 'no-cache', 'Expires': '0'},
+async def root(req: Request):
+    """Startseite.
+
+    Vorher mit no-store ausgeliefert: die ~100 KB gingen bei JEDEM Seitenaufbau
+    neu über das Boots-WLAN und wurden jedes Mal neu gezippt. Jetzt no-cache mit
+    ETag — der Browser fragt weiterhin jedes Mal nach (Updates kommen also
+    sofort an), bekommt bei unveränderter Datei aber ein leeres 304 zurück.
+    Gleiches Muster wie /js-bundle.js.
+    """
+    pfad = STATIC_DIR / 'index.html'
+    mtime = pfad.stat().st_mtime
+    if _index_cache['mtime'] < mtime:
+        _index_cache['data']  = pfad.read_bytes()
+        _index_cache['mtime'] = mtime
+        _index_cache['etag']  = f'"{int(mtime)}-{len(_index_cache["data"])}"'
+    if req.headers.get('if-none-match') == _index_cache['etag']:
+        return Response(status_code=304)
+    return Response(
+        content=_index_cache['data'],
+        media_type='text/html; charset=utf-8',
+        headers={'Cache-Control': 'no-cache', 'ETag': _index_cache['etag']},
     )
+
+
+
+class _WsClient:
+    """Ein WebSocket-Client mit eigener kleiner Sende-Queue.
+
+    Vorher sendete broadcast() sequenziell mit `await ws.send_json(...)` an jeden
+    Client. Ist der TCP-Schreibpuffer eines schwach angebundenen Geraets voll
+    (Handy am anderen Ende des Boots), blockiert dieses await — und weil der Pi
+    Zero W genau EINEN Event-Loop hat, stand damit der komplette Server: keine
+    weiteren Broadcasts, keine HTTP-Antworten, keine Alarmpruefung.
+
+    Jetzt bekommt jeder Client eine Queue der Laenge 2 und einen eigenen
+    Sender-Task. Laeuft die Queue voll, wird der AELTESTE Payload verworfen —
+    bei Live-Telemetrie ist der neueste Wert der einzig interessante, und ein
+    langsames Geraet darf die anderen nicht ausbremsen.
+    """
+
+    __slots__ = ('ws', 'queue', 'task', 'verworfen')
+
+    def __init__(self, ws: WebSocket):
+        self.ws        = ws
+        self.queue     = asyncio.Queue(maxsize=2)
+        self.task      = None
+        self.verworfen = 0
+
+    def start(self) -> None:
+        self.task = asyncio.create_task(self._sender())
+
+    def send(self, payload: dict) -> None:
+        """Nimmt einen Payload entgegen, ohne je zu blockieren."""
+        while True:
+            try:
+                self.queue.put_nowait(payload)
+                return
+            except asyncio.QueueFull:
+                try:
+                    self.queue.get_nowait()      # aeltesten wegwerfen
+                    self.verworfen += 1
+                except asyncio.QueueEmpty:
+                    return
+
+    async def _sender(self) -> None:
+        try:
+            while True:
+                payload = await self.queue.get()
+                await self.ws.send_json(payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.debug("WebSocket Sendefehler: %s", e)
+        finally:
+            ws_clients.discard(self)
+
+    async def stop(self) -> None:
+        if self.task:
+            self.task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await self.task
 
 
 @app.websocket('/ws')
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
-    ws_clients.add(ws)
+    client = _WsClient(ws)
+    client.start()
+    ws_clients.add(client)
     log.info("WebSocket verbunden (%d aktiv)", len(ws_clients))
     try:
-        try:
-            await ws.send_json({**state.to_dict(), 'version': VERSION})
-        except Exception as e:
-            log.error("WebSocket init JSON-Fehler: %s", e)
-            raise
+        client.send({**state.to_dict(), 'version': VERSION})
         while True:
             try:
                 await asyncio.wait_for(ws.receive_text(), timeout=30)
             except asyncio.TimeoutError:
-                await ws.send_json({'ping': True})
-    except (WebSocketDisconnect, Exception) as e:
-        if not isinstance(e, WebSocketDisconnect):
-            log.debug("WebSocket Fehler: %s", e)
+                client.send({'ping': True})
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.debug("WebSocket Fehler: %s", e)
     finally:
-        ws_clients.discard(ws)
-        log.info("WebSocket getrennt (%d aktiv)", len(ws_clients))
+        ws_clients.discard(client)
+        await client.stop()
+        if client.verworfen:
+            log.info("WebSocket getrennt (%d aktiv, %d Payloads verworfen)",
+                     len(ws_clients), client.verworfen)
+        else:
+            log.info("WebSocket getrennt (%d aktiv)", len(ws_clients))
 
 
 @app.get('/api/presets')
 async def get_presets():
-    return read_json(PRESETS_FILE)
+    return read_json(PRESETS_FILE, {})
 
 
 @app.post('/api/lights/preset/{preset_id}')
 async def apply_preset(preset_id: int):
-    data    = read_json(PRESETS_FILE)
+    data    = read_json(PRESETS_FILE, {})
     presets = data.get('presets', [])
     if not (0 <= preset_id < len(presets)):
         raise HTTPException(404, detail='Preset nicht gefunden')
@@ -355,7 +481,7 @@ async def set_channels(body: dict):
 
 @app.patch('/api/lights/preset/{preset_id}')
 async def update_preset(preset_id: int, body: dict):
-    data    = read_json(PRESETS_FILE)
+    data    = read_json(PRESETS_FILE, {})
     presets = data.get('presets', [])
     if not (0 <= preset_id < len(presets)):
         raise HTTPException(404, detail='Preset nicht gefunden')
@@ -372,9 +498,85 @@ async def update_preset(preset_id: int, body: dict):
     return data
 
 
+def _decimate_history(entries: list[dict], max_points: int) -> list[dict]:
+    """Dünnt einen Verlauf auf höchstens max_points Punkte aus.
+
+    Je Zeitfenster (Bucket) wird der Mittelwert jedes Feldes gebildet, der
+    Zeitstempel ist die Bucket-Mitte. Felder, die in einem Bucket gar nicht
+    vorkommen, fehlen auch im Ergebnis — so reißt keine Serie ab, nur weil
+    der erste Eintrag eines Buckets sie zufällig nicht hatte.
+    """
+    n = len(entries)
+    if max_points <= 0 or n <= max_points:
+        return entries
+
+    schritt = n / max_points
+    out: list[dict] = []
+    for i in range(max_points):
+        a = int(i * schritt)
+        b = int((i + 1) * schritt)
+        if b <= a:
+            b = a + 1
+        bucket = entries[a:min(b, n)]
+        if not bucket:
+            continue
+        summen: dict[str, float] = {}
+        anzahl: dict[str, int] = {}
+        for e in bucket:
+            for k, v in e.items():
+                if k == 'ts' or not isinstance(v, (int, float)):
+                    continue
+                summen[k] = summen.get(k, 0.0) + v
+                anzahl[k] = anzahl.get(k, 0) + 1
+        punkt: dict = {'ts': round((bucket[0]['ts'] + bucket[-1]['ts']) / 2, 1)}
+        for k, sm in summen.items():
+            punkt[k] = round(sm / anzahl[k], 3)
+        out.append(punkt)
+    return out
+
+
 @app.get('/api/history')
-async def get_history():
-    return list(history)
+async def get_history(range: int | None = None, max_points: int = 1500):
+    """Verlauf für die Graphen.
+
+    Vorher gab dieser Endpunkt stumpf alle 10.800 Einträge zurück. Ohne
+    response_model schickt FastAPI das durch den jsonable_encoder und danach
+    durch gzip Level 9 — alles synchron im einzigen Event-Loop. Am Gerät
+    gemessen: 11,1 s bis zum ersten Byte, und in dieser Zeit steht der GESAMTE
+    Server (auch /api/status brauchte dann 8,2 s statt 0,1 s).
+
+    Jetzt: nach Zeitfenster filtern, serverseitig ausdünnen, am Encoder vorbei
+    serialisieren und die Serialisierung bei großen Antworten in den Executor
+    verlagern.
+
+    server_now geht mit, weil der Pi keine Echtzeituhr hat: der Client rechnet
+    daraus einen Offset und filtert gegen die Server-Zeit statt gegen die
+    Uhr des Telefons.
+    """
+    jetzt = time.time()
+    eintraege = list(history)
+
+    if range is not None and range > 0:
+        grenze = jetzt - range
+        eintraege = [e for e in eintraege if e.get('ts', 0) >= grenze]
+
+    max_points = max(1, min(max_points, 5000))
+    eintraege = _decimate_history(eintraege, max_points)
+
+    payload = {'server_now': jetzt, 'entries': eintraege}
+
+    def _dump() -> str:
+        return json.dumps(payload, separators=(',', ':'))
+
+    # Kleine Antworten direkt, große im Executor — der Schwellwert liegt so,
+    # dass der Normalfall keinen Thread-Wechsel kostet.
+    if len(eintraege) > 400:
+        loop = asyncio.get_running_loop()
+        body = await loop.run_in_executor(None, _dump)
+    else:
+        body = _dump()
+
+    return Response(content=body, media_type='application/json')
 
 
 @app.get('/api/status')
@@ -384,7 +586,9 @@ async def get_status():
 
 @app.get('/api/daily-stats')
 async def get_daily_stats(days: int = 7):
-    return can_if.get_daily_stats(min(days, 30))
+    # Der Tracker haelt nur DAILY_STATS_MAX_DAYS Tage vor — mehr anzufordern
+    # lieferte vorher stillschweigend leere Tage.
+    return can_if.get_daily_stats(max(1, min(days, DAILY_STATS_MAX_DAYS)))
 
 
 @app.get('/api/network')
@@ -498,26 +702,34 @@ async def system_version():
     }
 
 
+def _lauf(cmd: list[str], timeout: float):
+    """subprocess.run mit festen Vorgaben — laeuft immer im Executor, nie im Loop."""
+    return subprocess.run(cmd, cwd=BASE_DIR, capture_output=True,
+                          text=True, timeout=timeout)
+
+
 @app.post('/api/system/update')
 async def system_update():
+    loop = asyncio.get_running_loop()
     before = _git_hash()
-    result = subprocess.run(
-        ['git', 'pull'],
-        cwd=BASE_DIR, capture_output=True, text=True, timeout=30,
-    )
+    # git pull dauert ueber Mobilfunk gut und gerne 10-30 s. Synchron im
+    # Event-Loop stand solange der komplette Server.
+    result = await loop.run_in_executor(None, _lauf, ['git', 'pull'], 30)
     if result.returncode != 0:
-        raise HTTPException(500, detail=result.stderr.strip())
+        # stderr NICHT an den Aufrufer geben: die Remote-URL enthaelt das
+        # GitHub-Token, und git schreibt sie bei Fehlern mit in die Meldung.
+        log.error("git pull fehlgeschlagen: %s", result.stderr.strip())
+        raise HTTPException(500, detail='Aktualisierung fehlgeschlagen — Details im Log.')
     changed = 'Already up to date.' not in result.stdout
     after = _git_hash()
     log.info("git pull: %s", result.stdout.strip())
     changelog = []
     if changed:
         try:
-            cl = subprocess.run(
+            cl = await loop.run_in_executor(
+                None, _lauf,
                 ['git', 'log', 'ORIG_HEAD..HEAD', '--no-merges',
-                 '--pretty=format:ENTRY%n%s%n%b'],
-                cwd=BASE_DIR, capture_output=True, text=True, timeout=10,
-            )
+                 '--pretty=format:ENTRY%n%s%n%b'], 10)
             for block in cl.stdout.split('ENTRY\n'):
                 block = block.strip()
                 if not block:
@@ -658,7 +870,7 @@ async def save_stauplan(request: Request):
 
 @app.patch('/api/settings')
 async def update_settings(body: dict):
-    data = read_json(PRESETS_FILE)
+    data = read_json(PRESETS_FILE, {})
     if 'tanks' in body:
         for key, val in body['tanks'].items():
             if key in data.get('tanks', {}):
@@ -695,8 +907,60 @@ async def set_charger_mode(body: dict):
     return status
 
 
+# Zulaessige Bereiche fuer Ladeparameter. Diese Werte gehen ueber NMEA 2000 an
+# die Victron-Geraete — ein Zahlendreher hier laedt eine LiFePO4-Bank kaputt.
+# Grenzen sind bewusst weit genug fuer 12-V- UND 24-V-Systeme.
+_LADE_GRENZEN: dict[str, tuple[float, float]] = {
+    'absorption_v':            (10.0, 60.0),
+    'float_v':                 (10.0, 60.0),
+    'hold_voltage':            (10.0, 60.0),
+    'off_voltage':             ( 0.0, 60.0),
+    'target_soc':              ( 0.0, 100.0),
+    'soc_ramp_pct':            ( 0.0, 100.0),
+    'soc_hysteresis_pct':      ( 0.0, 50.0),
+    'balance_target_soc':      ( 0.0, 100.0),
+    'balance_interval_days':   ( 1.0, 365.0),
+    'balance_min_hours':       ( 0.0, 48.0),
+    'balance_max_hours':       ( 0.1, 72.0),
+    'balance_end_current_a':   ( 0.0, 200.0),
+    'solar_priority_offset_v': ( 0.0, 5.0),
+}
+
+
+def _pruefe_ladewerte(patch: dict, pfad: str = '') -> None:
+    """Prueft alle Zahlenwerte rekursiv gegen _LADE_GRENZEN.
+
+    Vorher ging der Body ungeprueft durch einen deep_merge auf die Platte und
+    von dort an die Ladegeraete. Ein Tippfehler (144 statt 14.4) waere
+    unbemerkt bis in die Zellen durchgeschlagen.
+    """
+    for schluessel, wert in patch.items():
+        voll = f'{pfad}.{schluessel}' if pfad else schluessel
+        if isinstance(wert, dict):
+            _pruefe_ladewerte(wert, voll)
+            continue
+        if schluessel not in _LADE_GRENZEN:
+            continue
+        if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+            raise HTTPException(400, detail=f'{voll}: Zahl erwartet, {type(wert).__name__} bekommen')
+        lo, hi = _LADE_GRENZEN[schluessel]
+        if not (lo <= wert <= hi):
+            raise HTTPException(400, detail=f'{voll}: {wert} liegt ausserhalb von {lo} bis {hi}')
+
+
 @app.patch('/api/charger/settings')
 async def update_charger_settings(body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    _pruefe_ladewerte(body)
+    # Absorption darf nicht unter Float liegen — das ergibt kein sinnvolles Ladeprofil.
+    for profil in ('harbor', 'full', 'balance'):
+        p = body.get(profil)
+        if isinstance(p, dict):
+            a, f = p.get('absorption_v'), p.get('float_v')
+            if isinstance(a, (int, float)) and isinstance(f, (int, float)) and a < f:
+                raise HTTPException(400, detail=f'{profil}: absorption_v ({a}) darf nicht '
+                                                f'unter float_v ({f}) liegen')
     return charge_ctrl.update_settings(body)
 
 
@@ -887,8 +1151,11 @@ async def display_state():
 async def display_power(body: dict):
     on = bool(body.get('on', True))
     try:
-        r = subprocess.run(['vcgencmd', 'display_power', '1' if on else '0'],
-                           capture_output=True, text=True, timeout=5)
+        # vcgencmd braucht bis zu 5 s — synchron wuerde das den ganzen Server anhalten.
+        r = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(['vcgencmd', 'display_power', '1' if on else '0'],
+                                   capture_output=True, text=True, timeout=5))
         if r.returncode != 0:
             raise HTTPException(503, detail=f'Display-Steuerung nicht verfügbar: '
                                             f'{(r.stderr or r.stdout).strip()}')

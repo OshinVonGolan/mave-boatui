@@ -1,9 +1,31 @@
+# Mave Boat Monitor — Laufzeitabhängigkeiten
+#
+# Neuaufbau:  python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+#
+# ACHTUNG: uvicorn allein bringt KEINEN WebSocket-Treiber mit. Ohne 'websockets'
+# startet der Server zwar, aber /ws lehnt jede Verbindung ab und die App bleibt
+# auf "--" stehen. Das Paket ist Pflicht, nicht optional.
+
+# ── Pflicht ────────────────────────────────────────────────────────────────
 fastapi>=0.115.0
-uvicorn==0.29.0
-python-can==4.3.1
-grpcio>=1.60.0
-protobuf>=4.21.0
-yagrc>=1.0.2
-httpx>=0.27.0
-Pillow>=9.0.0
-numpy>=1.20.0
+uvicorn>=0.29.0
+websockets>=12.0          # WebSocket-Treiber für /ws — ohne das läuft die App nicht
+python-can>=4.3.1         # CAN-Bus (socketcan) für NMEA 2000
+
+# ── Optional ───────────────────────────────────────────────────────────────
+# Diese Pakete sind NICHT erforderlich. Fehlt eines, degradiert die zugehörige
+# Funktion sauber und der Rest der App läuft normal weiter. Auf dem Pi Zero W
+# ist der Bau von numpy/Pillow langwierig — nur installieren, wenn die Funktion
+# wirklich gebraucht wird.
+
+# Starlink-Status im Internet-Tab:
+# grpcio>=1.60.0
+# protobuf>=4.21.0
+# yagrc>=1.0.2
+
+# Router-Abfrage (Teltonika RUTX50) im Internet-Tab:
+# httpx>=0.27.0
+
+# Wasserstands-Pegelbild auswerten:
+# Pillow>=9.0.0
+# numpy>=1.20.0

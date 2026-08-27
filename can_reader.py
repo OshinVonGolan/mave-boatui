@@ -1,6 +1,7 @@
 """CAN-Bus Interface: liest NMEA2000-Frames, verwaltet den Systemzustand."""
 import asyncio
 import logging
+import threading
 import time
 from pathlib import Path
 
@@ -45,11 +46,19 @@ class BoatState:
         }
         self.tanks  = {'tank1': None, 'tank2': None}
         self.lights = {'channels': [0] * 9}
+        # 'power' = batterieseitige Ladeleistung des MPPT (Ausgang, V × A auf der
+        # Batterieseite). Für die Energiebilanz ist das die richtige Größe, und sie
+        # hat genau EINE Quelle: PGN 127508 (DC-Status, dc_type Solar) bzw. PGN
+        # 130910 (VE.Direct type 3) – beide liefern denselben physikalischen Wert.
+        # Die Panel-Leistung (Eingangsseite, PPV aus PGN 130912) liegt ausschließlich
+        # im eigenen Feld 'ppv' und schreibt NICHT mehr nach 'power'; das Hin und Her
+        # zwischen beiden Quellen hat die Solar-Kurve dauerhaft sägezahnen lassen.
         self.solar      = {
+            'charge_state_n2k': None,
             'power': None, 'current': None, 'voltage': None,
             # MPPT 75/15 – aus PGN 130910 (type 3)
             'cs': None, 'cs_label': None,
-            # MPPT 75/15 – aus PGN 130912
+            # MPPT 75/15 – aus PGN 130912; 'ppv' = Panel-/Eingangsleistung (W)
             'vpv': None, 'ppv': None,
             'yield_today_wh': None, 'max_power_today_w': None,
             'mppt_mode': None, 'mppt_mode_label': None,
@@ -73,21 +82,47 @@ class BoatState:
         self.inverter = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
                          'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None,
                          'err': None, 'warn': None}  # err = AR (Alarm Reason), warn = WARN
+        # charge_state_n2k = grober NMEA-Standardzustand aus PGN 127507. Bewusst
+        # getrennt von cs_label (feineres VE.Direct-Label aus PGN 130910).
         self.charger  = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
+                         'charge_state_n2k': None,
                          'dc_voltage': None, 'dc_current': None, '_last_seen': 0.0}  # Smart IP43
         self.orion    = {
             'state': None, 'power': None, 'cs': None, 'cs_label': None,
+            'charge_state_n2k': None,
             'dc_voltage': None, 'dc_current': None,   # Ausgang (Batterieseite) aus PGN 130910
             # Orion-XS erweitert – aus PGN 130913
             'output_power': None,
             'input_voltage': None, 'input_current': None, 'input_power': None,
             'off_reason': None, 'off_reason_label': None,
         }
+        # Zeitpunkt des letzten Frames je Quelle (time.monotonic()). Wird vom
+        # CAN-Thread geschrieben und vom Event-Loop gelesen – eine einzelne
+        # dict-Zuweisung ist unter dem GIL atomar, deshalb ohne Lock.
+        self._updated: dict[str, float] = {}
+
+    def touch(self, source: str):
+        """Vermerkt, dass für diese Quelle gerade ein Frame angekommen ist."""
+        self._updated[source] = time.monotonic()
+
+    def age_s(self, source: str):
+        """Sekunden seit dem letzten Frame dieser Quelle (None = nie gesehen)."""
+        t = self._updated.get(source)
+        return round(time.monotonic() - t, 1) if t is not None else None
 
     def to_dict(self) -> dict:
+        """Momentaufnahme für API und WebSocket.
+
+        Jede Gruppe bekommt zusätzlich '_age_s': Sekunden seit dem letzten Frame
+        dieser Quelle (None = seit dem Start nie gesehen). Fällt ein Sensor aus,
+        friert sein letzter Wert sonst unbemerkt ein und wird weiter als aktueller
+        Messwert angezeigt; mit dem Alter kann das Frontend ihn kennzeichnen.
+        Die Werte selbst werden bewusst NICHT auf None gesetzt – das würde
+        bestehende Anzeigen brechen.
+        """
         charger_d = {k: v for k, v in self.charger.items() if k != '_last_seen'}
         charger_d['active'] = (time.time() - self.charger['_last_seen']) < 30
-        return {
+        out = {
             'battery':    dict(self.battery),
             'tanks':      dict(self.tanks),
             'lights':     dict(self.lights),
@@ -98,6 +133,15 @@ class BoatState:
             'charger':    charger_d,
             'orion':      dict(self.orion),
         }
+        now = time.monotonic()
+        for name, d in out.items():
+            t = self._updated.get(name)
+            d['_age_s'] = round(now - t, 1) if t is not None else None
+        # Die Batterietemperatur kommt aus einer eigenen Quelle (PGN 130312) und
+        # kann ausfallen, während der Shunt weiter sendet – deshalb eigenes Alter.
+        t = self._updated.get('battery_temperature')
+        out['battery']['_temperature_age_s'] = round(now - t, 1) if t is not None else None
+        return out
 
 
 class CanInterface:
@@ -109,10 +153,17 @@ class CanInterface:
         self._bus         = None
         self._fp          = FastPacketReassembler()
         self._seq_id      = 0
+        # Der Fast-Packet-Zähler wird sowohl aus dem Event-Loop (API-Aufrufe wie
+        # Helligkeit/Alert) als auch aus dem CAN-Thread hochgezählt. Ohne Lock
+        # können sich zwei Sender dieselbe Sequenznummer greifen und ihre Frames
+        # beim Empfänger gegenseitig zerlegen.
+        self._seq_lock    = threading.Lock()
         self._running     = False
         self._loop        = None
         self._on_change   = None   # async callback(data: dict)
         self._broadcast_pending = False
+        self._broadcast_lock    = None   # asyncio.Lock, wird im Loop angelegt
+        self._bms_corr_active   = False  # Hysterese der BMS-Stromkorrektur
         self._network:  dict = {}   # (pgn, src) → tracking entry
         self._last_raw: dict = {}   # pgn → {src, len, hex} (Debug)
         self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
@@ -122,6 +173,13 @@ class CanInterface:
         self._starter_instance: int = 1
         self._charger_config_cb = None   # optional: callback(absorption_v, float_v)
         self._daily = DailyStatsTracker(stats_path or Path('daily_stats.json'))
+
+    def _next_seq(self) -> int:
+        """Liefert die nächste Fast-Packet-Sequenznummer (0-7), thread-sicher."""
+        with self._seq_lock:
+            seq = self._seq_id
+            self._seq_id = (seq + 1) & 0x07
+            return seq
 
     def set_battery_instances(self, service: int, starter: int):
         self._service_instance = service
@@ -152,7 +210,11 @@ class CanInterface:
         Sucht nach dem Gerät, das PGN 130910 (VE.Direct Extended) sendet.
         Fällt auf 0xFF (broadcast) zurück wenn unbekannt.
         """
-        for (pgn, src, _inst) in self._network:
+        # Kopie: der CAN-Thread trägt laufend neue Schlüssel ein, eine Iteration
+        # über das Original könnte mitten drin RuntimeError werfen. dict.copy()
+        # läuft komplett in C und ist damit unter dem GIL atomar – kein Lock im
+        # heißen Pfad nötig, der Schreiber bleibt unverändert schnell.
+        for (pgn, src, _inst) in self._network.copy():
             if pgn == 130910:
                 return src
         return 0xFF
@@ -236,8 +298,7 @@ class CanInterface:
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
             return
-        frames = build_brightness_frames(values, self._seq_id)
-        self._seq_id = (self._seq_id + 1) & 0x07
+        frames = build_brightness_frames(values, self._next_seq())
         for can_id, data in frames:
             try:
                 self._bus.send(can.Message(
@@ -251,8 +312,7 @@ class CanInterface:
         if self._bus is None:
             log.warning("CAN nicht verbunden – Alert nicht gesendet")
             return
-        frames = build_alert_frame(alert_id, active, priority=priority, seq=self._seq_id)
-        self._seq_id = (self._seq_id + 1) & 0x07
+        frames = build_alert_frame(alert_id, active, priority=priority, seq=self._next_seq())
         for can_id, data in frames:
             try:
                 self._bus.send(can.Message(
@@ -282,11 +342,13 @@ class CanInterface:
     def get_network_stats(self) -> list[dict]:
         now = time.monotonic()
         result = []
+        # Erst kopieren, dann sortieren: sorted() ruft pro Element Python-Code auf
+        # und würde dem CAN-Thread Gelegenheit geben, das Dict zu vergrößern.
         for (pgn, src, instance), e in sorted(
-            self._network.items(),
+            self._network.copy().items(),
             key=lambda x: (x[0][1], x[0][0], x[0][2] if x[0][2] is not None else -1)
         ):
-            ivs = e['intervals']
+            ivs = list(e['intervals'])   # Liste wird nebenläufig angehängt/ersetzt
             avg_ms = round(sum(ivs) / len(ivs) * 1000) if ivs else None
             result.append({
                 'pgn':         pgn,
@@ -303,7 +365,7 @@ class CanInterface:
     def get_raw_frames(self) -> dict:
         """Backward-compat: ein Eintrag pro PGN (neueste src)."""
         result = {}
-        for (pgn, src, instance), data in self._last_raw.items():
+        for (pgn, src, instance), data in self._last_raw.copy().items():
             if pgn not in result:
                 result[pgn] = data
         return result
@@ -312,11 +374,30 @@ class CanInterface:
         return self._last_raw.get((pgn, src, instance))
 
     def time_since_last_message(self) -> float:
-        if not self._network:
+        entries = list(self._network.values())   # atomare Kopie, s. o.
+        if not entries:
             return float('inf')
         now    = time.monotonic()
-        latest = max(e['last_seen'] for e in self._network.values())
+        latest = max(e['last_seen'] for e in entries)
         return round(now - latest, 1)
+
+    @staticmethod
+    def _merge(target: dict, values: dict) -> bool:
+        """Übernimmt alle Nicht-None-Werte aus `values` nach `target`.
+
+        Liefert True, wenn sich dabei mindestens ein Wert wirklich geändert hat.
+        Zwei Punkte, die vorher Dauer-Broadcasts erzeugt haben:
+          * Verglichen wird schlüsselweise – nicht das gelieferte Teil-Dict gegen
+            das komplette Zustands-Dict (das war immer ungleich).
+          * None bedeutet „in diesem Frame nicht enthalten" und überschreibt
+            keinen vorhandenen Wert; sonst pendeln zwei Quellen gegeneinander.
+        """
+        changed = False
+        for k, v in values.items():
+            if v is not None and target.get(k) != v:
+                target[k] = v
+                changed = True
+        return changed
 
     def _handle(self, msg: can.Message):
         pgn, src = parse_can_id(msg.arbitration_id)
@@ -352,6 +433,7 @@ class CanInterface:
             p = parse_fluid_level(payload)
             if p:
                 self._track_network(pgn, src, p['instance'])
+                self.state.touch('tanks')
                 key = 'tank1' if p['instance'] == 0 else 'tank2'
                 if self.state.tanks[key] != p['level']:
                     self.state.tanks[key] = p['level']
@@ -365,33 +447,49 @@ class CanInterface:
                 dc_type = self._dc_types.get(inst)
 
                 if inst == self._service_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
-                    for field, key in [('voltage', 'voltage'), ('current', 'current')]:
-                        if p[field] is not None and self.state.battery[key] != p[field]:
-                            self.state.battery[key] = p[field]
-                            changed = True
+                    self.state.touch('battery')
+                    if self._merge(self.state.battery,
+                                   {'voltage': p.get('voltage'), 'current': p.get('current')}):
+                        changed = True
                 elif inst == self._starter_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
-                    if p['voltage'] is not None and self.state.battery['starter_voltage'] != p['voltage']:
-                        self.state.battery['starter_voltage'] = p['voltage']
+                    self.state.touch('battery')
+                    if self._merge(self.state.battery, {'starter_voltage': p.get('voltage')}):
                         changed = True
 
                 if dc_type == DC_TYPE_SOLAR:
                     v, i = p.get('voltage'), p.get('current')
+                    # batterieseitige Ladeleistung – die einzige Quelle für solar.power
                     pwr = round(v * i, 1) if v is not None and i is not None else None
-                    new = {'power': pwr, 'current': i, 'voltage': v}
-                    if new != self.state.solar:
-                        self.state.solar.update(new)
+                    self.state.touch('solar')
+                    if self._merge(self.state.solar, {'power': pwr, 'current': i, 'voltage': v}):
                         changed = True
                 elif dc_type == DC_TYPE_ALTERNATOR:
                     v, i = p.get('voltage'), p.get('current')
                     pwr = round(v * i, 1) if v is not None and i is not None else None
-                    new = {'power': pwr, 'current': i, 'voltage': v}
-                    if new != self.state.alternator:
-                        self.state.alternator.update(new)
+                    self.state.touch('alternator')
+                    if self._merge(self.state.alternator, {'power': pwr, 'current': i, 'voltage': v}):
                         changed = True
 
         elif pgn == 130900:
             p = parse_battery_stats(payload)
             if p:
+                self.state.touch('battery')
+                # Die Temperatur hat mit PGN 130312 eine eigene, maßgebliche
+                # Quelle. Hier steht sie oft als NaN (None) drin und hat den
+                # echten Wert überschrieben – echter Wert, None, echter Wert …
+                # also bei jedem Frame eine Änderung und damit einen Broadcast.
+                # Deshalb: sobald 130312 schon einmal gesendet hat, gehört das
+                # Feld allein dieser Quelle. Nur solange sie schweigt, dient
+                # 130900 als Rückfall.
+                if self.state.age_s('battery_temperature') is not None:
+                    p.pop('temperature', None)
+                # Alle übrigen Felder hat NUR diese PGN – hier MUSS None auch
+                # durchschlagen: 'soc', 'ttg' und 'time_since_full' sind None,
+                # wenn der Shunt keinen gültigen Wert hat. Würde man None
+                # unterdrücken, bliebe der letzte Wert stehen und die
+                # Hafen-SOC-Regelung (main.broadcast → charge_ctrl.update_soc)
+                # sowie die Alarmprüfung liefen auf einem eingefrorenen SOC
+                # weiter – genau das, was ein None verhindern soll.
                 for k, v in p.items():
                     if self.state.battery.get(k) != v:
                         self.state.battery[k] = v
@@ -407,13 +505,17 @@ class CanInterface:
             p = parse_temperature(payload)
             if p:
                 self._track_network(pgn, src, payload[0] & 0x0F)
-                if self.state.battery['temperature'] != p['temperature_c']:
-                    self.state.battery['temperature'] = p['temperature_c']
-                    changed = True
+                # Maßgebliche Temperaturquelle – aber nur setzen, wenn wirklich
+                # ein Messwert vorliegt.
+                if p.get('temperature_c') is not None:
+                    self.state.touch('battery_temperature')
+                    if self._merge(self.state.battery, {'temperature': p['temperature_c']}):
+                        changed = True
 
         elif pgn == 130901:
             p = parse_bms_pack(payload)
             if p:
+                self.state.touch('bms')
                 p = self._correct_bms_currents(p)
                 for k, v in p.items():
                     if self.state.bms.get(k) != v:
@@ -422,12 +524,16 @@ class CanInterface:
 
         elif pgn == 130902:
             p = parse_bms_cells(payload)   # gibt Dict {'cell_count':.., 'cells':[..]} zurück
+            if p:
+                self.state.touch('bms')
             if p and self.state.bms.get('cells') != p['cells']:
                 self.state.bms['cells'] = p['cells']
                 changed = True
 
         elif pgn == 126720:
             p = parse_brightness(payload)
+            if p:
+                self.state.touch('lights')
             if p and self.state.lights['channels'] != p['channels']:
                 self.state.lights['channels'] = p['channels']
                 changed = True
@@ -441,6 +547,7 @@ class CanInterface:
                           'err', 'warn')
                 if p['type'] == 2 and p['instance'] == 0:  # Inverter
                     target = self.state.inverter
+                    self.state.touch('inverter')
                     if p.get('cs_label'):
                         p['state'] = p['cs_label']
                     for k in fields:
@@ -453,6 +560,7 @@ class CanInterface:
                         target['power'] = p['power']; changed = True
                 elif p['type'] == 1 and p['instance'] == 0:  # Orion-XS DC-DC
                     target = self.state.orion
+                    self.state.touch('orion')
                     if p.get('cs_label'):
                         p['state'] = p['cs_label']
                     for k in ('state','power','cs','cs_label','dc_voltage','dc_current'):
@@ -461,8 +569,11 @@ class CanInterface:
                             target[k] = v; changed = True
                 elif p['type'] == 3:  # Solar MPPT (inst 3)
                     target = self.state.solar
+                    self.state.touch('solar')
                     if p.get('cs_label'):
                         p['state'] = p['cs_label']
+                    # 'power' ist hier dc_voltage x dc_current, also die
+                    # batterieseitige Ladeleistung – passt zu PGN 127508.
                     for k in ('cs', 'cs_label', 'dc_voltage', 'dc_current', 'power'):
                         v = p.get(k)
                         if v is not None and target.get(k) != v:
@@ -472,6 +583,7 @@ class CanInterface:
                 elif p['type'] == 0:  # Lader (IP43 = inst 1)
                     target = self.state.charger
                     target['_last_seen'] = time.time()
+                    self.state.touch('charger')
                     if p.get('cs_label'):
                         p['state'] = p['cs_label']
                     for k in ('state','power','cs','cs_label','dc_voltage','dc_current'):
@@ -483,6 +595,7 @@ class CanInterface:
             p = parse_inverter_status(payload)
             if p:
                 self._track_network(pgn, src, None)
+                self.state.touch('inverter')
                 if p.get('state') and self.state.inverter.get('state') != p['state']:
                     self.state.inverter['state'] = p['state']
                     changed = True
@@ -493,34 +606,47 @@ class CanInterface:
                 self._track_network(pgn, src, p['instance'])
                 new_state = p.get('state')
                 inst = p['instance']
-                if inst == 1:  # Smart IP43
-                    self.state.charger['_last_seen'] = time.time()
-                    if new_state and new_state != 'Unbekannt' and self.state.charger.get('state') != new_state:
-                        self.state.charger['state'] = new_state; changed = True
-                elif inst == 0:  # Orion-XS
-                    if new_state and new_state != 'Unbekannt' and self.state.orion.get('state') != new_state:
-                        self.state.orion['state'] = new_state; changed = True
-                elif inst == 3:  # MPPT 75/15
-                    if new_state and new_state != 'Unbekannt' and self.state.solar.get('cs_label') != new_state:
-                        self.state.solar['cs_label'] = new_state; changed = True
+                # WICHTIG: 127507 liefert den GROBEN NMEA-Standardzustand
+                # (tN2kChargeState). Das VE.Direct-Label aus PGN 130910 ist
+                # feiner: das Gateway bildet z. B. CS 5 (Absorption) UND CS 6
+                # (Storage) beide auf N2kCS_Float ab. Wuerden wir 127507 in
+                # 'state' schreiben, kippte die Anzeige im Sekundentakt zwischen
+                # 'Storage' und 'Float' — samt Broadcast bei jedem Wechsel.
+                # Deshalb bekommt der Standardzustand ein EIGENES Feld;
+                # 'state'/'cs_label' bleiben allein bei 130910.
+                ziel = {1: self.state.charger, 0: self.state.orion,
+                        3: self.state.solar}.get(inst)
+                gruppe = {1: 'charger', 0: 'orion', 3: 'solar'}.get(inst)
+                if ziel is not None:
+                    if inst == 1:
+                        self.state.charger['_last_seen'] = time.time()
+                    self.state.touch(gruppe)
+                    if new_state and new_state != 'Unbekannt' and \
+                            ziel.get('charge_state_n2k') != new_state:
+                        ziel['charge_state_n2k'] = new_state
+                        changed = True
 
         elif pgn == 130912:
             p = parse_solar_ext(payload)
             if p:
                 self._track_network(pgn, src, p['instance'])
+                self.state.touch('solar')
                 for k in ('vpv', 'ppv', 'yield_today_wh', 'max_power_today_w',
                           'mppt_mode', 'mppt_mode_label'):
                     v = p.get(k)
                     if v is not None and self.state.solar.get(k) != v:
                         self.state.solar[k] = v; changed = True
-                # ppv ist die direkte Solarleistung → auch in solar.power
-                if p.get('ppv') is not None and self.state.solar.get('power') != p['ppv']:
-                    self.state.solar['power'] = p['ppv']; changed = True
+                # PPV ist die PANEL-Leistung (Eingangsseite) und bleibt in 'ppv'.
+                # Sie wird bewusst NICHT mehr nach 'power' geschrieben: 'power' ist
+                # die batterieseitige Ladeleistung. Zwei Schreiber auf demselben
+                # Feld haben die Solar-Kurve dauerhaft sägezahnen lassen, obwohl
+                # beide Messwerte für sich korrekt waren (Wirkungsgrad-Differenz).
 
         elif pgn == 130913:
             p = parse_dcdc_ext(payload)
             if p:
                 self._track_network(pgn, src, p['instance'])
+                self.state.touch('orion')
                 for k in ('output_power', 'input_voltage', 'input_current',
                           'input_power', 'off_reason', 'off_reason_label'):
                     v = p.get(k)
@@ -553,12 +679,31 @@ class CanInterface:
     def get_daily_stats(self, n: int = 7) -> list[dict]:
         return self._daily.get_last_n_days(n)
 
+    # Hysterese der BMS-Stromkorrektur: eingeschaltet wird sie erst ab
+    # _BMS_CORR_ON A Abweichung, ausgeschaltet erst wieder unter _BMS_CORR_OFF A.
+    # Mit nur einer Schwelle springt die Anzeige bei jedem Frame zwischen Roh-
+    # und Korrekturwert, sobald die Abweichung um 5 A herum pendelt.
+    _BMS_CORR_ON  = 5.0
+    _BMS_CORR_OFF = 3.0
+    # Skalierungsfaktoren außerhalb dieses Bereichs sind unbrauchbar: negativ
+    # heißt Vorzeichenkonflikt, sehr groß/klein entsteht, wenn das BMS-Netto
+    # nahe Null liegt und eine Multiplikation die Einzelströme explodieren ließe.
+    _BMS_FACTOR_MIN = 0.2
+    _BMS_FACTOR_MAX = 5.0
+
     def _correct_bms_currents(self, p: dict) -> dict:
         """Korrigiert BMS-Lade-/Entladestrom proportional anhand des genaueren Shunt-Stroms.
 
-        Wenn BMS-Netto und Shunt um mehr als 5 A abweichen, wird der BMS-Wert
-        so skaliert, dass die Differenz (charge − discharge) dem Shunt entspricht.
-        Das BMS-Verhältnis (wie viel Laden vs. Entladen) bleibt erhalten.
+        Weicht das BMS-Netto vom Shunt deutlich ab, werden die BMS-Werte so
+        skaliert, dass die Differenz (charge − discharge) dem Shunt entspricht;
+        das BMS-Verhältnis (wie viel Laden vs. Entladen) bleibt erhalten.
+
+        Zwei Eigenheiten sind hier bewusst behandelt:
+          * Ein-/Ausschaltschwelle liegen auseinander (Hysterese), damit die
+            Korrektur an der Schwelle nicht von Frame zu Frame flattert.
+          * Bei Vorzeichenkonflikt (BMS lädt, Shunt entlädt oder umgekehrt) wurden
+            früher BEIDE Ströme auf 0 gesetzt — jetzt werden sie aus dem Shunt
+            abgeleitet, der die verlässlichere Quelle ist.
         """
         shunt = self.state.battery.get('current')
         if shunt is None:
@@ -569,20 +714,30 @@ class CanInterface:
 
         # Beide nahe Null → kein Handlungsbedarf
         if abs(bms_net) < 0.5 and abs(shunt) < 0.5:
+            self._bms_corr_active = False
             return p
 
         diff = abs(bms_net - shunt)
-        if diff <= 5.0:
+        if self._bms_corr_active:
+            if diff < self._BMS_CORR_OFF:
+                self._bms_corr_active = False
+        elif diff > self._BMS_CORR_ON:
+            self._bms_corr_active = True
+        if not self._bms_corr_active:
             return p   # Abweichung akzeptabel
 
         p = dict(p)    # Kopie — Original nicht ändern
-        if abs(bms_net) > 0.1:
-            # Proportionale Skalierung: Verhältnis charge/discharge bleibt gleich
-            factor = shunt / bms_net
+        factor = shunt / bms_net if abs(bms_net) > 0.1 else 0.0
+        if self._BMS_FACTOR_MIN <= factor <= self._BMS_FACTOR_MAX:
+            # Proportionale Skalierung: Verhältnis charge/discharge bleibt gleich.
+            # max(0.0, …) bleibt: Lade- und Entladestrom sind per Definition
+            # Beträge; ein negativer Rohwert aus dem BMS darf nicht als
+            # negativer Ladestrom in History und Alarmregeln landen.
             p['current_charge']    = round(max(0.0, charge    * factor), 2)
             p['current_discharge'] = round(max(0.0, discharge * factor), 2)
         else:
-            # BMS meldet ~0, Shunt sagt etwas anderes → direkt aus Shunt ableiten
+            # BMS meldet ~0, widerspricht im Vorzeichen oder liegt so weit daneben,
+            # dass eine Skalierung absurde Werte ergäbe → direkt aus Shunt ableiten
             if shunt > 0:
                 p['current_charge'],    p['current_discharge'] = round(shunt, 2), 0.0
             else:
@@ -591,17 +746,50 @@ class CanInterface:
         return p
 
     def _schedule_broadcast(self):
-        """Sendet state-Update an alle WS-Clients (debounced, max 20/s)."""
+        """Sendet state-Update an alle WS-Clients (debounced, max 20/s).
+
+        Das Debounce-Fenster von 50 ms bleibt bewusst so kurz — real kommen nur
+        rund 2,4 Nachrichten/s zustande, die Rate ist kein Engpass; ein größeres
+        Fenster würde nur die Reaktionszeit der Oberfläche verschlechtern.
+        """
         if self._loop is None or self._on_change is None:
             return
         if not self._broadcast_pending:
             self._broadcast_pending = True
-            asyncio.run_coroutine_threadsafe(self._delayed_broadcast(), self._loop)
+            try:
+                asyncio.run_coroutine_threadsafe(self._delayed_broadcast(), self._loop)
+            except Exception as e:
+                # Schlägt schon das Einreihen fehl (Loop wird gerade beendet),
+                # räumt _delayed_broadcast das Flag nie weg – ab da käme nie
+                # wieder ein Broadcast zustande und die Anzeige stünde still.
+                self._broadcast_pending = False
+                log.warning("Broadcast konnte nicht eingereiht werden: %s", e)
 
     async def _delayed_broadcast(self):
-        await asyncio.sleep(0.05)
-        self._broadcast_pending = False
-        await self._on_change(self.state.to_dict())
+        """Wartet das Debounce-Fenster ab und sendet dann EINEN Zustand.
+
+        Dauert ein Sendevorgang länger als die 50 ms (viele oder langsame
+        WS-Clients), war vorher ein zweiter Broadcast bereits unterwegs und
+        beide liefen gleichzeitig — mit der Gefahr, dass der ältere Zustand
+        zuletzt beim Client ankommt. Der Lock serialisiert die Sendevorgänge;
+        das Pending-Flag wird erst INNERHALB des Locks gelöscht, damit während
+        eines laufenden Broadcasts höchstens ein weiterer wartet.
+        """
+        if self._broadcast_lock is None:
+            # Läuft im Event-Loop, also ohne Nebenläufigkeit bis zum ersten await.
+            self._broadcast_lock = asyncio.Lock()
+        try:
+            await asyncio.sleep(0.05)
+            async with self._broadcast_lock:
+                self._broadcast_pending = False
+                await self._on_change(self.state.to_dict())
+        except asyncio.CancelledError:
+            self._broadcast_pending = False
+            raise
+        except Exception as e:
+            # Flag zurücksetzen, sonst käme nie wieder ein Broadcast zustande.
+            self._broadcast_pending = False
+            log.warning("Broadcast fehlgeschlagen: %s", e)
 
     # ── Thread-Hauptschleife ─────────────────────────────────────────────────
 

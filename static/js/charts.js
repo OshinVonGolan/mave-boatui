@@ -1,7 +1,35 @@
 // ── Battery detail + charts ────────────────────────────────────────────────
 
 const HIST_MAX = 10000;
+const HIST_MAX_AGE_S = 25 * 3600;   // Verlauf zeitbasiert kappen, nicht stueckbasiert
+const HIST_MIN_GAP_S = 5;           // gleiche Kadenz wie der Server (main.py)
 const histData = [];  // [{ts, soc, voltage, current}, ...]
+
+// ── Zeitbasis ───────────────────────────────────────────────────────────────
+// Der Pi Zero W hat KEINE Echtzeituhr. Nach einem Stromausfall laeuft seine Uhr
+// falsch, bis NTP greift. Filtern wir Zeitfenster gegen Date.now() des Telefons,
+// schneidet ein Uhrenversatz unter Umstaenden ALLE Punkte weg — der Graph waere
+// leer, obwohl saubere Daten vorliegen. Deshalb rechnen wir mit der Server-Zeit.
+let _clockOffset = 0;   // server_now - Telefonzeit, in Sekunden
+
+function setClockOffset(serverNow) {
+  const versatz = serverNow - Date.now() / 1000;
+  // Unter einer Sekunde ist Messrauschen, darueber ist es echt.
+  _clockOffset = Math.abs(versatz) < 1 ? 0 : versatz;
+  if (_clockOffset) console.info('Uhrenversatz Pi/Geraet: %.1f s', _clockOffset);
+}
+
+/** Aktuelle Zeit auf der Zeitachse des Servers (Unix-Sekunden). */
+function nowTs() { return Date.now() / 1000 + _clockOffset; }
+
+/** Kappt einen Verlauf zeitbasiert und als Notbremse stueckbasiert. */
+function trimHist(arr, maxAgeS, maxLen) {
+  const grenze = nowTs() - maxAgeS;
+  let weg = 0;
+  while (weg < arr.length && arr[weg].ts < grenze) weg++;
+  if (weg) arr.splice(0, weg);
+  if (arr.length > maxLen) arr.splice(0, arr.length - maxLen);
+}
 
 // domain: feste Achsen-Grenzen [min,max] oder null = automatisch aus Daten
 const SERIES_DEF = {
@@ -16,11 +44,30 @@ const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
 
 let chartSecondary = 'current';       // aktive Sekundär-Serie (rechte Achse) oder null
 let chartRangeSec  = 1800;
-let chartHoverPos  = null; // null=live, 0.0–1.0=scrub fraction
+// chartHoverPos ist der Bruchteil des Zeitfensters unter dem Finger (0…1),
+// gesetzt von den Touch-/Maus-Handlern in lightdetail.js. Gerechnet wird aber
+// mit _scrubTs — siehe Kommentar in _zeichneCharts().
+let chartHoverPos  = null; // null=live, 0.0–1.0=Bruchteil des Zeitfensters
+let _scrubTs       = null; // an einen ZEITPUNKT gebundene Scrub-Position
+let _scrubPosBasis = null; // Bruchteil, aus dem _scrubTs berechnet wurde
 let _lastSolarW   = null;
 
+/**
+ * Traegt einen Messpunkt in den Client-Verlauf ein.
+ *
+ * Wurde vorher bei JEDER WebSocket-Nachricht aufgerufen und ungetaktet
+ * gepusht, waehrend HIST_MAX nach ANZAHL statt nach Zeit begrenzte. Damit
+ * deckte der Puffer nur Minuten ab — die Zeitknoepfe 6 h / 12 h / 24 h
+ * konnten konstruktionsbedingt nie gefuellt werden.
+ *
+ * Jetzt: gleiche 5-Sekunden-Kadenz wie der Server, und zeitbasiert gekappt.
+ */
 function recordHistory(b) {
-  const entry = { ts: Date.now() / 1000 };
+  const ts = nowTs();
+  const letzter = histData.length ? histData[histData.length - 1] : null;
+  if (letzter && (ts - letzter.ts) < HIST_MIN_GAP_S) return;
+
+  const entry = { ts };
   if (b.soc      != null) entry.soc      = b.soc;
   if (b.voltage  != null) entry.voltage  = b.voltage;
   if (b.current  != null) entry.current  = b.current;
@@ -28,7 +75,7 @@ function recordHistory(b) {
   if (_lastZelldiff != null) entry.zelldiff = _lastZelldiff;
   if (Object.keys(entry).length < 2) return; // kein Datenwert — nicht pushen
   histData.push(entry);
-  if (histData.length > HIST_MAX) histData.shift();
+  trimHist(histData, HIST_MAX_AGE_S, HIST_MAX);
 }
 
 // Exponential Moving Average — glättet stark springende Werte (z.B. Strom)
@@ -42,10 +89,24 @@ function _ema(pts, key, alpha = 0.12) {
   });
 }
 
-// Berechnet [lo,hi] Achsen-Domäne einer Serie aus den Werten + Definition
+// Berechnet [lo,hi] Achsen-Domäne einer Serie aus den Werten + Definition.
+// Gibt null zurueck, wenn kein brauchbarer Wert dabei ist — der Aufrufer
+// zeichnet die Serie dann gar nicht.
+//
+// Vorher stand hier Math.min(...vals): der Spread legt bei grossen Arrays den
+// Argument-Stack um (RangeError, Graph bleibt schwarz), und bei leerem vals
+// liefert er +Infinity/-Infinity. Daraus wurde ueber die Padding-Rechnung NaN,
+// und mit NaN-Grenzen wurde nichts mehr gezeichnet — ohne jede Fehlermeldung.
 function _seriesDomain(vals, def) {
   if (def.domain) return def.domain.slice();
-  let lo = Math.min(...vals), hi = Math.max(...vals);
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < vals.length; i++) {
+    const v = vals[i];
+    if (typeof v !== 'number' || !isFinite(v)) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (!isFinite(lo) || !isFinite(hi)) return null;
   if (def.zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
   let span = hi - lo;
   if (def.minSpan && span < def.minSpan) {       // flache Linie nicht aufblasen
@@ -61,7 +122,7 @@ function toggleSeries(key) {
   chartSecondary = (chartSecondary === key) ? null : key;
   if (prev) $(`tog-${prev}`).classList.remove('active');
   if (chartSecondary) $(`tog-${chartSecondary}`).classList.add('active');
-  renderCharts();
+  renderCharts(true);
 }
 
 function setChartRange(btn, secs) {
@@ -69,17 +130,33 @@ function setChartRange(btn, secs) {
   chartHoverPos = null;
   document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderCharts();
+  renderCharts(true);
 }
 
-function renderChartLegend(pts, secPts, scrubTs) {
+/**
+ * Legende unter dem Graphen.
+ *
+ * rohPts     — ungefilterte Messpunkte des Zeitfensters (weder zusammengefasst
+ *              noch geglaettet)
+ * gezeichnet — {Serie: Punkte}, genau die Reihen, die als Linie im Bild stehen
+ *
+ * Im LIVE-Zustand zeigt die Legende den letzten echten Messwert aus rohPts.
+ * Vorher stand dort der letzte Punkt der gezeichneten Reihe — und der ist ein
+ * EMA-geglaetteter Mittelwert ueber einen zusammengefassten Zeit-Bucket. Bei
+ * springendem Strom widersprach die Legende damit der Kachel daneben (Kachel
+ * "-12,4 A", Legende "-6,1 A"), was auf einem Batteriemonitor unbrauchbar ist.
+ * Beim Scrubben bleibt die gezeichnete Reihe die Quelle: der Wert muss zu dem
+ * Punkt passen, auf dem das Fadenkreuz sitzt.
+ */
+function renderChartLegend(rohPts, gezeichnet, scrubTs) {
   const leg = $('chartLegend');
   if (!leg) return;
-  const entries = [{ key: 'soc', src: pts }];
-  if (chartSecondary) entries.push({ key: chartSecondary, src: secPts });
-  leg.innerHTML = entries.map(({ key, src }) => {
+  const entries = [{ key: 'soc' }];
+  if (chartSecondary) entries.push({ key: chartSecondary });
+  leg.innerHTML = entries.map(({ key }) => {
     const def = SERIES_DEF[key];
-    const ptsK = src.filter(d => d[key] != null);
+    const quelle = scrubTs != null ? (gezeichnet[key] ?? rohPts) : rohPts;
+    const ptsK = quelle.filter(d => d[key] != null);
     let displayVal = null;
     if (scrubTs != null && ptsK.length) {
       let cl = ptsK[0], md = Math.abs(ptsK[0].ts - scrubTs);
@@ -157,30 +234,83 @@ function _smoothSeg(ctx, s) {
   for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
 }
 
+/**
+ * Fasst den Verlauf auf hoechstens maxPts Punkte zusammen (Mittelwert je Bucket).
+ *
+ * Die Schluessel werden ueber ALLE Elemente des Buckets gesammelt. Vorher wurden
+ * nur die Schluessel des ERSTEN Bucket-Elements uebernommen: fehlte dort z. B.
+ * `solar` (Solar meldet seltener als der Shunt), verschwand die Serie fuer den
+ * ganzen Bucket — die Linie riss immer wieder ab, obwohl Daten vorlagen.
+ */
 function _decimate(pts, maxPts) {
   if (pts.length <= maxPts) return pts;
   const out = [], step = pts.length / maxPts;
   for (let i = 0; i < maxPts; i++) {
     const lo = Math.floor(i * step), hi = Math.min(pts.length, Math.floor((i+1)*step));
-    const bucket = pts.slice(lo, hi);
-    const merged = { ts: bucket[Math.floor(bucket.length/2)].ts };
-    for (const k of Object.keys(bucket[0])) {
-      if (k === 'ts') continue;
-      const vals = bucket.map(d => d[k]).filter(v => v != null);
-      if (vals.length) merged[k] = vals.reduce((a,b) => a+b, 0) / vals.length;
+    if (hi <= lo) continue;                       // leerer Bucket (Rundung)
+    const summe = {}, anzahl = {};
+    for (let j = lo; j < hi; j++) {
+      const d = pts[j];
+      for (const k in d) {
+        if (k === 'ts') continue;
+        const v = d[k];
+        if (typeof v !== 'number' || !isFinite(v)) continue;
+        summe[k]  = (summe[k]  ?? 0) + v;
+        anzahl[k] = (anzahl[k] ?? 0) + 1;
+      }
     }
+    const merged = { ts: pts[lo + ((hi - lo) >> 1)].ts };
+    for (const k in summe) merged[k] = summe[k] / anzahl[k];
     out.push(merged);
   }
   return out;
 }
 
-function renderCharts() {
+// ── Zeichentakt ─────────────────────────────────────────────────────────────
+// renderCharts() wird bei JEDER WebSocket-Nachricht gerufen (am Geraet gemessen
+// 2,42/s) und zeichnet jedes Mal das komplette Canvas neu — inklusive Filtern,
+// Zusammenfassen und Glaetten des Verlaufs. Auf dem Pi Zero W (ein Kern) ist
+// das verschenkte Rechenzeit, mehr als ein Bild pro Sekunde sieht ohnehin
+// niemand. Deshalb: hoechstens 1 Hz, und gezeichnet wird im
+// requestAnimationFrame (im Hintergrund-Tab laeuft der gar nicht erst).
+//
+// Bedienung geht vor: Scrubben, Zeitfenster- und Serienwechsel zeichnen sofort
+// (sofort=true bzw. veraenderte Fingerposition), werden aber ueber denselben
+// rAF zu einem Bild pro Frame zusammengefasst.
+const CHART_MIN_INTERVAL_MS = 1000;
+let _chartRaf = null, _chartTimer = null, _chartLetzteZeichnung = 0, _chartHoverGesehen = null;
+
+function renderCharts(sofort = false) {
+  if (chartHoverPos !== _chartHoverGesehen) {   // Finger bewegt/abgehoben = Bedienung
+    _chartHoverGesehen = chartHoverPos;
+    sofort = true;
+  }
+  if (_chartRaf !== null) return;               // Bild ist schon angemeldet
+  const seit = Date.now() - _chartLetzteZeichnung;
+  if (!sofort && seit < CHART_MIN_INTERVAL_MS) {
+    // Den letzten Stand nachziehen, sobald der Takt es erlaubt — genau ein Timer.
+    if (_chartTimer === null)
+      _chartTimer = setTimeout(() => { _chartTimer = null; renderCharts(true); },
+                               CHART_MIN_INTERVAL_MS - seit);
+    return;
+  }
+  if (_chartTimer !== null) { clearTimeout(_chartTimer); _chartTimer = null; }
+  _chartRaf = requestAnimationFrame(() => {
+    _chartRaf = null;
+    _chartLetzteZeichnung = Date.now();
+    _zeichneCharts();
+  });
+}
+
+function _zeichneCharts() {
   const canvas = $('chartMain');
   if (!canvas) return;
 
-  const now    = Date.now() / 1000;
+  const now    = nowTs();
   const cutoff = now - chartRangeSec;
-  const pts    = _decimate(histData.filter(d => d.ts >= cutoff), 2000);
+  // rohPts: unveraenderte Messwerte — Quelle fuer die Legende im Live-Zustand.
+  const rohPts = histData.filter(d => d.ts >= cutoff);
+  const pts    = _decimate(rohPts, 2000);
 
   const dpr = window.devicePixelRatio || 1;
   // offsetWidth ist immer ein Integer → kein Sub-Pixel-Wachstum beim Hover
@@ -200,7 +330,24 @@ function renderCharts() {
 
   const tMin0  = now - chartRangeSec;
   const xOf    = ts => PAD_L + Math.max(0, Math.min(CW, ((ts - tMin0) / chartRangeSec) * CW));
-  const scrubTs = chartHoverPos !== null ? tMin0 + chartHoverPos * chartRangeSec : null;
+
+  // Der Scrub haengt an einem ZEITPUNKT, nicht am Fensteranteil. Das Fenster
+  // wandert mit jedem Tick nach rechts; wuerde bei jedem Bild erneut
+  // tMin0 + Anteil * Fenster gerechnet, zeigte das Fadenkreuz bei ruhendem
+  // Finger jede Sekunde einen anderen Messwert — der Wert wanderte unter dem
+  // Finger weg. Umgerechnet wird deshalb nur, wenn die Bedienung den Anteil
+  // aendert; danach bleibt der Zeitpunkt stehen.
+  if (chartHoverPos === null) {
+    _scrubTs = null; _scrubPosBasis = null;
+  } else if (chartHoverPos !== _scrubPosBasis) {
+    _scrubPosBasis = chartHoverPos;
+    _scrubTs = tMin0 + chartHoverPos * chartRangeSec;
+  } else if (_scrubTs !== null) {
+    // Haelt der Finger lange still, laeuft der Zeitpunkt irgendwann aus dem
+    // Fenster — dann am Rand festhalten statt ins Leere zu zeigen.
+    _scrubTs = Math.max(tMin0, Math.min(now, _scrubTs));
+  }
+  const scrubTs = _scrubTs;
 
   // Sekundär-Punkte ggf. glätten (EMA): alpha kommt direkt aus SERIES_DEF
   const secDef   = chartSecondary ? SERIES_DEF[chartSecondary] : null;
@@ -209,7 +356,9 @@ function renderCharts() {
     ? _ema(pts, chartSecondary, secAlpha)
     : pts;
 
-  renderChartLegend(pts, secPts, scrubTs);
+  const gezeichnet = { soc: pts };
+  if (chartSecondary) gezeichnet[chartSecondary] = secPts;
+  renderChartLegend(rohPts, gezeichnet, scrubTs);
 
   // Aktive Serien aufbauen: SOC fest links (0–100%), Sekundär-Serie rechts
   const active = [];
@@ -226,8 +375,9 @@ function renderCharts() {
   if (chartSecondary) {
     const key = chartSecondary, def = SERIES_DEF[key];
     const vals = secPts.map(d => d[key]).filter(v => v != null);
-    if (vals.length >= 2) {
-      const [lo, hi] = _seriesDomain(vals, def);
+    const dom  = vals.length >= 2 ? _seriesDomain(vals, def) : null;
+    if (dom) {
+      const [lo, hi] = dom;
       const span = (hi - lo) || 1;
       const yOf = v => PAD_T + CH - ((Math.max(lo, Math.min(hi, v)) - lo) / span) * CH;
       active.push({ key, def, lo, hi, yOf, sPts: secPts });
@@ -434,7 +584,7 @@ function openBattDetail() {
   _renderMobileCells();
   // Graph erst nach zwei Frames — Canvas hat dann korrekte clientWidth/clientHeight
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    renderCharts();
+    renderCharts(true);
     _loadAndRenderWeekChart();
   }));
 }
@@ -464,21 +614,23 @@ function _renderWeekChart(data) {
   const CW = W - PAD.l - PAD.r;
   const CH = H - PAD.t - PAD.b;
 
-  // Maximalwert für Ah-Achse
+  // ZWEI Achsen: Ah links (Balken geladen/entladen), Prozent rechts (Ø SOC).
+  // Der SOC-Balken wurde vorher zwar schon mit ySoc gerechnet, aber die einzige
+  // beschriftete Achse war die Ah-Achse — ein 80-%-Balken las sich damit als
+  // "80 Ah". Die rechte Achse macht den zweiten Massstab sichtbar.
   const maxAh = Math.max(
     ...data.map(d => Math.max(d.charged_ah || 0, d.discharged_ah || 0)), 1
   );
   const yAh  = v  => PAD.t + CH * (1 - v / maxAh);
-  const ySoc = v  => PAD.t + CH * (1 - v / 100);
+  const ySoc = v  => PAD.t + CH * (1 - Math.max(0, Math.min(100, v)) / 100);
 
   // Hintergrund
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
 
-  // Y-Achsen-Ticks (Ah links)
-  ctx.fillStyle = '#475569'; ctx.font = `${9 * dpr / dpr}px sans-serif`; ctx.textAlign = 'right';
-  const ahTicks = [0, maxAh * 0.5, maxAh];
-  ahTicks.forEach(v => {
+  // Y-Achse links: Ah (mit den Gitterlinien)
+  ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+  [0, maxAh * 0.5, maxAh].forEach(v => {
     const y = yAh(v);
     ctx.fillStyle = '#334155';
     ctx.fillRect(PAD.l, y, CW, 0.5);
@@ -486,7 +638,20 @@ function _renderWeekChart(data) {
     ctx.fillText(Math.round(v) + ' Ah', PAD.l - 3, y + 3);
   });
 
+  // Y-Achse rechts: Prozent (Ø SOC) — in der Farbe des SOC-Balkens, damit
+  // erkennbar ist, welcher Balken auf welchem Massstab steht.
+  ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(59,130,246,0.85)';
+  [0, 50, 100].forEach(v => {
+    const y = ySoc(v);
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(59,130,246,0.35)'; ctx.lineWidth = 1;
+    ctx.moveTo(PAD.l + CW, y); ctx.lineTo(PAD.l + CW + 3, y); ctx.stroke();
+    ctx.fillText(v + '%', PAD.l + CW + 5, y + 3);
+  });
+
   const barW   = CW / data.length;
+  ctx.textAlign = 'center';
   const bW     = Math.max(3, barW * 0.22);  // Breite je Balken
   const radius = 2;
 
@@ -527,9 +692,13 @@ function _renderWeekChart(data) {
       roundedBar(cx + bW * 1.2, ySoc(d.avg_soc), bW, bh);
     }
 
-    // Tag-Beschriftung
+    // Tag-Beschriftung. Tage ohne jede Angabe (der Server liefert dort null,
+    // nicht 0) werden gedimmt — ein leerer Tag ist "keine Daten", nicht "nichts
+    // verbraucht".
+    const ohneDaten = d.charged_ah == null && d.discharged_ah == null && d.avg_soc == null;
     const label = new Date(d.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short' });
-    ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = ohneDaten ? '#3f4d61' : '#64748b';
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(label, cx, PAD.t + CH + 14);
   });
 }
@@ -598,12 +767,20 @@ function updateBms(bms) {
     if (hdot) {
       const anyAlarm = bms.alarm_min_volt || bms.alarm_max_volt ||
                        bms.alarm_min_temp || bms.alarm_max_temp;
-      const cells = bms.cells ?? [];
-      const minV  = cells.length ? Math.min(...cells) : bms.lowest_cell_v;
-      const maxV  = cells.length ? Math.max(...cells) : bms.highest_cell_v;
+      // bms.cells sind Objekte ({voltage, temp}) — Math.min(...cells) lieferte
+      // NaN, jeder Vergleich damit war false und der Punkt blieb IMMER gruen:
+      // eine ausfallende Zelle wurde nicht angezeigt. Deshalb erst die
+      // Spannungen herausziehen, dann Min/Max bilden.
+      const zellV = (bms.cells ?? [])
+        .map(c => c?.voltage)
+        .filter(v => typeof v === 'number' && isFinite(v));
+      const minV  = zellV.length ? Math.min(...zellV) : bms.lowest_cell_v;
+      const maxV  = zellV.length ? Math.max(...zellV) : bms.highest_cell_v;
       const diff  = (minV != null && maxV != null) ? maxV - minV : null;
-      const tempHigh = (bms.highest_temp ?? 0) > 40;
-      const tempLow  = (bms.lowest_temp  ?? 0) < 5;
+      // Fehlende Temperatur ist KEINE Temperatur von 0 °C: mit "?? 0" meldete
+      // der Punkt bei einem BMS ohne Temperaturfuehler dauerhaft Unterkuehlung.
+      const tempHigh = bms.highest_temp != null && bms.highest_temp > 40;
+      const tempLow  = bms.lowest_temp  != null && bms.lowest_temp  < 5;
       const cellBad  = (minV != null && minV < 3.0) || (maxV != null && maxV > 3.65) || (diff != null && diff > 0.08);
       const cellWarn = (minV != null && minV < 3.1) || (maxV != null && maxV > 3.6) || (diff != null && diff > 0.04);
       let color, shadow;

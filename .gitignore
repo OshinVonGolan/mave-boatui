@@ -6,3 +6,13 @@ connectivity.json
 monday.json
 presets.json
 alarms.json
+history.ndjson
+history.ndjson.tmp
+
+# Laufzeitdaten — liegen auf dem Pi und duerfen NIE ins Repo. Werden sie
+# versehentlich committet, scheitert dort jeder `git pull` mit
+# "untracked working tree files would be overwritten by merge".
+charger_state.json
+daily_stats.json
+stauplan.json
+wartung.json

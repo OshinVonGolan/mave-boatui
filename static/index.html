@@ -10,7 +10,7 @@
   <title>Mave — Bord Monitor</title>
   <link rel="manifest" href="/static/manifest.json" />
   <link rel="apple-touch-icon" href="/static/icon-192.png" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f172a'/><text x='16' y='23' text-anchor='middle' font-size='18'>⚓</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f172a'/><g transform='translate(6 5) scale(0.85)' fill='none' stroke='%23e2e8f0' stroke-width='2.4' stroke-linecap='round'><circle cx='12' cy='5' r='3'/><path d='M12 22V8M5 12H2a10 10 0 0 0 20 0h-3'/></g></svg>">
   <link rel="stylesheet" href="/static/css/style.css">
   <script>
   // Frühes Fehler-Logging — läuft vor allen defer-Scripts.
@@ -158,7 +158,42 @@
   </button>
 </div>
 
+<!-- ── Statusleiste: alle Kernwerte auf einen Blick, jedes Feld tippbar ── -->
+<section class="statusbar" id="statusBar" aria-label="Bordstatus">
+  <button type="button" class="sb-item" onclick="openBattDetail()">
+    <span class="sb-lbl">Batterie</span>
+    <span class="sb-val"><b id="sbSoc">--</b><i>%</i></span>
+    <span class="sb-sub" id="sbBattSub">--</span>
+  </button>
+  <button type="button" class="sb-item" onclick="openBattDetail()">
+    <span class="sb-lbl">Laden</span>
+    <span class="sb-val"><b id="sbChg">--</b><i>W</i></span>
+    <span class="sb-sub" id="sbChgSub">--</span>
+  </button>
+  <button type="button" class="sb-item" onclick="toggleTanks()">
+    <span class="sb-lbl" id="sbT1Lbl">Wasser</span>
+    <span class="sb-val"><b id="sbT1">--</b><i>%</i></span>
+    <span class="sb-sub" id="sbT1Sub">--</span>
+  </button>
+  <button type="button" class="sb-item" onclick="toggleTanks()">
+    <span class="sb-lbl" id="sbT2Lbl">Diesel</span>
+    <span class="sb-val"><b id="sbT2">--</b><i>%</i></span>
+    <span class="sb-sub" id="sbT2Sub">--</span>
+  </button>
+  <button type="button" class="sb-item" onclick="openWaterLevel()">
+    <span class="sb-lbl">Pegel</span>
+    <span class="sb-val"><b id="sbWl">--</b><i>cm</i></span>
+    <span class="sb-sub">Travemünde</span>
+  </button>
+  <button type="button" class="sb-item" onclick="openWartung()">
+    <span class="sb-lbl">Wartung</span>
+    <span class="sb-val"><b id="sbWart">--</b></span>
+    <span class="sb-sub" id="sbWartSub">--</span>
+  </button>
+</section>
+
 <main>
+
 
   <!-- ── Batterie ── -->
   <section class="card card-battery" id="battCard" onclick="openBattDetail()">
@@ -247,7 +282,7 @@
     <!-- Lichtmaschine — nur sichtbar wenn Daten ankommen (Solar separat im Detail) -->
     <div class="src-row hidden" id="srcRow">
       <div class="src-item src-alt" id="srcAlt">
-        <span class="src-icon">⚡</span>
+        <span class="src-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
         <span class="src-val" id="altW">--</span>
         <span>W Lichtmaschine</span>
       </div>
@@ -276,79 +311,6 @@
         </div>
       </div>
     </div><!-- /.tile-wide-side -->
-    </div><!-- /.tile-content -->
-  </section>
-
-  <!-- ── Tanks ── -->
-  <section class="card card-tanks" id="tankCard" onclick="toggleTanks()">
-    <div class="card-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <path d="M3 9h18M9 21V9"/>
-      </svg>
-      Tanks
-      <span id="tankUnitLabel" style="margin-left:auto;font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:none;font-weight:400">
-        % · Tippen für Liter
-      </span>
-    </div>
-
-    <div class="tanks-row">
-      <div class="tank">
-        <div class="tank-name" id="tank1Name">Tank 1</div>
-        <div class="tank-bar-wrap">
-          <div class="tank-fill" id="tank1Fill" style="height:0%"></div>
-          <div class="tank-pct-label">
-            <div class="tank-val-big" id="tank1Val">--</div>
-            <div class="tank-val-unit" id="tank1Unit">%</div>
-          </div>
-        </div>
-        <div class="tank-pct-below" id="tank1Sub">&nbsp;</div>
-      </div>
-      <div class="tank">
-        <div class="tank-name" id="tank2Name">Tank 2</div>
-        <div class="tank-bar-wrap">
-          <div class="tank-fill" id="tank2Fill" style="height:0%"></div>
-          <div class="tank-pct-label">
-            <div class="tank-val-big" id="tank2Val">--</div>
-            <div class="tank-val-unit" id="tank2Unit">%</div>
-          </div>
-        </div>
-        <div class="tank-pct-below" id="tank2Sub">&nbsp;</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Beleuchtung ── -->
-  <section class="card card-lights" id="lightsCard"
-           style="cursor:pointer;transition:border-color .2s"
-           onclick="openLightDetail()"
-           onmouseenter="this.style.borderColor='var(--accent2)'"
-           onmouseleave="this.style.borderColor=''">
-    <div class="card-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <circle cx="12" cy="12" r="5"/>
-        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-      </svg>
-      Beleuchtung
-      <span class="card-link">Steuern →</span>
-    </div>
-    <div class="tile-content">
-      <div class="tile-main">
-        <div class="channels-block">
-          <div class="channels-row" id="channelsRow"></div>
-          <div class="channels-label" id="channelsLabel"></div>
-        </div>
-        <div class="divider"></div>
-        <div class="presets-grid" id="presetsGrid">
-          <div style="color:var(--text3);font-size:13px">Lade…</div>
-        </div>
-      </div><!-- /.tile-main -->
-      <div class="tile-wide-side" onclick="event.stopPropagation()">
-        <div class="lights-wide">
-          <div class="lights-wide-hd">Zonen</div>
-          <div class="lights-wide-sliders" id="lightsWideSliders"></div>
-        </div>
-      </div><!-- /.tile-wide-side -->
     </div><!-- /.tile-content -->
   </section>
 
@@ -432,6 +394,79 @@
     </div>
   </section>
 
+  <!-- ── Tanks ── -->
+  <section class="card card-tanks" id="tankCard" onclick="toggleTanks()">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18M9 21V9"/>
+      </svg>
+      Tanks
+      <span id="tankUnitLabel" style="margin-left:auto;font-size:10px;color:var(--text3);letter-spacing:.04em;text-transform:none;font-weight:400">
+        % · Tippen für Liter
+      </span>
+    </div>
+
+    <div class="tanks-row">
+      <div class="tank">
+        <div class="tank-name" id="tank1Name">Tank 1</div>
+        <div class="tank-bar-wrap">
+          <div class="tank-fill" id="tank1Fill" style="height:0%"></div>
+          <div class="tank-pct-label">
+            <div class="tank-val-big" id="tank1Val">--</div>
+            <div class="tank-val-unit" id="tank1Unit">%</div>
+          </div>
+        </div>
+        <div class="tank-pct-below" id="tank1Sub">&nbsp;</div>
+      </div>
+      <div class="tank">
+        <div class="tank-name" id="tank2Name">Tank 2</div>
+        <div class="tank-bar-wrap">
+          <div class="tank-fill" id="tank2Fill" style="height:0%"></div>
+          <div class="tank-pct-label">
+            <div class="tank-val-big" id="tank2Val">--</div>
+            <div class="tank-val-unit" id="tank2Unit">%</div>
+          </div>
+        </div>
+        <div class="tank-pct-below" id="tank2Sub">&nbsp;</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Beleuchtung ── -->
+  <section class="card card-lights" id="lightsCard"
+           style="cursor:pointer;transition:border-color .2s"
+           onclick="openLightDetail()"
+           onmouseenter="this.style.borderColor='var(--accent2)'"
+           onmouseleave="this.style.borderColor=''">
+    <div class="card-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      Beleuchtung
+      <span class="card-link">Steuern →</span>
+    </div>
+    <div class="tile-content">
+      <div class="tile-main">
+        <div class="channels-block">
+          <div class="channels-row" id="channelsRow"></div>
+          <div class="channels-label" id="channelsLabel"></div>
+        </div>
+        <div class="divider"></div>
+        <div class="presets-grid" id="presetsGrid">
+          <div style="color:var(--text3);font-size:13px">Lade…</div>
+        </div>
+      </div><!-- /.tile-main -->
+      <div class="tile-wide-side" onclick="event.stopPropagation()">
+        <div class="lights-wide">
+          <div class="lights-wide-hd">Zonen</div>
+          <div class="lights-wide-sliders" id="lightsWideSliders"></div>
+        </div>
+      </div><!-- /.tile-wide-side -->
+    </div><!-- /.tile-content -->
+  </section>
+
   <!-- ── Wasserstand Kachel ── -->
   <section class="card card-wl" id="wlCard" onclick="openWaterLevel()"
            style="cursor:pointer;transition:border-color .2s"
@@ -480,7 +515,7 @@
       <span class="wx-half-icon" id="wxHalfIcon">·</span>
       <div class="wx-half-main">
         <span class="wx-half-temp" id="wxHalfTemp">--°</span>
-        <div class="wx-half-sub">🌬️ <span id="wxHalfWind">-- kn</span> · 💧 <span id="wxHalfPop">--%</span></div>
+        <div class="wx-half-sub"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2M17.7 7.7A2.5 2.5 0 1 1 19.5 12H2"/></svg> <span id="wxHalfWind">-- kn</span> · <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"/></svg> <span id="wxHalfPop">--%</span></div>
       </div>
     </div>
   </section>
@@ -671,13 +706,13 @@
   <div class="ov-body" style="padding:0">
 
     <div class="set-nav" id="setNav">
-      <button class="set-nav-btn active" data-cat="tanks"   onclick="switchSettingsCat('tanks')">💧 Tanks</button>
-      <button class="set-nav-btn"        data-cat="batt"    onclick="switchSettingsCat('batt')">🔋 Batterien</button>
-      <button class="set-nav-btn"        data-cat="laden"   onclick="switchSettingsCat('laden')">⚡ Laden</button>
-      <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')">🔧 Wartung</button>
-      <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')">📡 Netzwerk</button>
-      <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')">⚙️ System</button>
-      <button class="set-nav-btn"        data-cat="display" onclick="switchSettingsCat('display')">🖥 Anzeige</button>
+      <button class="set-nav-btn active" data-cat="tanks"   onclick="switchSettingsCat('tanks')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"/></svg> Tanks</button>
+      <button class="set-nav-btn"        data-cat="batt"    onclick="switchSettingsCat('batt')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg> Batterien</button>
+      <button class="set-nav-btn"        data-cat="laden"   onclick="switchSettingsCat('laden')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Laden</button>
+      <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg> Wartung</button>
+      <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg> Netzwerk</button>
+      <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 2.6h.1A2 2 0 1 1 11 2.6V3a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.4 9V9a2 2 0 1 1 0 4h-.1z"/></svg> System</button>
+      <button class="set-nav-btn"        data-cat="display" onclick="switchSettingsCat('display')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Anzeige</button>
     </div>
 
     <!-- Kategorie: Tanks -->
@@ -765,15 +800,15 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
           <button class="btn-primary" onclick="setChargerMode('harbor')"
             style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
-            ⚓ Hafen
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="3"/><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/></svg> Hafen
           </button>
           <button class="btn-primary" onclick="setChargerMode('full')"
             style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
-            ⚡ Vollladung
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Vollladung
           </button>
           <button class="btn-primary" onclick="setChargerMode('balance')"
             style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:12px;padding:6px 12px">
-            ⚖ Balancing
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M5 7h14M5 7l-3 6h6zM19 7l3 6h-6z"/></svg> Balancing
           </button>
         </div>
       </div>

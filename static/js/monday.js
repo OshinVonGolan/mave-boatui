@@ -49,22 +49,35 @@ async function loadMondayBoard() {
   const body = $('mondayBody');
   if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
   body.innerHTML = '<div class="monday-empty">Lade Aufgaben…</div>';
+  let daten;
+  // Nur das Holen der Daten fällt unter "Verbindung fehlgeschlagen". Vorher lag
+  // auch das Rendern im selben try — ein Fehler beim Zeichnen meldete dann eine
+  // Verbindungsstörung, obwohl die Daten längst da waren.
   try {
     const r = await fetch('/api/monday/board');
     if (!r.ok) {
       const err = await r.json().catch(() => ({ detail: r.statusText }));
-      body.innerHTML = `<div class="monday-empty" style="color:var(--red)">${err.detail || 'Fehler beim Laden'}</div>`;
+      body.innerHTML = `<div class="monday-empty" style="color:var(--red)">${_esc(err.detail || 'Fehler beim Laden')}</div>`;
       return;
     }
-    _mondayData = await r.json();
+    daten = await r.json();
+  } catch (e) {
+    body.innerHTML = `<div class="monday-empty" style="color:var(--red)">Verbindung fehlgeschlagen</div>`;
+    return;
+  } finally {
+    if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+  }
+
+  _mondayData = daten;
+  try {
     renderMondayLabelFilters();
     renderMondayBoard(_mondayData);
     const titleEl = $('mondayBoardTitle');
-    if (titleEl && _mondayData.name) titleEl.childNodes[titleEl.childNodes.length - 1].textContent = ' ' + _mondayData.name;
+    const last    = titleEl?.childNodes[titleEl.childNodes.length - 1];
+    if (last && _mondayData.name) last.textContent = ' ' + _mondayData.name;
   } catch (e) {
-    body.innerHTML = `<div class="monday-empty" style="color:var(--red)">Verbindung fehlgeschlagen</div>`;
-  } finally {
-    if (btn) { btn.classList.remove('spinning'); btn.disabled = false; }
+    console.error('Monday-Board zeichnen:', e);
+    body.innerHTML = `<div class="monday-empty" style="color:var(--red)">Anzeige fehlgeschlagen</div>`;
   }
 }
 
@@ -79,10 +92,10 @@ function renderMondayLabelFilters() {
   const cols = _mondayData?.status_columns || [];
   _mondayLabelFilter = {};
   wrap.innerHTML = cols.map(col => `
-    <select onchange="setMondayLabelFilter('${col.id}', this.value)"
+    <select onchange="setMondayLabelFilter(${_jsAttr(col.id)}, this.value)"
             style="background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:12px">
       <option value="">${_esc(col.title)}: Alle</option>
-      ${col.options.map(o => `<option value="${o.index}">${_esc(col.title)}: ${_esc(o.label)}</option>`).join('')}
+      ${col.options.map(o => `<option value="${_esc(o.index)}">${_esc(col.title)}: ${_esc(o.label)}</option>`).join('')}
     </select>`).join('');
 }
 
@@ -92,24 +105,22 @@ function setMondayLabelFilter(colId, index) {
   if (_mondayData) renderMondayBoard(_mondayData);
 }
 
-// Robuster Event-Listener als Fallback (falls oninput-Inline nicht greift)
-document.addEventListener('DOMContentLoaded', () => {
-  const el = $('mondaySearchInput');
-  if (el) el.addEventListener('input', e => filterMonday(e.target.value));
-});
+// Kein zusätzlicher input-Listener: das Suchfeld ruft filterMonday() bereits
+// per inline oninput auf (index.html). Beides zusammen zeichnete das Board bei
+// jedem Tastendruck zweimal — auf dem Pi Zero deutlich spürbar.
 
 function toggleMondayNewForm() {
   const form = $('mondayNewForm');
   const open = form.style.display !== 'none';
   if (!open && _mondayData?.groups?.length) {
     $('mondayNewGroup').innerHTML = _mondayData.groups.map(g =>
-      `<option value="${g.id}">${_esc(g.title)}</option>`
+      `<option value="${_esc(g.id)}">${_esc(g.title)}</option>`
     ).join('');
     $('mondayNewName').value = '';
     // Populate status column selects dynamically
     const statusRow = $('mondayNewStatusRow');
     statusRow.innerHTML = (_mondayData.status_columns || []).map(col => `
-      <select id="mondayNewCol_${col.id}"
+      <select id="mondayNewCol_${_esc(col.id)}"
               style="flex:1;min-width:130px;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px"
               title="${_esc(col.title)}">
         <option value="">— ${_esc(col.title)} —</option>
@@ -201,7 +212,7 @@ function renderMondayBoard(data) {
       return true;
     });
     if (!visible.length) return;
-    const dot = group.color ? `<span class="monday-group-dot" style="background:${group.color}"></span>` : '';
+    const dot = group.color ? `<span class="monday-group-dot" style="background:${_esc(group.color)}"></span>` : '';
     html += `<div class="monday-group-hd">${dot}${_esc(group.title)} <span style="color:var(--text3);font-weight:400;margin-left:4px">${visible.length}</span></div>`;
     visible.forEach(item => {
       let pillsHtml = '';
@@ -211,16 +222,16 @@ function renderMondayBoard(data) {
         const color = opt?.color || '#c4c4c4';
         const empty = !cv.text;
         pillsHtml += `<span class="monday-status-pill${empty ? ' empty' : ''}"
-          style="background:${empty ? '' : color}"
-          onclick="openStatusPicker(event,'${item.id}','${colId}',${JSON.stringify(col.options).replace(/"/g,'&quot;')},'${cv.index}')"
+          style="background:${empty ? '' : _esc(color)}"
+          onclick="openStatusPicker(event,${_jsAttr(item.id)},${_jsAttr(colId)},${_jsAttr(col.options)},${_jsAttr(cv.index ?? '')})"
           >${_esc(cv.text || '–')}</span>`;
       });
       if (!pillsHtml && primaryColId) {
         pillsHtml = `<span class="monday-status-pill empty"
-          onclick="openStatusPicker(event,'${item.id}','${primaryColId}',${JSON.stringify(statusCols[primaryColId]?.options||[]).replace(/"/g,'&quot;')},'')"
+          onclick="openStatusPicker(event,${_jsAttr(item.id)},${_jsAttr(primaryColId)},${_jsAttr(statusCols[primaryColId]?.options || [])},'')"
           >–</span>`;
       }
-      html += `<div class="monday-item" data-item-id="${item.id}">
+      html += `<div class="monday-item" data-item-id="${_esc(item.id)}">
         <span class="monday-item-name">${_esc(item.name)}</span>${pillsHtml}
       </div>`;
     });
@@ -232,16 +243,25 @@ function _esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Wert als JS-Literal in ein inline-Attribut (onclick, onmouseenter …) setzen.
+// Ein Attribut wird erst HTML-entschlüsselt und dann als JavaScript gelesen —
+// reines _esc() reicht dort nicht, ein Apostroph im Text bricht sonst aus dem
+// String aus. Deshalb erst JSON (schließt Anführungszeichen und Backslashes),
+// danach HTML-Escape.
+function _jsAttr(value) {
+  return _esc(JSON.stringify(value ?? null));
+}
+
 function openStatusPicker(event, itemId, columnId, options, currentIndex) {
   event.stopPropagation();
   const picker = $('statusPicker');
   const bg     = $('statusPickerBg');
   picker.innerHTML = options.map(opt => {
     const active = opt.index === currentIndex;
-    return `<div class="status-picker-item" onclick="applyStatus('${itemId}','${columnId}','${opt.index}',${JSON.stringify(opt.label).replace(/"/g,'&quot;')})">
-      <span class="status-picker-dot" style="background:${opt.color}"></span>
+    return `<div class="status-picker-item" onclick="applyStatus(${_jsAttr(itemId)},${_jsAttr(columnId)},${_jsAttr(opt.index)},${_jsAttr(opt.label)})">
+      <span class="status-picker-dot" style="background:${_esc(opt.color)}"></span>
       <span style="${active ? 'font-weight:700' : ''}">${_esc(opt.label)}</span>
-      ${active ? '<span style="margin-left:auto;font-size:11px;color:var(--text3)">✓</span>' : ''}
+      ${active ? `<span style="margin-left:auto;color:var(--text3);display:inline-flex">${icon('check', { size: 13 })}</span>` : ''}
     </div>`;
   }).join('');
 

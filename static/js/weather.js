@@ -2,19 +2,13 @@
 
 let _wxData = null;
 
-function _wxIcon(c) {
-  if (c == null) return '·';
-  if (c === 0) return '☀️';
-  if (c <= 2)  return '🌤️';
-  if (c === 3) return '☁️';
-  if (c === 45 || c === 48) return '🌫️';
-  if (c <= 57) return '🌦️';
-  if (c <= 67) return '🌧️';
-  if (c <= 77) return '🌨️';
-  if (c <= 82) return '🌧️';
-  if (c <= 86) return '🌨️';
-  if (c >= 95) return '⛈️';
-  return '·';
+// Wetter-Symbol als Inline-SVG (Icon-System, keine Emojis).
+// Ohne Wettercode bleibt es beim schlichten Punkt — sonst würde eine
+// fehlende Angabe wie "bewölkt" aussehen.
+function _wxIconHtml(code, storm, size) {
+  if (storm) return icon('thunder', { size });
+  if (code == null) return '<span style="opacity:.5">·</span>';
+  return icon(weatherIcon(code), { size });
 }
 
 function _wxDayName(date, i) {
@@ -29,6 +23,9 @@ function _renderWeather() {
   const land = d.land?.days || [];
   const sea  = d.sea?.days  || [];
 
+  // Zeilen mit Icon: Icon und Wert mittig nebeneinander
+  const rowStyle = 'display:flex;align-items:center;justify-content:center;gap:4px';
+
   // Normal: 3-Tage-Spalten (Land: Icon/Temp/Regen · See: Wind/Welle)
   const grid = $('wxGrid');
   if (grid) {
@@ -37,11 +34,11 @@ function _renderWeather() {
       const storm = ld.storm || sd.storm;
       return `<div class="wx-day">
         <div class="wx-day-name">${_wxDayName(ld.date, i)}</div>
-        <div class="wx-icon">${storm ? '⛈️' : _wxIcon(ld.wmo)}</div>
+        <div class="wx-icon">${_wxIconHtml(ld.wmo, storm, 30)}</div>
         <div class="wx-temp"><b>${ld.tmax != null ? Math.round(ld.tmax) : '--'}°</b> <span>${ld.tmin != null ? Math.round(ld.tmin) : '--'}°</span></div>
-        <div class="wx-row">💧 ${ld.pop != null ? ld.pop : '--'}%</div>
-        <div class="wx-row">🌬️ ${sd.wind != null ? Math.round(sd.wind) : '--'} kn</div>
-        <div class="wx-row">🌊 ${sd.wave != null ? sd.wave.toFixed(1) : '--'} m</div>
+        <div class="wx-row" style="${rowStyle}">${icon('droplet', { size: 13 })} ${ld.pop != null ? ld.pop : '--'}%</div>
+        <div class="wx-row" style="${rowStyle}">${icon('wind', { size: 13 })} ${sd.wind != null ? Math.round(sd.wind) : '--'} kn</div>
+        <div class="wx-row" style="${rowStyle}">${icon('waves', { size: 13 })} ${sd.wave != null ? sd.wave.toFixed(1) : '--'} m</div>
       </div>`;
     }).join('');
   }
@@ -50,7 +47,8 @@ function _renderWeather() {
   const ld = land[0] || {}, sd = sea[0] || {};
   const storm = ld.storm || sd.storm;
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-  set('wxHalfIcon', storm ? '⛈️' : _wxIcon(ld.wmo));
+  const iconEl = $('wxHalfIcon');
+  if (iconEl) iconEl.innerHTML = _wxIconHtml(ld.wmo, storm, 40);
   set('wxHalfTemp', (ld.tmax != null ? Math.round(ld.tmax) : '--') + '°');
   set('wxHalfWind', (sd.wind != null ? Math.round(sd.wind) : '--') + ' kn');
   set('wxHalfPop',  (ld.pop  != null ? ld.pop  : '--') + '%');
@@ -63,5 +61,6 @@ function fetchWeather() {
     .catch(() => {});
 }
 
-fetchWeather();
-setInterval(fetchWeather, 30 * 60 * 1000);
+// Alle 30 Minuten — pausiert automatisch, solange die Seite versteckt ist.
+const _wxPoller = createPoller(fetchWeather, 30 * 60 * 1000);
+_wxPoller.start();

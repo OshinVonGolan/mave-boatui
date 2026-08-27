@@ -1,0 +1,76 @@
+// ── SVG-Icon-System ────────────────────────────────────────────────────────
+// Ersetzt Emoji-Piktogramme im UI (Projektregel: keine Emojis).
+// Stil folgt der vorhandenen Konvention: 24er-Raster, currentColor, stroke 2.
+//
+//   icon('sun')                 -> <svg …>…</svg>  (16 px)
+//   icon('sun', {size: 22})     -> größer
+//   icon('sun', {cls: 'muted'}) -> zusätzliche CSS-Klasse
+//
+// Farbe kommt IMMER vom umgebenden Text (currentColor) — nie hart setzen.
+
+const ICON_PATHS = {
+  // Wetter
+  sun:        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:       '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  cloud:      '<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+  cloudSun:   '<path d="M12 3v1M5.6 5.6l.7.7M3 12h1M18.4 5.6l-.7.7"/><circle cx="12" cy="12" r="3"/><path d="M19 17h-1.1A5 5 0 1 0 9 19h10a3 3 0 0 0 0-6z"/>',
+  rain:       '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 20l-1 2M12 20l-1 2M16 20l-1 2"/>',
+  drizzle:    '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 20v1M12 20v1M16 20v1"/>',
+  thunder:    '<path d="M18 7h-1.26A6.5 6.5 0 1 0 9 16h9a4.5 4.5 0 0 0 0-9z"/><path d="M13 13l-3 5h4l-3 5"/>',
+  snow:       '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 21h.01M12 21h.01M16 21h.01M10 19h.01M14 19h.01"/>',
+  fog:        '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M5 20h14M7 23h10"/>',
+  wind:       '<path d="M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2M17.7 7.7A2.5 2.5 0 1 1 19.5 12H2"/>',
+  waves:      '<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5s2.5 2 5 2c1.3 0 1.9-.5 2.5-1M2 12c.6.5 1.2 1 2.5 1C7 13 7 11 9.5 11s2.5 2 5 2c1.3 0 1.9-.5 2.5-1M2 18c.6.5 1.2 1 2.5 1C7 19 7 17 9.5 17s2.5 2 5 2c1.3 0 1.9-.5 2.5-1"/>',
+  droplet:    '<path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"/>',
+  thermometer:'<path d="M14 14.8V3.5a2.5 2.5 0 0 0-5 0v11.3a4 4 0 1 0 5 0z"/>',
+
+  // Energie
+  bolt:       '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+  battery:    '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/>',
+  plug:       '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  solar:      '<circle cx="12" cy="8" r="3"/><path d="M12 1v1M6.3 3.3l.8.8M2 8h1M22 8h-1M17.7 3.3l-.8.8"/><path d="M4 21l2-7h12l2 7z"/>',
+  alternator: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
+  gauge:      '<path d="M12 14l3.5-3.5"/><path d="M3.6 18a9 9 0 1 1 16.8 0"/>',
+  scale:      '<path d="M12 3v18M5 7h14M5 7l-3 6h6zM19 7l3 6h-6z"/>',
+
+  // Licht
+  bulb:       '<path d="M15 14c.2-1 .7-1.7 1.5-2.5A5.5 5.5 0 1 0 7.5 11.5C8.3 12.3 8.8 13 9 14"/><path d="M9 18h6M10 22h4"/>',
+  bulbOff:    '<path d="M9 18h6M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5a5.5 5.5 0 0 0-.9-7.7M9 14c-.2-1-.7-1.7-1.5-2.5a5.5 5.5 0 0 1 .3-7.6"/><path d="M2 2l20 20"/>',
+
+  // Status / Navigation
+  anchor:     '<circle cx="12" cy="5" r="3"/><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/>',
+  warning:    '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  check:      '<path d="M20 6L9 17l-5-5"/>',
+  close:      '<path d="M18 6L6 18M6 6l12 12"/>',
+  wrench:     '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/>',
+  clock:      '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  info:       '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
+  arrowRight: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+};
+
+/** Liefert ein Inline-SVG als String. Farbe erbt via currentColor. */
+function icon(name, opts = {}) {
+  const body = ICON_PATHS[name];
+  if (!body) return '';
+  const size = opts.size || 16;
+  const cls  = opts.cls ? ` class="${opts.cls}"` : '';
+  return `<svg${cls} width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" `
+       + `stroke="currentColor" stroke-width="2" stroke-linecap="round" `
+       + `stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+/** Wetter-Code (Open-Meteo WMO) -> Icon-Name. */
+function weatherIcon(code) {
+  if (code == null) return 'cloud';
+  if (code === 0)                       return 'sun';
+  if (code === 1 || code === 2)         return 'cloudSun';
+  if (code === 3)                       return 'cloud';
+  if (code === 45 || code === 48)       return 'fog';
+  if (code >= 51 && code <= 57)         return 'drizzle';
+  if (code >= 61 && code <= 67)         return 'rain';
+  if (code >= 71 && code <= 77)         return 'snow';
+  if (code >= 80 && code <= 82)         return 'rain';
+  if (code >= 85 && code <= 86)         return 'snow';
+  if (code >= 95)                       return 'thunder';
+  return 'cloud';
+}

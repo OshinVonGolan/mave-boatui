@@ -126,7 +126,7 @@ function renderPresetEditList() {
   $('presetEditList').innerHTML = presets.map((p, i) => `
     <div class="preset-save-card" id="per${i}">
       <div class="preset-save-card-top">
-        <span class="preset-save-card-emoji">${p.emoji}</span>
+        <span class="preset-save-card-emoji">${presetIcon(p, 20)}</span>
         <input class="preset-edit-name" id="pen${i}" type="text"
                value="${p.name}" maxlength="24" placeholder="Preset ${i + 1}">
       </div>

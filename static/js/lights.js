@@ -123,12 +123,26 @@ async function loadPresets() {
   } catch(e) { console.error('Presets nicht geladen:', e); }
 }
 
+
+// Presets tragen historisch ein Emoji-Feld (presets.json liegt als Datendatei
+// auf dem Pi und ist nicht versioniert — wir koennen sie hier nicht umschreiben).
+// Deshalb wird das Emoji beim Rendern auf ein Icon aus dem SVG-Satz abgebildet.
+// Ein spaeter ergaenztes Feld `icon` hat Vorrang.
+const PRESET_ICON = {
+  '🌙': 'moon', '☀️': 'sun', '☀': 'sun', '💡': 'bulb',
+  '🔆': 'sun', '🌞': 'sun', '🕯️': 'bulb', '🔦': 'bulb',
+};
+function presetIcon(p, size) {
+  const name = p.icon || PRESET_ICON[(p.emoji || '').trim()] || 'bulb';
+  return icon(name, { size: size || 22 });
+}
+
 function renderPresets() {
   const grid = $('presetsGrid'); grid.innerHTML = '';
   presets.forEach((p, i) => {
     const btn = document.createElement('button');
     btn.className = 'preset-btn' + (p.values==null?' disabled':'') + (activePreset===i?' active':'');
-    btn.innerHTML = `<span class="preset-emoji">${p.emoji}</span><span class="preset-name">${p.name}</span>`;
+    btn.innerHTML = `<span class="preset-emoji">${presetIcon(p)}</span><span class="preset-name">${p.name}</span>`;
     if (p.values != null) btn.addEventListener('click', e => { e.stopPropagation(); applyPreset(i); });
     grid.appendChild(btn);
   });

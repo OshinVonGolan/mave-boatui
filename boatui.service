@@ -1,13 +1,19 @@
 [Unit]
 Description=Mave Boat Monitor UI
 After=network.target can0.service
-Requires=can0.service
+# Wants statt Requires: kommt can0 beim Booten nicht hoch (Adapter hakt, Bus stromlos),
+# soll die App TROTZDEM starten. Der CAN-Reader verbindet sich zur Laufzeit selbst neu.
+# Mit Requires= wurde die App bei fehlgeschlagenem can0 mitgerissen, und Restart=always
+# half nicht, weil die Abhaengigkeit weiterhin fehlschlug.
+Wants=can0.service
 
 [Service]
 Type=simple
 User=joshy
 WorkingDirectory=/home/joshy/mave-boatui
-ExecStart=/home/joshy/mave-boatui/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080
+# --no-access-log: jede HTTP-Anfrage erzeugte sonst eine Journal-Zeile auf der SD-Karte.
+# Fehler und Warnungen der App werden weiterhin protokolliert.
+ExecStart=/home/joshy/mave-boatui/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8080 --no-access-log
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

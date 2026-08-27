@@ -1,6 +1,9 @@
 // ── Connectivity ───────────────────────────────────────────────────────────
 
 let _connData = {};
+// Bleibt als null bestehen: _closeAllOverlays() in charts.js räumt diese
+// Variable noch auf. Das Overlay hat KEINEN eigenen Timer mehr — der globale
+// Poller in init.js rendert es mit (siehe fetchConnectivity).
 var _connOverlayTimer = null;
 
 // Starlink Mini schlafen legen / aufwecken (dish_power_save).
@@ -50,18 +53,26 @@ function openConnectivity() {
   $('connInetOverlay').classList.remove('hidden');
   _navActive('connInetBtn');
   renderConnectivity(_connData);
+  // Kein eigener Intervall-Timer: der globale Poller (init.js) ruft
+  // fetchConnectivity() auf und rendert das offene Overlay gleich mit.
   fetchConnectivity();
-  _connOverlayTimer = setInterval(fetchConnectivity, 20000);
 }
 function closeConnectivity() {
   $('connInetOverlay').classList.add('hidden');
-  clearInterval(_connOverlayTimer); _connOverlayTimer = null;
   history.replaceState(null, '', location.pathname);
 }
 
 const _SVG_SATELLITE = `<path d="M3.5 18.5l-2-2L13 5l2 2L3.5 18.5z" stroke-width="1.5"/><path d="M8 20l4-4"/><path d="M20 8l-4 4"/><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M15 5a4 4 0 0 1 4 4" stroke-width="1.5"/>`;
 const _SVG_MOBILE    = `<rect x="2" y="15" width="3.5" height="6" rx=".7" fill="currentColor" stroke="none"/><rect x="8" y="10" width="3.5" height="11" rx=".7" fill="currentColor" stroke="none"/><rect x="14" y="5" width="3.5" height="16" rx=".7" fill="currentColor" stroke="none"/><rect x="20" y="1" width="3.5" height="20" rx=".7" fill="currentColor" stroke="none" opacity=".3"/>`;
 const _SVG_WIFI      = `<path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1.5" fill="currentColor" stroke="none"/>`;
+
+// Baut ein Inline-SVG aus den Pfaden oben — gleiche Form wie icon() im
+// Icon-System, nur mit den Connectivity-eigenen Motiven (Schüssel/Antenne).
+function _connSvg(paths, size = 22) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" `
+       + `stroke="currentColor" stroke-width="2" stroke-linecap="round" `
+       + `stroke-linejoin="round" aria-hidden="true" focusable="false">${paths}</svg>`;
+}
 
 function updateConnectivityIcon(d) {
   const dot   = $('connInetDot');
@@ -115,7 +126,8 @@ function renderConnectivity(d) {
   const mobDotCls = r.mobile_up ? (sigPct >= 40 ? 'ok' : 'warn') : '';
 
   const activeLabel = isWan ? 'Starlink (WAN)' : (r.mobile_up ? `Mobilfunk — ${mob.operator || ''}` : 'Kein aktiver Uplink');
-  const activeIcon  = isWan ? '🛰' : (r.mobile_up ? '📶' : '⚠');
+  const activeIcon  = isWan ? _connSvg(_SVG_SATELLITE)
+                            : (r.mobile_up ? _connSvg(_SVG_MOBILE) : icon('warning', { size: 22 }));
   const activeColor = isWan ? slColor : (r.mobile_up ? sigColor : 'var(--red)');
   const fallback    = isWan && r.mobile_up
     ? `Fallback verfügbar: Mobilfunk — ${mob.operator || ''} ${mob.ntype || ''}`
@@ -126,13 +138,13 @@ function renderConnectivity(d) {
   const alertEntries = Object.keys(sl.alerts ?? {});
   const alertHtml = alertEntries.length
     ? alertEntries.map(k => `<div class="bms-flag warn">! ${k.replace(/_/g,' ')}</div>`).join('')
-    : '<div class="bms-flag ok">✓ Keine Alarme</div>';
+    : `<div class="bms-flag ok">${icon('check', { size: 13 })} Keine Alarme</div>`;
 
   body.innerHTML = `
     <div class="conn-active-banner">
       <div style="font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Aktiver Uplink</div>
       <div class="conn-active-type">
-        <span class="conn-active-icon">${activeIcon}</span>
+        <span class="conn-active-icon" style="display:inline-flex;align-items:center;color:${activeColor}">${activeIcon}</span>
         <span class="conn-active-label" style="color:${activeColor}">${activeLabel}</span>
       </div>
       ${fallback ? `<div class="conn-fallback">${fallback}</div>` : ''}
@@ -176,8 +188,10 @@ function renderConnectivity(d) {
           </div>
           <div class="bms-flags-row">${alertHtml}</div>
           <div class="sl-sleep-row">
-            <button class="btn-secondary" onclick="starlinkSleep(true)">😴 Schlafen legen</button>
-            <button class="btn-secondary" onclick="starlinkSleep(false)">☀️ Aufwecken</button>
+            <button class="btn-secondary" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"
+                    onclick="starlinkSleep(true)">${icon('moon', { size: 15 })} Schlafen legen</button>
+            <button class="btn-secondary" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"
+                    onclick="starlinkSleep(false)">${icon('sun', { size: 15 })} Aufwecken</button>
           </div>
         </div>
       </div>

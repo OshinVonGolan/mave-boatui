@@ -1,6 +1,10 @@
 // ── Display-Konfiguration ───────────────────────────────────────────────────
 
 const _DSP_KEY = 'mave_display_cfg';
+// Wird hochgezaehlt, wenn sich die Standard-Aufteilung aendert. Gespeicherte
+// Konfigurationen aus einer aelteren Version werden dann EINMALIG verworfen,
+// damit die neue Aufteilung auf schon benutzten Geraeten auch ankommt.
+const _DSP_VER = 2;
 
 const _TILES = [
   { id: 'battery',  label: 'Batterie',     sizes: ['hidden','normal','half','wide'] },
@@ -34,8 +38,8 @@ const _PROFILES = [
 const _DSP_DEFAULTS = {
   activeProfile: 'auto',
   tiles: {
-    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'hidden' },
-    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'normal' },
+    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'wide'   },
+    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'wide'   },
     mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'hidden',  weather:'half',   wartung:'hidden' },
   },
 };
@@ -45,7 +49,8 @@ let _dsp = null;
 function _dspLoad() {
   try {
     const raw = localStorage.getItem(_DSP_KEY);
-    const saved = raw ? JSON.parse(raw) : {};
+    let saved = raw ? JSON.parse(raw) : {};
+    if ((saved.ver ?? 1) < _DSP_VER) saved = { activeProfile: saved.activeProfile };
     _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile, tiles: {} };
     for (const p of _PROFILES) {
       const savedTiles = saved.tiles?.[p.id] ?? {};
@@ -65,6 +70,7 @@ function _dspLoad() {
 }
 
 function _dspSave() {
+  if (_dsp) _dsp.ver = _DSP_VER;
   localStorage.setItem(_DSP_KEY, JSON.stringify(_dsp));
 }
 
@@ -169,7 +175,10 @@ function _applyGrid() {
     if (cols === 1) {
       el.style.gridColumn = el.style.gridRow = el.style.order = '';
     } else {
-      el.style.gridColumn = `span ${(sz === 'wide') ? Math.min(2, cols) : 1}`;
+      // Bei 3 Spalten spannt 'wide' ueber ALLE drei — sonst bliebe in der
+      // letzten Reihe genau eine Luecke stehen (6 normale + 2 = 8 von 9).
+      const span = (sz === 'wide') ? (cols === 3 ? 3 : Math.min(2, cols)) : 1;
+      el.style.gridColumn = `span ${span}`;
       el.style.gridRow    = `span ${(sz === 'half') ? 1 : 2}`;
       // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder
       // statt halber Kacheln, die sich oben zwischen die vollen mischen.
@@ -473,4 +482,95 @@ function saveDisplaySettings(silent) {
   _dspSave();
   applyDisplayConfig();
   if (!silent) _dspFeedback('Gespeichert ✓');
+}
+
+
+// ── Statusleiste ────────────────────────────────────────────────────────────
+// Fuellt die dichte Kernwert-Zeile ueber den Kacheln. Wird aus handleData()
+// heraus bei jedem State-Update gerufen. Schreibt ausschliesslich per
+// textContent — kein innerHTML, damit das auf dem Pi Zero billig bleibt.
+
+let _sbWartung = null;   // { overdue, total } — von wartung.js gemeldet
+
+function _sbSet(id, txt) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== txt) el.textContent = txt;
+}
+
+function _sbState(itemId, cls) {
+  const el = document.getElementById(itemId);
+  if (!el) return;
+  const item = el.closest('.sb-item');
+  if (!item) return;
+  item.classList.remove('sb-ok', 'sb-low', 'sb-warn', 'sb-idle', 'sb-stale');
+  if (cls) item.classList.add(cls);
+}
+
+const _n = (v, d = 0) => (v == null || !isFinite(v)) ? null : Number(v).toFixed(d);
+
+function updateStatusBar(data) {
+  if (!data || !document.getElementById('statusBar')) return;
+
+  // Batterie: SOC gross, Spannung und Strom klein darunter
+  const b = data.battery || {};
+  _sbSet('sbSoc', _n(b.soc) ?? '--');
+  const volt = _n(b.voltage, 2), cur = _n(b.current, 1);
+  _sbSet('sbBattSub', (volt == null && cur == null) ? 'keine Daten'
+    : `${volt ?? '--'} V · ${cur != null && cur > 0 ? '+' : ''}${cur ?? '--'} A`);
+  _sbState('sbSoc', b.soc == null ? 'sb-idle'
+    : b.soc < 30 ? 'sb-warn' : b.soc < 50 ? 'sb-low' : 'sb-ok');
+
+  // Laden: staerkste aktive Quelle mit Namen, damit klar ist WORAUS geladen wird
+  const quellen = [
+    ['Landstrom',   data.charger    && data.charger.power],
+    ['Solar',       data.solar      && data.solar.power],
+    ['Lichtmasch.', data.alternator && data.alternator.power],
+  ].filter(([, w]) => w != null && w > 1);
+  quellen.sort((x, y) => y[1] - x[1]);
+  const gesamt = quellen.reduce((sum, [, w]) => sum + w, 0);
+  _sbSet('sbChg', quellen.length ? String(Math.round(gesamt)) : '0');
+  _sbSet('sbChgSub', quellen.length
+    ? (quellen.length === 1 ? quellen[0][0] : `${quellen[0][0]} +${quellen.length - 1}`)
+    : (data.inverter && data.inverter.state === 'Aktiv' ? 'Inverter an' : 'keine Quelle'));
+  _sbState('sbChg', quellen.length ? 'sb-ok' : 'sb-idle');
+
+  // Tanks: Namen und Kapazitaet kommen aus den Presets, nicht hart verdrahtet
+  const t = data.tanks || {};
+  const cfg = (typeof tanksConfig === 'object' && tanksConfig) || {};
+  [['tank1', 'sbT1'], ['tank2', 'sbT2']].forEach(([key, id]) => {
+    const pct = t[key];
+    _sbSet(id, _n(pct) ?? '--');
+    const c = cfg[key] || {};
+    if (c.name) _sbSet(id + 'Lbl', c.name);
+    _sbSet(id + 'Sub', (pct != null && c.capacity_l)
+      ? `${Math.round(pct * c.capacity_l / 100)} von ${c.capacity_l} L`
+      : (pct == null ? 'keine Daten' : ''));
+    _sbState(id, pct == null ? 'sb-idle'
+      : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
+  });
+
+  // Wasserstand: kommt aus einer eigenen Quelle, wir lesen den Header-Chip mit
+  const chip = document.getElementById('wlValue');
+  const m = chip && chip.textContent.match(/(-?\d+)/);
+  _sbSet('sbWl', m ? m[1] : '--');
+
+  _sbRenderWartung();
+}
+
+/** Schreibt NUR die beiden Wartungsfelder — laesst den Rest der Leiste in Ruhe. */
+function _sbRenderWartung() {
+  if (!_sbWartung) return;
+  _sbSet('sbWart', String(_sbWartung.overdue));
+  _sbSet('sbWartSub', _sbWartung.overdue === 0 ? 'alles aktuell' : 'überfällig');
+  _sbState('sbWart', _sbWartung.overdue > 0 ? 'sb-warn' : 'sb-ok');
+}
+
+/** Wird von wartung.js gerufen, sobald der Wartungsplan geladen ist. */
+function setStatusWartung(overdue, total) {
+  _sbWartung = { overdue: overdue || 0, total: total || 0 };
+  // Frueher stand hier updateStatusBar({}) — das hat die komplette Leiste mit
+  // einem leeren Datenobjekt ueberschrieben und alle Werte auf "--" gesetzt.
+  // Ausgeloest wurde das u.a. bei jedem resize (Handy: Ein-/Ausblenden der
+  // URL-Leiste), was ein sichtbares Flackern erzeugte.
+  _sbRenderWartung();
 }

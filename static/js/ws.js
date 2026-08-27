@@ -22,6 +22,7 @@ const CHARGE_SOURCES = [
 
 const chargeHist = [];   // [{ts, charger, solar1, solar2, solar3, alternator, wind}, ...]
 const CHARGE_HIST_MAX = 25000;
+const CHARGE_HIST_MAX_AGE_S = 25 * 3600;   // zeitbasiert kappen, siehe trimHist()
 let chargeRange    = 'live';
 let _lastChargeActive = [];
 
@@ -40,7 +41,7 @@ function reRenderChargePie() {
     return;
   }
   const cutoffSec = chargeRange === '24h' ? 86400 : 604800;
-  const cutoff    = Date.now() / 1000 - cutoffSec;
+  const cutoff    = nowTs() - cutoffSec;
   const window    = chargeHist.filter(e => e.ts >= cutoff);
 
   if (!window.length) { renderChargePie([], false); return; }
@@ -213,10 +214,19 @@ function updatePowerSources(data) {
   _w('battWideSrcAlt',   data.alternator?.power ?? data.orion?.output_power);
 
   // History aufzeichnen
-  const entry = { ts: Date.now() / 1000 };
+  const entry = { ts: nowTs() };
   CHARGE_SOURCES.forEach(s => { entry[s.key] = s.get(data) ?? 0; });
-  chargeHist.push(entry);
-  if (chargeHist.length > CHARGE_HIST_MAX) chargeHist.shift();
+  // Getaktet wie histData: sonst deckten 25.000 Eintraege bei jedem WS-Tick
+  // nur ~20 Minuten ab, und die Knoepfe "24 h" / "7 T" mittelten in Wahrheit
+  // ueber diese 20 Minuten.
+  // WICHTIG: nur das Wegschreiben ist getaktet. Ein frühes return hier würde
+  // auch die Live-Torte darunter ausbremsen — die soll bei jedem Zustand
+  // aktualisieren, nicht nur alle 5 s.
+  const letzterC = chargeHist.length ? chargeHist[chargeHist.length - 1] : null;
+  if (!letzterC || (entry.ts - letzterC.ts) >= HIST_MIN_GAP_S) {
+    chargeHist.push(entry);
+    trimHist(chargeHist, CHARGE_HIST_MAX_AGE_S, CHARGE_HIST_MAX);
+  }
 
   _lastChargeActive = CHARGE_SOURCES
     .map(s => ({ label: s.label, color: s.color, watts: s.get(data) ?? 0 }))
@@ -419,6 +429,7 @@ function handleData(data) {
   if (data.bms) updateBms(data.bms);
   if (!$('battOverlay').classList.contains('hidden')) renderDeviceTiles(data);
   _syncWartungHeight();
+  updateStatusBar(data);   // dichte Kernwert-Zeile ueber den Kacheln
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
     _applyAlarmBorders(data.alarms);
@@ -437,25 +448,82 @@ function _syncWartungHeight() {
 window.addEventListener('resize', _syncWartungHeight);
 
 let _histFetchPending = false;
+let _histFetchOk      = 0;      // Zeitpunkt des letzten ERFOLGREICHEN Abrufs
 
-function _fetchHistory() {
-  if (histData.length > 0 || _histFetchPending) return;
+// Wie weit zurück der Server gefragt wird — deckt den größten Bereich ab,
+// den die Zeitknöpfe im Chart anbieten (24 h).
+const HIST_FETCH_RANGE_S = 24 * 3600;
+const HIST_REFETCH_AFTER_S = 300;   // nach 5 min darf erneut geholt werden
+
+/**
+ * Holt den Verlauf vom Server und führt ihn mit dem zusammen, was der Client
+ * inzwischen selbst gesammelt hat.
+ *
+ * Vorher stand hier zweimal `if (histData.length > 0) return;`. Das sah nach
+ * einer Schutzmaßnahme aus, war aber der Grund, warum die Graphen leer blieben:
+ * der WebSocket liefert den ersten State binnen Millisekunden, recordHistory
+ * trägt ihn ein — und wenn die Antwort auf /api/history Sekunden später
+ * eintraf, war histData längst nicht mehr leer und der komplette Server-
+ * Verlauf wurde weggeworfen. Jeder Seitenaufbau hat den teuren Abruf also
+ * bezahlt und das Ergebnis verworfen.
+ *
+ * Jetzt wird gemerged statt verworfen, und nach Reconnect darf erneut geholt
+ * werden (vorher blockierte der Guard das für immer).
+ */
+function _fetchHistory(force) {
+  if (_histFetchPending) return;
+  if (!force && _histFetchOk && (Date.now() / 1000 - _histFetchOk) < HIST_REFETCH_AFTER_S) return;
   _histFetchPending = true;
-  fetch('/api/history').then(r => r.json()).then(hist => {
-    if (histData.length > 0) return;
-    hist.forEach(e => {
-      histData.push(e);
-      const ce = { ts: e.ts };
-      ['solar1','solar2','solar3','charger','alternator','wind'].forEach(k => {
-        if (e[k] != null) ce[k] = e[k];
-      });
-      if (Object.keys(ce).length > 1) chargeHist.push(ce);
-    });
-    histData.sort((a, b) => a.ts - b.ts);
-    recomputeDailyAhFromHist();
-    if (!$('battOverlay').classList.contains('hidden')) renderCharts();
-    reRenderChargePie();
-  }).catch(() => {}).finally(() => { _histFetchPending = false; });
+
+  fetch(`/api/history?range=${HIST_FETCH_RANGE_S}&max_points=1500`)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(res => {
+      const eintraege = Array.isArray(res) ? res : (res.entries || []);
+
+      // Zeitbasis: der Pi hat KEINE Echtzeituhr. Filtern wir Zeitfenster gegen
+      // die Uhr des Telefons, kann eine falsch stehende Pi-Uhr alle Punkte
+      // wegschneiden — der Graph wäre leer, obwohl Daten da sind.
+      if (typeof res.server_now === 'number') setClockOffset(res.server_now);
+
+      _mergeHist(histData, eintraege);
+
+      const CH_KEYS = ['solar1', 'charger', 'alternator'];
+      _mergeHist(chargeHist, eintraege.map(e => {
+        const ce = { ts: e.ts };
+        CH_KEYS.forEach(k => { if (e[k] != null) ce[k] = e[k]; });
+        return ce;
+      }).filter(ce => Object.keys(ce).length > 1));
+
+      _histFetchOk = Date.now() / 1000;
+      recomputeDailyAhFromHist();
+      if (!$('battOverlay').classList.contains('hidden')) renderCharts();
+      reRenderChargePie();
+    })
+    .catch(err => {
+      // Nicht verschlucken: ohne Meldung sucht man den leeren Graphen ewig.
+      console.warn('Verlauf konnte nicht geladen werden:', err);
+    })
+    .finally(() => { _histFetchPending = false; });
+}
+
+/**
+ * Führt Server-Einträge in ein bestehendes Array ein, ohne Doppelte.
+ * Der Client sammelt zwischen den Abrufen selbst weiter — beide Quellen
+ * beschreiben dieselbe Zeitachse, deshalb wird über den Zeitstempel
+ * dedupliziert (auf die Sekunde gerundet) und danach sortiert.
+ */
+function _mergeHist(ziel, neue) {
+  if (!neue.length) return;
+  const bekannt = new Set(ziel.map(e => Math.round(e.ts)));
+  let dazu = 0;
+  for (const e of neue) {
+    const k = Math.round(e.ts);
+    if (bekannt.has(k)) continue;
+    bekannt.add(k);
+    ziel.push(e);
+    dazu++;
+  }
+  if (dazu) ziel.sort((a, b) => a.ts - b.ts);
 }
 
 function connect() {
@@ -465,7 +533,10 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/ws`);
   ws.onopen    = () => {
     setConnState('ok'); clearTimeout(reconnectTimer);
-    _fetchHistory(); // Fallback falls connect() vor Auth aufgerufen wurde
+    // Nach jedem (Wieder-)Verbinden nachladen: Server-Neustart, WLAN-Abriss
+    // oder Handy aus dem Standby hinterlassen sonst eine Lücke im Verlauf,
+    // die nie wieder gefüllt wurde.
+    _fetchHistory(true);
   };
   ws.onmessage = ev => { try { handleData(JSON.parse(ev.data)); } catch(_) {} };
   ws.onclose = ws.onerror = () => {

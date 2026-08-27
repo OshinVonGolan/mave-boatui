@@ -1,6 +1,7 @@
 """NMEA 2000 PGN-Parser und Fast-Packet Reassembler für den Boat-Monitor."""
 import math
 import struct
+import time
 
 LIGHT_BANK_INSTANCE = 1
 RPI_SOURCE_ADDRESS  = 100   # CAN-Quelladresse des Raspberry Pi
@@ -28,66 +29,189 @@ def make_can_id(pgn: int, src: int, dst: int = 0xFF, priority: int = 6) -> int:
 
 # ── Fast-Packet Reassembler ──────────────────────────────────────────────────
 
-FAST_PACKET_PGNS = {126720, 126983, 126984, 126996, 130900, 130901, 130902, 130910, 130912, 130913, 130914}
+# PGNs, die als Fast Packet (mehrere CAN-Frames) uebertragen werden.
+# 127506 und 127507 gehoeren laut NMEA2000-Bibliothek dazu
+# (IsDefaultFastPacketMessage, NMEA2000.cpp) - der VE.Direct-Gateway sendet
+# 127507 deshalb als Fast Packet, obwohl die Nutzlast nur 6 Byte lang ist.
+FAST_PACKET_PGNS = {126720, 126983, 126984, 126996, 127506, 127507,
+                    130900, 130901, 130902, 130910, 130912, 130913, 130914}
+
+FAST_PACKET_TIMEOUT_S = 5.0   # unvollstaendige Puffer nach dieser Zeit verwerfen
+FAST_PACKET_MAX_LEN   = 223   # 6 Byte im Kopfframe + 31 Folgeframes x 7 Byte
 
 
 class FastPacketReassembler:
-    """Reassembliert mehrteilige NMEA2000 Fast-Packet-Nachrichten."""
+    """Reassembliert mehrteilige NMEA2000 Fast-Packet-Nachrichten.
 
-    def __init__(self):
+    Prüft dabei die Frame-Reihenfolge: Ein verlorener, doppelter oder
+    vertauschter Frame verwirft den ganzen Puffer, statt still einen
+    zusammengeschobenen und damit falschen Messwert zu liefern.
+    Angefangene Puffer, die nie vervollständigt werden (Sender fällt aus,
+    letzter Frame geht verloren), verfallen nach FAST_PACKET_TIMEOUT_S und
+    belegen keinen Speicher mehr.
+
+    Zeitbasis ist bewusst time.monotonic(): der Pi hat keine Echtzeituhr,
+    seine Wanduhr springt beim ersten Zeitabgleich.
+    """
+
+    __slots__ = ('_buf', '_timeout', '_next_sweep', 'dropped_broken', 'dropped_stale')
+
+    def __init__(self, timeout: float = FAST_PACKET_TIMEOUT_S):
         self._buf: dict = {}
+        self._timeout    = timeout
+        self._next_sweep = 0.0
+        self.dropped_broken = 0   # Zähler für die Diagnose: Reihenfolge verletzt
+        self.dropped_stale  = 0   # Zähler für die Diagnose: Puffer verfallen
 
     def process(self, pgn: int, src: int, raw: bytes):
         """Gibt den vollständigen Payload zurück, sobald alle Frames empfangen wurden."""
         if not raw:
             return None
 
+        now       = time.monotonic()
         frame_num = raw[0] & 0x1F
         seq_id    = (raw[0] >> 5) & 0x07
         key       = (pgn, src, seq_id)
 
+        if self._buf and now >= self._next_sweep:
+            self._sweep(now)
+
         if frame_num == 0:
+            # Kopfframe: Byte 1 ist die Gesamtlänge, danach 6 Datenbytes.
             if len(raw) < 2:
                 return None
-            self._buf[key] = {'total': raw[1], 'data': bytearray(raw[2:])}
-        else:
-            if key not in self._buf:
+            total = raw[1]
+            if total == 0 or total > FAST_PACKET_MAX_LEN:
+                self._buf.pop(key, None)   # unbrauchbare Längenangabe
                 return None
-            self._buf[key]['data'].extend(raw[1:])
+            if key in self._buf:
+                # Der vorherige Puffer wurde nie fertig -> er war unvollständig.
+                self.dropped_broken += 1
+            entry = {'total': total, 'data': bytearray(raw[2:]), 'next': 1, 'ts': now}
+            self._buf[key] = entry
+        else:
+            entry = self._buf.get(key)
+            if entry is None:
+                return None               # Folgeframe ohne Kopfframe -> nichts zu tun
+            if frame_num != entry['next']:
+                del self._buf[key]        # Frame verloren, doppelt oder vertauscht
+                self.dropped_broken += 1
+                return None
+            if now - entry['ts'] > self._timeout:
+                del self._buf[key]        # Rest der Nachricht kam zu spät
+                self.dropped_stale += 1
+                return None
+            entry['data'].extend(raw[1:])
+            entry['next'] = frame_num + 1
+            entry['ts']   = now
 
-        entry = self._buf.get(key)
-        if entry and len(entry['data']) >= entry['total']:
-            result = bytes(entry['data'][:entry['total']])
+        if len(entry['data']) >= entry['total']:
             del self._buf[key]
-            return result
+            return bytes(entry['data'][:entry['total']])
 
         return None
+
+    def _sweep(self, now: float):
+        """Entfernt Puffer, die nicht rechtzeitig vervollständigt wurden."""
+        self._next_sweep = now + self._timeout
+        stale = [k for k, e in self._buf.items() if now - e['ts'] > self._timeout]
+        for k in stale:
+            del self._buf[k]
+        self.dropped_stale += len(stale)
+
+
+# ── "Nicht verfügbar"-Kennungen und Plausibilität ────────────────────────────
+
+# Sentinels der NMEA2000-Bibliothek (N2kMsg.h / N2kMsg.cpp):
+# NA = Feld nicht belegt, OR = Wert außerhalb des darstellbaren Bereichs.
+# Achtung: Add2ByteDouble() schreibt für "nicht belegt" 0x7FFF, NICHT 0x8000.
+N2K_INT16_NA   = 0x7FFF        # 32767
+N2K_INT16_OR   = 0x7FFE        # 32766
+N2K_UINT16_NA  = 0xFFFF
+N2K_UINT16_OR  = 0xFFFE
+N2K_UINT8_NA   = 0xFF
+N2K_UINT32_NA  = 0xFFFF_FFFF
+N2K_UINT32_OR  = 0xFFFF_FFFE
+
+
+def _int16_ok(raw: int) -> bool:
+    """True, wenn ein 2-Byte-Wert mit Vorzeichen ein echter Messwert ist."""
+    return raw != N2K_INT16_NA and raw != N2K_INT16_OR
+
+
+def _uint16_ok(raw: int) -> bool:
+    """True, wenn ein 2-Byte-Wert ohne Vorzeichen ein echter Messwert ist."""
+    return raw != N2K_UINT16_NA and raw != N2K_UINT16_OR
+
+
+def _uint32_ok(raw: int) -> bool:
+    """True, wenn ein 4-Byte-Wert ohne Vorzeichen ein echter Messwert ist."""
+    return raw != N2K_UINT32_NA and raw != N2K_UINT32_OR
+
+
+# Physikalisch mögliche Bereiche der Messwerte an Bord. Alles außerhalb stammt
+# aus Bitfehlern oder aus einer Kennung, die wir nicht kennen. Solche Werte
+# werden VERWORFEN (None) und nicht auf den Randwert geklemmt: ein Ausreißer
+# soll verschwinden und nicht als scheinbar gültiger Grenzwert im Verlauf,
+# in der Tagesstatistik oder in einem Alarm landen.
+_PLAUSIBLE_RANGES = {
+    'soc':         (0.0, 100.0),        # %
+    'voltage':     (0.0, 60.0),         # V – 12/24-V-Bordnetz inkl. Ausgleichsladung
+    'current':     (-1000.0, 1000.0),   # A – negativ = Entladung
+    'temperature': (-40.0, 100.0),      # °C
+}
+
+
+def _plausible(value, kind: str):
+    """Gibt value unverändert zurück, wenn es im plausiblen Bereich liegt, sonst None."""
+    if value is None:
+        return None
+    lo, hi = _PLAUSIBLE_RANGES[kind]
+    if not math.isfinite(value) or value < lo or value > hi:
+        return None
+    return value
 
 
 # ── PGN-Parser ───────────────────────────────────────────────────────────────
 
 def parse_fluid_level(data: bytes):
-    """PGN 127505 – Fluid Level (Single Frame, 7 Byte)."""
+    """PGN 127505 – Fluid Level (Single Frame, 7 Byte).
+
+    Layout laut SetN2kPGN127505 (N2kMessages.cpp):
+      0    uint8  Instanz (Bits 0-3) | Fluid-Typ (Bits 4-7)
+      1-2  int16  Füllstand x 0,004 %   -> MIT Vorzeichen, N/A = 0x7FFF
+      3-6  uint32 Kapazität x 0,1 l
+    """
     if len(data) < 7:
         return None
     instance  = data[0] & 0x0F
-    level_raw = struct.unpack_from('<H', data, 1)[0]
-    if level_raw == 0xFFFF:
+    level_raw = struct.unpack_from('<h', data, 1)[0]
+    if not _int16_ok(level_raw):
         return None
     return {'instance': instance, 'level': round(level_raw * 0.004, 1)}
 
 
 def parse_dc_status(data: bytes):
-    """PGN 127508 – Battery Status (Single Frame, 8 Byte)."""
+    """PGN 127508 – Battery Status (Single Frame, 8 Byte).
+
+    Layout laut SetN2kPGN127508 (N2kMessages.cpp):
+      0    uint8  Batterie-Instanz
+      1-2  uint16 Spannung x 0,01 V   N/A = 0xFFFF
+      3-4  int16  Strom x 0,1 A       N/A = 0x7FFF (NICHT 0x8000)
+      5-6  uint16 Temperatur x 0,01 K
+      7    uint8  SID
+    """
     if len(data) < 5:
         return None
     instance = data[0]
     v_raw    = struct.unpack_from('<H', data, 1)[0]
     i_raw    = struct.unpack_from('<h', data, 3)[0]
+    voltage  = round(v_raw * 0.01, 2) if _uint16_ok(v_raw) else None
+    current  = round(i_raw * 0.1,  1) if _int16_ok(i_raw)  else None
     return {
         'instance': instance,
-        'voltage':  round(v_raw * 0.01, 2) if v_raw != 0xFFFF  else None,
-        'current':  round(i_raw * 0.1,  1) if i_raw != -32768  else None,
+        'voltage':  _plausible(voltage, 'voltage'),
+        'current':  _plausible(current, 'current'),
     }
 
 
@@ -231,15 +355,27 @@ def parse_dc_detailed(data: bytes):
 
 
 def parse_temperature(data: bytes):
-    """PGN 130312 – Temperature (Single Frame, 8 Byte). Gibt Temperatur in °C zurück."""
+    """PGN 130312 – Temperature (Single Frame, 8 Byte). Gibt Temperatur in °C zurück.
+
+    Layout laut SetN2kPGN130312 (N2kMessages.cpp):
+      0    uint8  SID
+      1    uint8  Temperatur-Instanz
+      2    uint8  Quelle (tN2kTempSource)
+      3-4  uint16 Ist-Temperatur x 0,01 K   N/A = 0xFFFF
+      5-6  uint16 Soll-Temperatur x 0,01 K
+      7    uint8  reserviert
+    Die Instanz steht in Byte 1, nicht in Byte 0 – Byte 0 ist die SID.
+    """
     if len(data) < 5:
         return None
-    source  = data[1]
-    t_raw   = struct.unpack_from('<H', data, 2)[0]
-    if t_raw == 0xFFFF:
+    source  = data[2]
+    t_raw   = struct.unpack_from('<H', data, 3)[0]
+    if not _uint16_ok(t_raw):
         return None
-    temp_c = round(t_raw * 0.01 - 273.15, 1)
-    return {'instance': data[0], 'source': source, 'temperature_c': temp_c}
+    temp_c = _plausible(round(t_raw * 0.01 - 273.15, 1), 'temperature')
+    if temp_c is None:
+        return None
+    return {'instance': data[1], 'source': source, 'temperature_c': temp_c}
 
 
 def parse_brightness(data: bytes):
@@ -452,30 +588,53 @@ def parse_ve_direct_ext(data: bytes):
 
 
 def parse_inverter_status(data: bytes):
-    """PGN 127750 – Converter/Inverter Status (Single Frame)."""
-    if len(data) < 4:
-        return None
-    # Byte 3 bits 0-3: operating state per NMEA2K N2kCI_OperatingState
-    state_nibble = data[3] & 0x0F
-    STATES = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 3: 'Aktiv', 9: 'Aktiv'}
-    return {'state': STATES.get(state_nibble, f'State {state_nibble}')}
+    """PGN 127750 – Converter/Inverter Status (Single Frame).
 
-
-def parse_charger_status_pgn(data: bytes):
-    """PGN 127507 – Charger Status (Single Frame).
-    Byte 0: device_instance (bits 0-3) | battery_instance (bits 4-7).
+    Layout laut SetN2kPGN127750 (N2kMessages.cpp):
+      0  uint8 SID
+      1  uint8 ConnectionNumber (= deviceInstance des Gateways)
+      2  uint8 OperatingState (tN2kConvMode)  <- hier steht der Zustand
+      3  uint8 RippleState<<6 | LowDcVoltage<<4 | Overload<<2 | TemperatureState
+      4-7 uint32 reserviert (0xFFFFFFFF)
+    Byte 3 ist das Sammel-Statusfeld, NICHT der Betriebszustand; das Gateway
+    füllt es mit lauter „nicht verfügbar" (0xFF). Der Zustand ist ein ganzes
+    Byte, deshalb kein Nibble-Maskieren – 0xFF (NotAvailable) heißt: nichts
+    melden, sonst würde ein gültiger Zustand überschrieben.
     """
     if len(data) < 4:
         return None
-    inst = data[0] & 0x0F          # bits 0-3: device instance
-    batt = (data[0] >> 4) & 0x0F   # bits 4-7: battery instance
-    mode = data[1] & 0x0F          # byte 1 bits 0-3: operating state
-    MODES = {
-        0: 'Unbekannt', 1: 'Aus', 2: 'Bulk', 3: 'Absorption',
-        4: 'Überladen', 5: 'Equalise', 6: 'Float', 7: 'Kein Float',
-        8: 'Const VI', 9: 'Deaktiviert', 0xF: 'Fehler',
+    state_raw = data[2]
+    if state_raw == 0xFF:          # N2kCICS_NotAvailable
+        return None
+    # tN2kConvMode: 0=Off, 1=Low Power (Victron ECO), 2=Fault, 9=Inverting
+    STATES = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 9: 'Aktiv'}
+    return {'state': STATES.get(state_raw, f'State {state_raw}')}
+
+
+def parse_charger_status_pgn(data: bytes):
+    """PGN 127507 – Charger Status (Fast Packet, 6 Byte Nutzlast).
+
+    Layout laut SetN2kPGN127507 (N2kMessages.cpp):
+      0    uint8  Instanz (ganzes Byte)
+      1    uint8  Batterie-Instanz (ganzes Byte)
+      2    uint8  Lademodus (Bits 4-7) | Ladezustand (Bits 0-3)
+      3    uint8  reserviert | Ausgleich anstehend | Ein/Aus
+      4-5  uint16 Restzeit Ausgleichsladung
+    Instanz und Batterie-Instanz stecken NICHT gemeinsam in Byte 0, und der
+    Ladezustand steht in Byte 2, nicht in Byte 1.
+    """
+    if len(data) < 3:
+        return None
+    inst = data[0]
+    batt = data[1]
+    state_raw = data[2] & 0x0F     # tN2kChargeState
+    STATES = {
+        0: 'Aus', 1: 'Bulk', 2: 'Absorption', 3: 'Überladen',
+        4: 'Equalise', 5: 'Float', 6: 'Kein Float', 7: 'Const VI',
+        8: 'Deaktiviert', 9: 'Fehler', 14: 'Fehler', 15: 'Unbekannt',
     }
-    return {'instance': inst, 'battery': batt, 'state': MODES.get(mode, f'Mode {mode}')}
+    return {'instance': inst, 'battery': batt,
+            'state': STATES.get(state_raw, f'Mode {state_raw}')}
 
 
 def parse_product_info(data: bytes) -> dict | None:
@@ -517,23 +676,25 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
         fluid_types = {0:'Kraftstoff',1:'Frischwasser',2:'Grauwasser',3:'Livewell',4:'Öl',5:'Schwarzwasser',6:'Motorraum'}
         inst      = payload[0] & 0x0F
         ftype     = payload[0] >> 4
-        lvl_raw   = struct.unpack_from('<H', payload, 1)[0]
+        lvl_raw   = struct.unpack_from('<h', payload, 1)[0]   # int16, N/A = 0x7FFF
         cap_raw   = struct.unpack_from('<I', payload, 3)[0] if len(payload) >= 7 else 0xFFFFFFFF
         return [
             fv('Instanz', inst),
             fv('Fluid-Typ', f"{fluid_types.get(ftype, f'Typ {ftype}')} (0x{ftype:X})"),
-            fv('Füllstand', f'{lvl_raw * 0.004:.1f} %' if lvl_raw != 0xFFFF else NA),
-            fv('Kapazität', f'{cap_raw * 0.1:.0f} L' if cap_raw != 0xFFFFFFFF else NA),
+            fv('Füllstand', f'{lvl_raw * 0.004:.1f} %' if _int16_ok(lvl_raw) else NA),
+            fv('Kapazität', f'{cap_raw * 0.1:.0f} L' if _uint32_ok(cap_raw) else NA),
         ]
 
     elif pgn == 127506:
         if len(payload) < 3: return []
         dc_types = {0:'Batteriebank',1:'Lichtmaschine',2:'Wandler',3:'Solar',4:'Solar',6:'Wind'}
-        soc_raw = struct.unpack_from('<H', payload, 3)[0] if len(payload) >= 5 else 0xFFFF
+        # Byte 3 ist der Ladezustand als EIN Byte in Prozent (N/A = 0xFF),
+        # kein 2-Byte-Wert mit 0,004er Auflösung – Byte 4 ist die Zellgesundheit.
+        soc_raw = payload[3] if len(payload) >= 4 else N2K_UINT8_NA
         return [
             fv('Instanz', payload[1]),
             fv('DC-Typ', dc_types.get(payload[2] & 0x0F, f'Typ {payload[2] & 0x0F}')),
-            fv('SOC', f'{soc_raw * 0.004:.1f} %' if soc_raw != 0xFFFF else NA),
+            fv('SOC', f'{soc_raw} %' if soc_raw != N2K_UINT8_NA else NA),
         ]
 
     elif pgn == 127507:
@@ -557,8 +718,11 @@ def parse_pgn_fields(pgn: int, payload: bytes) -> list[dict]:
     elif pgn == 130312:
         p = parse_temperature(payload)
         if not p: return []
-        src_map = {0:'Seewasser',1:'Außenluft',2:'Innenluft',3:'Motorraum',4:'Kühlwasser',
-                   5:'Getriebeöl',6:'Motoröl',7:'Batterieraum',14:'Benutzerdefiniert'}
+        # tN2kTempSource (N2kTypes.h) – die alte Liste war ab Index 4 falsch.
+        src_map = {0:'Seewasser',1:'Außenluft',2:'Innenluft',3:'Motorraum',4:'Hauptkabine',
+                   5:'Livewell',6:'Köderbehälter',7:'Kühlung',8:'Heizung',9:'Taupunkt',
+                   10:'Windchill (scheinbar)',11:'Windchill (theoretisch)',12:'Hitzeindex',
+                   13:'Gefrierfach',14:'Abgas',15:'Wellendichtung'}
         return [fv('Instanz', p['instance']),
                 fv('Quelle', src_map.get(p['source'], f"Quelle {p['source']}")),
                 fv('Temperatur', f"{p['temperature_c']} °C")]

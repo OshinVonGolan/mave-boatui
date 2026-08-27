@@ -37,9 +37,39 @@ function _updateTopbarChip(data) {
   }
 }
 
+// Eine einzelne Messlücke (v: null) darf die Grafik nicht kippen: null wird in
+// JavaScript zu 0 gerechnet, Math.min/Math.max lieferten dadurch eine unsinnige
+// Skala und der Kurvenzug verschwand. Deshalb bleiben nur endliche Werte übrig;
+// ihre Position auf der Zeitachse (Index im Originalfeld) bleibt erhalten,
+// sodass Lücken übersprungen und nicht zusammengeschoben werden.
+function _wlNum(v) {
+  if (v == null || v === '') return NaN;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+function _wlPoints(measurements) {
+  if (!Array.isArray(measurements) || !measurements.length) return [];
+  const span = Math.max(1, measurements.length - 1);
+  const pts  = [];
+  measurements.forEach((m, i) => {
+    const v = _wlNum(m?.v);
+    if (Number.isFinite(v)) pts.push({ f: i / span, v });   // f = 0…1 auf der Zeitachse
+  });
+  return pts;
+}
+
+function _wlRange(pts) {
+  let min = Infinity, max = -Infinity;
+  for (const p of pts) { if (p.v < min) min = p.v; if (p.v > max) max = p.v; }
+  return { min, max };
+}
+
 function _renderWlChart(measurements) {
   const canvas = $('wlCanvas');
-  if (!canvas || !measurements || !measurements.length) return;
+  if (!canvas) return;
+  const pts = _wlPoints(measurements);
+  if (pts.length < 2) return;
   const dpr = window.devicePixelRatio || 1;
   const W   = canvas.offsetWidth  || 600;
   const H   = canvas.offsetHeight || 180;
@@ -47,15 +77,16 @@ function _renderWlChart(measurements) {
   canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
 
-  const vals = measurements.map(m => m.v);
-  const min  = Math.min(...vals) - 5;
-  const max  = Math.max(...vals) + 5;
+  const span = _wlRange(pts);
+  const min  = span.min - 5;
+  const max  = span.max + 5;
   const pad  = { t: 10, r: 10, b: 24, l: 44 };
   const cW   = W - pad.l - pad.r;
   const cH   = H - pad.t - pad.b;
 
-  const xOf = i => pad.l + (i / (measurements.length - 1)) * cW;
+  const xOf = f => pad.l + f * cW;
   const yOf = v => pad.t + (1 - (v - min) / (max - min)) * cH;
 
   // grid lines
@@ -76,11 +107,11 @@ function _renderWlChart(measurements) {
   grad.addColorStop(0, 'rgba(59,130,246,0.3)');
   grad.addColorStop(1, 'rgba(59,130,246,0.02)');
   ctx.beginPath();
-  measurements.forEach((m, i) => {
-    i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v));
+  pts.forEach((p, i) => {
+    i === 0 ? ctx.moveTo(xOf(p.f), yOf(p.v)) : ctx.lineTo(xOf(p.f), yOf(p.v));
   });
-  ctx.lineTo(xOf(measurements.length - 1), pad.t + cH);
-  ctx.lineTo(xOf(0), pad.t + cH);
+  ctx.lineTo(xOf(pts[pts.length - 1].f), pad.t + cH);
+  ctx.lineTo(xOf(pts[0].f), pad.t + cH);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
@@ -90,8 +121,8 @@ function _renderWlChart(measurements) {
   ctx.strokeStyle = '#3b82f6';
   ctx.lineWidth   = 2;
   ctx.lineJoin    = 'round';
-  measurements.forEach((m, i) => {
-    i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v));
+  pts.forEach((p, i) => {
+    i === 0 ? ctx.moveTo(xOf(p.f), yOf(p.v)) : ctx.lineTo(xOf(p.f), yOf(p.v));
   });
   ctx.stroke();
 
@@ -100,10 +131,12 @@ function _renderWlChart(measurements) {
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
   const step = Math.max(1, Math.floor(measurements.length / 6));
+  const zeitSpanne = Math.max(1, measurements.length - 1);
   for (let i = 0; i < measurements.length; i += step) {
-    const dt  = new Date(measurements[i].ts);
+    const dt = new Date(measurements[i]?.ts);
+    if (isNaN(dt.getTime())) continue;
     const lbl = dt.getHours().toString().padStart(2, '0') + ':' + dt.getMinutes().toString().padStart(2, '0');
-    ctx.fillText(lbl, xOf(i), H - 6);
+    ctx.fillText(lbl, xOf(i / zeitSpanne), H - 6);
   }
 }
 
@@ -164,7 +197,9 @@ function _updateWlTile(data) {
 // Mini-Verlaufsgrafik in der Home-Kachel (füllt das Quadrat, ohne Achsen).
 function _renderWlSpark(measurements) {
   const canvas = $('wlTileSpark');
-  if (!canvas || !measurements || measurements.length < 2) return;
+  if (!canvas) return;
+  const pts = _wlPoints(measurements);
+  if (pts.length < 2) return;
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth, H = canvas.offsetHeight;
   if (!W || !H) return;
@@ -173,24 +208,23 @@ function _renderWlSpark(measurements) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
-  const vals = measurements.map(m => m.v);
-  const min = Math.min(...vals), max = Math.max(...vals);
+  const { min, max } = _wlRange(pts);
   const rng = (max - min) || 1;
   const pad = 6;
-  const xOf = i => (i / (measurements.length - 1)) * W;
+  const xOf = f => f * W;
   const yOf = v => pad + (1 - (v - min) / rng) * (H - 2 * pad);
 
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, 'rgba(59,130,246,0.30)');
   grad.addColorStop(1, 'rgba(59,130,246,0.00)');
   ctx.beginPath();
-  measurements.forEach((m, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v)));
-  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(xOf(p.f), yOf(p.v)) : ctx.lineTo(xOf(p.f), yOf(p.v)));
+  ctx.lineTo(xOf(pts[pts.length - 1].f), H); ctx.lineTo(xOf(pts[0].f), H); ctx.closePath();
   ctx.fillStyle = grad; ctx.fill();
 
   ctx.beginPath();
   ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-  measurements.forEach((m, i) => i === 0 ? ctx.moveTo(xOf(i), yOf(m.v)) : ctx.lineTo(xOf(i), yOf(m.v)));
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(xOf(p.f), yOf(p.v)) : ctx.lineTo(xOf(p.f), yOf(p.v)));
   ctx.stroke();
 }
 
@@ -207,6 +241,11 @@ function fetchWaterLevel() {
 }
 
 function openWaterLevel() {
+  // Gleiches Muster wie alle anderen Overlays: erst aufräumen, dann einen
+  // History-Eintrag setzen. Ohne den Eintrag verließ die Zurück-Geste die App,
+  // statt nur dieses Overlay zu schließen.
+  _closeAllOverlays();
+  history.pushState({ overlay: 'waterlevel' }, '', '#waterlevel');
   $('wlOverlay').classList.remove('hidden');
   _updateWlOverlay(_wlData);
   if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); _updateTopbarChip(d); } });
@@ -214,4 +253,5 @@ function openWaterLevel() {
 
 function closeWaterLevel() {
   $('wlOverlay').classList.add('hidden');
+  history.replaceState(null, '', location.pathname);
 }

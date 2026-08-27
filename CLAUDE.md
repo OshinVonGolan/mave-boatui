@@ -4,7 +4,7 @@
 
 Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten über NMEA 2000 (CAN-Bus) ein, zeigt sie in einer mobilen Web-App an und erlaubt Steuerung von Inverter und Licht. Daten kommen von zwei Teensy-Mikrocontrollern die als NMEA 2000 Knoten am Bus hängen.
 
-**URL im Netz:** `http://mave.local` (Pi im WLAN)  
+**URL im Netz:** `http://mave-control.local:8080` (Pi im WLAN, Hostname `mave-control`)  
 **Start:** systemd-Service `boatui.service`
 
 ---
@@ -14,7 +14,7 @@ Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten �
 ### 1. Version bumpen bei jedem Commit der die App verändert
 ```python
 # main.py Zeile ~45
-VERSION = _git_semver() or '1.16.64'   # ← hochzählen: 1.16.64 → 1.16.65
+VERSION = _git_semver() or '1.21.0'   # ← hochzählen: 1.21.0 → 1.21.1
 ```
 Commit-Message-Format (für Changelog):
 ```
@@ -30,7 +30,46 @@ git push
 ```
 Der Pi nutzt den **Aktualisieren**-Button im UI um `git pull` von GitHub zu machen. Ohne Push findet der Pi den neuen Commit nicht. **Immer direkt nach `git commit` auch `git push` ausführen.**
 
-### 3. PROTOCOL.md bei neuen PGNs aktualisieren
+### 3. Zwei Fallen, die schon einmal teuer waren
+
+**Nichts Blockierendes in async-Handler.** Der Pi Zero W hat einen Kern und einen
+uvicorn-Worker. `/api/history` gab früher 10.800 Einträge über den `jsonable_encoder`
+zurück — am Gerät gemessen 11,1 s, in denen der komplette Server stand (auch
+`/api/status` brauchte dann 8,2 s statt 0,1 s). Alles, was rechnet, Dateien liest
+oder `subprocess` startet, gehört in `run_in_executor`.
+
+**Der Pi hat keine Echtzeituhr.** Nach Stromausfall läuft seine Uhr falsch, bis NTP
+greift. Zeitfenster im Frontend deshalb NIE gegen `Date.now()` filtern, sondern
+gegen `nowTs()` aus `charts.js` — der Offset kommt aus `server_now` in der Antwort
+von `/api/history`.
+
+### 4. Was existiert, sagt der laufende Bus — nicht der Quellordner
+
+`GET /api/network` listet jede PGN und jedes Gerät, das der Pi wirklich gesehen hat. **Das
+ist die Wahrheit.** Stand 27.08.2026 hängen genau vier Geräte am Bus:
+
+| src | Gerätename | Firmware-Projekt | sendet |
+|-----|-----------|------------------|--------|
+| 0 | VE.Direct NMEA2K GW | `VE.Direct - NMEA2K Gateway` | 127507, 127750, 130910, 130912, 130913 |
+| 1 | VE.Direct Bridge | `Battery Bord` | 127508, 130900, 130901, 130902 |
+| 22 | Arduino N2k->PC | `Mave Boat Net Monitor` | 127505 (Tanks), 126720 (Licht) |
+| 4 | (namenlos) | unbekannt | nur PGN 0, 5 Frames |
+
+**Nicht am Bus: 127506 und 130312.** Parser dafür existieren, laufen aber leer.
+
+**Das ist KEIN Grund zum Aufräumen.** Es gibt Vorbereitungen für Hardware, die noch nicht
+verbaut ist — PGN 127506, PGN 130312, `alternator`, `solar2`, `solar3`, `wind`. Die Pfade
+bleiben stehen, sie kosten nichts (fehlt die Quelle, liefert `.get()` None) und werden
+gebraucht, sobald die Geräte dran sind. `/api/network` sagt, was **existiert** — es ist
+kein Argument fürs Löschen.
+
+In `~/Dokumente/PlatformIO/Projects/` liegen weitere Projekte (`Performance Meter`,
+`baltic500-logger`, `Vivis-Wundersamer-Wecker`), die mit diesem Boot **nichts zu tun haben**.
+Ein Projekt im selben Ordner ist kein Beleg dafür, dass das Gerät am Bus hängt — dieser
+Trugschluss hat schon einmal zu einem erfundenen Befund geführt. Erst `/api/network` fragen,
+dann analysieren.
+
+### 5. PROTOCOL.md bei neuen PGNs aktualisieren
 Bei jeder Änderung am Kommunikationsprotokoll (neues PGN, neuer commandType, neue Register, geändertes Payload-Layout):
 - Neue PGN-Sektion in `PROTOCOL.md` anlegen (Format, Payload-Tabelle, Beispiele)
 - PGN-Übersichtstabelle am Ende ergänzen
@@ -94,6 +133,9 @@ Raspberry Pi
 | `alarm_engine.py` | Alarmregeln prüfen, aktive Alarme verwalten, `alarms.json` lesen/schreiben |
 | `connectivity.py` | Internetverbindung und Mobilfunk überwachen (ConnectivityMonitor) |
 | `monday.py` | Monday.com API-Integration (Wartungsboard) |
+| `jsonio.py` | `read_json` (wirft nie) und `write_json` (atomar: tmp + fsync + replace) — alle JSON-Dateien laufen darüber |
+| `history_store.py` | Verlauf als NDJSON auf der Platte, gepuffert im eigenen Thread geschrieben, beim Start zurückgeladen |
+| `static/js/icons.js` | SVG-Icon-System: `icon(name, {size})` und `weatherIcon(code)` — **keine Emojis im UI** |
 
 ### Konfiguration / Daten
 

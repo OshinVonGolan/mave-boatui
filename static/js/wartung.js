@@ -132,8 +132,11 @@ function updateWartungHomeTile() {
       <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span>
       Alle Wartungen aktuell
     </div>`;
+    if (typeof setStatusWartung === 'function') setStatusWartung(0, 0);
     return;
   }
+
+  if (typeof setStatusWartung === 'function') setStatusWartung(overdue, pending.length);
 
   let html = '<div class="w-home-badge">';
   if (overdue > 0) html += `<span class="w-badge-pill" style="background:#ef44441a;color:#ef4444">${overdue} überfällig</span>`;

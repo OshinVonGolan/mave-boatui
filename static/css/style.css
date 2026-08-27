@@ -178,6 +178,66 @@
     @media (min-width: 1600px) { main { max-width: 1660px; } }
     #wartungHomeBody { overflow: hidden; }
 
+    /* ── Statusleiste ─────────────────────────────────────────────────────
+       Alle Kernwerte in einer dichten Zeile ueber den Kacheln. Jedes Feld
+       fuehrt per Tap in die zugehoerige Detailansicht. Steht bewusst
+       AUSSERHALB des Kachel-Grids: main setzt grid-auto-rows per JS auf
+       Kachelhoehe, das wuerde die Leiste sonst auf Kachelgroesse aufblasen. */
+    .statusbar {
+      margin: calc(var(--header-h) + var(--gap)) var(--gap) 0;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      gap: 1px;                                  /* 1px Spalt = Haarlinie */
+      background: var(--border);                 /* scheint durch den Spalt */
+      border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    main { padding-top: var(--gap); }            /* Header-Abstand traegt jetzt die Leiste */
+
+    .sb-item {
+      background: var(--surface); border: 0; margin: 0;
+      padding: 10px 12px 11px; min-width: 0;
+      display: flex; flex-direction: column; gap: 2px;
+      font-family: inherit; color: inherit; text-align: left;
+      cursor: pointer; transition: background .15s;
+    }
+    .sb-item:hover, .sb-item:active { background: var(--surface2); }
+    .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .sb-lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sb-val { display: flex; align-items: baseline; gap: 3px; line-height: 1.1;
+      color: var(--text); font-variant-numeric: tabular-nums; }
+    .sb-val b { font-size: 21px; font-weight: 700; }
+    .sb-val i { font-size: 11px; font-style: normal; font-weight: 600; color: var(--text2); }
+    .sb-sub { font-size: 11px; color: var(--text3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Zustandsfarben: nur der Zahlenwert faerbt sich, nie die ganze Flaeche */
+    .sb-item.sb-ok   .sb-val b { color: var(--green); }
+    .sb-item.sb-low  .sb-val b { color: var(--yellow); }
+    .sb-item.sb-warn .sb-val b { color: var(--red); }
+    .sb-item.sb-idle .sb-val b { color: var(--text2); }
+    .sb-item.sb-stale .sb-val b,
+    .sb-item.sb-stale .sb-sub { opacity: .45; }  /* Wert veraltet, Sensor stumm */
+
+    @media (max-width: 640px) {
+      .statusbar { grid-template-columns: repeat(3, 1fr); }
+      .sb-item { padding: 9px 10px 10px; }
+      .sb-val b { font-size: 18px; }
+    }
+    /* Breite Schirme: Leiste exakt so breit wie das Kachelraster darunter */
+    @media (min-width: 1024px) {
+      .statusbar { max-width: calc(1240px - 2 * var(--gap)); margin-left: auto; margin-right: auto; }
+    }
+    @media (min-width: 1600px) {
+      .statusbar { max-width: calc(1660px - 2 * var(--gap)); }
+    }
+    /* Kiosk: kein Header, dafuer Sidebar links — Leiste zieht mit */
+    .kiosk-mode .statusbar {
+      margin-top: calc(var(--gap) + var(--kiosk-handle-h));
+      margin-left: calc(var(--kiosk-side-w) + var(--gap));
+    }
+    .kiosk-mode main { padding-top: var(--gap); }
+
     /* Innenaufbau: Titel immer oben, Inhalt füllt den Rest der Kachel.
        Bei wide wird .tile-content zur Zeile: links normal, rechts Extra. */
     .tile-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }

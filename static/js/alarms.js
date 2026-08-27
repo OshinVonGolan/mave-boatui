@@ -176,7 +176,7 @@ function renderAlarms(list) {
   const el = $('alarmList');
   const visible = list.filter(a => !a._deleted);
   if (!visible.length) {
-    el.innerHTML = '<div class="alarm-empty">Keine Alarme ✓</div>';
+    el.innerHTML = `<div class="alarm-empty">Keine Alarme ${icon('check', { size: 14 })}</div>`;
     $('ackAllBtn').style.display = 'none';
     return;
   }
@@ -186,7 +186,7 @@ function renderAlarms(list) {
   el.innerHTML = visible.map(a => {
     const cls = [a.severity, a.acknowledged ? 'acknowledged' : '', a.resolved ? 'resolved' : ''].filter(Boolean).join(' ');
     const opLabel = a.op === '<' ? 'unter' : 'über';
-    const resolvedBadge = a.resolved ? '<div class="alarm-resolved-badge">✓ Behoben</div>' : '';
+    const resolvedBadge = a.resolved ? `<div class="alarm-resolved-badge">${icon('check', { size: 13 })} Behoben</div>` : '';
     const ackBtn = !a.acknowledged && !a.resolved
       ? `<button class="alarm-ack-btn" onclick="ackAlarm('${a.id}')">Bestätigen</button>` : '';
     return `<div class="alarm-card ${cls}" id="alarm-${a.id}">
@@ -218,7 +218,7 @@ async function deleteAlarm(id) {
   const card = $(`alarm-${id}`);
   if (card) card.remove();
   if (!$('alarmList').querySelector('.alarm-card')) {
-    $('alarmList').innerHTML = '<div class="alarm-empty">Keine Alarme ✓</div>';
+    $('alarmList').innerHTML = `<div class="alarm-empty">Keine Alarme ${icon('check', { size: 14 })}</div>`;
   }
 }
 
@@ -432,6 +432,10 @@ function initDualRange(key, r) {
 
 function toggleRuleSeverity(key) {
   if (!_rulesCache[key]) return;
+  // renderRules() baut die Liste komplett neu auf. Ohne dieses Übernehmen gingen
+  // bereits eingetippte Grenzwerte und verschobene Bereichsregler verloren —
+  // switchRuleCat() macht es an dieser Stelle genauso.
+  _commitVisibleRules();
   _rulesCache[key].severity = _rulesCache[key].severity === 'critical' ? 'warning' : 'critical';
   renderRules(_rulesCache);
 }
@@ -453,14 +457,12 @@ async function saveRules() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).then(r => r.json());
+    }).then(_jsonOrThrow);
     _rulesCache = data;
-    fb.className = 'settings-feedback show';
-    fb.textContent = 'Gespeichert ✓';
-    setTimeout(() => fb.classList.remove('show'), 2500);
-  } catch(_) {
-    fb.className = 'settings-feedback error show';
-    fb.textContent = 'Fehler beim Speichern';
+    renderRules(_rulesCache);
+    _fbOk(fb);
+  } catch(e) {
+    _fbError(fb, e.message);
   }
 }
 
