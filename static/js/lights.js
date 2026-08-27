@@ -142,7 +142,8 @@ function renderPresets() {
   presets.forEach((p, i) => {
     const btn = document.createElement('button');
     btn.className = 'preset-btn' + (p.values==null?' disabled':'') + (activePreset===i?' active':'');
-    btn.innerHTML = `<span class="preset-emoji">${presetIcon(p)}</span><span class="preset-name">${p.name}</span>`;
+    // Preset-Namen sind frei eingebbar (Lichter-Detail) und landen im innerHTML.
+    btn.innerHTML = `<span class="preset-emoji">${presetIcon(p)}</span><span class="preset-name">${_esc(p.name)}</span>`;
     if (p.values != null) btn.addEventListener('click', e => { e.stopPropagation(); applyPreset(i); });
     grid.appendChild(btn);
   });

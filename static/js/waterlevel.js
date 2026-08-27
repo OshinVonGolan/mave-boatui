@@ -246,9 +246,18 @@ function openWaterLevel() {
   // statt nur dieses Overlay zu schließen.
   _closeAllOverlays();
   history.pushState({ overlay: 'waterlevel' }, '', '#waterlevel');
+  _wlOverlayAnzeigen();
+}
+
+// Overlay sichtbar machen und fuellen — ohne History anzufassen. Wird auch von
+// der Zurueck-/Vorwaerts-Geste benutzt (popstate-Karte in lightdetail.js), die
+// den History-Eintrag schon hat. Liegen noch keine Daten vor (erster Abruf
+// fehlgeschlagen, naechster Poll erst in bis zu 10 min), wird einmal
+// nachgeholt, sonst bliebe die Ansicht leer.
+function _wlOverlayAnzeigen() {
   $('wlOverlay').classList.remove('hidden');
   _updateWlOverlay(_wlData);
-  if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); _updateTopbarChip(d); } });
+  if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); _updateTopbarChip(d); } }).catch(() => {});
 }
 
 function closeWaterLevel() {

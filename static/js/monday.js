@@ -239,8 +239,19 @@ function renderMondayBoard(data) {
   body.innerHTML = html || `<div class="monday-empty">${fq ? 'Keine Treffer' : 'Keine Aufgaben'}</div>`;
 }
 
+// ACHTUNG: _esc() gibt es auch in core.js. Alle Dateien werden zu EINEM Skript
+// zusammengefasst (main.py, _JS_FILES) — monday.js steht dort hinter core.js,
+// diese Fassung gewinnt also fuer die ganze App. Sie muss deshalb Zeichen fuer
+// Zeichen dasselbe tun wie die in core.js: auch ' escapen (sonst bricht ein
+// Apostroph aus einem Attribut aus) und null/undefined zu '' machen statt zu
+// den Woertern "null"/"undefined".
 function _esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Wert als JS-Literal in ein inline-Attribut (onclick, onmouseenter …) setzen.

@@ -211,7 +211,10 @@ function _renderBattWideChart() {
   const src = (typeof histData !== 'undefined') ? histData : [];
   const t1  = nowTs();
   const t0  = t1 - WIDE_FENSTER_S;
-  const pts = src.filter(d => d.ts >= t0 && d.ts <= t1 && d.soc != null);
+  // Nur echte Zahlen: ein NaN-SOC wuerde als Luecke durch die Linie laufen und
+  // Min/Max unbrauchbar machen — `!= null` allein faengt NaN nicht ab.
+  const pts = src.filter(d => d.ts >= t0 && d.ts <= t1 &&
+                              typeof d.soc === 'number' && isFinite(d.soc));
   const dpr = window.devicePixelRatio || 1;
   canvas.width = W * dpr; canvas.height = H * dpr;
   const ctx = canvas.getContext('2d');
@@ -224,9 +227,15 @@ function _renderBattWideChart() {
   }
   _setWideHeader(pts[pts.length - 1].ts - pts[0].ts);
 
-  const socs = pts.map(p => p.soc);
-  let lo = Math.min(...socs);
-  let hi = Math.max(...socs);
+  // Min/Max als Schleife statt Math.min(...socs): der Spread schiebt jeden Punkt
+  // als eigenes Argument auf den Stack und legt ihn bei langen Verlaeufen um
+  // (RangeError, die Kachel bliebe leer) — sechs Stunden sind mehrere tausend
+  // Punkte.
+  let lo = pts[0].soc, hi = pts[0].soc;
+  for (const p of pts) {
+    if (p.soc < lo) lo = p.soc;
+    if (p.soc > hi) hi = p.soc;
+  }
   setT('battWideMin', Math.round(lo));
   setT('battWideMax', Math.round(hi));
   if (hi - lo < 5) { const m = (hi + lo) / 2; lo = m - 2.5; hi = m + 2.5; }
@@ -718,17 +727,214 @@ function _tileStarter(b) {
   return _tile(icon('battery', {size:14}), 'Starterbatterie', '', body, 'ok');
 }
 
+// ── Energieringe ───────────────────────────────────────────────────────────
+// SOC als Scheibe in der Mitte, darum je ein Ring pro Energiequelle und ein
+// Ring fuer den Verbrauch. Alle Quellenringe teilen sich EINE Watt-Skala, damit
+// die Laengen untereinander vergleichbar sind — die Skala steht sichtbar dabei,
+// sonst waere ein voller Ring bedeutungslos.
+//
+// Bewusst getrennt vom Fluss-Schema (flow.js): das zeigt die Topologie
+// (was fliesst wohin), das hier zeigt die Verhaeltnisse auf einen Blick.
+
+const RING_QUELLEN = [
+  { key: 'charger', name: 'Landstrom', farbe: 'var(--accent)',
+    holen: d => d.charger?.power },
+  { key: 'solar',   name: 'Solar',     farbe: 'var(--yellow)',
+    holen: d => d.solar?.power },
+  { key: 'orion',   name: 'DC-DC',     farbe: '#a78bfa',
+    holen: d => d.orion?.power },
+  // Lichtmaschine: Vorbereitung, erscheint sobald das Geraet Daten liefert.
+  { key: 'alternator', name: 'Lichtmaschine', farbe: '#38bdf8',
+    holen: d => d.alternator?.power },
+];
+
+/** Ein Ring als SVG: gedaempfte Spur plus gefuellter Bogen. */
+function _ring(r, strich, farbe, anteil) {
+  const C = 2 * Math.PI * r;
+  const f = Math.max(0, Math.min(1, anteil ?? 0));
+  // Runde Enden zeichnen auch bei winzigen Anteilen noch einen Punkt. Erst ab
+  // einem sichtbaren Anteil ueberhaupt einen Bogen ausgeben, sonst behauptet
+  // eine Quelle mit 0 W optisch, sie liefere etwas.
+  const sichtbar = f >= 0.01;
+  return `<circle cx="110" cy="110" r="${r}" fill="none" stroke="var(--surface2)"
+            stroke-width="${strich}"/>
+          ${sichtbar ? `<circle cx="110" cy="110" r="${r}" fill="none" stroke="${farbe}"
+            stroke-width="${strich}" stroke-linecap="round"
+            stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}"
+            transform="rotate(-90 110 110)"
+            style="transition:stroke-dasharray .5s ease"/>` : ''}`;
+}
+
+/**
+ * Baut die Ringgrafik samt Legende.
+ * Rueckgabe: { svg, legende, skala } — der Aufrufer setzt sie ins Layout.
+ */
+function _bdRinge(data) {
+  const b = data.battery ?? {};
+  const soc = b.soc != null ? Math.round(b.soc) : null;
+  const socFarbe = soc == null ? 'var(--text3)'
+    : soc >= 50 ? 'var(--green)' : soc >= 20 ? 'var(--yellow)' : 'var(--red)';
+
+  // Quellen einsammeln; nur Geraete, die ueberhaupt einen Wert melden.
+  const quellen = RING_QUELLEN
+    .map(q => ({ ...q, watt: q.holen(data) }))
+    .filter(q => q.watt != null);
+
+  // Verbrauch = was reinkommt minus was in der Batterie landet. Der Inverter
+  // steckt darin — ihn zusaetzlich als eigenen Ring zu zeigen, wuerde ihn
+  // doppelt zaehlen.
+  const rein = quellen.reduce((s, q) => s + Math.max(0, q.watt), 0);
+  const verbrauch = b.power != null ? Math.max(0, rein - b.power) : null;
+
+  // Gemeinsame Skala, auf einen glatten Wert aufgerundet.
+  const groesster = Math.max(rein, verbrauch ?? 0, ...quellen.map(q => Math.abs(q.watt)));
+  const skala = groesster <= 0 ? 100
+    : [50, 100, 200, 500, 1000, 2000, 5000].find(s => s >= groesster * 1.15) ?? Math.ceil(groesster / 1000) * 1000;
+
+  // Ringe von innen nach aussen: erst die Quellen, ganz aussen der Verbrauch.
+  const bahnen = [...quellen];
+  if (verbrauch != null) {
+    bahnen.push({ key: 'last', name: 'Verbrauch', farbe: 'var(--orange)', watt: verbrauch });
+  }
+
+  const R_INNEN = 74, ABSTAND = 11, STRICH = 8;
+  const ringe = bahnen.map((q, i) =>
+    _ring(R_INNEN + i * ABSTAND, STRICH, q.farbe, Math.abs(q.watt) / skala)).join('');
+
+  const svg = `<svg class="bd-ring-svg" viewBox="0 0 220 220" role="img"
+      aria-label="Energieverteilung: ${bahnen.map(q => `${q.name} ${Math.round(q.watt)} Watt`).join(', ')}">
+    ${ringe}
+    <circle cx="110" cy="110" r="59" fill="none" stroke="var(--surface2)" stroke-width="14"/>
+    ${soc != null ? `<circle cx="110" cy="110" r="59" fill="none" stroke="${socFarbe}"
+        stroke-width="14" stroke-linecap="round"
+        stroke-dasharray="${(2 * Math.PI * 59 * soc / 100).toFixed(1)} ${(2 * Math.PI * 59).toFixed(1)}"
+        transform="rotate(-90 110 110)" style="transition:stroke-dasharray .5s ease"/>` : ''}
+    <text x="110" y="104" text-anchor="middle" class="bd-ring-num"
+          fill="${socFarbe}">${soc != null ? soc : '--'}</text>
+    <text x="110" y="128" text-anchor="middle" class="bd-ring-lbl">% SOC</text>
+  </svg>`;
+
+  const legende = bahnen.map(q => `<div class="bd-leg">
+      <span class="bd-leg-dot" style="background:${q.farbe}"></span>
+      <span class="bd-leg-name">${q.name}</span>
+      <span class="bd-leg-val">${Math.round(q.watt)}<small>W</small></span>
+    </div>`).join('');
+
+  return { svg, legende, skala };
+}
+
+
+/** Kennzahl der Servicebatterie-Karte. */
+function _sbStat(label, wert, einheit, farbe) {
+  const leer = '<span style="color:var(--text3)">--</span>';
+  return `<div class="st"><span class="st-l">${label}</span>
+    <span class="st-v"${farbe ? ` style="color:${farbe}"` : ''}>${
+      wert == null ? leer : wert + (einheit ? `<small>${einheit}</small>` : '')
+    }</span></div>`;
+}
+
+/**
+ * Servicebatterie als EINE Karte.
+ *
+ * Vorher war die Bank auf zwei Kacheln zerlegt — Shunt-Werte in der einen,
+ * BMS-Werte in der anderen — und die Zellen standen neben der Starterbatterie.
+ * Shunt und BMS messen aber DIESELBE Batterie; die Starterbatterie hat damit
+ * nichts zu tun. Deshalb hier alles zusammen, Starter separat.
+ */
+function _sbKarte(data) {
+  const b = data.battery ?? {}, bms = data.bms ?? {};
+  const { svg, legende, skala } = _bdRinge(data);
+
+  const zellDiff = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+    ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) : null;
+
+  const zellen = (bms.cells || []).map((z, i) => {
+    const nr = i + 1;
+    const kl = nr === bms.lowest_cell_nr ? 'lo' : nr === bms.highest_cell_nr ? 'hi' : '';
+    return `<div class="cell ${kl}"><div class="cell-nr">#${nr}</div>
+      <div class="cell-v">${z && z.voltage != null ? z.voltage.toFixed(3) : '--'}</div>
+      <div class="cell-t">${z && z.temp != null ? z.temp.toFixed(1) + ' °C' : ''}</div></div>`;
+  }).join('');
+
+  const flaggen = [
+    bms.allow_charge    === false ? '<span class="chip warn">Laden gesperrt</span>' : '',
+    bms.allow_discharge === false ? '<span class="chip warn">Entladen gesperrt</span>' : '',
+    bms.comm_error                ? '<span class="chip err">Kommunikationsfehler</span>' : '',
+  ].filter(Boolean).join('');
+
+  return `<div class="sb-card">
+    <div class="sb-hd">${icon('battery', {size: 14})} Servicebatterie
+      ${flaggen}
+      <span class="chip on">${bms.cell_count ?? (bms.cells || []).length} Zellen${
+        bms.capacity_ah != null ? ' · ' + bms.capacity_ah.toFixed(1) + ' Ah' : ''}</span>
+    </div>
+    <div class="sb-grid">
+      <div class="bd-ring-wrap">${svg}</div>
+      <div class="bd-leg-spalte">
+        <div class="bd-legende">${legende}</div>
+        <div class="bd-ring-skala">Ringe auf gemeinsamer<br>Skala bis ${skala} W</div>
+      </div>
+      <div class="sb-stats">
+        ${_sbStat('Spannung', b.voltage != null ? b.voltage.toFixed(2) : null, 'V')}
+        ${_sbStat('Strom', b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) : null,
+                  'A', b.current == null ? null : b.current > 0 ? 'var(--green)' : 'var(--orange)')}
+        ${_sbStat('Leistung', b.power != null ? (b.power > 0 ? '+' : '') + Math.round(b.power) : null,
+                  'W', b.power == null ? null : b.power > 0 ? 'var(--green)' : 'var(--orange)')}
+        ${_sbStat('Verbleibend', bms.remaining_kwh != null
+                  ? Math.round(bms.remaining_kwh * 1000).toLocaleString('de-DE') : null, 'Wh')}
+        ${_sbStat('Verbraucht', b.consumed_ah != null ? b.consumed_ah.toFixed(1) : null, 'Ah')}
+        ${_sbStat('Zelldiff.', zellDiff, 'mV', zellDiff != null && zellDiff > 50 ? 'var(--yellow)' : null)}
+        ${_sbStat('Temperatur', bms.lowest_temp != null && bms.highest_temp != null
+                  ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)}` : null, '°C')}
+        ${_sbStat('Zyklen', b.cycles)}
+        ${_sbStat('Voll vor', b.time_since_full != null ? timeSince(b.time_since_full) : null)}
+        ${_sbStat('BMS', bms.voltage != null ? bms.voltage.toFixed(2) : null, 'V')}
+      </div>
+    </div>
+    ${zellen ? `<div class="sb-cells">
+      <div class="sb-cells-hd">Zellen
+        <span class="chip">${bms.lowest_cell_v != null ? bms.lowest_cell_v.toFixed(3) : '--'} – ${
+          bms.highest_cell_v != null ? bms.highest_cell_v.toFixed(3) : '--'} V</span>
+      </div>
+      <div class="cellrow">${zellen}</div>
+    </div>` : ''}
+  </div>`;
+}
+
+/** Starterbatterie: eigene, kleine Karte — gehoert NICHT zur Bank. */
+function _starterKarte(b) {
+  if (!b || b.starter_voltage == null) return '';
+  const v = b.starter_voltage;
+  const farbe = v < 11.8 ? 'var(--red)' : v < 12.2 ? 'var(--yellow)' : null;
+  // Min kann durch einen Messausreisser knapp negativ werden — nicht als
+  // "-0.00 V" anzeigen, das liest sich wie ein Defekt.
+  const min = b.starter_min_voltage != null ? Math.max(0, b.starter_min_voltage) : null;
+  return `<div class="starter">
+    ${_sbStat('Starterbatterie', v.toFixed(2), 'V', farbe)}
+    ${_sbStat('Min', min != null ? min.toFixed(2) : null, 'V')}
+    ${_sbStat('Max', b.starter_max_voltage != null ? b.starter_max_voltage.toFixed(2) : null, 'V')}
+  </div>`;
+}
+
+/**
+ * Baut die Batterie-Detailseite.
+ * Reihenfolge: Servicebatterie -> Verlauf -> Geraete -> Starterbatterie.
+ * Die Geraetekacheln (_tileMppt & Co.) bleiben unveraendert in Gebrauch, sie
+ * stehen jetzt nur unter dem Verlauf statt ueber dem SOC.
+ */
 function renderDeviceTiles(data) {
   const sec = $('deviceTilesSection');
-  if (!sec) return;
-  const b   = data.battery ?? null;
-  const bms = data.bms     ?? null;
-  sec.innerHTML =
-    _tileBattBoard(b, bms) +
-    _tileBms(bms) +
-    _tileMppt(data.solar) +
-    _tileOrion(data.orion) +
-    _tileCharger(data.charger) +
-    _tileInverter(data.inverter) +
-    _tileStarter(b);
+  if (sec) sec.innerHTML = _sbKarte(data);
+
+  const geraete = document.getElementById('bdSources');
+  if (geraete) {
+    geraete.innerHTML =
+      _tileCharger(data.charger) +
+      _tileMppt(data.solar) +
+      _tileOrion(data.orion) +
+      _tileInverter(data.inverter);
+  }
+
+  const starter = document.getElementById('bdDiag');
+  if (starter) starter.innerHTML = _starterKarte(data.battery ?? null);
 }

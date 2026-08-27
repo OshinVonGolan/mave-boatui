@@ -555,7 +555,7 @@
   <div class="ov-body">
 
     <!-- ── Geräte-Kacheln (dynamisch via JS) ── -->
-    <div id="deviceTilesSection" class="dt-section"></div>
+    <div id="deviceTilesSection" class="dt-section" style="display:block;padding-bottom:0"></div>
 
     <!-- ── Graphen ── -->
     <!-- ── Verlauf-Graph (volle Breite) ── -->
@@ -581,6 +581,12 @@
         <canvas class="chart" id="chartMain" style="cursor:crosshair"></canvas>
       </div>
     </div><!-- bd-pg-charts-only -->
+
+    <!-- ── Geraete: Lader, Solar, DC-DC, Inverter — gleich hohe Kacheln ── -->
+    <div id="bdSources" class="dt-section" style="padding-top:0"></div>
+
+    <!-- ── Starterbatterie: eigene kleine Karte, gehoert NICHT zur Bank ── -->
+    <div id="bdDiag" style="padding:0 16px"></div>
 
     <!-- ── 7-Tage Trend + Lade-Quellen nebeneinander ── -->
     <div class="bd-bottom-row">

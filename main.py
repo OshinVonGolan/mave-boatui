@@ -3,6 +3,7 @@ import asyncio
 import functools
 import json
 import logging
+import math
 import os
 import re
 import signal
@@ -51,7 +52,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.21.0'
+VERSION  = _git_semver() or '1.22.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -63,9 +64,10 @@ def _parse_version_fallback(text: str) -> str:
     m = re.search(r"_git_semver\(\)\s*or\s*'([^']+)'", text)
     return m.group(1) if m else ''
 
-def _refresh_remote_version():
+def _refresh_remote_version() -> bool:
+    """Gleicht den Remote-Stand ab. Liefert True, wenn das geklappt hat."""
     try:
-        subprocess.run(['git', 'fetch', '--quiet'], cwd=Path(__file__).parent, timeout=30)
+        fetch = subprocess.run(['git', 'fetch', '--quiet'], cwd=Path(__file__).parent, timeout=30)
         h = subprocess.run(['git', 'rev-parse', '--short', '@{u}'],
                            cwd=Path(__file__).parent, capture_output=True, text=True, timeout=10)
         rhash = h.stdout.strip() if h.returncode == 0 else ''
@@ -74,13 +76,30 @@ def _refresh_remote_version():
         rver = _parse_version_fallback(show.stdout) if show.returncode == 0 else ''
         _remote_ver.update(ts=time.time(), version=rver, hash=rhash,
                            up_to_date=((rhash == GIT_HASH) if rhash else None))
+        return fetch.returncode == 0 and bool(rhash)
     except Exception as e:
         logging.getLogger(__name__).debug('Remote-Version-Check: %s', e)
+        return False
+
+# 30 Minuten statt 5: ein `git fetch` bedeutet auf dem Pi Zero Prozessstart,
+# Zugriff auf die SD-Karte, DNS und einen TLS-Handshake — auf ARMv6 ohne
+# Krypto-Beschleunigung teuer, und das auf dem einzigen Kern. Ohne Netz laeuft
+# jeder Versuch stur in seine Timeouts (bis zu 50 s), deshalb faellt die
+# Wartezeit bei Fehlschlag jeweils aufs Doppelte zurueck, hoechstens 2 Stunden.
+_VERSION_CHECK_INTERVAL = 1800   # Normalfall: alle 30 min
+_VERSION_CHECK_MAX      = 7200   # Rueckfall offline: hoechstens alle 2 h
 
 def _remote_version_loop():
+    wartezeit = _VERSION_CHECK_INTERVAL
     while True:
-        _refresh_remote_version()
-        time.sleep(300)
+        if _refresh_remote_version():
+            wartezeit = _VERSION_CHECK_INTERVAL
+        else:
+            wartezeit = min(wartezeit * 2, _VERSION_CHECK_MAX)
+            logging.getLogger(__name__).debug(
+                'Remote-Version nicht erreichbar — naechster Versuch in %d min',
+                wartezeit // 60)
+        time.sleep(wartezeit)
 
 
 async def _run_blocking(fn, *args, **kwargs):
@@ -449,6 +468,59 @@ async def ws_endpoint(ws: WebSocket):
             log.info("WebSocket getrennt (%d aktiv)", len(ws_clients))
 
 
+# ── Pruefung von Request-Bodys ───────────────────────────────────────────────
+# Die Endpunkte nehmen rohe dicts entgegen und griffen frueher ungeprueft zu:
+# `len(values)` auf einer Zahl, `int(v)` auf 'abc' — beides endete als HTTP 500
+# ("Interner Fehler"), obwohl schlicht der Body falsch war. Diese Helfer machen
+# daraus eine 400 mit einer Meldung, die sagt, was erwartet wird.
+
+def _zahl(wert, lo: float, hi: float, name: str) -> float:
+    """Prueft einen Zahlenwert aus dem Body und gibt ihn zurueck.
+
+    true/false sind in Python zwar ints, aber hier nie gemeint. NaN und
+    Unendlich muessen ebenfalls raus: json.loads laesst beide als Literal durch.
+    """
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)) or not math.isfinite(wert):
+        raise HTTPException(400, detail=f'{name}: Zahl erwartet, '
+                                        f'{type(wert).__name__} bekommen')
+    if not (lo <= wert <= hi):
+        raise HTTPException(400, detail=f'{name}: {wert} liegt ausserhalb von {lo} bis {hi}')
+    return wert
+
+
+def _text(wert, max_laenge: int, name: str) -> str:
+    if not isinstance(wert, str):
+        raise HTTPException(400, detail=f'{name}: Text erwartet, '
+                                        f'{type(wert).__name__} bekommen')
+    return wert[:max_laenge]
+
+
+def _unbekannt_ablehnen(daten: dict, erlaubt, pfad: str) -> None:
+    """Lehnt unbekannte Schluessel mit 400 ab.
+
+    Bewusst ABLEHNEN und nicht stillschweigend verwerfen oder loeschen: was
+    bereits in presets.json steht, bleibt unangetastet — der Aufrufer erfaehrt
+    nur, dass sein Schluessel hier nicht hingehoert. Sonst waechst die Datei
+    bei jedem Tippfehler um einen Eintrag, den nie wieder jemand entfernt.
+    """
+    fremd = sorted(str(k) for k in daten if k not in erlaubt)
+    if fremd:
+        raise HTTPException(400, detail=f'{pfad}: unbekannte Schluessel: {", ".join(fremd)}')
+
+
+_LICHT_KANAELE = 9
+
+def _kanalwerte(werte, name: str = 'values') -> list[int]:
+    """Prueft eine Helligkeitsliste und gibt genau 9 ganze Werte 0..255 zurueck."""
+    if not isinstance(werte, list):
+        raise HTTPException(400, detail=f'{name}: Liste erwartet, '
+                                        f'{type(werte).__name__} bekommen')
+    if len(werte) != _LICHT_KANAELE:
+        raise HTTPException(400, detail=f'{name}: {_LICHT_KANAELE} Werte erforderlich, '
+                                        f'{len(werte)} bekommen')
+    return [int(_zahl(v, 0, 255, f'{name}[{i}]')) for i, v in enumerate(werte)]
+
+
 @app.get('/api/presets')
 async def get_presets():
     return read_json(PRESETS_FILE, {})
@@ -463,17 +535,20 @@ async def apply_preset(preset_id: int):
     preset = presets[preset_id]
     if preset.get('values') is None:
         raise HTTPException(400, detail='Preset nicht konfiguriert')
-    can_if.send_brightness(preset['values'])
-    log.info("Preset %d '%s' aktiviert", preset_id, preset['name'])
-    return {'ok': True, 'preset': preset['name']}
+    # Auch die Werte aus der Datei pruefen: eine von Hand verkorkste
+    # presets.json darf keinen 500er ausloesen, sondern eine klare Meldung.
+    try:
+        werte = _kanalwerte(preset['values'], f'Preset {preset_id}')
+    except HTTPException:
+        raise HTTPException(400, detail=f'Preset {preset_id} enthaelt unbrauchbare Werte')
+    can_if.send_brightness(werte)
+    log.info("Preset %d '%s' aktiviert", preset_id, preset.get('name', ''))
+    return {'ok': True, 'preset': preset.get('name', '')}
 
 
 @app.post('/api/lights/channels')
 async def set_channels(body: dict):
-    values = body.get('values', [])
-    if len(values) != 9:
-        raise HTTPException(400, detail='9 Werte erforderlich')
-    values = [max(0, min(255, int(v))) for v in values]
+    values = _kanalwerte(body.get('values'))
     can_if.send_brightness(values)
     state.lights['channels'] = values
     return {'ok': True}
@@ -481,20 +556,30 @@ async def set_channels(body: dict):
 
 @app.patch('/api/lights/preset/{preset_id}')
 async def update_preset(preset_id: int, body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    # 'icon' gehoert dazu: presetIcon() in lights.js liest p.icon zuerst und
+    # faellt nur ersatzweise auf die Emoji-Zuordnung zurueck. Das Feld ist als
+    # Nachfolger vorgesehen und darf hier nicht abgelehnt werden.
+    _unbekannt_ablehnen(body, ('name', 'emoji', 'icon', 'values'), 'preset')
     data    = read_json(PRESETS_FILE, {})
     presets = data.get('presets', [])
     if not (0 <= preset_id < len(presets)):
         raise HTTPException(404, detail='Preset nicht gefunden')
     if 'name' in body:
-        presets[preset_id]['name'] = str(body['name'])[:32]
+        presets[preset_id]['name'] = _text(body['name'], 32, 'name')
     if 'emoji' in body:
-        presets[preset_id]['emoji'] = str(body['emoji'])[:4]
+        presets[preset_id]['emoji'] = _text(body['emoji'], 4, 'emoji')
+    if 'icon' in body:
+        presets[preset_id]['icon'] = _text(body['icon'], 32, 'icon')
     if 'values' in body:
-        vals = list(body['values'])
-        if len(vals) == 9:
-            presets[preset_id]['values'] = [max(0, min(255, int(v))) for v in vals]
-    write_json(PRESETS_FILE, data)
-    log.info("Preset %d aktualisiert: '%s'", preset_id, presets[preset_id]['name'])
+        # Frueher wurde eine Liste mit falscher Laenge stillschweigend
+        # verworfen — der Nutzer sah "Gespeichert", gespeichert war nichts.
+        presets[preset_id]['values'] = _kanalwerte(body['values'])
+    # Schreiben in den Thread-Pool: fsync auf der SD-Karte dauert auf dem Pi
+    # Zero laenge genug, um im Event-Loop den ganzen Server anzuhalten.
+    await _run_blocking(write_json, PRESETS_FILE, data)
+    log.info("Preset %d aktualisiert: '%s'", preset_id, presets[preset_id].get('name', ''))
     return data
 
 
@@ -596,17 +681,67 @@ async def get_network():
     return can_if.get_network_stats()
 
 
+# Hoechstens so viele VERSCHIEDENE Fehler im RAM-Log; Wiederholungen zaehlen
+# im jeweiligen Eintrag hoch. Ein Fehler in einer Render-Schleife feuert sonst
+# im Sekundentakt, schiebt binnen einer Minute jeden anderen Fehler aus der
+# Liste und flutet nebenbei das Journal auf der SD-Karte.
+_JS_ERRORS_MAX  = 50
+# Obergrenze des Request-Bodys. 2 KB waren zu knapp: ein Chromium-Stack mit
+# zehn Rahmen und langen /static/js/...-Adressen kommt leicht auf ueber 2 KB,
+# und weil der Melder einen zu grossen Body verwirft, gingen ausgerechnet die
+# Fehler mit dem brauchbarsten Stack spurlos verloren. Der gespeicherte Eintrag
+# bleibt durch die Feldgrenzen unten trotzdem bei rund 1,7 KB.
+_JS_ERROR_BYTES = 16 * 1024
 _js_errors: list[dict] = []
+
+def _js_error_key(eintrag: dict):
+    """Kennzeichen eines Fehlers: gleiche Meldung an gleicher Stelle."""
+    return (eintrag.get('msg'), eintrag.get('src'), eintrag.get('line'))
+
+def _js_zeilennr(wert):
+    """Zeilen-/Spaltennummer aus dem Body — alles Unbrauchbare wird zu None.
+
+    Ohne diese Umwandlung landete hier alles, was das Feld enthielt (auch eine
+    verschachtelte Struktur), unveraendert im RAM-Log.
+    """
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    return int(wert) if math.isfinite(wert) else None
 
 @app.post('/api/jserror')
 async def post_jserror(request: Request):
-    """Empfängt JS-Fehler vom Frontend und speichert sie im RAM-Log."""
+    """Empfängt JS-Fehler vom Frontend und speichert sie im RAM-Log.
+
+    Gleiche Meldungen werden zusammengefasst: der Eintrag bekommt 'count'
+    sowie 'first_ts'/'last_ts'. Ins Log geht nur das erste Auftreten.
+    """
     try:
-        entry = await request.json()
-        _js_errors.append(entry)
-        if len(_js_errors) > 50:
-            _js_errors.pop(0)
-        logging.error('JS-FEHLER: %s @ %s:%s', entry.get('msg','?'), entry.get('src','?'), entry.get('line','?'))
+        entry = await _json_body(request, _JS_ERROR_BYTES)
+        if not isinstance(entry, dict):
+            entry = {'msg': str(entry)[:500]}
+        # Auf die Felder begrenzen, die core.js schickt (msg/src/line/col/
+        # stack/ts) und jedes davon kappen: der Fehlermelder ist ungeschuetzt
+        # erreichbar, das RAM-Log darf davon nicht beliebig gross werden.
+        entry = {'msg':   str(entry.get('msg', '?'))[:500],
+                 'src':   str(entry.get('src', '?'))[:200],
+                 'line':  _js_zeilennr(entry.get('line')),
+                 'col':   _js_zeilennr(entry.get('col')),
+                 'stack': str(entry.get('stack', ''))[:1000] or None,
+                 'ts':    str(entry.get('ts', ''))[:40] or None}
+        jetzt    = time.time()
+        kennung  = _js_error_key(entry)
+        for bekannt in _js_errors:
+            if _js_error_key(bekannt) == kennung:
+                bekannt['count']   = bekannt.get('count', 1) + 1
+                bekannt['last_ts'] = jetzt
+                break
+        else:
+            entry.update(count=1, first_ts=jetzt, last_ts=jetzt)
+            _js_errors.append(entry)
+            if len(_js_errors) > _JS_ERRORS_MAX:
+                _js_errors.pop(0)
+            logging.error('JS-FEHLER: %s @ %s:%s',
+                          entry['msg'], entry['src'], entry['line'])
     except Exception:
         pass
     return {'ok': True}
@@ -846,14 +981,46 @@ async def debug_router_clients():
     return results
 
 
+# 1 MB reicht fuer Wartungsplan und Stauplan um Groessenordnungen. Ohne
+# Obergrenze laege ein 50-MB-Body erst komplett im RAM eines Rechners mit
+# 512 MB, bevor ihn ueberhaupt jemand ablehnen koennte.
+_MAX_BODY_BYTES = 1024 * 1024
+
+async def _json_body(request: Request, grenze: int = _MAX_BODY_BYTES):
+    """Liest den Request-Body mit Obergrenze und gibt das geparste JSON zurueck.
+
+    Der Body wird stueckweise gelesen und beim Ueberschreiten sofort mit 413
+    abgebrochen, statt ihn erst ganz einzusammeln. Ungueltiges JSON ergibt 400
+    statt eines ungefangenen JSONDecodeError (bisher HTTP 500).
+    """
+    zu_gross = HTTPException(413, detail=f'Daten zu gross (hoechstens '
+                                         f'{grenze // 1024} KB)')
+    angekuendigt = request.headers.get('content-length')
+    if angekuendigt is not None:
+        try:
+            if int(angekuendigt) > grenze:
+                raise zu_gross
+        except ValueError:
+            pass          # unbrauchbarer Header — die Stueckpruefung faengt es
+    roh = bytearray()
+    async for stueck in request.stream():
+        roh += stueck
+        if len(roh) > grenze:
+            raise zu_gross
+    try:
+        return json.loads(roh)
+    except ValueError:
+        raise HTTPException(400, detail='Ungueltiges JSON') from None
+
+
 @app.get('/api/wartung')
 async def get_wartung():
     return read_json(WARTUNG_FILE, [])
 
 @app.put('/api/wartung')
 async def save_wartung(request: Request):
-    body = await request.json()
-    write_json(WARTUNG_FILE, body)
+    body = await _json_body(request)
+    await _run_blocking(write_json, WARTUNG_FILE, body)
     return body
 
 
@@ -863,29 +1030,103 @@ async def get_stauplan():
 
 @app.put('/api/stauplan')
 async def save_stauplan(request: Request):
-    body = await request.json()
-    write_json(STAUPLAN_FILE, body)
+    body = await _json_body(request)
+    await _run_blocking(write_json, STAUPLAN_FILE, body)
     return body
 
 
+# Bekannte Schluessel je Abschnitt. Unbekannte werden mit 400 abgelehnt, damit
+# presets.json nicht bei jedem Tippfehler um einen Eintrag waechst — geloescht
+# wird dabei nichts, was schon in der Datei steht.
+_SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung')
+_TANK_FELDER         = ('name', 'capacity_l', 'color')
+_BATTERIE_FELDER     = ('service_instance', 'starter_instance',
+                        'primary_source', 'capacity_ah')
+
 @app.patch('/api/settings')
 async def update_settings(body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    _unbekannt_ablehnen(body, _SETTINGS_ABSCHNITTE, 'settings')
     data = read_json(PRESETS_FILE, {})
+
     if 'tanks' in body:
+        if not isinstance(body['tanks'], dict):
+            raise HTTPException(400, detail='tanks: Objekt erwartet')
+        # Bekannt ist, was der CAN-Zustand kennt (state.tanks) ODER was schon
+        # in presets.json steht — Letzteres, damit ein bereits gepflegter
+        # Eintrag nie abgelehnt wird. Ohne den ersten Teil scheiterte eine
+        # frische Installation, die noch gar keine presets.json hat.
+        erlaubte_tanks = set(state.tanks) | set(data.get('tanks') or {})
         for key, val in body['tanks'].items():
-            if key in data.get('tanks', {}):
-                data['tanks'][key].update(val)
+            if key not in erlaubte_tanks:
+                raise HTTPException(400, detail=f'tanks: unbekannter Tank {key}')
+            if not isinstance(val, dict):
+                raise HTTPException(400, detail=f'tanks.{key}: Objekt erwartet')
+            _unbekannt_ablehnen(val, _TANK_FELDER, f'tanks.{key}')
+            geprueft = {}
+            if 'name' in val:
+                geprueft['name'] = _text(val['name'], 32, f'tanks.{key}.name')
+            if 'capacity_l' in val:
+                geprueft['capacity_l'] = _zahl(val['capacity_l'], 0, 100000,
+                                               f'tanks.{key}.capacity_l')
+            if 'color' in val:
+                geprueft['color'] = _text(val['color'], 32, f'tanks.{key}.color')
+            ziel = data.setdefault('tanks', {}).setdefault(key, {})
+            if not isinstance(ziel, dict):
+                raise HTTPException(400, detail=f'tanks.{key}: Eintrag in presets.json '
+                                                f'ist kein Objekt')
+            ziel.update(geprueft)
+
     if 'devices' in body:
-        data.setdefault('devices', {}).update(body['devices'])
+        # Die Schluessel sind CAN-Quelladressen (0..255), keine feste Liste —
+        # ein noch nicht verbautes Geraet bekommt hier spaeter einfach seine
+        # Adresse. Begrenzt wird deshalb der Wertebereich, nicht die Auswahl.
+        if not isinstance(body['devices'], dict):
+            raise HTTPException(400, detail='devices: Objekt erwartet')
+        geraete = {}
+        for key, val in body['devices'].items():
+            try:
+                adresse = int(key)
+            except (TypeError, ValueError):
+                raise HTTPException(400, detail=f'devices: {key!r} ist keine CAN-Adresse') from None
+            if not 0 <= adresse <= 255:
+                raise HTTPException(400, detail=f'devices: Adresse {adresse} liegt '
+                                                f'ausserhalb von 0 bis 255')
+            geraete[str(adresse)] = _text(val, 64, f'devices.{key}')
+        data.setdefault('devices', {}).update(geraete)
+
     if 'batteries' in body:
-        data.setdefault('batteries', {}).update(body['batteries'])
-        _apply_presets_config()
+        if not isinstance(body['batteries'], dict):
+            raise HTTPException(400, detail='batteries: Objekt erwartet')
+        _unbekannt_ablehnen(body['batteries'], _BATTERIE_FELDER, 'batteries')
+        b = dict(body['batteries'])
+        for feld in ('service_instance', 'starter_instance'):
+            if feld in b:
+                b[feld] = int(_zahl(b[feld], 0, 255, f'batteries.{feld}'))
+        if 'primary_source' in b:
+            b['primary_source'] = _text(b['primary_source'], 32, 'batteries.primary_source')
+        # leeres Eingabefeld = keine Kapazitaet hinterlegt; die Oberflaeche
+        # schickt dafuer null, das MUSS durchgehen.
+        if b.get('capacity_ah') is not None:
+            b['capacity_ah'] = _zahl(b['capacity_ah'], 0, 100000, 'batteries.capacity_ah')
+        data.setdefault('batteries', {}).update(b)
+
     if 'wartung' in body:
         w = body['wartung']
+        if not isinstance(w, dict):
+            raise HTTPException(400, detail='wartung: Objekt erwartet')
+        _unbekannt_ablehnen(w, ('due_soon_days',), 'wartung')
         if 'due_soon_days' in w:
-            days = max(1, min(14, int(w['due_soon_days'])))
-            data.setdefault('wartung', {})['due_soon_days'] = days
-    write_json(PRESETS_FILE, data)
+            tage = int(_zahl(w['due_soon_days'], 1, 14, 'wartung.due_soon_days'))
+            data.setdefault('wartung', {})['due_soon_days'] = tage
+
+    await _run_blocking(write_json, PRESETS_FILE, data)
+    # ERST schreiben, DANN uebernehmen: _apply_presets_config() liest
+    # presets.json neu ein. Vor dem Schreiben aufgerufen las es den alten Stand,
+    # geaenderte Batterie-Instanzen wurden also bis zum Neustart ignoriert.
+    if 'batteries' in body:
+        _apply_presets_config()
     return data
 
 
@@ -1166,7 +1407,10 @@ async def display_power(body: dict):
 
 @app.post('/api/display/brightness')
 async def display_brightness(body: dict):
-    val = max(0, min(100, int(body.get('value', 50))))
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    # frueher: int('abc') → ValueError → HTTP 500 statt einer klaren 400
+    val = int(_zahl(body.get('value', 50), 0, 100, 'value'))
     bl  = _backlight_dir()
     if not bl:
         raise HTTPException(503, detail='Kein Backlight-Gerät (Display ohne Helligkeitssteuerung)')

@@ -135,6 +135,87 @@ function _cols() {
   return 4;
 }
 
+// Kachelelemente einmal merken — _applyGrid läuft bei jedem resize-Frame,
+// da sind sieben querySelector-Aufrufe auf dem Pi Zero unnötige Arbeit.
+let _tileElCache = {};
+function _tileEl(id) {
+  if (!_tileElCache[id]) _tileElCache[id] = document.querySelector(_TILE_SEL[id]);
+  return _tileElCache[id];
+}
+
+/** Kachel liegt zwar in der Konfiguration, ist aber mangels Daten versteckt.
+ *  tanks.js/battery.js setzen dafür style.display; .tile-nodata ist der
+ *  gleichwertige Weg ueber eine Klasse. Beides zaehlt hier als "nicht da". */
+function _tileOhneDaten(el) {
+  return el.style.display === 'none' || el.classList.contains('tile-nodata');
+}
+
+/** Kacheln in DOM-Reihenfolge, nicht in _TILES-Reihenfolge.
+ *  Die Karten stehen in index.html anders als in _TILES (Batterie, 230V,
+ *  Tanks, Licht, Pegel, Wetter, Wartung). Das Raster verteilt bei gleichem
+ *  order-Wert aber nach DOM-Reihenfolge — rechnete die Bandaufteilung nach
+ *  _TILES, bekam die falsche Kachel die Restzelle und rechts blieb eine
+ *  ganze Spalte leer (z. B. Beleuchtung auf 'breit' bei 3 Spalten).
+ *  Die Karten sind fest in index.html, die Reihenfolge wird einmal gemerkt. */
+let _tilesDomCache = null;
+function _tilesInDomOrder() {
+  if (_tilesDomCache) return _tilesDomCache;
+  const da = _TILES.filter(t => _tileEl(t.id));
+  if (da.length !== _TILES.length) return da;      // noch nicht alles im DOM
+  _tilesDomCache = da.sort((a, b) => {
+    const pos = _tileEl(a.id).compareDocumentPosition(_tileEl(b.id));
+    return (pos & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1;
+  });
+  return _tilesDomCache;
+}
+
+/**
+ * Verteilt eine Kachelgruppe bandweise auf `cols` Spalten und schliesst dabei
+ * die Lücken. Ein Band ist eine Reihe von `cols` Spalten; volle Kacheln sind
+ * `rowSpan` Zeilen hoch. 'wide' will zwei Spalten, alles andere eine.
+ * Passt eine breite Kachel nicht mehr ins laufende Band, fängt sie ein neues
+ * an — die Restzellen des alten Bandes bekommen dann die Kacheln davor, damit
+ * mitten im Raster kein Loch stehen bleibt. Bleiben im letzten Band Zellen
+ * frei, wird nur eine breite Kachel aufgezogen (sie ist ohnehin als Banner
+ * gedacht); normale Kacheln bleiben dort quadratisch.
+ */
+function _bandLayout(kacheln, cols, rowSpan, order) {
+  const baender = [];
+  let band = [], frei = cols;
+  for (const k of kacheln) {
+    k.span = (k.sz === 'wide') ? Math.min(2, cols) : 1;
+    if (k.span > frei) { baender.push({ items: band, frei }); band = []; frei = cols; }
+    band.push(k);
+    frei -= k.span;
+  }
+  if (band.length) baender.push({ items: band, frei });
+
+  for (let i = 0; i < baender.length; i++) {
+    const b       = baender[i];
+    const letztes = (i === baender.length - 1);
+    if (b.frei > 0 && b.items.length) {
+      const breit = b.items.find(k => k.sz === 'wide');
+      if (breit) {
+        breit.span += b.frei;                       // Banner füllt den Rest
+        b.frei = 0;
+      } else if (!letztes) {
+        // Echte Lücke mitten im Raster: von hinten auffüllen, aber höchstens
+        // bis zur doppelten Breite, damit Quadrate Quadrate bleiben.
+        for (let j = b.items.length - 1; j >= 0 && b.frei > 0; j--) {
+          const plus = Math.min(b.frei, 2 - b.items[j].span);
+          b.items[j].span += plus;
+          b.frei -= plus;
+        }
+      }
+    }
+    for (const k of b.items) {
+      k.el.style.gridColumn = `span ${k.span}`;
+      k.el.style.gridRow    = `span ${rowSpan}`;
+      k.el.style.order      = order;
+    }
+  }
+}
+
 function _applyGrid() {
   if (!_dsp) _dspLoad();
   const main = document.querySelector('main');
@@ -159,8 +240,12 @@ function _applyGrid() {
     main.style.gridAutoRows = rowH + 'px';
   }
 
-  for (const t of _TILES) {
-    const el = document.querySelector(_TILE_SEL[t.id]);
+  // Erst einsammeln, wer überhaupt im Raster liegt — danach verteilen.
+  // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder
+  // statt halber Kacheln, die sich oben zwischen die vollen mischen.
+  const voll = [], halb = [];
+  for (const t of _tilesInDomOrder()) {
+    const el = _tileEl(t.id);
     if (!el) continue;
     const sz = tileCfg[t.id] ?? 'normal';
     if (sz === 'hidden') {
@@ -171,20 +256,57 @@ function _applyGrid() {
       continue;
     }
     el.classList.remove('tile-hidden');
-    el.style.display = '';
-    if (cols === 1) {
+    // ACHTUNG: hier NICHT el.style.display zurücksetzen. Das hat früher das
+    // datengetriebene Verstecken aus tanks.js/battery.js bei jedem resize
+    // wieder aufgerissen — die leere Tank-Kachel blitzte dann kurz auf.
+    if (cols === 1 || _tileOhneDaten(el)) {
       el.style.gridColumn = el.style.gridRow = el.style.order = '';
-    } else {
-      // Bei 3 Spalten spannt 'wide' ueber ALLE drei — sonst bliebe in der
-      // letzten Reihe genau eine Luecke stehen (6 normale + 2 = 8 von 9).
-      const span = (sz === 'wide') ? (cols === 3 ? 3 : Math.min(2, cols)) : 1;
-      el.style.gridColumn = `span ${span}`;
-      el.style.gridRow    = `span ${(sz === 'half') ? 1 : 2}`;
-      // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder
-      // statt halber Kacheln, die sich oben zwischen die vollen mischen.
-      el.style.order      = (sz === 'half') ? '1' : '0';
+      continue;
     }
+    (sz === 'half' ? halb : voll).push({ el, sz });
   }
+
+  if (cols > 1) {
+    _bandLayout(voll, cols, 2, '0');
+    _bandLayout(halb, cols, 1, '1');
+  }
+
+  _gridSig = _gridVisSig();
+  if (!_gridWatchOn) _gridWatchInit();
+}
+
+// ── Sichtbarkeitswechsel aus den Datenmodulen nachziehen ─────────────────────
+// tanks.js/battery.js blenden ihre Kachel aus, sobald keine Werte mehr
+// anliegen. Damit aendert sich die Kachelzahl im Raster; ohne erneuten Lauf
+// bliebe an ihrer Stelle eine Lücke stehen. Der Beobachter meldet sich zwar
+// bei jedem Datensatz (die Module schreiben style.display jedes Mal neu),
+// rechnet aber nur weiter, wenn sich die Sichtbarkeit wirklich geändert hat.
+
+let _gridSig      = '';
+let _gridWatchOn  = false;
+let _gridWatchRaf = null;
+
+function _gridVisSig() {
+  let s = '';
+  for (const t of _TILES) {
+    const el = _tileEl(t.id);
+    s += !el ? '-' : (_tileOhneDaten(el) || el.classList.contains('tile-hidden')) ? '0' : '1';
+  }
+  return s;
+}
+
+function _gridWatchInit() {
+  if (typeof MutationObserver !== 'function') return;
+  const mo = new MutationObserver(() => {
+    if (_gridVisSig() === _gridSig || _gridWatchRaf) return;
+    _gridWatchRaf = requestAnimationFrame(() => { _gridWatchRaf = null; _applyGrid(); });
+  });
+  let beobachtet = 0;
+  for (const t of _TILES) {
+    const el = _tileEl(t.id);
+    if (el) { mo.observe(el, { attributes: true, attributeFilter: ['style', 'class'] }); beobachtet++; }
+  }
+  if (beobachtet) _gridWatchOn = true;
 }
 
 let _resizeRaf = null;
@@ -205,7 +327,7 @@ function applyDisplayConfig() {
   const tileCfg = _dsp.tiles[profile] ?? {};
 
   for (const t of _TILES) {
-    const el = document.querySelector(_TILE_SEL[t.id]);
+    const el = _tileEl(t.id);
     if (!el) continue;
     const sz = tileCfg[t.id] ?? 'normal';
     el.classList.toggle('tile--half', sz === 'half');

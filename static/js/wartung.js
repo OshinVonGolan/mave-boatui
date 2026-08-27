@@ -27,7 +27,13 @@ let WARTUNG_DATA = JSON.parse(JSON.stringify(WARTUNG_DEFAULTS));
 let _wEditCatId  = null;
 let _wEditTaskId = null;
 
+// task kommt aus wartung.json und ist damit nicht garantiert ein Objekt (die
+// Datei liegt unversioniert auf dem Pi). Diese Funktion laeuft ueber
+// updateWartungHomeTile bei JEDEM WebSocket-Frame — wirft sie, bricht der
+// restliche Frame ab (Statusleiste, Alarmrand). Deshalb hier abfangen statt
+// verwerfen: ein unbrauchbarer Eintrag wird als "noch nie erledigt" angezeigt.
 function getWartungStatus(task) {
+  if (!task || typeof task !== 'object') task = {};
   if (task.interval_days === 0)
     return { status: 'manual', color: '#94a3b8', label: task.last_done ? fmtDate(task.last_done) : 'Noch nie', days: null };
   if (!task.last_done)
@@ -52,12 +58,22 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// wartung.json auf dem Pi nimmt beim Speichern jede Struktur an. Fehlt einer
+// Kategorie das tasks-Feld, warf getWartungStatus() bisher bei JEDEM
+// WebSocket-Frame einen TypeError ("interval_days of undefined") und die
+// Startseite blieb halb leer. Deshalb einmal beim Laden geradeziehen: fehlende
+// Aufgabenlisten werden zu einer leeren Liste. Vorhandene Angaben bleiben
+// unangetastet — es wird nichts verworfen.
+function _wartungNormalisieren(liste) {
+  return liste.map(cat => ({ ...cat, tasks: Array.isArray(cat?.tasks) ? cat.tasks : [] }));
+}
+
 async function _wartungLoad() {
   try {
     const r = await fetch('/api/wartung');
     if (r.ok) {
       const d = await r.json();
-      if (Array.isArray(d) && d.length) WARTUNG_DATA = d;
+      if (Array.isArray(d) && d.length) WARTUNG_DATA = _wartungNormalisieren(d);
     }
   } catch(_) {}
   updateWartungTopbar();
@@ -143,14 +159,17 @@ function updateWartungHomeTile() {
   if (dueSoon > 0) html += `<span class="w-badge-pill" style="background:#f59e0b1a;color:#f59e0b">${dueSoon} demnächst</span>`;
   html += '</div>';
 
+  // Kategorie- und Aufgabennamen sind freie Nutzereingaben (Neue Aufgabe /
+  // Neue Kategorie) und landen hier im innerHTML. Ohne _esc() zerlegt schon ein
+  // Anfuehrungszeichen im Namen das Markup und die Kachel bleibt halb leer.
   pending.forEach(({ t, s }) => {
     html += `<div class="w-home-row">
       <span style="display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden">
-        <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block;flex-shrink:0"></span>
-        <span class="w-home-cat" style="background:${t.catColor}28">${t.catName}</span>
-        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</span>
+        <span style="width:7px;height:7px;border-radius:50%;background:${_esc(s.color)};display:inline-block;flex-shrink:0"></span>
+        <span class="w-home-cat" style="background:${_esc(t.catColor)}28">${_esc(t.catName)}</span>
+        <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(t.name)}</span>
       </span>
-      <span style="color:${s.color};font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px">${s.label}</span>
+      <span style="color:${_esc(s.color)};font-size:12px;font-weight:600;flex-shrink:0;margin-left:8px">${_esc(s.label)}</span>
     </div>`;
   });
 
@@ -176,24 +195,28 @@ function closeWartung() {
   history.replaceState(null, '', location.pathname);
 }
 
+// Alles, was aus WARTUNG_DATA kommt, ist Nutzereingabe: Kategorie- und
+// Aufgabenname, das Intervall-Label und die aus dem Namen abgeleitete Kennung.
+// Freitext geht durch _esc(), Werte in inline-Attributen durch _jsAttr() —
+// ein Apostroph im Namen brach sonst den onclick-Aufruf auf.
 function renderWartung() {
   const body = $('wartungBody');
   let html = '';
   WARTUNG_DATA.forEach(cat => {
     html += `<div class="w-cat">
-      <div class="w-cat-hd" style="border-color:${cat.color};color:${cat.color}">
-        <span class="w-dot" style="background:${cat.color}"></span>${cat.name}
-        <button onclick="event.stopPropagation();deleteWartungCat('${cat.id}')" title="Kategorie löschen"
+      <div class="w-cat-hd" style="border-color:${_esc(cat.color)};color:${_esc(cat.color)}">
+        <span class="w-dot" style="background:${_esc(cat.color)}"></span>${_esc(cat.name)}
+        <button onclick="event.stopPropagation();deleteWartungCat(${_jsAttr(cat.id)})" title="Kategorie löschen"
           style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 6px;font-size:13px;line-height:1">✕</button>
       </div>`;
     cat.tasks.forEach(task => {
       const s = getWartungStatus(task);
       const lastStr = task.last_done ? fmtDate(task.last_done) : 'Noch nie';
-      html += `<div class="w-task" onclick="openWartungTask('${cat.id}','${task.id}')">
-        <span class="w-status-dot" style="background:${s.color}"></span>
-        <span class="w-task-name">${task.name}</span>
-        <span class="w-task-interval">${task.interval_label}</span>
-        <span class="w-task-due" style="color:${s.color}">${s.label}</span>
+      html += `<div class="w-task" onclick="openWartungTask(${_jsAttr(cat.id)},${_jsAttr(task.id)})">
+        <span class="w-status-dot" style="background:${_esc(s.color)}"></span>
+        <span class="w-task-name">${_esc(task.name)}</span>
+        <span class="w-task-interval">${_esc(task.interval_label)}</span>
+        <span class="w-task-due" style="color:${_esc(s.color)}">${_esc(s.label)}</span>
       </div>`;
     });
     html += '</div>';
@@ -234,7 +257,7 @@ function exportWartungCsv() {
 
 function _wEditPopulateCats(selectedId) {
   $('wEditCat').innerHTML = WARTUNG_DATA.map(c =>
-    `<option value="${c.id}"${c.id === selectedId ? ' selected' : ''}>${c.name}</option>`
+    `<option value="${_esc(c.id)}"${c.id === selectedId ? ' selected' : ''}>${_esc(c.name)}</option>`
   ).join('');
 }
 

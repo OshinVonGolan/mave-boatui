@@ -485,6 +485,11 @@ function _fetchHistory(force) {
       // wegschneiden — der Graph wäre leer, obwohl Daten da sind.
       if (typeof res.server_now === 'number') setClockOffset(res.server_now);
 
+      // Der Server fuehrt die Solarleistung als 'solar1' (solar2/solar3 sind
+      // Vorbereitung fuer weitere Felder), die Chart-Serie liest aber 'solar'.
+      // Ohne diese Abbildung zeigte die Solarkurve nur den seit Seitenaufruf
+      // gesammelten Schwanz und die Legende stand dauerhaft auf "Solar --".
+      eintraege.forEach(e => { if (e.solar == null && e.solar1 != null) e.solar = e.solar1; });
       _mergeHist(histData, eintraege);
 
       const CH_KEYS = ['solar1', 'charger', 'alternator'];

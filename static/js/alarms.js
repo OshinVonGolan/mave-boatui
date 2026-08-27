@@ -165,8 +165,12 @@ function updateAlarmBadge(count) {
   $('burgerBtn')?.classList.toggle('has-alarm', count > 0);
 }
 
+// ts kommt vom Pi. Der Pi hat keine Echtzeituhr, das Anzeigegeraet kann also
+// mehrere Stunden daneben liegen — dann stuende hier "3 h" oder eine negative
+// Spanne bei einem gerade eben ausgeloesten Alarm. nowTs() rechnet auf der
+// Zeitachse des Servers (charts.js).
 function timeAgo(ts) {
-  const s = Math.round(Date.now() / 1000 - ts);
+  const s = Math.round(nowTs() - ts);
   if (s < 60)  return `${s} s`;
   if (s < 3600) return `${Math.floor(s/60)} min`;
   return `${Math.floor(s/3600)} h`;

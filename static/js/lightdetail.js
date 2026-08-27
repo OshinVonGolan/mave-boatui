@@ -122,13 +122,15 @@ function syncLightOverlay(channels) {
   }
 }
 
+// Der Preset-Name steht in einem value-Attribut. Ohne _esc() beendet ein
+// Anfuehrungszeichen im Namen das Attribut und der Rest der Karte verrutscht.
 function renderPresetEditList() {
   $('presetEditList').innerHTML = presets.map((p, i) => `
     <div class="preset-save-card" id="per${i}">
       <div class="preset-save-card-top">
         <span class="preset-save-card-emoji">${presetIcon(p, 20)}</span>
         <input class="preset-edit-name" id="pen${i}" type="text"
-               value="${p.name}" maxlength="24" placeholder="Preset ${i + 1}">
+               value="${_esc(p.name)}" maxlength="24" placeholder="Preset ${i + 1}">
       </div>
       <button class="preset-save-card-btn" id="psb${i}" onclick="saveCurrentAsPreset(${i})">
         Werte speichern
@@ -209,6 +211,9 @@ window.addEventListener('popstate', () => {
         _connOverlayTimer = setInterval(fetchConnectivity, 20000);
       },
       wartung:  () => { $('wartungOverlay').classList.remove('hidden'); renderWartung(); },
+      // openWaterLevel() setzt inzwischen einen History-Eintrag #waterlevel —
+      // ohne diesen Eintrag hier bliebe die Ansicht beim Vorwaerts-Blaettern leer.
+      waterlevel: () => { _wlOverlayAnzeigen(); },
       stauplan: () => { $('stauplanOverlay').classList.remove('hidden'); renderStauTable(''); },
       monday: () => {
         $('mondayOverlay').classList.remove('hidden');

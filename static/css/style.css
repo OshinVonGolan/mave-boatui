@@ -178,6 +178,102 @@
     @media (min-width: 1600px) { main { max-width: 1660px; } }
     #wartungHomeBody { overflow: hidden; }
 
+    /* ── Batterie-Detail: Servicebatterie als EINE Karte ───────────────────
+       Vorher war die Bank auf zwei Kacheln zerlegt (Shunt-Werte hier,
+       BMS-Werte dort) und die BMS-Zellen standen neben der Starterbatterie,
+       mit der sie nichts zu tun haben. Shunt und BMS sind zwei Messquellen
+       DERSELBEN Batterie und gehoeren deshalb zusammen.
+       Die Energieringe zeigen die Quellen als wachsende Kreise um den SOC. */
+    .sb-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: var(--gap); }
+    .sb-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+      font-size: 12px; font-weight: 700; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--text2); }
+    .sb-hd .chip { margin-left: auto; }
+    .sb-grid { display: grid; gap: 24px; align-items: center;
+      grid-template-columns: 230px 190px minmax(0, 1fr); }
+    @media (max-width: 1050px) { .sb-grid { grid-template-columns: 230px minmax(0, 1fr); } }
+    @media (max-width: 700px)  { .sb-grid { grid-template-columns: 1fr; } }
+
+    /* Energieringe */
+    .bd-ring-wrap { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+    .bd-ring-svg  { width: 100%; max-width: 230px; height: auto; display: block; }
+    .bd-ring-num  { font-size: 38px; font-weight: 700; font-family: inherit; }
+    .bd-ring-lbl  { font-size: 12px; font-weight: 600; fill: var(--text3); font-family: inherit; }
+    .bd-leg-spalte{ display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .bd-ring-skala{ font-size: 11px; color: var(--text3); line-height: 1.4; }
+    .bd-legende   { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+    @media (max-width: 1050px) {
+      .bd-legende { display: grid; gap: 8px 16px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    }
+    .bd-leg      { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
+    .bd-leg-dot  { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .bd-leg-name { color: var(--text2); overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .bd-leg-val  { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .bd-leg-val small { font-size: 10px; font-weight: 600; color: var(--text3); margin-left: 2px; }
+
+    /* Kennzahlen — Spalten breit genug, dass kein Label abgeschnitten wird */
+    .sb-stats { display: grid; gap: 16px 18px;
+      grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+    .st   { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .st-l { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-v { font-size: 20px; font-weight: 700; line-height: 1.15;
+      font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .st-v small { font-size: 11px; font-weight: 600; color: var(--text2); margin-left: 3px; }
+
+    /* Zellen gehoeren zur Servicebatterie und stehen deshalb IN deren Karte */
+    .sb-cells    { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .sb-cells-hd { display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+      font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3); }
+    /* 62px: bei 320px Geraetebreite bleiben nach Kartenpolster und Luecken
+       rund 68px je Spalte — mit 74px waere die vierte Zelle allein in eine
+       zweite Reihe gerutscht. */
+    .cellrow { display: grid; gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); }
+    .cell    { background: var(--surface2); border-radius: 9px; padding: 8px 6px; text-align: center; }
+    .cell-nr { font-size: 10px; font-weight: 700; color: var(--text3); }
+    .cell-v  { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .cell-t  { font-size: 10px; color: var(--text3); font-variant-numeric: tabular-nums; }
+    .cell.lo .cell-v { color: var(--yellow); }   /* niedrigste Zelle */
+    .cell.hi .cell-v { color: var(--accent); }   /* hoechste Zelle */
+    .chip    { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+      background: var(--surface2); color: var(--text3); white-space: nowrap; }
+    .chip.on   { background: #22c55e1a; color: var(--green); }
+    .chip.warn { background: #eab3081a; color: var(--yellow); }
+    .chip.err  { background: #ef44441a; color: var(--red); }
+
+    /* Starterbatterie: eigene, bewusst kleinere Karte — hat mit der Bank nichts zu tun */
+    .starter { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 18px; margin-bottom: var(--gap);
+      display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+
+    /* Geraete-Kacheln unter dem Verlauf: gleich hoch, kein Treppeneffekt */
+    .bd-flow { display: grid; gap: var(--gap); margin-bottom: var(--gap);
+      grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); align-items: stretch; }
+    .bd-src  { background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--border); border-radius: var(--radius);
+      padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .bd-src-ok { border-left-color: var(--green); }
+    .bd-src-warn { border-left-color: var(--yellow); }
+    .bd-src-err { border-left-color: var(--red); }
+    .bd-src-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .bd-src-name { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--text2); min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bd-src-head .chip { margin-left: auto; }
+    .bd-src-main { display: flex; align-items: baseline; gap: 4px;
+      font-variant-numeric: tabular-nums; }
+    .bd-src-main b { font-size: 26px; font-weight: 700; line-height: 1; }
+    .bd-src-main span { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .bd-src-sub { font-size: 12px; color: var(--text3); margin-top: auto;
+      font-variant-numeric: tabular-nums;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     /* ── Statusleiste ─────────────────────────────────────────────────────
        Alle Kernwerte in einer dichten Zeile ueber den Kacheln. Jedes Feld
        fuehrt per Tap in die zugehoerige Detailansicht. Steht bewusst
@@ -185,7 +281,10 @@
        Kachelhoehe, das wuerde die Leiste sonst auf Kachelgroesse aufblasen. */
     .statusbar {
       margin: calc(var(--header-h) + var(--gap)) var(--gap) 0;
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+      /* Feste Spaltenzahl statt auto-fit: auto-fit hat zwischen 641 und
+         ~690 px genau FUENF Spalten gebildet, das sechste Feld stand dann
+         allein in einer zweiten Zeile neben vier leeren Zellen. */
+      display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 1px;                                  /* 1px Spalt = Haarlinie */
       background: var(--border);                 /* scheint durch den Spalt */
       border: 1px solid var(--border);
@@ -219,10 +318,23 @@
     .sb-item.sb-stale .sb-val b,
     .sb-item.sb-stale .sb-sub { opacity: .45; }  /* Wert veraltet, Sensor stumm */
 
+    /* Bis 700 px zwei Zeilen a drei Feldern — darunter reicht die Breite fuer
+       sechs nebeneinander nicht, ohne dass die Unterzeilen abschneiden. */
+    @media (max-width: 700px) {
+      .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
     @media (max-width: 640px) {
-      .statusbar { grid-template-columns: repeat(3, 1fr); }
       .sb-item { padding: 9px 10px 10px; }
       .sb-val b { font-size: 18px; }
+    }
+    /* Sehr schmal (bis 380 px): dichter setzen. Sonst schnitt die Unterzeile
+       der Batterie ("13.38 V . -12.7 A") in der 320-px-Spalte ab. */
+    @media (max-width: 380px) {
+      .sb-item { padding: 8px 8px 9px; }
+      .sb-lbl  { font-size: 9px; letter-spacing: .05em; }
+      .sb-val b { font-size: 17px; }
+      .sb-val i { font-size: 10px; }
+      .sb-sub  { font-size: 10px; }
     }
     /* Breite Schirme: Leiste exakt so breit wie das Kachelraster darunter */
     @media (min-width: 1024px) {
@@ -252,6 +364,10 @@
 
     /* Größen-Sichtbarkeit */
     .tile-hidden { display: none !important; }   /* schlägt inline display aus Daten-Updates */
+    /* Kachel ist eingeschaltet, hat aber keine Daten (Tanks/Batterie).
+       _applyGrid() rechnet sie aus dem Raster heraus, statt sie wieder
+       aufzureißen. */
+    .tile-nodata { display: none !important; }
     .tile-show-half, .tile-show-wide { display: none; }
     .tile--half .tile-show-half { display: block; }
     .tile--wide .tile-show-wide { display: block; }
@@ -671,6 +787,11 @@
       display: grid; grid-template-columns: 1fr; gap: 14px;
       max-width: 1500px; margin: 0 auto; padding: 0 16px 14px; box-sizing: border-box;
     }
+    /* .bd-pg-chart traegt grid-area:chart aus einem anderen Seitenlayout. Hier
+       gibt es diesen benannten Bereich nicht — der Browser legt daraufhin eine
+       implizite Spalte an und schiebt den Verlauf nach rechts, waehrend links
+       eine leere Flaeche stehen bleibt. Platzierung deshalb zuruecksetzen. */
+    .bd-pg-charts-only > .bd-pg-chart { grid-area: auto; }
     /* ── 7-Tage + Lade-Quellen nebeneinander ── */
     .bd-bottom-row {
       display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
@@ -678,6 +799,14 @@
     }
     .bd-week-wrap { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden; }
+
+    /* Die Regel weiter unten blendet #deviceTilesSection auf dem Handy aus —
+       sie stammt aus der Zeit, als dort sieben dichte Geraetekacheln standen.
+       Seit dem Umbau ist das die Servicebatterie-Karte und damit der
+       Hauptinhalt der Seite; sie muss auch auf dem Handy sichtbar bleiben. */
+    @media (max-width: 639px) {
+      #deviceTilesSection { display: block !important; padding-bottom: 0; }
+    }
 
     /* ── Mobile Zellen (nur auf Mobile sichtbar) ── */
     .bd-mobile-cells { display: none; }

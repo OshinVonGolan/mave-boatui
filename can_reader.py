@@ -62,6 +62,10 @@ class BoatState:
             'vpv': None, 'ppv': None,
             'yield_today_wh': None, 'max_power_today_w': None,
             'mppt_mode': None, 'mppt_mode_label': None,
+            # Batterieseitige Klemmwerte aus PGN 130910 (Typ 3) — gleiches
+            # Muster wie inverter['ac_power']: werden geschrieben, fehlten aber
+            # im Konstruktor und tauchten erst beim ersten Frame auf.
+            'dc_voltage': None, 'dc_current': None,
         }
         self.alternator = {'power': None, 'current': None, 'voltage': None}
         self.bms = {
@@ -79,8 +83,13 @@ class BoatState:
             'cells': [],
         }
         # VE.Direct-Geräte (via PGN 130910 / 127507 / 127750)
+        # 'ac_power' = AC-Scheinleistung aus PGN 130910 (Typ 2). Das Feld MUSS
+        # hier stehen: der 130910-Zweig schreibt es, und ohne Anlage im
+        # Konstruktor waechst das Dict erst beim ersten Frame um einen Schluessel
+        # — die Form der API-/WebSocket-Nutzlast aenderte sich also zur Laufzeit.
         self.inverter = {'state': None, 'power': None, 'cs': None, 'cs_label': None,
-                         'ac_voltage': None, 'ac_current': None, 'dc_voltage': None, 'dc_current': None,
+                         'ac_voltage': None, 'ac_current': None, 'ac_power': None,
+                         'dc_voltage': None, 'dc_current': None,
                          'err': None, 'warn': None}  # err = AR (Alarm Reason), warn = WARN
         # charge_state_n2k = grober NMEA-Standardzustand aus PGN 127507. Bewusst
         # getrennt von cs_label (feineres VE.Direct-Label aus PGN 130910).
@@ -417,7 +426,11 @@ class CanInterface:
         # Debug: letzten vollständigen Payload je (pgn, src, instance) merken
         _inst = None
         if pgn in (127507, 127508, 130910, 130912, 130913) and payload:  _inst = payload[0] & 0x0F
-        elif pgn in (127505, 130312) and payload:      _inst = payload[0] & 0x0F
+        elif pgn == 127505 and payload:                _inst = payload[0] & 0x0F
+        # PGN 130312: Byte 0 ist die SID, die Instanz steht in Byte 1. Mit der
+        # SID waere _last_raw unbegrenzt gewachsen und der Schluessel haette
+        # nicht mehr zu dem aus _track_network gepasst (Detailansicht → 404).
+        elif pgn == 130312 and len(payload) > 1:       _inst = payload[1]
         elif pgn == 127506 and len(payload) > 1:       _inst = payload[1]
         self._last_raw[(pgn, src, _inst)] = {'src': src, 'len': len(payload), 'hex': payload.hex()}
 
@@ -504,7 +517,11 @@ class CanInterface:
         elif pgn == 130312:
             p = parse_temperature(payload)
             if p:
-                self._track_network(pgn, src, payload[0] & 0x0F)
+                # Byte 0 ist die SID (zaehlt pro Nachricht hoch), NICHT die
+                # Instanz. Mit der SID als Schluessel legte der Netzwerk-Tracker
+                # bis zu 16 Phantom-Eintraege je Geraet an; die echte Instanz
+                # steht in Byte 1 und kommt vom Parser als p['instance'].
+                self._track_network(pgn, src, p['instance'])
                 # Maßgebliche Temperaturquelle – aber nur setzen, wenn wirklich
                 # ein Messwert vorliegt.
                 if p.get('temperature_c') is not None:

@@ -610,7 +610,16 @@ function _renderWeekChart(data) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
-  const PAD = { t: 8, r: 12, b: 28, l: 36 };
+  // Beide Achsen brauchen Platz fuer ihre Beschriftung: links steht sie
+  // rechtsbuendig bei PAD.l - 3, rechts linksbuendig bei PAD.l + CW + 5. Mit
+  // r:12 lag "100%" ausserhalb der Zeichenflaeche — die zweite Achse war zwar
+  // gerechnet, aber schlicht nicht zu sehen.
+  // Die Raender sind gegen die BREITESTE Schrift gemessen, die "9px sans-serif"
+  // treffen kann: auf dem Pi ist das DejaVu Sans (Raspberry Pi OS). Dort ist
+  // "100%" 25,7 px und "15.1 Ah" 34,8 px breit — mit r:30 / l:38 waere beides
+  // um Haaresbreite angeschnitten worden. Auf schmaleren Schriften bleibt nur
+  // etwas Luft stehen, das kostet keinen sichtbaren Balken.
+  const PAD = { t: 8, r: 36, b: 28, l: 42 };
   const CW = W - PAD.l - PAD.r;
   const CH = H - PAD.t - PAD.b;
 
@@ -624,6 +633,14 @@ function _renderWeekChart(data) {
   const yAh  = v  => PAD.t + CH * (1 - v / maxAh);
   const ySoc = v  => PAD.t + CH * (1 - Math.max(0, Math.min(100, v)) / 100);
 
+  // Ah-Beschriftung mit so vielen Nachkommastellen, wie der Achsenschritt
+  // braucht. Mit Math.round() stand an einem ruhigen Tag "0 Ah / 1 Ah / 1 Ah"
+  // an der Achse: drei Zahlen, von denen zwei gleich aussahen und keine den
+  // gezeichneten Balken entsprach.
+  const _ahSchritt = maxAh / 2;
+  const _ahDez     = _ahSchritt >= 10 ? 0 : _ahSchritt >= 0.5 ? 1 : 2;
+  const fmtAh      = v => v.toFixed(_ahDez) + ' Ah';
+
   // Hintergrund
   ctx.fillStyle = '#1e293b';
   ctx.fillRect(0, 0, W, H);
@@ -635,7 +652,7 @@ function _renderWeekChart(data) {
     ctx.fillStyle = '#334155';
     ctx.fillRect(PAD.l, y, CW, 0.5);
     ctx.fillStyle = '#64748b';
-    ctx.fillText(Math.round(v) + ' Ah', PAD.l - 3, y + 3);
+    ctx.fillText(fmtAh(v), PAD.l - 3, y + 3);
   });
 
   // Y-Achse rechts: Prozent (Ø SOC) — in der Farbe des SOC-Balkens, damit
@@ -702,6 +719,26 @@ function _renderWeekChart(data) {
     ctx.fillText(label, cx, PAD.t + CH + 14);
   });
 }
+
+// Groessenwechsel: Canvas-Bitmaps haengen an der Pixelbreite, gezeichnet wird
+// aber nur, wenn neue Messwerte kommen. Dreht das Telefon sich bei offenem
+// Batterie-Detail, bliebe die alte Bitmap stehen und wuerde verzerrt
+// hochskaliert. Deshalb beide Graphen neu zeichnen — entprellt ueber
+// requestAnimationFrame, damit der eine Kern des Pi waehrend des Drehens nicht
+// dutzendfach rechnet, und nur solange das Overlay ueberhaupt sichtbar ist.
+let _chartResizeRaf = null;
+function _chartsBeiGroessenwechsel() {
+  if (_chartResizeRaf !== null) cancelAnimationFrame(_chartResizeRaf);
+  _chartResizeRaf = requestAnimationFrame(() => {
+    _chartResizeRaf = null;
+    const ov = $('battOverlay');
+    if (!ov || ov.classList.contains('hidden')) return;
+    renderCharts(true);
+    if (_weekData) _renderWeekChart(_weekData);
+  });
+}
+window.addEventListener('resize', _chartsBeiGroessenwechsel);
+window.addEventListener('orientationchange', _chartsBeiGroessenwechsel);
 
 function _renderMobileCells() {
   const wrap = $('bdMobileCells');

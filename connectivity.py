@@ -28,6 +28,11 @@ class ConnectivityMonitor:
         self._token         = None
         self._token_ts      = 0.0
         self._grpc_stub     = None
+        # Der gRPC-Kanal MUSS neben dem Stub gehalten werden: nur ueber ihn
+        # laesst er sich schliessen. Ohne ihn blieb bei jedem Fehler ein
+        # verwaister Kanal samt Hintergrund-Threads und Sockets zurueck —
+        # alle 20 s einer, auf einem Pi Zero mit 512 MB nicht harmlos.
+        self._grpc_channel  = None
 
     def start(self):
         t = threading.Thread(target=self._loop, daemon=True, name='connectivity')
@@ -138,6 +143,21 @@ class ConnectivityMonitor:
 
     # ── starlink ──────────────────────────────────────────────────────────────
 
+    def _close_grpc(self):
+        """Schliesst den Status-Kanal zur Dish und vergisst den Stub.
+
+        Wird ausschliesslich aus dem Poll-Thread gerufen (_fetch_starlink).
+        Damit schliesst nie ein fremder Thread einen Kanal, den der Poll gerade
+        benutzt; set_starlink_sleep setzt nur den Stub auf None und ueberlaesst
+        das Aufraeumen dem naechsten Poll.
+        """
+        ch, self._grpc_channel, self._grpc_stub = self._grpc_channel, None, None
+        if ch is not None:
+            try:
+                ch.close()
+            except Exception as e:
+                log.debug('Starlink-Kanal schliessen: %s', e)
+
     def _fetch_starlink(self):
         try:
             import grpc
@@ -145,7 +165,11 @@ class ConnectivityMonitor:
             from yagrc import reflector as yr
 
             if self._grpc_stub is None:
+                self._close_grpc()          # Rest eines frueheren Versuchs
                 ch  = grpc.insecure_channel(self._starlink_host)
+                # sofort merken, damit auch ein Fehler beim Laden der
+                # Reflection-Protokolle den Kanal nicht zurueckliesse
+                self._grpc_channel = ch
                 ref = yr.GrpcReflectionClient()
                 ref.load_protocols(ch, symbols=['SpaceX.API.Device.Device'])
                 Req      = ref.message_class('SpaceX.API.Device.Request')
@@ -185,7 +209,7 @@ class ConnectivityMonitor:
             }
         except Exception as e:
             log.warning('Starlink gRPC: %s', e)
-            self._grpc_stub = None
+            self._close_grpc()
             return {'reachable': False, 'error': str(e)}
 
     def set_starlink_sleep(self, enable: bool) -> dict:
@@ -193,6 +217,7 @@ class ConnectivityMonitor:
         enable=True: Power-Save ab jetzt für ~24 h (spart Strom; Dish schläft,
         wenn kein Traffic). enable=False: Power-Save aus (Dish wach).
         Kein motorisierter Mast -> bewusst dish_power_save statt dish_stow."""
+        ch = None
         try:
             import grpc
             from yagrc import reflector as yr
@@ -222,9 +247,20 @@ class ConnectivityMonitor:
             )
             stub = ref.service_stub_class('SpaceX.API.Device.Device')(ch)
             stub.Handle(Req(dish_power_save=ps), timeout=8)
+            # Nur den Stub vergessen: der alte Status-Kanal gehoert dem
+            # Poll-Thread und wird dort beim naechsten Aufbau geschlossen.
+            # Ihn hier zu schliessen traefe evtl. einen laufenden Aufruf.
             self._grpc_stub = None   # Status-Stub neu aufbauen lassen
             log.info('Starlink power_save=%s gesetzt', enable)
             return {'ok': True, 'power_save': enable}
         except Exception as e:
             log.warning('Starlink power_save fehlgeschlagen: %s', e)
             return {'ok': False, 'error': str(e)}
+        finally:
+            # Dieser Kanal gehoert allein diesem Aufruf — auch beim fruehen
+            # return (dish_power_save nicht unterstuetzt) und im Fehlerfall.
+            if ch is not None:
+                try:
+                    ch.close()
+                except Exception as e:
+                    log.debug('Starlink-Steuerkanal schliessen: %s', e)

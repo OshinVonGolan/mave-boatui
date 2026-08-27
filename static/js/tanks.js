@@ -43,9 +43,34 @@ function renderTank(idx, pct) {
   }
 }
 
+// Ohne Messwerte wird die Kachel ausgeblendet. Die Rasterberechnung in
+// display.js (_applyGrid) setzt aber bei jedem Neuaufbau — Fenstergroesse
+// geaendert, Kachel-Einstellungen gespeichert — style.display JEDER sichtbaren
+// Kachel zurueck. Die leere Tank-Kachel blitzte dadurch wieder auf und
+// verschwand erst mit dem naechsten WebSocket-Frame. Deshalb merken wir uns die
+// gewuenschte Sichtbarkeit und stellen sie sofort wieder her, sobald jemand das
+// style-Attribut anfasst. Der Beobachter haengt an genau einem Element und
+// meldet sich nur bei echten Attributaenderungen — auf dem Pi Zero kostet das
+// nichts.
+let _tankCardSichtbar = true;
+
+function _applyTankCardVisibility() {
+  const card = $('tankCard');
+  if (!card) return;
+  const soll = _tankCardSichtbar ? '' : 'none';
+  if (card.style.display !== soll) card.style.display = soll;   // kein Endlos-Ping-Pong
+}
+
+(function _watchTankCard() {
+  const card = $('tankCard');
+  if (!card || typeof MutationObserver !== 'function') return;
+  new MutationObserver(_applyTankCardVisibility)
+    .observe(card, { attributes: true, attributeFilter: ['style'] });
+})();
+
 function updateTanks(tanks) {
-  const hasAny = tanks.tank1 != null || tanks.tank2 != null;
-  $('tankCard').style.display = hasAny ? '' : 'none';
+  _tankCardSichtbar = tanks.tank1 != null || tanks.tank2 != null;
+  _applyTankCardVisibility();
   renderTank(1, tanks.tank1);
   renderTank(2, tanks.tank2);
 }
