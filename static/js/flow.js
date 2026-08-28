@@ -47,8 +47,17 @@ function _setEdge(id, color, w, reverse = false, forceStatic = false) {
 
   el.style.stroke = color;
 
-  if (forceStatic || Math.abs(w ?? 0) < 1) {
-    // Strom fließt sicher, Menge unbekannt → statische farbige Strichlinie
+  if (Math.abs(w ?? 0) < 1 && !forceStatic) {
+    // Es fliesst nichts. Frueher blieb hier eine graue Leitung stehen; die
+    // sah aus, als waere das Geraet beteiligt, obwohl es aus war.
+    el.classList.remove('on', 'static', 'flow-rev');
+    el.style.stroke = '';
+    el.style.animationDuration = '';
+    return;
+  }
+
+  if (forceStatic) {
+    // Strom fliesst sicher, Menge unbekannt → farbige Strichlinie ohne Lauf
     el.classList.remove('on', 'flow-rev');
     el.classList.add('static');
     el.style.animationDuration = '';
@@ -98,7 +107,7 @@ function updateFlow(data) {
   // waren gross und sagten wenig.
   // SVG-Text bricht nicht um und wird nicht abgeschnitten — zu lange Zeilen
   // liefen aus dem Kasten heraus (Orion: "Remote, Motor-Absch. · Ein 12.6 V").
-  const _kurz = (t, max = 30) => t && t.length > max ? t.slice(0, max - 1) + '…' : t;
+  const _kurz = (t, max = 34) => t && t.length > max ? t.slice(0, max - 1) + '…' : t;
   const _sub = (...teile) =>
     _kurz(teile.filter(x => x != null && x !== '').join(' · ')) || null;
   const _v2 = v => v != null ? v.toFixed(2) + ' V' : null;
@@ -174,17 +183,33 @@ function updateFlow(data) {
                     .filter(Boolean).join('  ·  '));
   if (bg) bg.classList.remove('dim');
 
-  // ── Kanten (alle einheitlich dunkelblau) ─────────────────────────────
-  _setEdge('fe-solar1',       C, s1w,      false);
-  _setEdge('fe-solar2',       C, s2w,      false);
-  _setEdge('fe-solar3',       C, s3w,      false);
-  _setEdge('fe-charger',      C, chargerW, false);
-  _setEdge('fe-gridcharger',  C, chargerW, false, hasGrid && chargerW == null);
-  _setEdge('fe-gridbord',     C, null,     false, hasGrid);
-  _setEdge('fe-orion',        C, orionW,   false);
-  _setEdge('fe-starterorion', C, orionW,   false, altW > 5 && orionW == null);
-  _setEdge('fe-altstarter',   C, altW,     false, altW == null && orionW > 5);
-  _setEdge('fe-inv',          C, invW,     false);
-  _setEdge('fe-invbord',      C, invW,     false, bordActive && invW == null);
-  _setEdge('fe-dcgrid',       C, dcNetW,   false);
+  // ── Kanten ────────────────────────────────────────────────────────────
+  // Grundsatz: eine Leitung wird nur gezeichnet, wenn dort auch Strom fliesst.
+  // Ein Geraet, das aus ist, haengt an keiner Linie.
+  _setEdge('fe-solar1',  C, s1w);
+  _setEdge('fe-solar2',  C, s2w);
+  _setEdge('fe-solar3',  C, s3w);
+  _setEdge('fe-charger', C, chargerW);
+  _setEdge('fe-inv',     C, invW);
+  _setEdge('fe-dcgrid',  C, dcNetW);
+
+  // Landstrom -> Ladegeraet: nur wenn das Ladegeraet wirklich zieht.
+  _setEdge('fe-gridcharger', C, chargerW, false, hasGrid && chargerW == null);
+
+  // AC-Lasten haengen an einem NETZUMSCHALTER: entweder Landstrom ODER
+  // Inverter, nie beides. Der Umschalter legt sie auf den Inverter, wenn
+  // Landstrom fehlt und der Inverter laeuft. Vorher lief dauerhaft eine Linie
+  // vom Landstrom zu den AC-Lasten, auch wenn der Inverter versorgt haette.
+  const invLaeuft   = invW != null && invW > 10;
+  const aufLandstrom = hasGrid && !invLaeuft;
+  _setEdge('fe-gridbord', C, null, false, aufLandstrom);
+  _setEdge('fe-invbord',  C, invW, false, invLaeuft && invW == null);
+
+  // Ladekette Lichtmaschine -> Starter -> Orion -> Batterie: nur zeigen, wenn
+  // der Orion auch wirklich laedt. Steht er (Motor aus, Remote-Abschaltung),
+  // fliesst nichts, und dann gehoert da auch keine Linie hin.
+  const orionLaeuft = orionW != null && orionW > 1;
+  _setEdge('fe-orion',        C, orionW);
+  _setEdge('fe-starterorion', C, null, false, orionLaeuft);
+  _setEdge('fe-altstarter',   C, altW, false, orionLaeuft && altW == null);
 }

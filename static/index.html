@@ -1726,115 +1726,102 @@
     </div>
   </div>
   <div class="ov-body" style="padding:14px;background:#0c1828;display:flex;align-items:stretch;justify-content:center;overflow:hidden">
-    <svg class="flow-schema" viewBox="0 0 1120 668" xmlns="http://www.w3.org/2000/svg"
+    <svg class="flow-schema" viewBox="0 0 1040 690" xmlns="http://www.w3.org/2000/svg"
          preserveAspectRatio="xMidYMid meet">
 
-      <!-- Basis-Kanten (grau): zeigen die Verkabelung auch ohne Fluss.
-           Die Fuehrung ist so gewaehlt, dass keine Leitung eine andere
-           oder einen Kasten kreuzt — vorher liefen sie hinter den Kaesten
-           durch und ueberlagerten sich. -->
-      <path class="flow-edge" d="M 120,64 V 30 H 1000 V 64"/>
-      <path class="flow-edge" d="M 200,94 H 290"/>
-      <path class="flow-edge" d="M 830,94 H 920"/>
-      <path class="flow-edge" d="M 370,124 V 210 H 520 V 280"/>
-      <path class="flow-edge" d="M 750,124 V 210 H 600 V 280"/>
-      <path class="flow-edge" d="M 210,330 H 460"/>
-      <path class="flow-edge" d="M 210,390 H 460"/>
-      <path class="flow-edge" d="M 210,450 H 460"/>
-      <path class="flow-edge" d="M 660,390 H 920"/>
-      <path class="flow-edge" d="M 210,608 H 250"/>
-      <path class="flow-edge" d="M 420,608 H 460"/>
-      <path class="flow-edge" d="M 545,580 V 500"/>
+      <!-- Eine Leitung erscheint NUR, wenn dort Strom fliesst (flow.js).
+           Frueher war die Verkabelung dauerhaft grau gezeichnet — dann
+           hingen Linien an Solar, Inverter und der Ladekette, obwohl die
+           Geraete aus waren. Die AC-Lasten haengen an einem Netzumschalter:
+           entweder Landstrom ODER Inverter, nie beides. -->
+      <path class="flow-edge-dot" id="fe-gridbord" d="M 240,72 H 800"/>
+      <path class="flow-edge-dot" id="fe-gridcharger" d="M 130,124 V 142"/>
+      <path class="flow-edge-dot" id="fe-charger" d="M 240,194 H 330"/>
+      <path class="flow-edge-dot" id="fe-solar1" d="M 240,316 H 330"/>
+      <path class="flow-edge-dot" id="fe-solar2" d="M 240,406 H 290 V 400 H 330"/>
+      <path class="flow-edge-dot" id="fe-solar3" d="M 240,470 H 290 V 400 H 330"/>
+      <path class="flow-edge-dot" id="fe-inv" d="M 710,194 H 800"/>
+      <path class="flow-edge-dot" id="fe-invbord" d="M 910,142 V 124"/>
+      <path class="flow-edge-dot" id="fe-dcgrid" d="M 710,316 H 800"/>
+      <path class="flow-edge-dot" id="fe-altstarter" d="M 240,612 H 280"/>
+      <path class="flow-edge-dot" id="fe-starterorion" d="M 500,612 H 540"/>
+      <path class="flow-edge-dot" id="fe-orion" d="M 650,560 V 410"/>
 
-      <!-- Fluss-Kanten: Farbe und Animation setzt flow.js -->
-      <path class="flow-edge-dot" id="fe-gridbord" d="M 120,64 V 30 H 1000 V 64"/>
-      <path class="flow-edge-dot" id="fe-gridcharger" d="M 200,94 H 290"/>
-      <path class="flow-edge-dot" id="fe-invbord" d="M 830,94 H 920"/>
-      <path class="flow-edge-dot" id="fe-charger" d="M 370,124 V 210 H 520 V 280"/>
-      <path class="flow-edge-dot" id="fe-inv" d="M 750,124 V 210 H 600 V 280"/>
-      <path class="flow-edge-dot" id="fe-solar1" d="M 210,330 H 460"/>
-      <path class="flow-edge-dot" id="fe-solar2" d="M 210,390 H 460"/>
-      <path class="flow-edge-dot" id="fe-solar3" d="M 210,450 H 460"/>
-      <path class="flow-edge-dot" id="fe-dcgrid" d="M 660,390 H 920"/>
-      <path class="flow-edge-dot" id="fe-altstarter" d="M 210,608 H 250"/>
-      <path class="flow-edge-dot" id="fe-starterorion" d="M 420,608 H 460"/>
-      <path class="flow-edge-dot" id="fe-orion" d="M 545,580 V 500"/>
-
-      <!-- Batterie: Mittelpunkt, mit Platz fuer mehrere Zeilen -->
+      <!-- Batterie: Mittelpunkt -->
       <g id="fg-batt" class="flow-g">
-        <rect class="flow-box-main" x="460" y="280" width="200" height="220" rx="14"/>
-        <text class="flow-name" x="560" y="312">Batterie</text>
-        <text class="flow-val" id="fv-batt" x="560" y="360" style="font-size:30px">--</text>
-        <text class="flow-sub" id="fsa-batt" x="560" y="392"></text>
-        <text class="flow-sub" id="fsb-batt" x="560" y="414"></text>
-        <text class="flow-sub" id="fsc-batt" x="560" y="436"></text>
+        <rect class="flow-box-main" x="330" y="150" width="380" height="260" rx="16"/>
+        <text class="flow-name" x="520" y="192">Batterie</text>
+        <text class="flow-val" id="fv-batt" x="520" y="262" style="font-size:50px">--</text>
+        <text class="flow-sub" id="fsa-batt" x="520" y="308" style="font-size:15px"></text>
+        <text class="flow-sub" id="fsb-batt" x="520" y="338" style="font-size:15px"></text>
+        <text class="flow-sub" id="fsc-batt" x="520" y="368" style="font-size:15px"></text>
       </g>
 
       <g id="fg-grid" class="flow-g">
-        <rect class="flow-box" x="40" y="64" width="160" height="60" rx="10"/>
-        <text class="flow-name" x="120.0" y="80">Landstrom</text>
-        <text class="flow-val" id="fv-grid" x="120.0" y="104" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-grid" x="120.0" y="117"></text>
+        <rect class="flow-box" x="20" y="20" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="130.0" y="44">Landstrom</text>
+        <text class="flow-val" id="fv-grid" x="130.0" y="86" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-grid" x="130.0" y="108"></text>
       </g>
       <g id="fg-charger" class="flow-g">
-        <rect class="flow-box" x="290" y="64" width="160" height="60" rx="10"/>
-        <text class="flow-name" x="370.0" y="80">Ladegerät</text>
-        <text class="flow-val" id="fv-charger" x="370.0" y="104" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-charger" x="370.0" y="117"></text>
-      </g>
-      <g id="fg-inv" class="flow-g">
-        <rect class="flow-box" x="670" y="64" width="160" height="60" rx="10"/>
-        <text class="flow-name" x="750.0" y="80">Inverter</text>
-        <text class="flow-val" id="fv-inv" x="750.0" y="104" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-inv" x="750.0" y="117"></text>
-      </g>
-      <g id="fg-bord" class="flow-g">
-        <rect class="flow-box" x="920" y="64" width="160" height="60" rx="10"/>
-        <text class="flow-name" x="1000.0" y="80">AC-Lasten</text>
-        <text class="flow-val" id="fv-bord" x="1000.0" y="104" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-bord" x="1000.0" y="117"></text>
+        <rect class="flow-box" x="20" y="142" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="130.0" y="166">Ladegerät</text>
+        <text class="flow-val" id="fv-charger" x="130.0" y="208" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-charger" x="130.0" y="230"></text>
       </g>
       <g id="fg-solar1" class="flow-g">
-        <rect class="flow-box" x="40" y="302" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="125.0" y="318">Solar 1</text>
-        <text class="flow-val" id="fv-solar1" x="125.0" y="342" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-solar1" x="125.0" y="355"></text>
+        <rect class="flow-box" x="20" y="264" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="130.0" y="288">Solar</text>
+        <text class="flow-val" id="fv-solar1" x="130.0" y="330" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-solar1" x="130.0" y="352"></text>
       </g>
       <g id="fg-solar2" class="flow-g">
-        <rect class="flow-box" x="40" y="362" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="125.0" y="378">Solar 2</text>
-        <text class="flow-val" id="fv-solar2" x="125.0" y="402" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-solar2" x="125.0" y="415"></text>
+        <rect class="flow-box" x="20" y="380" width="220" height="52" rx="12"/>
+        <text class="flow-name" x="130.0" y="396">Solar 2</text>
+        <text class="flow-val" id="fv-solar2" x="130.0" y="418" style="font-size:18px">--</text>
+        <text class="flow-sub" id="fsa-solar2" x="130.0" y="430"></text>
       </g>
       <g id="fg-solar3" class="flow-g">
-        <rect class="flow-box" x="40" y="422" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="125.0" y="438">Solar 3</text>
-        <text class="flow-val" id="fv-solar3" x="125.0" y="462" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-solar3" x="125.0" y="475"></text>
+        <rect class="flow-box" x="20" y="444" width="220" height="52" rx="12"/>
+        <text class="flow-name" x="130.0" y="460">Solar 3</text>
+        <text class="flow-val" id="fv-solar3" x="130.0" y="482" style="font-size:18px">--</text>
+        <text class="flow-sub" id="fsa-solar3" x="130.0" y="494"></text>
+      </g>
+      <g id="fg-bord" class="flow-g">
+        <rect class="flow-box" x="800" y="20" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="910.0" y="44">AC-Lasten</text>
+        <text class="flow-val" id="fv-bord" x="910.0" y="86" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-bord" x="910.0" y="108"></text>
+      </g>
+      <g id="fg-inv" class="flow-g">
+        <rect class="flow-box" x="800" y="142" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="910.0" y="166">Inverter</text>
+        <text class="flow-val" id="fv-inv" x="910.0" y="208" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-inv" x="910.0" y="230"></text>
       </g>
       <g id="fg-dcgrid" class="flow-g">
-        <rect class="flow-box" x="920" y="362" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="1005.0" y="378">DC-Lasten</text>
-        <text class="flow-val" id="fv-dcgrid" x="1005.0" y="402" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-dcgrid" x="1005.0" y="415"></text>
+        <rect class="flow-box" x="800" y="264" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="910.0" y="288">DC-Lasten</text>
+        <text class="flow-val" id="fv-dcgrid" x="910.0" y="330" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-dcgrid" x="910.0" y="352"></text>
       </g>
       <g id="fg-alt" class="flow-g">
-        <rect class="flow-box" x="40" y="580" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="125.0" y="596">Lichtmasch.</text>
-        <text class="flow-val" id="fv-alt" x="125.0" y="620" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-alt" x="125.0" y="633"></text>
+        <rect class="flow-box" x="20" y="560" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="130.0" y="584">Lichtmasch.</text>
+        <text class="flow-val" id="fv-alt" x="130.0" y="626" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-alt" x="130.0" y="648"></text>
       </g>
       <g id="fg-starter" class="flow-g">
-        <rect class="flow-box" x="250" y="580" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="335.0" y="596">Starter</text>
-        <text class="flow-val" id="fv-starter" x="335.0" y="620" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-starter" x="335.0" y="633"></text>
+        <rect class="flow-box" x="280" y="560" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="390.0" y="584">Starter</text>
+        <text class="flow-val" id="fv-starter" x="390.0" y="626" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-starter" x="390.0" y="648"></text>
       </g>
       <g id="fg-orion" class="flow-g">
-        <rect class="flow-box" x="460" y="580" width="170" height="56" rx="10"/>
-        <text class="flow-name" x="545.0" y="596">Orion XS</text>
-        <text class="flow-val" id="fv-orion" x="545.0" y="620" style="font-size:19px">--</text>
-        <text class="flow-sub" id="fsa-orion" x="545.0" y="633"></text>
+        <rect class="flow-box" x="540" y="560" width="220" height="104" rx="12"/>
+        <text class="flow-name" x="650.0" y="584">Orion XS</text>
+        <text class="flow-val" id="fv-orion" x="650.0" y="626" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsa-orion" x="650.0" y="648"></text>
       </g>
     </svg>
   </div>
