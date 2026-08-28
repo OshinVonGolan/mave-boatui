@@ -14,7 +14,7 @@ Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten �
 ### 1. Version bumpen bei jedem Commit der die App verändert
 ```python
 # main.py Zeile ~45
-VERSION = _git_semver() or '1.27.0'   # ← hochzählen: 1.27.0 → 1.27.1
+VERSION = _git_semver() or '1.28.0'   # ← hochzählen: 1.28.0 → 1.28.1
 ```
 Commit-Message-Format (für Changelog):
 ```
@@ -196,7 +196,7 @@ So geht es richtig — am Beispiel der PGN 130912 (Solar Extended):
 - Instanz für `_last_raw` in der Instanz-Extraktion ergänzen
 
 **4. Frontend**
-- `battery.js`: `renderDeviceTiles()` / Tile-Hilfsfunktionen anpassen
+- `battery.js`: neues Gerät in `_baGeraete()` an die Liste hängen (`renderDeviceTiles()` ruft sie auf)
 - `ws.js / charts.js`: falls neue State-Felder im `data`-Dict sichtbar sein müssen
 
 **5. PROTOCOL.md** aktualisieren (Payload-Layout, Geräte-Tabelle, PGN-Übersicht)
@@ -291,7 +291,11 @@ Der Pi ermittelt die Gateway-Adresse dynamisch aus empfangenen PGN-130910-Frames
 
 - **Neue Geräte/PGNs immer End-to-End** implementieren: Teensy → nmea2000.py → can_reader.py → Frontend. Kein halbfertiges Zwischending einbauen.
 - **DEBUG_DUMP = true** kurz flashen um unbekannte Geräte zu identifizieren (alle Felder werden gedumpt wenn neuer Frame kommt). Danach wieder auf `false`.
-- **Device-Tiles** in `battery.js` sind rein JS-generiert — kein HTML nötig. Felder mit `_kv(label, val, unit)` hinzufügen.
+- **Geräte-Kacheln** der Batterie-Detailseite sind rein JS-generiert — kein HTML nötig. Neues Gerät in
+  `_baGeraete()` (battery.js) an die `liste` anhängen: `{name, icon, watt, chip, an, sub}`. Alle Kacheln haben
+  bewusst dieselbe Form (Name, Zustands-Chip, eine große Wattzahl, eine Zusatzzeile), damit die Reihe nicht
+  als Treppe ausläuft — was da nicht hineinpasst, gehört nicht auf die Batterieseite.
+  (Die früheren Helfer `_tile()` / `_kv()` gibt es nicht mehr.)
 - **State-Updates** nur wenn Wert sich geändert hat (`if target.get(k) != v`), sonst broadcast-Sturm.
 - **Timeout-Schutz** im Gateway: PGNs werden nur gesendet wenn letzter VE.Direct-Frame < 5s alt (`DATA_TIMEOUT_MS = 5000`). Pi bekommt nie veraltete Werte.
 

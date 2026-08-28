@@ -14,23 +14,41 @@ const VL_FARBEN = {
   batterie:  '#22c55e',
 };
 
+// Kein "7 Tage" mehr: der Feinverlauf haelt 16 Stunden vor (history_store.py,
+// retention_s = 16*3600). Der Knopf versprach eine Woche und lieferte 16
+// Stunden — die Wochenansicht ist der 7-Tage-Trend unter diesem Diagramm,
+// der aus den Tagesstatistiken kommt und wirklich sieben Tage abdeckt.
 const VL_BEREICHE = [
   { label: '2 Std', secs: 2 * 3600 },
+  { label: '6 Std', secs: 6 * 3600 },
   { label: '12 Std', secs: 12 * 3600 },
-  { label: '24 Std', secs: 24 * 3600 },
-  { label: '7 Tage', secs: 7 * 86400 },
+  { label: '16 Std', secs: 16 * 3600 },
 ];
 
 let _vlBereich  = 12 * 3600;
 let _vlDaten    = null;
 let _vlLaeuft   = false;
 
-function openVerlauf() {
-  _closeAllOverlays();
-  history.pushState({ overlay: 'verlauf' }, '', '#verlauf');
+/**
+ * Seite aufbauen — OHNE History-Eintrag.
+ *
+ * Getrennt, weil der popstate-Handler in lightdetail.js dieselbe Ansicht
+ * herstellen muss, ohne einen weiteren Eintrag zu schieben.
+ */
+function _verlaufAnzeigen() {
   $('verlaufOverlay').classList.remove('hidden');
   _vlBereichKnoepfe();
   ladeVerlauf();
+  // Der 7-Tage-Trend (charts.js) sitzt seit dem Umzug auf dieser Seite. Erst
+  // nach zwei Frames zeichnen: vorher war das Overlay noch versteckt, das
+  // Canvas misst dann 0 Breite und _renderWeekChart steigt still aus.
+  requestAnimationFrame(() => requestAnimationFrame(() => _loadAndRenderWeekChart()));
+}
+
+function openVerlauf() {
+  _closeAllOverlays();
+  history.pushState({ overlay: 'verlauf' }, '', '#verlauf');
+  _verlaufAnzeigen();
 }
 
 function closeVerlauf() {
@@ -239,5 +257,12 @@ let _vlResizeRaf = null;
 window.addEventListener('resize', () => {
   if (!$('verlaufOverlay') || $('verlaufOverlay').classList.contains('hidden')) return;
   if (_vlResizeRaf) cancelAnimationFrame(_vlResizeRaf);
-  _vlResizeRaf = requestAnimationFrame(() => { _vlResizeRaf = null; zeichneVerlauf(); });
+  _vlResizeRaf = requestAnimationFrame(() => {
+    _vlResizeRaf = null;
+    zeichneVerlauf();
+    // _chartsBeiGroessenwechsel in charts.js zeichnet den Wochentrend zwar
+    // ebenfalls neu; hier steht es, damit die Seite auch dann vollstaendig
+    // ist, wenn dieser Pfad zuerst laeuft.
+    if (typeof _weekData !== 'undefined' && _weekData) _renderWeekChart(_weekData);
+  });
 });

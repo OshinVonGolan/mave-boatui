@@ -267,6 +267,19 @@
     .vl-btn.an { border-color: var(--accent); color: var(--accent); }
     .vl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .vl-chart { width: 100%; height: 300px; display: block; }
+    /* Wochentrend auf derselben Seite — flacher als der Feinverlauf, weil er
+       nur sieben Balkenpaare zeigt. */
+    .vl-week-chart { width: 100%; height: 210px; display: block; }
+    .vl-titel { font-size: 11px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3); }
+    .vl-legende { display: flex; align-items: center; gap: 12px; margin-left: auto;
+      font-size: 10px; color: var(--text3); flex-wrap: wrap; }
+    .vl-legende i { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+      margin-right: 5px; vertical-align: -1px; }
+    /* Leerzustand: KEIN gezeichnetes Diagramm mit erfundener Achse. */
+    .vl-leer { display: flex; align-items: center; justify-content: center;
+      min-height: 120px; padding: 22px 16px; text-align: center;
+      font-size: 13px; color: var(--text3); line-height: 1.6; }
     @media (max-width: 639px) { .vl-chart { height: 220px; } }
     .vl-summen { display: grid; gap: 10px 22px; margin-top: 14px;
       padding-top: 14px; border-top: 1px solid var(--border);
@@ -323,13 +336,27 @@
        Absolute 3.335 gegen 3.340 sagt beim Draufschauen nichts. Die
        Abweichung zeigt sofort, welche Zelle ausreisst. */
     .ba-zellen { display: flex; flex-direction: column; gap: 8px; }
-    .ba-zeile-z { display: grid; grid-template-columns: 26px minmax(0, 1fr) 58px;
-      gap: 10px; align-items: center; font-size: 12px; }
+    .ba-zeile-z { display: grid; grid-template-columns: 24px 62px minmax(0, 1fr) 58px;
+      gap: 9px; align-items: center; font-size: 12px; }
     .ba-znr   { color: var(--text3); font-weight: 700; }
+    /* Absolute Zellspannung — ersetzt die frueher nur mobil gezeigte Kachel. */
+    .ba-zv    { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ba-zv small { color: var(--text3); font-weight: 600; font-size: 10px; }
     .ba-bahn-z{ position: relative; height: 16px; background: var(--surface2); border-radius: 4px; }
     .ba-null  { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
     .ba-bar-z { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; transition: all .4s ease; }
+    /* Ueber der Skala: der Balken ist geklemmt. Ohne Markierung wuerde eine
+       Zelle mit 200 mV Abweichung genauso aussehen wie eine mit 76 mV. */
+    .ba-bar-ueber { border-radius: 2px 0 0 2px;
+      background-image: linear-gradient(135deg, rgba(255,255,255,.45) 25%, transparent 25%,
+        transparent 50%, rgba(255,255,255,.45) 50%, rgba(255,255,255,.45) 75%, transparent 75%);
+      background-size: 6px 6px; }
     .ba-mv    { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+    @media (max-width: 420px) {
+      /* Auf sehr schmalen Geraeten hat die Bahn sonst weniger Platz als die
+         Zahlen daneben — dann lieber die Bahn schmaler als die Werte kuerzen. */
+      .ba-zeile-z { grid-template-columns: 20px 56px minmax(0, 1fr) 52px; gap: 7px; font-size: 11px; }
+    }
 
     /* ── Batterie-Detail: Servicebatterie als EINE Karte ───────────────────
        Vorher war die Bank auf zwei Kacheln zerlegt (Shunt-Werte hier,
@@ -343,29 +370,17 @@
       font-size: 12px; font-weight: 700; letter-spacing: .07em;
       text-transform: uppercase; color: var(--text2); }
     .sb-hd .chip { margin-left: auto; }
+    /* Die Kopfzeile setzt Grossbuchstaben — in den Chips stehen aber Einheiten,
+       und aus "19 mV" wurde damit "19 MV", also Megavolt. */
+    .sb-hd .chip { text-transform: none; letter-spacing: .02em; }
+    /* Nur der ERSTE Chip wird nach rechts geschoben — die folgenden reihen sich
+       daneben ein, statt auseinandergerissen zu werden. */
+    .sb-hd .chip ~ .chip { margin-left: 0; }
     .sb-grid { display: grid; gap: 24px; align-items: center;
       grid-template-columns: 230px 190px minmax(0, 1fr); }
     @media (max-width: 1050px) { .sb-grid { grid-template-columns: 230px minmax(0, 1fr); } }
     @media (max-width: 700px)  { .sb-grid { grid-template-columns: 1fr; } }
 
-    /* Energieringe */
-    .bd-ring-wrap { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-    .bd-ring-svg  { width: 100%; max-width: 230px; height: auto; display: block; }
-    .bd-ring-num  { font-size: 38px; font-weight: 700; font-family: inherit; }
-    .bd-ring-lbl  { font-size: 12px; font-weight: 600; fill: var(--text3); font-family: inherit; }
-    .bd-leg-spalte{ display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-    .bd-ring-skala{ font-size: 11px; color: var(--text3); line-height: 1.4; }
-    .bd-legende   { display: flex; flex-direction: column; gap: 9px; width: 100%; }
-    @media (max-width: 1050px) {
-      .bd-legende { display: grid; gap: 8px 16px;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-    }
-    .bd-leg      { display: flex; align-items: center; gap: 7px; font-size: 12px; min-width: 0; }
-    .bd-leg-dot  { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
-    .bd-leg-name { color: var(--text2); overflow: hidden;
-      text-overflow: ellipsis; white-space: nowrap; }
-    .bd-leg-val  { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .bd-leg-val small { font-size: 10px; font-weight: 600; color: var(--text3); margin-left: 2px; }
 
     /* Kennzahlen — Spalten breit genug, dass kein Label abgeschnitten wird */
     .sb-stats { display: grid; gap: 16px 18px;
@@ -404,6 +419,18 @@
     .starter { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 14px 18px; margin-bottom: var(--gap);
       display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+    /* Erklaert einen unterschlagenen Schleppzeiger — bricht auf eine eigene
+       Zeile um, damit die Kennzahlen daneben nicht schmal gequetscht werden. */
+    .starter-hinweis { flex-basis: 100%; font-size: 11px; color: var(--text3); line-height: 1.45; }
+
+    /* Widerspruch zwischen eingestellter Bankkapazitaet und BMS-Restenergie.
+       Bewusst auffaellig: die Autonomie-Aussage darueber haengt daran. */
+    .ba-streit { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px;
+      padding: 9px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5;
+      color: var(--yellow); background: rgba(234,179,8,.10);
+      border: 1px solid rgba(234,179,8,.35); }
+    .ba-streit svg { flex-shrink: 0; margin-top: 2px; }
+    .ba-streit b { color: var(--text1); }
 
     /* Geraete-Kacheln unter dem Verlauf: gleich hoch, kein Treppeneffekt */
     .bd-flow { display: grid; gap: var(--gap); margin-bottom: var(--gap);
@@ -856,6 +883,18 @@
       letter-spacing: .02em; text-transform: none; color: var(--text1);
       display: flex; align-items: center; gap: 8px; }
     .ov-header-spacer { width: 0; flex-shrink: 0; }
+    /* Zwei Knoepfe im Overlay-Kopf (Stromverlauf + Energiefluss). Auf schmalen
+       Geraeten duerfen sie umbrechen, statt den Titel zu zerquetschen. */
+    .ov-head-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      justify-content: flex-end; }
+    @media (max-width: 560px) {
+      /* Mit zwei beschrifteten Knoepfen bleibt fuer den Titel nichts uebrig —
+         bei 320 px zerbrach "Batterie — Details" mitten im Gedankenstrich.
+         Unter 560 px zeigen die Knoepfe nur ihr Symbol; die Beschriftung
+         steht weiterhin im title-/aria-label-Attribut. */
+      .ov-head-btns .monday-refresh { padding: 6px 9px; gap: 0; }
+      .ov-head-btns .monday-refresh .btn-text { display: none; }
+    }
     .ov-body { flex: 1; overflow-y: auto; padding: 12px 16px 16px; }
 
     /* ── Zentrierte Modals (statt Bottom-Sheets) ── */
@@ -904,49 +943,6 @@
       display: flex; flex-wrap: wrap; gap: 12px;
       padding: 16px 16px 4px; max-width: 1500px; margin: 0 auto; width: 100%; box-sizing: border-box;
     }
-    .dt-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px 16px;
-      min-width: 200px; flex: 1 1 200px; display: flex; flex-direction: column; gap: 10px;
-    }
-    /* Status-Farbe als linker Rand — ersetzt dt-card-off Opacity */
-    .dt-card      { border-left: 3px solid var(--border); }
-    .dt-card-ok   { border-left-color: var(--green); }
-    .dt-card-idle { border-left-color: var(--border); }
-    .dt-card-warn { border-left-color: var(--yellow); }
-    .dt-card-err  { border-left-color: var(--red); }
-    .dt-head {
-      display: flex; align-items: center; gap: 7px;
-      font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-      color: var(--text3); padding-bottom: 9px; border-bottom: 1px solid var(--border);
-    }
-    .dt-icon  { font-size: 14px; }
-    .dt-title { flex: 1; }
-    .dt-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .dt-status { font-size: 10px; font-weight: 500; color: var(--text3); }
-    .dt-body  { display: flex; flex-direction: column; gap: 6px; }
-    .dt-kvgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
-    .dt-kv    { display: flex; flex-direction: column; gap: 1px; }
-    .dt-lbl   { font-size: 10px; color: var(--text3); }
-    .dt-val   { font-size: 14px; font-weight: 600; color: var(--text1); }
-    .dt-unit  { font-size: 11px; font-weight: 400; color: var(--text3); }
-    .dt-soc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-    .dt-soc-num { font-size: 22px; font-weight: 700; }
-    .dt-soc-wrap { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
-    .dt-soc-fill { height: 100%; border-radius: 3px; transition: width .4s; }
-    .dt-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-    .dt-flag  { font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
-    .dt-flag-warn { background: rgba(234,179,8,.18); color: var(--yellow); }
-    .dt-flag-err  { background: rgba(239,68,68,.18);  color: var(--red); }
-    .dt-cell-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
-    .dt-cell { background: var(--surface2,var(--border)); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; gap: 1px; }
-    .dt-cell-nr  { font-size: 9px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-    .dt-cell-v   { font-size: 15px; font-weight: 700; color: var(--text1); }
-    .dt-cell-t   { font-size: 10px; color: var(--text3); }
-    .dt-cell-lo  { border-color: var(--red);    background: rgba(239,68,68,.08); }
-    .dt-cell-lo .dt-cell-v { color: var(--red); }
-    .dt-cell-hi  { border-color: var(--green);  background: rgba(34,197,94,.08); }
-    .dt-cell-hi .dt-cell-v { color: var(--green); }
 
     /* Charts-only Grid (für battOverlay nach Umbau) */
     .bd-pg-charts-only {
@@ -959,42 +955,10 @@
        eine leere Flaeche stehen bleibt. Platzierung deshalb zuruecksetzen. */
     .bd-pg-charts-only > .bd-pg-chart { grid-area: auto; }
     /* ── 7-Tage + Lade-Quellen nebeneinander ── */
-    /* Nur noch der 7-Tage-Trend steht hier — er ist die einzige Langzeitansicht
-       (der Verlaufsspeicher reicht ~16 h, daily_stats dagegen 30 Tage). */
-    .bd-bottom-row {
-      display: grid; grid-template-columns: 1fr; gap: 14px;
-      max-width: 1500px; margin: 0 auto; padding: 0 16px 16px; box-sizing: border-box;
-    }
-    .bd-week-wrap { background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden; }
-
-    /* Die Regel weiter unten blendet #deviceTilesSection auf dem Handy aus —
-       sie stammt aus der Zeit, als dort sieben dichte Geraetekacheln standen.
-       Seit dem Umbau ist das die Servicebatterie-Karte und damit der
-       Hauptinhalt der Seite; sie muss auch auf dem Handy sichtbar bleiben. */
-    @media (max-width: 639px) {
-      #deviceTilesSection { display: block !important; padding-bottom: 0; }
-    }
-
-    /* ── Mobile Zellen (nur auf Mobile sichtbar) ── */
-    .bd-mobile-cells { display: none; }
-
     @media (max-width: 639px) {
       .bd-pg-charts-only { padding: 0 10px 12px; }
-      .bd-bottom-row     { grid-template-columns: 1fr; padding: 0 10px 12px; gap: 10px; }
       /* Mobile Battery-Detail: nur Graph + 7-Tage + Pie + Zellen */
-      #deviceTilesSection { display: none; }
-      .bd-mobile-cells    { display: block; }
       /* Device-Tiles auf Desktop: 2-spaltig, kompakter */
-      .dt-section { padding: 10px 10px 4px; gap: 8px;
-        display: grid; grid-template-columns: 1fr 1fr; }
-      .dt-card { min-width: 0; padding: 10px 11px; gap: 7px; font-size: 13px; }
-      .dt-kvgrid { grid-template-columns: 1fr; gap: 3px 8px; }
-      .dt-val { font-size: 13px; }
-      .dt-lbl { font-size: 9px; }
-      .dt-card:nth-child(1), .dt-card:nth-child(2) { grid-column: 1 / -1; }
-      .dt-cell { padding: 4px 7px; }
-      .dt-cell-v { font-size: 13px; }
     }
 
     /* Altes Grid (nicht mehr für battOverlay genutzt, kann bleiben) */
@@ -1014,8 +978,6 @@
     .bd-pg-chart   { grid-area: chart; }
     .bd-pg-cells   { grid-area: cells; }
     .bd-pg-sources { grid-area: sources; }
-    /* Im bd-bottom-row: grid-area überschreiben damit auto-placement greift */
-    .bd-bottom-row > .bd-pg-sources { grid-area: auto; }
     .bd-pg-starter { grid-area: starter; }
     @media (max-width: 1023px) {
       .bd-pg {

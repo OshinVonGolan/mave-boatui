@@ -520,310 +520,6 @@ function updateTopbarBatt(soc) {
   if (pct)  pct.textContent = Math.round(v) + '%';
 }
 
-// ── Device Tiles (Battery Detail Overlay) ─────────────────────────────────
-
-const _MPPT_MODE_LABEL = ['Aus', 'Begrenzt', 'Aktiv'];
-const _ORION_OR = {
-  0x0001: 'Kein Eingang', 0x0002: 'Schalter aus', 0x0004: 'Remote',
-  0x0008: 'Schutz aktiv', 0x0020: 'Payload', 0x0040: 'BMS', 0x0080: 'Motor-Absch.',
-};
-
-function _orLabel(or_val) {
-  if (or_val == null) return null;
-  const bits = Object.entries(_ORION_OR).filter(([bit]) => or_val & Number(bit)).map(([,lbl]) => lbl);
-  return bits.length ? bits.join(', ') : 'OK';
-}
-
-function _kv(label, val, unit='', cls='') {
-  if (val == null || val === '' || val === '--') return '';
-  const v = unit ? `${val}<span class="dt-unit"> ${unit}</span>` : val;
-  return `<div class="dt-kv${cls ? ' ' + cls : ''}"><span class="dt-lbl">${label}</span><span class="dt-val">${v}</span></div>`;
-}
-
-// status: 'ok' | 'idle' | 'warn' | 'err'
-const _DOT_COLOR = { ok:'var(--green)', idle:'var(--border)', warn:'var(--yellow)', err:'var(--red)' };
-
-// iconHtml: fertiges SVG aus icon(name) — KEIN Emoji (Projektregel).
-// Parameter bewusst nicht "icon" genannt, sonst verdeckt er die Funktion icon().
-function _tile(iconHtml, title, statusTxt, bodyHtml, status='idle') {
-  const dotColor = _DOT_COLOR[status] ?? 'var(--border)';
-  return `<div class="dt-card dt-card-${status}">
-    <div class="dt-head">
-      <span class="dt-icon" style="display:inline-flex;align-items:center;color:var(--text2)">${iconHtml}</span>
-      <span class="dt-title">${title}</span>
-      <span class="dt-dot" style="background:${dotColor}"></span>
-      ${statusTxt ? `<span class="dt-status">${statusTxt}</span>` : ''}
-    </div>
-    <div class="dt-body">${bodyHtml}</div>
-  </div>`;
-}
-
-function _chgCsState(cs) {
-  if (cs == null) return 'idle';
-  if (cs === 2)  return 'err';   // Fault
-  if (cs === 0)  return 'idle';  // Off
-  return 'ok';                    // Bulk/Absorption/Float/etc.
-}
-
-function _tileBattBoard(b, bms) {
-  if (!b) return '';
-  const socPct = b.soc != null ? Math.round(b.soc) : null;
-  const socBar = socPct != null
-    ? `<div class="dt-soc-wrap"><div class="dt-soc-fill" style="width:${socPct}%;background:${socPct>=50?'var(--green)':socPct>=20?'var(--yellow)':'var(--red)'}"></div></div>`
-    : '';
-  const socTxt = socPct != null ? `<span class="dt-soc-num">${socPct}%</span>` : '';
-  // "Verbraucht" ist direkt der Shunt-Zaehler (negativ = entnommen, laeuft beim
-  // Laden wieder Richtung 0). Frueher stand hier das Sitzungs-Minimum: die
-  // Anzeige war eine Ratsche, lief nur nach unten und behauptete nach dem Laden
-  // weiter, die Batterie sei leer.
-  const body = `
-    <div class="dt-soc-row">${socTxt}${socBar}</div>
-    <div class="dt-kvgrid">
-      ${_kv('Spannung',    b.voltage    != null ? b.voltage.toFixed(2) : null, 'V')}
-      ${_kv('Strom',       b.current    != null ? b.current.toFixed(1) : null, 'A', b.current < 0 ? 'val-orange' : 'val-green')}
-      ${_kv('Leistung',    b.power      != null ? Math.round(b.power)  : null, 'W', b.power < 0 ? 'val-orange' : 'val-green')}
-      ${_kv('Verbraucht',  b.consumed_ah != null ? b.consumed_ah.toFixed(1) : null, 'Ah')}
-      ${_kv('Min',         b.min_voltage != null ? b.min_voltage.toFixed(3) : null, 'V')}
-      ${_kv('Max',         b.max_voltage != null ? b.max_voltage.toFixed(3) : null, 'V')}
-      ${_kv('Zyklen',      b.cycles)}
-      ${_kv('Voll vor',    b.time_since_full != null ? timeSince(b.time_since_full) : null)}
-      ${_kv('Starter',     b.starter_voltage != null ? b.starter_voltage.toFixed(2) : null, 'V')}
-      ${_kv('Temp.',       b.temperature != null ? b.temperature.toFixed(1) : null, '°C')}
-    </div>`;
-  const shuntStatus = socPct != null && socPct < 20 ? 'warn' : 'ok';
-  return _tile(icon('battery', {size:14}), 'Servicebatterie / Shunt', socPct != null ? `${socPct}%` : '', body, shuntStatus);
-}
-
-function _tileBms(bms) {
-  if (!bms || bms.voltage == null) return '';
-  const flags = [
-    bms.allow_charge    === false ? '<span class="dt-flag dt-flag-warn">Laden gesperrt</span>' : '',
-    bms.allow_discharge === false ? '<span class="dt-flag dt-flag-warn">Entladen gesperrt</span>' : '',
-    bms.comm_error      ? '<span class="dt-flag dt-flag-err">BMS Komm.-Fehler</span>' : '',
-    bms.alarm_min_volt  ? '<span class="dt-flag dt-flag-err">Zellspg. zu niedrig</span>' : '',
-    bms.alarm_max_volt  ? '<span class="dt-flag dt-flag-err">Zellspg. zu hoch</span>' : '',
-    bms.alarm_min_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu niedrig</span>' : '',
-    bms.alarm_max_temp  ? '<span class="dt-flag dt-flag-err">Temp. zu hoch</span>' : '',
-  ].filter(Boolean).join('');
-
-  // Zellen-Grid: 2×2 (bzw. n×2) mit Spannung + optionaler Temperatur
-  const cells = bms.cells ?? [];
-  let cellGrid = '';
-  if (cells.length > 0) {
-    const hasMinAlarm = bms.alarm_min_volt;
-    const hasMaxAlarm = bms.alarm_max_volt;
-    const lo = bms.lowest_cell_v, hi = bms.highest_cell_v;
-    const cellHtml = cells.map((c, i) => {
-      const v = c.voltage != null ? c.voltage.toFixed(3) : '--';
-      const t = c.temp    != null ? ` · ${c.temp.toFixed(1)}°` : '';
-      // Nur Farbe wenn wirklich ein Alarm aktiv ist
-      const isAlarmLo = hasMinAlarm && lo != null && c.voltage != null && Math.abs(c.voltage - lo) < 0.001;
-      const isAlarmHi = hasMaxAlarm && hi != null && c.voltage != null && Math.abs(c.voltage - hi) < 0.001;
-      const cls = isAlarmLo ? ' dt-cell-lo' : isAlarmHi ? ' dt-cell-hi' : '';
-      return `<div class="dt-cell${cls}">
-        <span class="dt-cell-nr">#${i + 1}</span>
-        <span class="dt-cell-v">${v}<span class="dt-unit"> V</span></span>
-        ${t ? `<span class="dt-cell-t">${t}</span>` : ''}
-      </div>`;
-    }).join('');
-    cellGrid = `<div class="dt-cell-grid">${cellHtml}</div>`;
-  }
-
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Spannung',    bms.voltage       != null ? bms.voltage.toFixed(2) : null, 'V')}
-      ${_kv('Strom',       bms.current_total != null ? bms.current_total.toFixed(2) : null, 'A', bms.current_total < 0 ? 'val-orange' : 'val-green')}
-      ${_kv('SOC',         bms.soc != null ? bms.soc + ' %' : null)}
-      ${_kv('Kapazität',   bms.capacity_ah   != null ? bms.capacity_ah.toFixed(1) : null, 'Ah')}
-      ${_kv('Verbleibend', bms.remaining_kwh != null ? (bms.remaining_kwh * 1000).toFixed(0) : null, 'Wh')}
-      ${_kv('Lade-A',      bms.current_charge    != null ? bms.current_charge.toFixed(2) : null, 'A')}
-      ${_kv('Entlade-A',   bms.current_discharge != null ? bms.current_discharge.toFixed(2) : null, 'A')}
-      ${bms.lowest_temp    != null ? _kv('Temp. min/max', `${bms.lowest_temp.toFixed(1)} / ${(bms.highest_temp??0).toFixed(1)} °C`) : ''}
-    </div>
-    ${cellGrid}
-    ${flags ? `<div class="dt-flags">${flags}</div>` : ''}`;
-  const socTxt = bms.soc != null ? `SOC ${bms.soc}%` : '';
-  const bmsStatus = flags.length ? (bms.comm_error || bms.alarm_min_volt || bms.alarm_max_volt || bms.alarm_min_temp || bms.alarm_max_temp ? 'err' : 'warn') : 'ok';
-  return _tile(icon('gauge', {size:14}), '123SmartBMS', socTxt, body, bmsStatus);
-}
-
-function _tileMppt(solar) {
-  if (!solar || (solar.voltage == null && solar.vpv == null && solar.cs_label == null)) return '';
-  const state = solar.cs_label ?? '--';
-  const isActive = solar.cs != null && solar.cs !== 0;
-  const mpptLbl = solar.mppt_mode != null ? (_MPPT_MODE_LABEL[solar.mppt_mode] ?? `Mode ${solar.mppt_mode}`) : null;
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Zustand',        state)}
-      ${_kv('Tracker',        mpptLbl)}
-      ${_kv('Batterie-Spg.', solar.voltage  != null ? solar.voltage.toFixed(3)  : null, 'V')}
-      ${_kv('Lade-Strom',    solar.current  != null ? solar.current.toFixed(3)  : null, 'A', 'val-green')}
-      ${_kv('Ausgangsleistung', solar.power != null ? Math.round(solar.power)   : null, 'W', 'val-green')}
-      ${_kv('Panel-Spannung', solar.vpv     != null ? solar.vpv.toFixed(2)      : null, 'V')}
-      ${_kv('Panel-Leistung', solar.ppv     != null ? Math.round(solar.ppv)     : null, 'W', 'val-green')}
-      ${_kv('Ertrag heute',   solar.yield_today_wh    != null ? solar.yield_today_wh    : null, 'Wh')}
-      ${_kv('Max heute',      solar.max_power_today_w != null ? solar.max_power_today_w : null, 'W')}
-    </div>`;
-  return _tile(icon('solar', {size:14}), 'MPPT 75/15', state, body, _chgCsState(solar.cs));
-}
-
-function _tileOrion(orion) {
-  if (!orion || (orion.cs == null && orion.output_power == null)) return '';
-  const state = orion.state ?? orion.cs_label ?? '--';
-  const isActive = orion.cs != null && orion.cs !== 0;
-  const orLbl = orion.off_reason_label ?? _orLabel(orion.off_reason);
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Zustand',           state)}
-      ${_kv('Aus-Spg.',          orion.dc_voltage    != null ? orion.dc_voltage.toFixed(3)   : null, 'V')}
-      ${_kv('Aus-Strom',         orion.dc_current    != null ? orion.dc_current.toFixed(3)   : null, 'A', 'val-green')}
-      ${_kv('Ausgangsleistung',  orion.output_power  != null ? Math.round(orion.output_power): null, 'W', 'val-green')}
-      ${_kv('Ein-Spannung',      orion.input_voltage != null ? orion.input_voltage.toFixed(3): null, 'V')}
-      ${_kv('Ein-Strom',         orion.input_current != null ? orion.input_current.toFixed(3): null, 'A')}
-      ${_kv('Eingangsleistung',  orion.input_power   != null ? Math.round(orion.input_power) : null, 'W')}
-      ${orLbl ? _kv('Off Reason', orLbl) : ''}
-    </div>`;
-  return _tile(icon('alternator', {size:14}), 'Orion-XS DC-DC', state, body, _chgCsState(orion.cs));
-}
-
-function _tileCharger(charger) {
-  if (!charger || charger.state == null) return '';
-  const isActive = charger.active !== false && charger.state && charger.state !== 'Aus';
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Zustand',    charger.state)}
-      ${_kv('Spannung',   charger.dc_voltage != null ? charger.dc_voltage.toFixed(3) : null, 'V')}
-      ${_kv('Strom',      charger.dc_current != null ? charger.dc_current.toFixed(3) : null, 'A', 'val-green')}
-      ${_kv('Leistung',   charger.power      != null ? Math.round(charger.power)     : null, 'W', 'val-green')}
-    </div>`;
-  const chargerCs = charger.cs ?? (charger.state === 'Aus' ? 0 : charger.state ? 1 : null);
-  return _tile(icon('plug', {size:14}), 'Smart IP43', charger.state ?? '', body, _chgCsState(chargerCs));
-}
-
-function _tileInverter(inv) {
-  if (!inv || inv.state == null) return '';
-  const isActive = inv.state === 'Aktiv' || inv.state === 'Eco';
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Zustand',     inv.state)}
-      ${_kv('AC-Spannung', (isActive && inv.ac_voltage != null) ? inv.ac_voltage.toFixed(1) : null, 'V')}
-      ${_kv('AC-Strom',    (isActive && inv.ac_current != null) ? inv.ac_current.toFixed(1) : null, 'A')}
-      ${_kv('AC-Leistung', (isActive && inv.power != null) ? Math.round(inv.power) : null, 'W', 'val-orange')}
-      ${_kv('DC-Spannung', inv.dc_voltage != null ? inv.dc_voltage.toFixed(3) : null, 'V')}
-      ${_kv('DC-Strom',    inv.dc_current != null ? inv.dc_current.toFixed(3) : null, 'A')}
-    </div>`;
-  const invStatus = inv.state === 'Fehler' ? 'err' : isActive ? 'ok' : 'idle';
-  return _tile(icon('bolt', {size:14}), 'Inverter 2000VA', inv.state ?? '', body, invStatus);
-}
-
-function _tileStarter(b) {
-  if (!b || b.starter_voltage == null) return '';
-  const body = `
-    <div class="dt-kvgrid">
-      ${_kv('Spannung', b.starter_voltage != null ? b.starter_voltage.toFixed(2) : null, 'V')}
-      ${_kv('Min',      _starterMin != null ? _starterMin.toFixed(2) : null, 'V')}
-      ${_kv('Max',      _starterMax != null ? _starterMax.toFixed(2) : null, 'V')}
-    </div>`;
-  return _tile(icon('battery', {size:14}), 'Starterbatterie', '', body, 'ok');
-}
-
-// ── Energieringe ───────────────────────────────────────────────────────────
-// SOC als Scheibe in der Mitte, darum je ein Ring pro Energiequelle und ein
-// Ring fuer den Verbrauch. Alle Quellenringe teilen sich EINE Watt-Skala, damit
-// die Laengen untereinander vergleichbar sind — die Skala steht sichtbar dabei,
-// sonst waere ein voller Ring bedeutungslos.
-//
-// Bewusst getrennt vom Fluss-Schema (flow.js): das zeigt die Topologie
-// (was fliesst wohin), das hier zeigt die Verhaeltnisse auf einen Blick.
-
-const RING_QUELLEN = [
-  { key: 'charger', name: 'Landstrom', farbe: 'var(--accent)',
-    holen: d => d.charger?.power },
-  { key: 'solar',   name: 'Solar',     farbe: 'var(--yellow)',
-    holen: d => d.solar?.power },
-  { key: 'orion',   name: 'DC-DC',     farbe: '#a78bfa',
-    holen: d => d.orion?.power },
-  // Lichtmaschine: Vorbereitung, erscheint sobald das Geraet Daten liefert.
-  { key: 'alternator', name: 'Lichtmaschine', farbe: '#38bdf8',
-    holen: d => d.alternator?.power },
-];
-
-/** Ein Ring als SVG: gedaempfte Spur plus gefuellter Bogen. */
-function _ring(r, strich, farbe, anteil) {
-  const C = 2 * Math.PI * r;
-  const f = Math.max(0, Math.min(1, anteil ?? 0));
-  // Runde Enden zeichnen auch bei winzigen Anteilen noch einen Punkt. Erst ab
-  // einem sichtbaren Anteil ueberhaupt einen Bogen ausgeben, sonst behauptet
-  // eine Quelle mit 0 W optisch, sie liefere etwas.
-  const sichtbar = f >= 0.01;
-  return `<circle cx="110" cy="110" r="${r}" fill="none" stroke="var(--surface2)"
-            stroke-width="${strich}"/>
-          ${sichtbar ? `<circle cx="110" cy="110" r="${r}" fill="none" stroke="${farbe}"
-            stroke-width="${strich}" stroke-linecap="round"
-            stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}"
-            transform="rotate(-90 110 110)"
-            style="transition:stroke-dasharray .5s ease"/>` : ''}`;
-}
-
-/**
- * Baut die Ringgrafik samt Legende.
- * Rueckgabe: { svg, legende, skala } — der Aufrufer setzt sie ins Layout.
- */
-function _bdRinge(data) {
-  const b = data.battery ?? {};
-  const soc = b.soc != null ? Math.round(b.soc) : null;
-  const socFarbe = soc == null ? 'var(--text3)'
-    : soc >= 50 ? 'var(--green)' : soc >= 20 ? 'var(--yellow)' : 'var(--red)';
-
-  // Quellen einsammeln; nur Geraete, die ueberhaupt einen Wert melden.
-  const quellen = RING_QUELLEN
-    .map(q => ({ ...q, watt: q.holen(data) }))
-    .filter(q => q.watt != null);
-
-  // Verbrauch = was reinkommt minus was in der Batterie landet. Der Inverter
-  // steckt darin — ihn zusaetzlich als eigenen Ring zu zeigen, wuerde ihn
-  // doppelt zaehlen.
-  const rein = quellen.reduce((s, q) => s + Math.max(0, q.watt), 0);
-  const verbrauch = b.power != null ? Math.max(0, rein - b.power) : null;
-
-  // Gemeinsame Skala, auf einen glatten Wert aufgerundet.
-  const groesster = Math.max(rein, verbrauch ?? 0, ...quellen.map(q => Math.abs(q.watt)));
-  const skala = groesster <= 0 ? 100
-    : [50, 100, 200, 500, 1000, 2000, 5000].find(s => s >= groesster * 1.15) ?? Math.ceil(groesster / 1000) * 1000;
-
-  // Ringe von innen nach aussen: erst die Quellen, ganz aussen der Verbrauch.
-  const bahnen = [...quellen];
-  if (verbrauch != null) {
-    bahnen.push({ key: 'last', name: 'Verbrauch', farbe: 'var(--orange)', watt: verbrauch });
-  }
-
-  const R_INNEN = 74, ABSTAND = 11, STRICH = 8;
-  const ringe = bahnen.map((q, i) =>
-    _ring(R_INNEN + i * ABSTAND, STRICH, q.farbe, Math.abs(q.watt) / skala)).join('');
-
-  const svg = `<svg class="bd-ring-svg" viewBox="0 0 220 220" role="img"
-      aria-label="Energieverteilung: ${bahnen.map(q => `${q.name} ${Math.round(q.watt)} Watt`).join(', ')}">
-    ${ringe}
-    <circle cx="110" cy="110" r="59" fill="none" stroke="var(--surface2)" stroke-width="14"/>
-    ${soc != null ? `<circle cx="110" cy="110" r="59" fill="none" stroke="${socFarbe}"
-        stroke-width="14" stroke-linecap="round"
-        stroke-dasharray="${(2 * Math.PI * 59 * soc / 100).toFixed(1)} ${(2 * Math.PI * 59).toFixed(1)}"
-        transform="rotate(-90 110 110)" style="transition:stroke-dasharray .5s ease"/>` : ''}
-    <text x="110" y="104" text-anchor="middle" class="bd-ring-num"
-          fill="${socFarbe}">${soc != null ? soc : '--'}</text>
-    <text x="110" y="128" text-anchor="middle" class="bd-ring-lbl">% SOC</text>
-  </svg>`;
-
-  const legende = bahnen.map(q => `<div class="bd-leg">
-      <span class="bd-leg-dot" style="background:${q.farbe}"></span>
-      <span class="bd-leg-name">${q.name}</span>
-      <span class="bd-leg-val">${Math.round(q.watt)}<small>W</small></span>
-    </div>`).join('');
-
-  return { svg, legende, skala };
-}
-
-
 /** Kennzahl der Servicebatterie-Karte. */
 function _sbStat(label, wert, einheit, farbe) {
   const leer = '<span style="color:var(--text3)">--</span>';
@@ -833,14 +529,13 @@ function _sbStat(label, wert, einheit, farbe) {
     }</span></div>`;
 }
 
-/**
- * Servicebatterie als EINE Karte.
- *
- * Vorher war die Bank auf zwei Kacheln zerlegt — Shunt-Werte in der einen,
- * BMS-Werte in der anderen — und die Zellen standen neben der Starterbatterie.
- * Shunt und BMS messen aber DIESELBE Batterie; die Starterbatterie hat damit
- * nichts zu tun. Deshalb hier alles zusammen, Starter separat.
- */
+// ── Batterie-Detailseite ──────────────────────────────────────────────────
+// Die Servicebatterie ist EINE Karte. Vorher war die Bank auf zwei Kacheln
+// zerlegt — Shunt-Werte in der einen, BMS-Werte in der anderen — und die Zellen
+// standen neben der Starterbatterie. Shunt und BMS messen aber DIESELBE
+// Batterie; die Starterbatterie hat damit nichts zu tun. Deshalb hier alles
+// zusammen, Starter separat.
+
 /** Quellen, die ueberhaupt einen Wert melden. */
 function _baQuellen(data) {
   return [
@@ -897,7 +592,38 @@ function _baAntwort(data) {
   const soc = b.soc != null ? Math.round(b.soc) : null;
   const farbe = soc == null ? 'var(--text3)'
     : soc >= 50 ? 'var(--green)' : soc >= 20 ? 'var(--yellow)' : 'var(--red)';
-  const restWh = bms.remaining_kwh != null ? Math.round(bms.remaining_kwh * 1000) : null;
+  // Verfuegbare Energie — bewusst aus der KONFIGURIERTEN Bankkapazitaet.
+  //
+  // Es gibt zwei Quellen, und sie widersprechen sich um fast eine
+  // Groessenordnung. Live gemessen: Einstellungen sagen 100 Ah Bank
+  // (= rund 1,3 kWh bei 13,3 V), das BMS meldet remaining_kwh = 10,878.
+  // Zusaetzlich meldet dasselbe BMS capacity_ah = 11,5 — und 10,878 / 11,5
+  // ergibt exakt den SOC von 95 %, die beiden BMS-Felder stehen also in
+  // derselben Einheit, welche auch immer das ist. PROTOCOL.md:238 sagt Ah,
+  // die Zahlen verhalten sich wie kWh; belegen laesst sich das nur am
+  // BMS-Display selbst.
+  //
+  // Auf dieser Karte steht die Frage "wie lange reicht der Strom" — die darf
+  // nicht auf einem Feld stehen, dessen Einheit ungeklaert ist. Deshalb:
+  // Hauptquelle ist dieselbe Rechnung, aus der auch die Batterie-Kachel ihre
+  // Restkapazitaet zieht (konfigurierte Kapazitaet + consumed_ah vom Shunt).
+  // Das BMS dient als Gegenprobe; weichen beide stark ab, sagen wir das,
+  // statt eine der beiden Zahlen stillschweigend zu bevorzugen.
+  const capAh    = batteriesConfig.capacity_ah ?? null;
+  // consumed_ah ist beim Victron-Shunt NEGATIV (entnommene Ah). Nach oben auf
+  // die Bankkapazitaet klemmen: ein Shunt mit falschem Vorzeichen oder ein
+  // nicht zurueckgesetzter Zaehler ergaebe sonst "Verfuegbar 2.369 Wh von
+  // 1.286 Wh" — mehr verfuegbar als vorhanden.
+  const restAh = (capAh != null && b.consumed_ah != null)
+    ? Math.min(capAh, Math.max(0, capAh + b.consumed_ah)) : null;
+  const restWhSh = (restAh != null && b.voltage != null)
+    ? Math.round(restAh * b.voltage) : null;
+  const restWhBms = bms.remaining_kwh != null ? Math.round(bms.remaining_kwh * 1000) : null;
+  const restWh    = restWhSh ?? restWhBms;
+  // Faktor 2 als Schwelle: Messrauschen und ein nicht ganz frisch kalibrierter
+  // Shunt erklaeren Abweichungen im Zehnerprozentbereich, keinen Faktor 2.
+  const streit = (restWhSh != null && restWhBms != null && restWhSh > 0 && restWhBms > 0)
+    && (restWhBms / restWhSh > 2 || restWhSh / restWhBms > 2);
 
   const q = _baQuellen(data);
   const rein = q.reduce((sum, x) => sum + x.w, 0);
@@ -918,14 +644,32 @@ function _baAntwort(data) {
     unter = 'kein nennenswerter Verbrauch';
   }
 
-  const zelldiff = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
-    ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) : null;
+  // Energie durchgaengig in Wh.
+  //
+  // Vorher standen "Verfuegbar 10.878 Wh" und "Verbraucht -0,1 Ah" nebeneinander
+  // — dieselbe Groesse in zwei Einheiten in einer Zeile. Die Gesamtkapazitaet
+  // kommt aus den BMS-eigenen Zahlen (Restenergie / SOC), NICHT aus dem
+  // Shunt-SOC: remaining_kwh ist ein BMS-Wert, und die beiden SOC-Angaben
+  // weichen voneinander ab (live: Shunt 100 %, BMS 95 %). Unter 20 % SOC wird
+  // die Division zu grob — der SOC kommt als ganze Prozentzahl, bei 10 % sind
+  // das schon +-5 % Fehler auf das Ergebnis. Dann nur den Restwert zeigen.
+  // Gesamtkapazitaet: bei der Shunt-Rechnung steht sie direkt in den
+  // Einstellungen, beim BMS-Rueckfall wird sie aus Restenergie und SOC
+  // hochgerechnet. Unter 20 % SOC wird diese Division zu grob — der SOC kommt
+  // als ganze Prozentzahl, bei 10 % sind das schon +-5 % Fehler.
+  const bmsSoc = bms.soc;
+  const gesamtWh = restWhSh != null
+    ? (b.voltage != null ? Math.round(capAh * b.voltage) : null)
+    : (restWh != null && bmsSoc != null && bmsSoc >= 20
+        ? Math.round(restWh / (bmsSoc / 100)) : null);
+  const wh = n => n.toLocaleString('de-DE') + ' Wh';
+
+  // Zelldiff. steht ab jetzt als "Spreizung" in der Zellen-Karte direkt
+  // darunter — hier waere es dieselbe Zahl ein zweites Mal.
   const kette = [
     ['Spannung',  b.voltage != null ? b.voltage.toFixed(2) + ' V' : null],
     ['Strom',     b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) + ' A' : null],
-    ['Verbraucht', b.consumed_ah != null ? b.consumed_ah.toFixed(1) + ' Ah' : null],
     ['Zyklen',    b.cycles],
-    ['Zelldiff.', zelldiff != null ? zelldiff + ' mV' : null],
     ['Temperatur', bms.lowest_temp != null && bms.highest_temp != null
       ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)} °C` : null],
     ['Voll vor',  b.time_since_full != null ? timeSince(b.time_since_full) : null],
@@ -938,9 +682,16 @@ function _baAntwort(data) {
       <div>
         <div class="ba-kopf">${kopf}<small>${unter}</small></div>
         <div class="ba-kette">
-          ${restWh != null ? `<span>Verfügbar <b>${restWh.toLocaleString('de-DE')} Wh</b></span>` : ''}
+          ${restWh != null ? `<span>Verfügbar <b>${wh(restWh)}</b>${
+            gesamtWh != null ? ` von ${wh(gesamtWh)}` : ''}</span>` : ''}
           ${kette}
         </div>
+        ${streit ? `<div class="ba-streit">${icon('warning', {size: 13})}
+          <span>Bank laut Einstellungen <b>${capAh} Ah</b> (${wh(restWhSh)} verfügbar),
+          BMS meldet <b>${wh(restWhBms)}</b> — Faktor
+          ${(Math.max(restWhBms, restWhSh) / Math.min(restWhBms, restWhSh)).toFixed(1)}.
+          Gerechnet wird mit dem eingestellten Wert. Bitte Bankkapazität in den
+          Einstellungen prüfen.</span></div>` : ''}
       </div>
     </div>
   </div>`;
@@ -989,6 +740,30 @@ function _baBilanz(data) {
  * Absolute 3.335 gegen 3.340 sagt beim Draufschauen nichts; die Abweichung
  * zeigt sofort, welche Zelle ausreisst.
  */
+// Zellabweichung: feste Skala und feste Schwellen.
+//
+// Vorher skalierte die Karte sich selbst (max = Math.max(8, ...groesste
+// Abweichung)) und faerbte ab 15 mV rot. Damit sah sie IMMER maximal dramatisch
+// aus: die groesste Abweichung fuellte per Definition den Balken, egal ob sie
+// 4 mV oder 400 mV betrug, und eine fuer LiFePO4 im Ruhezustand voellig normale
+// Spreizung von 25 mV erzeugte einen roten Vollbalken.
+//
+// Jetzt: feste Skala, damit Balkenlaengen ueber die Zeit UND zwischen den
+// Zellen vergleichbar sind. Die Skala endet genau dort, wo die Farbe auf Rot
+// springt — ein voller Balken heisst also "rot", nichts anderes.
+// Schwellen auf die Abweichung vom Mittel, nicht auf die Spreizung: bei einer
+// 4-Zellen-Bank mit einem Ausreisser ist die max. Abweichung 3/4 der Spreizung.
+// 40 mV Abweichung entspricht damit rund 53 mV Spreizung (fuer LiFePO4 im
+// Auge behalten), 75 mV Abweichung rund 100 mV Spreizung (handlungsbeduerftig).
+const _ZELL_SKALA_MV = 75;   // Balkenende = Rot-Schwelle
+const _ZELL_GELB_MV  = 40;
+const _ZELL_ROT_MV   = 75;
+
+function _zellFarbe(mv) {
+  const a = Math.abs(mv);
+  return a > _ZELL_ROT_MV ? 'var(--red)' : a > _ZELL_GELB_MV ? 'var(--yellow)' : 'var(--green)';
+}
+
 function _baZellen(data) {
   const bms = data.bms ?? {};
   const c = Array.isArray(bms.cells) ? bms.cells : [];
@@ -997,19 +772,31 @@ function _baZellen(data) {
   const gueltig = mv.filter(v => v != null);
   if (!gueltig.length) return '';
   const mittel = gueltig.reduce((a, x) => a + x, 0) / gueltig.length;
-  const abw = mv.map(v => v == null ? null : v - mittel);
-  const max = Math.max(8, ...abw.filter(v => v != null).map(Math.abs));
+  const spreizung = Math.max(...gueltig) - Math.min(...gueltig);
 
+  // Zellen OHNE Wert werden als Zeile mit "--" ausgegeben statt stillschweigend
+  // uebersprungen: eine fehlende Zelle ist eine Information, kein Nichts.
   const zeilen = c.map((z, i) => {
-    const a = abw[i];
-    if (a == null) return '';
-    const breite = Math.abs(a) / max * 50;
+    const v = mv[i];
+    if (v == null) {
+      return `<div class="ba-zeile-z">
+        <span class="ba-znr">#${i + 1}</span>
+        <span class="ba-zv" style="color:var(--text3)">-- V</span>
+        <div class="ba-bahn-z"><div class="ba-null"></div></div>
+        <span class="ba-mv" style="color:var(--text3)">--</span>
+      </div>`;
+    }
+    const a = v - mittel;
+    const ueber = Math.abs(a) > _ZELL_SKALA_MV;
+    const breite = Math.min(Math.abs(a) / _ZELL_SKALA_MV, 1) * 50;
     const links = a < 0 ? 50 - breite : 50;
-    const f = Math.abs(a) > 15 ? 'var(--red)' : Math.abs(a) > 8 ? 'var(--yellow)' : 'var(--green)';
+    const f = _zellFarbe(a);
     return `<div class="ba-zeile-z">
       <span class="ba-znr">#${i + 1}</span>
+      <span class="ba-zv">${(v / 1000).toFixed(3)}<small> V</small></span>
       <div class="ba-bahn-z"><div class="ba-null"></div>
-        <div class="ba-bar-z" style="left:${links}%;width:${breite}%;background:${f}"></div></div>
+        <div class="ba-bar-z${ueber ? ' ba-bar-ueber' : ''}"
+             style="left:${links}%;width:${breite}%;background:${f}"></div></div>
       <span class="ba-mv" style="color:${f}">${a > 0 ? '+' : ''}${a.toFixed(0)} mV</span>
     </div>`;
   }).join('');
@@ -1027,9 +814,11 @@ function _baZellen(data) {
     <div class="sb-hd">${icon('gauge', {size: 14})} Zellen
       ${flaggen}
       <span class="chip">Mittel ${(mittel / 1000).toFixed(3)} V</span>
+      <span class="chip" style="color:${_zellFarbe(spreizung * 3 / 4)}">Spreizung ${spreizung.toFixed(0)} mV</span>
     </div>
     <div class="ba-zellen">${zeilen}</div>
-    ${temps ? `<div class="vl-hinweis">Abweichung vom Zellmittel · ${temps}</div>` : ''}
+    <div class="vl-hinweis">Abweichung vom Zellmittel, Skala &plusmn;${_ZELL_SKALA_MV} mV${
+      temps ? ' · ' + temps : ''}</div>
   </div>`;
 }
 
@@ -1089,26 +878,51 @@ function _baGeraete(data) {
   </div>`).join('');
 }
 
+/**
+ * Plausible Starterspannung?
+ *
+ * Die Min-/Max-Werte sind die Schleppzeiger des Shunts (Victron H15/H16). Sie
+ * halten fest, was am Hilfseingang JE gemessen wurde — auch Momente, in denen
+ * dort gar keine Batterie hing. Live gemessen kam so ein Minimum von -0,004 V
+ * zurueck. Frueher wurde das auf 0 geklemmt und als "0.00 V" angezeigt; das
+ * liest sich wie eine tiefentladene Batterie, ist aber ein Aussetzer der
+ * Messung. Eine angeschlossene Bleibatterie liegt selbst voellig platt noch
+ * ueber 5 V, und ueber 20 V kann am 12-V-Eingang nichts Echtes stehen.
+ * Ausserhalb dieses Fensters zeigen wir "--" statt einer erfundenen Zahl.
+ */
+const _ST_MIN_PLAUSIBEL = 5.0;
+const _ST_MAX_PLAUSIBEL = 20.0;
+const _stPlausibel = v =>
+  (v != null && v >= _ST_MIN_PLAUSIBEL && v <= _ST_MAX_PLAUSIBEL) ? v : null;
+
 /** Starterbatterie: eigene, kleine Karte — gehoert NICHT zur Bank. */
 function _starterKarte(b) {
   if (!b || b.starter_voltage == null) return '';
   const v = b.starter_voltage;
   const farbe = v < 11.8 ? 'var(--red)' : v < 12.2 ? 'var(--yellow)' : null;
-  // Min kann durch einen Messausreisser knapp negativ werden — nicht als
-  // "-0.00 V" anzeigen, das liest sich wie ein Defekt.
-  const min = b.starter_min_voltage != null ? Math.max(0, b.starter_min_voltage) : null;
+  const min = _stPlausibel(b.starter_min_voltage);
+  const max = _stPlausibel(b.starter_max_voltage);
+  // Nur erklaeren, wenn wirklich etwas unterschlagen wurde — sonst steht da
+  // eine Fussnote ohne Anlass.
+  const verworfen = (b.starter_min_voltage != null && min == null)
+                 || (b.starter_max_voltage != null && max == null);
   return `<div class="starter">
     ${_sbStat('Starterbatterie', v.toFixed(2), 'V', farbe)}
     ${_sbStat('Min', min != null ? min.toFixed(2) : null, 'V')}
-    ${_sbStat('Max', b.starter_max_voltage != null ? b.starter_max_voltage.toFixed(2) : null, 'V')}
+    ${_sbStat('Max', max != null ? max.toFixed(2) : null, 'V')}
+    ${verworfen ? `<div class="starter-hinweis">Ein Schleppzeiger liegt ausserhalb
+      des plausiblen Bereichs (${_ST_MIN_PLAUSIBEL}–${_ST_MAX_PLAUSIBEL} V) und wird
+      nicht angezeigt.</div>` : ''}
   </div>`;
 }
 
 /**
  * Baut die Batterie-Detailseite.
  * Reihenfolge: Servicebatterie -> Verlauf -> Geraete -> Starterbatterie.
- * Die Geraetekacheln (_tileMppt & Co.) bleiben unveraendert in Gebrauch, sie
- * stehen jetzt nur unter dem Verlauf statt ueber dem SOC.
+ *
+ * Die Geraete kommen aus _baGeraete(); die alten Einzelkacheln (_tileMppt,
+ * _tileBms & Co.) sind mit diesem Umbau entfallen. Wer ein NEUES Geraet
+ * ergaenzt, haengt es in _baGeraete() an die Liste — nicht mehr an _tile()/_kv().
  */
 function renderDeviceTiles(data) {
   const sec = $('deviceTilesSection');

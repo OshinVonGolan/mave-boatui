@@ -581,12 +581,10 @@ function openBattDetail() {
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
   if (_lastData) renderDeviceTiles(_lastData);
-  _renderMobileCells();
   // Graph erst nach zwei Frames — Canvas hat dann korrekte clientWidth/clientHeight
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    renderCharts(true);
-    _loadAndRenderWeekChart();
-  }));
+  // Der 7-Tage-Trend ist auf die Stromverlauf-Seite umgezogen und wird dort
+  // geladen; hier bleibt der Feinverlauf.
+  requestAnimationFrame(() => requestAnimationFrame(() => renderCharts(true)));
 }
 
 function _loadAndRenderWeekChart() {
@@ -598,7 +596,32 @@ function _loadAndRenderWeekChart() {
 
 function _renderWeekChart(data) {
   const canvas = $('weekChart');
-  if (!canvas || !data || !data.length) return;
+  if (!canvas) return;
+  const hinweis = $('weekHinweis');
+
+  // Leerzustand.
+  //
+  // daily_stats liefert fuer Tage ohne Messwerte KEINE leere Liste, sondern
+  // sieben Eintraege mit charged_ah/discharged_ah/avg_soc = null. Die alte
+  // Pruefung (!data.length) griff dabei nie: gezeichnet wurde ein vollstaendiges
+  // Diagramm mit der Achse "0,0 / 0,5 / 1,0 Ah" — eine erfundene Skala, die wie
+  // ein Messergebnis aussieht. Jetzt wird bei fehlenden Daten gar nichts
+  // gezeichnet und stattdessen gesagt, warum.
+  const hatDaten = Array.isArray(data) && data.some(d =>
+    (d.charged_ah ?? 0) > 0 || (d.discharged_ah ?? 0) > 0 || d.avg_soc != null);
+
+  // Sichtbarkeit VOR jeder Messung setzen: ein display:none-Canvas hat
+  // offsetWidth 0, und der Zeichencode weiter unten steigt dann still aus.
+  canvas.style.display = hatDaten ? 'block' : 'none';
+  if (hinweis) {
+    hinweis.className   = hatDaten ? 'vl-hinweis' : 'vl-leer';
+    hinweis.textContent = hatDaten
+      ? 'Geladene und entladene Amperestunden je Tag (linke Achse), '
+        + 'dazu der Tagesmittelwert des Ladezustands (rechte Achse).'
+      : 'Für die letzten sieben Tage liegen noch keine Tageswerte vor. '
+        + 'Der Trend füllt sich, sobald der Monitor einen Tag durchgelaufen ist.';
+  }
+  if (!hatDaten) return;
 
   const dpr = window.devicePixelRatio || 1;
   const W   = canvas.offsetWidth;
@@ -732,31 +755,17 @@ function _chartsBeiGroessenwechsel() {
   _chartResizeRaf = requestAnimationFrame(() => {
     _chartResizeRaf = null;
     const ov = $('battOverlay');
-    if (!ov || ov.classList.contains('hidden')) return;
-    renderCharts(true);
-    if (_weekData) _renderWeekChart(_weekData);
+    if (ov && !ov.classList.contains('hidden')) renderCharts(true);
+    // Der Wochentrend sitzt jetzt in einem ANDEREN Overlay — er darf nicht
+    // mehr an der Sichtbarkeit des Batterie-Overlays haengen, sonst wird er
+    // beim Drehen des Geraets nie neu gezeichnet.
+    const vl = $('verlaufOverlay');
+    if (vl && !vl.classList.contains('hidden') && _weekData) _renderWeekChart(_weekData);
   });
 }
 window.addEventListener('resize', _chartsBeiGroessenwechsel);
 window.addEventListener('orientationchange', _chartsBeiGroessenwechsel);
 
-function _renderMobileCells() {
-  const wrap = $('bdMobileCells');
-  if (!wrap) return;
-  const bms = _lastBms;
-  if (!bms || !bms.cells || !bms.cells.length) { wrap.innerHTML = ''; return; }
-  const cells = bms.cells.slice(0, 8);
-  const rows = cells.map((c, i) => {
-    const v = c.voltage != null ? c.voltage.toFixed(3) : '--';
-    const t = c.temp    != null ? ` · ${c.temp.toFixed(1)}°` : '';
-    return `<div class="dt-cell">
-      <span class="dt-cell-nr">#${i+1}</span>
-      <span class="dt-cell-v">${v}<span class="dt-unit"> V</span></span>
-      ${t ? `<span class="dt-cell-t">${t}</span>` : ''}
-    </div>`;
-  }).join('');
-  wrap.innerHTML = `<div class="dt-cell-grid" style="padding:0 12px 12px">${rows}</div>`;
-}
 function closeBattDetail() {
   $('battOverlay').classList.add('hidden');
   history.replaceState(null, '', location.pathname);
@@ -779,12 +788,17 @@ function cellColor(v, isLowest, isHighest, alarmMin, alarmMax) {
 function updateBms(bms) {
   if (!bms) return;
   _lastBms = bms;
-  // Restkapazität: Shunt (updateBattery) hat Vorrang; BMS als Fallback
-  const remAhEl = $('battRemVal');
-  if (remAhEl && remAhEl.textContent === '--') {
-    if (bms.capacity_ah != null && bms.soc != null)
-      remAhEl.textContent = (bms.capacity_ah * bms.soc / 100).toFixed(1);
-  }
+  // Restkapazität kommt ausschliesslich aus updateBattery() (konfigurierte
+  // Bankkapazitaet + consumed_ah vom Shunt).
+  //
+  // Hier stand ein BMS-Rueckfall: bms.capacity_ah * bms.soc / 100, ausgegeben
+  // in Ah. Der ist unbrauchbar, weil das Feld hoechstwahrscheinlich gar keine
+  // Ah enthaelt: live meldet das BMS capacity_ah = 11,5 bei remaining_kwh =
+  // 10,878 und soc = 95 — und 10,878 / 11,5 = 0,946, also exakt der SOC. Das
+  // Feld verhaelt sich wie kWh. Als "11,5 Ah" waere es fuer eine Bank mit
+  // 10,9 kWh Restenergie um Groessenordnungen daneben. Bis die Einheit am
+  // BMS-Display geprueft ist, lieber "--" als eine falsche Zahl.
+  // (Parser: nmea2000.py, parse_bms_pack, Offset 17.)
   // BMS-Relais-Status auf der Batterie-Kachel
   const relayRow = $('bmsRelayRow');
   if (relayRow && bms.allow_charge != null) {

@@ -116,11 +116,18 @@ Bar; normaler (Handy-)Modus unverändert. Tabs/`_kioskSetActive` funktionieren w
 ruhig etwas niedriger sein — aktuell ist sehr viel Leerraum über und unter der Zahl.
 
 **Dateien:**
-- `static/css/style.css` — Höhe/Padding der `.dt-kv` / `.dt-val` / `.dt-kvgrid`
-  reduzieren (vertikales Padding bzw. `line-height` der Zahl verringern, ggf.
-  geringere Mindesthöhe der Grid-Zellen).
+- `static/css/style.css` — Höhe/Padding der Wert-Zellen reduzieren:
+  `.batt-item` (Zeile ~765, `padding: 7px 10px`) sowie `.batt-item .label` /
+  `.batt-item .value` (~770/771) und die Kachel-eigene Überschreibung
+  `.card-battery .batt-grid .batt-item` (~561). In der halbhohen Variante
+  zusätzlich `.batt-half-stat` / `.batt-half-stat b` (~571/572).
 - ggf. `static/js/battery.js` — nur falls die Höhe dort inline gesetzt wird
-  (Wert-Zellen werden in `_kv()` / `renderDeviceTiles()` erzeugt, Zeile ~355).
+  (Wert-Zellen entstehen in `_renderBattGrid()` bzw. `_renderBattHalfWide()`).
+
+> Hinweis: Diese Aufgabe nannte früher `.dt-kv` / `.dt-val` / `.dt-kvgrid` und
+> `_kv()`. Diese Klassen und die Hilfsfunktion gab es zur Zeit der alten
+> Geräte-Kacheln; sie sind mit dem Umbau der Batterie-Detailseite entfallen.
+> Der Wunsch selbst — weniger Leerraum um die Zahl — ist unverändert offen.
 
 **Akzeptanz:** Zahl bleibt zentriert und gut lesbar, aber der Leerraum ober-/
 unterhalb ist sichtbar reduziert; Layout in `half`/`normal`/`wide` bleibt intakt.

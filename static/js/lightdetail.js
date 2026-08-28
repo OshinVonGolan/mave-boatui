@@ -198,7 +198,16 @@ window.addEventListener('popstate', () => {
   const hash = location.hash.slice(1);
   if (hash) {
     const map = {
-      battery:  () => { $('battOverlay').classList.remove('hidden'); if (_lastBms) updateBms(_lastBms); setTimeout(renderCharts, 50); },
+      // renderDeviceTiles muss mit: ueber diesen Pfad (Zurueck-Taste, direkter
+      // Aufruf von #battery) lief es frueher nicht, die drei Karten oben
+      // blieben bis zum naechsten WebSocket-Frame leer.
+      battery:  () => { $('battOverlay').classList.remove('hidden');
+                        if (_lastBms) updateBms(_lastBms);
+                        if (_lastData) renderDeviceTiles(_lastData);
+                        setTimeout(renderCharts, 50); },
+      // #verlauf fehlte hier ganz — seit der 7-Tage-Trend auf dieser Seite
+      // sitzt, waere er ueber Vor/Zurueck sonst nicht mehr erreichbar.
+      verlauf:  () => { _verlaufAnzeigen(); },
       flow:     () => { $('flowOverlay').classList.remove('hidden'); if (_lastData) updateFlow(_lastData); },
       lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },

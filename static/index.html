@@ -566,10 +566,16 @@
       </svg>
       Batterie — Details
     </div>
-    <button class="monday-refresh" onclick="openFlow()" title="Energiefluss-Diagramm">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-      Energiefluss
-    </button>
+    <div class="ov-head-btns">
+      <button class="monday-refresh" onclick="openVerlauf()" title="Stromverlauf und 7-Tage-Trend" aria-label="Stromverlauf und 7-Tage-Trend">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        <span class="btn-text">Stromverlauf</span>
+      </button>
+      <button class="monday-refresh" onclick="openFlow()" title="Energiefluss-Diagramm" aria-label="Energiefluss-Diagramm">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span class="btn-text">Energiefluss</span>
+      </button>
+    </div>
   </div>
   <div class="ov-body">
 
@@ -587,7 +593,10 @@
             <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
             <button class="chart-range"        data-secs="43200"  onclick="setChartRange(this,43200)">12 Std</button>
             <button class="chart-range"        data-secs="86400"  onclick="setChartRange(this,86400)">24 Std</button>
-            <button class="chart-range"        data-secs="604800" onclick="setChartRange(this,604800)">7 T</button>
+            <!-- "7 T" stand hier. Der Feinverlauf haelt nur 16 Stunden vor
+                 (history_store.py, retention_s) — der Knopf hat sieben Tage
+                 versprochen und 16 Stunden geliefert. Die Wochenansicht steht
+                 als 7-Tage-Trend auf der Stromverlauf-Seite. -->
           </div>
         </div>
         <div class="chart-tog-group">
@@ -608,28 +617,15 @@
     <div id="bdDiag" style="padding:0 16px"></div>
 
     <!-- ── 7-Tage Trend + Lade-Quellen nebeneinander ── -->
-    <div class="bd-bottom-row">
-      <div class="bd-week-wrap" id="weekTrendWrap">
-        <div class="bd-card-hd-row" style="padding:12px 16px 0">
-          <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)">7-Tage Trend</span>
-          <div style="display:flex;align-items:center;gap:10px;font-size:10px;color:var(--text3)">
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:4px"></span>Geladen</span>
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f97316;margin-right:4px"></span>Entladen</span>
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#3b82f6;margin-right:4px"></span>Ø SOC</span>
-          </div>
-        </div>
-        <canvas id="weekChart" style="width:100%;height:210px;display:block"></canvas>
-      </div>
-
-      <!-- Die Karte "Lade-Quellen" stand hier. Sie zeigte den Anteil der
-           Ladequellen als Ring — genau das sagt die gerichtete Bilanz oben
-           bereits, nur ohne Richtung. Aus der Seite genommen, der Code in
-           ws.js (renderChargePie) bleibt unangetastet und ist gutmuetig,
-           wenn die Elemente fehlen. -->
-    </div><!-- bd-bottom-row -->
-
-    <!-- Mobile-only: Zellen-Kachel direkt in der Detail-Ansicht -->
-    <div class="bd-mobile-cells" id="bdMobileCells"></div>
+    <!-- Der 7-Tage-Trend stand hier. Er ist auf die Stromverlauf-Seite
+         umgezogen: dort gehoert "ueber Zeit" hin, hier bleibt "jetzt" plus der
+         Live-Verlauf. Der Knopf oben rechts fuehrt dorthin — auch im Kiosk,
+         wo der Kopfbereich der Startseite ausgeblendet ist.
+         Die Karte "Lade-Quellen" stand ebenfalls hier. Sie zeigte den Anteil
+         der Ladequellen als Ring — genau das sagt die gerichtete Bilanz oben
+         bereits, nur ohne Richtung. Aus der Seite genommen, der Code in
+         ws.js (renderChargePie) bleibt unangetastet und ist gutmuetig,
+         wenn die Elemente fehlen. -->
 
     <!-- versteckte Elemente für JS-Kompatibilität (updateDualTiles, updateBattery) -->
     <div style="display:none" aria-hidden="true">
@@ -1711,6 +1707,22 @@
       <canvas id="vlChart" class="vl-chart"></canvas>
       <div class="vl-summen" id="vlSummen"></div>
       <div class="vl-hinweis" id="vlHinweis"></div>
+    </div>
+
+    <!-- 7-Tage-Trend: von der Batterie-Detailseite hierher umgezogen. Er ist
+         die EINZIGE Quelle fuer eine echte Wochenansicht — der Feinverlauf
+         oben haelt nur 16 Stunden vor (history_store.py, retention_s). -->
+    <div class="vl-karte" id="weekTrendWrap">
+      <div class="vl-kopf">
+        <span class="vl-titel">7-Tage-Trend</span>
+        <div class="vl-legende">
+          <span><i style="background:#22c55e"></i>Geladen</span>
+          <span><i style="background:#f97316"></i>Entladen</span>
+          <span><i style="background:#3b82f6"></i>&#216; SOC</span>
+        </div>
+      </div>
+      <canvas id="weekChart" class="vl-week-chart"></canvas>
+      <div class="vl-hinweis" id="weekHinweis"></div>
     </div>
   </div>
 </div>
