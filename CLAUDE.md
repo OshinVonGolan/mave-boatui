@@ -14,7 +14,7 @@ Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten �
 ### 1. Version bumpen bei jedem Commit der die App verändert
 ```python
 # main.py Zeile ~45
-VERSION = _git_semver() or '1.22.1'   # ← hochzählen: 1.22.1 → 1.22.2
+VERSION = _git_semver() or '1.23.0'   # ← hochzählen: 1.23.0 → 1.23.1
 ```
 Commit-Message-Format (für Changelog):
 ```
@@ -136,6 +136,7 @@ Raspberry Pi
 | `jsonio.py` | `read_json` (wirft nie) und `write_json` (atomar: tmp + fsync + replace) — alle JSON-Dateien laufen darüber |
 | `history_store.py` | Verlauf als NDJSON auf der Platte, gepuffert im eigenen Thread geschrieben, beim Start zurückgeladen |
 | `static/js/icons.js` | SVG-Icon-System: `icon(name, {size})` und `weatherIcon(code)` — **keine Emojis im UI** |
+| `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
 
 ### Konfiguration / Daten
 

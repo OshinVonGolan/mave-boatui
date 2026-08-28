@@ -178,6 +178,86 @@
     @media (min-width: 1600px) { main { max-width: 1660px; } }
     #wartungHomeBody { overflow: hidden; }
 
+    /* ── Stromverlauf (eigene Seite) ──────────────────────────────────────
+       Nach Cerbo-Vorbild: Erzeugung als gestapelte Flaeche, Verbrauch als
+       Linie darueber, darunter die Energiesummen des Fensters. */
+    .vl-karte { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 18px;
+      max-width: 1500px; margin: 0 auto; }
+    .vl-kopf  { display: flex; align-items: center; gap: 10px;
+      flex-wrap: wrap; margin-bottom: 14px; }
+    .vl-bereiche { display: flex; gap: 6px; flex-wrap: wrap; }
+    .vl-btn   { font-family: inherit; font-size: 12px; font-weight: 600;
+      padding: 6px 12px; border-radius: 9px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--text2); }
+    .vl-btn:hover { border-color: var(--accent2); }
+    .vl-btn.an { border-color: var(--accent); color: var(--accent); }
+    .vl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .vl-chart { width: 100%; height: 300px; display: block; }
+    @media (max-width: 639px) { .vl-chart { height: 220px; } }
+    .vl-summen { display: grid; gap: 10px 22px; margin-top: 14px;
+      padding-top: 14px; border-top: 1px solid var(--border);
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .vl-summe-zeile { display: flex; align-items: center; gap: 9px; font-size: 13px; min-width: 0; }
+    .vl-punkt { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+    .vl-name  { color: var(--text2); overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .vl-wh    { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .vl-hinweis { font-size: 12px; color: var(--text3); margin-top: 10px; }
+
+    /* ── Batterie: die Antwort zuerst ─────────────────────────────────────
+       Die Seite beantwortete bisher nirgends die Frage, mit der man sie
+       oeffnet: reicht der Strom? Der Shunt liefert dafuer kein ttg, aus
+       Restenergie und Verbrauch laesst es sich aber rechnen. */
+    .ba-antwort { display: grid; gap: 22px 28px; align-items: center;
+      grid-template-columns: 200px minmax(0, 1fr); }
+    @media (max-width: 700px) { .ba-antwort { grid-template-columns: 1fr; gap: 16px; } }
+    .ba-ring     { width: 100%; max-width: 200px; height: auto; display: block; margin: 0 auto; }
+    .ba-ring-num { font-size: 40px; font-weight: 700; font-family: inherit; }
+    .ba-ring-lbl { font-size: 11px; font-weight: 600; fill: var(--text3); font-family: inherit; }
+    .ba-kopf     { font-size: clamp(20px, 3.4vw, 27px); font-weight: 700;
+      line-height: 1.2; letter-spacing: -.01em; text-wrap: balance; }
+    .ba-kopf small { display: block; font-size: 13px; font-weight: 500;
+      color: var(--text3); margin-top: 6px; letter-spacing: 0; }
+    .ba-kette { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px;
+      font-size: 13px; color: var(--text3); font-variant-numeric: tabular-nums; }
+    .ba-kette b { color: var(--text2); font-weight: 600; }
+
+    /* ── Batterie: gerichtete Bilanz ── */
+    .ba-fluss { display: grid; gap: 18px; align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+    @media (max-width: 760px) { .ba-fluss { grid-template-columns: 1fr; gap: 14px; } }
+    .ba-seite { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+    .ba-zeile { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto;
+      gap: 9px; align-items: center; font-size: 13px; }
+    .ba-punkt { width: 9px; height: 9px; border-radius: 3px; }
+    .ba-name  { color: var(--text2); overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .ba-watt  { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ba-bahn  { grid-column: 2 / 4; height: 5px; border-radius: 3px;
+      background: var(--surface2); overflow: hidden; margin-top: -3px; }
+    .ba-bahn div { height: 100%; border-radius: 3px; transition: width .4s ease; }
+    .ba-mitte { display: flex; flex-direction: column; align-items: center;
+      gap: 3px; padding: 0 8px; white-space: nowrap; }
+    .ba-mitte b { font-size: 25px; font-weight: 700; line-height: 1;
+      font-variant-numeric: tabular-nums; }
+    .ba-mitte span { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3); }
+    .ba-pfeil { color: var(--text3); font-size: 17px; line-height: 1; }
+    @media (max-width: 760px) { .ba-pfeil { transform: rotate(90deg); } }
+
+    /* ── Batterie: Zellen als Abweichung vom Mittel ───────────────────────
+       Absolute 3.335 gegen 3.340 sagt beim Draufschauen nichts. Die
+       Abweichung zeigt sofort, welche Zelle ausreisst. */
+    .ba-zellen { display: flex; flex-direction: column; gap: 8px; }
+    .ba-zeile-z { display: grid; grid-template-columns: 26px minmax(0, 1fr) 58px;
+      gap: 10px; align-items: center; font-size: 12px; }
+    .ba-znr   { color: var(--text3); font-weight: 700; }
+    .ba-bahn-z{ position: relative; height: 16px; background: var(--surface2); border-radius: 4px; }
+    .ba-null  { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+    .ba-bar-z { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; transition: all .4s ease; }
+    .ba-mv    { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
     /* ── Batterie-Detail: Servicebatterie als EINE Karte ───────────────────
        Vorher war die Bank auf zwei Kacheln zerlegt (Shunt-Werte hier,
        BMS-Werte dort) und die BMS-Zellen standen neben der Starterbatterie,

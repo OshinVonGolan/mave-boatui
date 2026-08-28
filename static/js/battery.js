@@ -841,19 +841,177 @@ function _sbStat(label, wert, einheit, farbe) {
  * Shunt und BMS messen aber DIESELBE Batterie; die Starterbatterie hat damit
  * nichts zu tun. Deshalb hier alles zusammen, Starter separat.
  */
-function _sbKarte(data) {
+/** Quellen, die ueberhaupt einen Wert melden. */
+function _baQuellen(data) {
+  return [
+    ['Landstrom', data.charger?.power,    'var(--accent)'],
+    ['Solar',     data.solar?.power,      'var(--yellow)'],
+    ['DC-DC',     data.orion?.power,      '#a78bfa'],
+    // Lichtmaschine: Vorbereitung, erscheint sobald das Geraet Daten liefert.
+    ['Lichtmaschine', data.alternator?.power, '#38bdf8'],
+  ].filter(q => q[1] != null).map(q => ({ name: q[0], w: Math.max(0, q[1]), farbe: q[2] }));
+}
+
+// _W ist in flow.js belegt — alle JS-Dateien landen in EINEM Bundle-Scope.
+const _baW = v => v == null ? '--'
+  : Math.abs(v) >= 1000 ? (v / 1000).toFixed(2) + ' kW' : Math.round(v) + ' W';
+
+/** Zeitspanne menschenlesbar. */
+function _baDauer(h) {
+  if (h == null || !isFinite(h) || h <= 0) return null;
+  if (h >= 48) return Math.round(h / 24) + ' Tage';
+  if (h >= 1)  return Math.floor(h) + ' h ' + Math.round((h % 1) * 60) + ' min';
+  return Math.round(h * 60) + ' min';
+}
+
+/** SOC als Ring — Prozent ist radial richtig aufgehoben. */
+function _baRing(soc, farbe) {
+  const r = 62, C = 2 * Math.PI * r;
+  return `<svg class="ba-ring" viewBox="0 0 160 160" role="img"
+      aria-label="Ladezustand ${soc != null ? soc : 'unbekannt'} Prozent">
+    <circle cx="80" cy="80" r="${r}" fill="none" stroke="var(--surface2)" stroke-width="13"/>
+    ${soc != null ? `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${farbe}"
+      stroke-width="13" stroke-linecap="round"
+      stroke-dasharray="${(C * soc / 100).toFixed(1)} ${C.toFixed(1)}"
+      transform="rotate(-90 80 80)" style="transition:stroke-dasharray .5s ease"/>` : ''}
+    <text x="80" y="76" text-anchor="middle" class="ba-ring-num"
+      fill="${farbe}">${soc != null ? soc : '--'}</text>
+    <text x="80" y="96" text-anchor="middle" class="ba-ring-lbl">% Ladung</text>
+  </svg>`;
+}
+
+/**
+ * Karte 1 — die Antwort.
+ *
+ * Die Seite beantwortete bisher nirgends die Frage, mit der man sie oeffnet:
+ * reicht der Strom? Der Shunt liefert kein ttg (live immer null), aus
+ * Restenergie und Verbrauch laesst sich die Autonomie aber rechnen.
+ *
+ * Gerechnet wird bewusst gegen den VERBRAUCH, nicht gegen den Nettofluss: am
+ * Steg ist netto nahe null und ergaebe absurde Zahlen ("reicht 91 Tage").
+ * Die nuetzliche Frage ist "wie lange komme ich hin, wenn der Landstrom
+ * wegfaellt".
+ */
+function _baAntwort(data) {
   const b = data.battery ?? {}, bms = data.bms ?? {};
-  const { svg, legende, skala } = _bdRinge(data);
+  const soc = b.soc != null ? Math.round(b.soc) : null;
+  const farbe = soc == null ? 'var(--text3)'
+    : soc >= 50 ? 'var(--green)' : soc >= 20 ? 'var(--yellow)' : 'var(--red)';
+  const restWh = bms.remaining_kwh != null ? Math.round(bms.remaining_kwh * 1000) : null;
 
-  const zellDiff = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+  const q = _baQuellen(data);
+  const rein = q.reduce((sum, x) => sum + x.w, 0);
+  const p = b.power;
+  const verbrauch = p != null ? Math.max(0, rein - p) : null;
+  const amNetz = q.some(x => x.name !== 'Solar' && x.w > 5);
+
+  let kopf = 'Ladezustand', unter = '';
+  if (verbrauch != null && verbrauch > 2 && restWh != null) {
+    kopf = (amNetz ? 'ohne Landstrom ' : '') + 'reicht ' + (_baDauer(restWh / verbrauch) || '--');
+    unter = `bei aktuell ${_baW(verbrauch)} Verbrauch`
+      + (p > 1 ? ` · lädt mit ${_baW(p)}` : p < -1 ? ` · entnimmt ${_baW(Math.abs(p))}` : '');
+  } else if (p != null && p > 1 && restWh != null && soc) {
+    const gesamt = restWh / (soc / 100);
+    kopf = soc >= 99 ? 'voll geladen' : 'voll in ' + (_baDauer((gesamt - restWh) / p) || '--');
+    unter = `lädt mit ${_baW(p)}`;
+  } else {
+    unter = 'kein nennenswerter Verbrauch';
+  }
+
+  const zelldiff = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
     ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) : null;
+  const kette = [
+    ['Spannung',  b.voltage != null ? b.voltage.toFixed(2) + ' V' : null],
+    ['Strom',     b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) + ' A' : null],
+    ['Verbraucht', b.consumed_ah != null ? b.consumed_ah.toFixed(1) + ' Ah' : null],
+    ['Zyklen',    b.cycles],
+    ['Zelldiff.', zelldiff != null ? zelldiff + ' mV' : null],
+    ['Temperatur', bms.lowest_temp != null && bms.highest_temp != null
+      ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)} °C` : null],
+    ['Voll vor',  b.time_since_full != null ? timeSince(b.time_since_full) : null],
+  ].filter(([, v]) => v != null)
+   .map(([n, v]) => `<span>${n} <b>${v}</b></span>`).join('');
 
-  const zellen = (bms.cells || []).map((z, i) => {
-    const nr = i + 1;
-    const kl = nr === bms.lowest_cell_nr ? 'lo' : nr === bms.highest_cell_nr ? 'hi' : '';
-    return `<div class="cell ${kl}"><div class="cell-nr">#${nr}</div>
-      <div class="cell-v">${z && z.voltage != null ? z.voltage.toFixed(3) : '--'}</div>
-      <div class="cell-t">${z && z.temp != null ? z.temp.toFixed(1) + ' °C' : ''}</div></div>`;
+  return `<div class="sb-card">
+    <div class="ba-antwort">
+      ${_baRing(soc, farbe)}
+      <div>
+        <div class="ba-kopf">${kopf}<small>${unter}</small></div>
+        <div class="ba-kette">
+          ${restWh != null ? `<span>Verfügbar <b>${restWh.toLocaleString('de-DE')} Wh</b></span>` : ''}
+          ${kette}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Karte 2 — gerichtete Bilanz.
+ * Quellen links, Batterie mit Vorzeichen in der Mitte, Verbrauch rechts.
+ * Ringe zeigten nur Betraege; eine Energiebilanz ist aber gerichtet.
+ */
+function _baBilanz(data) {
+  const q = _baQuellen(data);
+  if (!q.length) return '';
+  const rein = q.reduce((sum, x) => sum + x.w, 0);
+  const p = data.battery?.power;
+  const verbrauch = p != null ? Math.max(0, rein - p) : null;
+  const max = Math.max(rein, verbrauch ?? 0, 1);
+
+  const zeile = (name, w, farbe) => `<div class="ba-zeile">
+      <span class="ba-punkt" style="background:${farbe}"></span>
+      <span class="ba-name">${name}</span>
+      <span class="ba-watt">${_baW(w)}</span>
+      <div class="ba-bahn"><div style="width:${(w / max * 100).toFixed(1)}%;background:${farbe}"></div></div>
+    </div>`;
+
+  return `<div class="sb-card">
+    <div class="sb-hd">${icon('bolt', {size: 14})} Energiebilanz jetzt</div>
+    <div class="ba-fluss">
+      <div class="ba-seite">${q.map(x => zeile(x.name, x.w, x.farbe)).join('')}</div>
+      <div class="ba-mitte">
+        <span class="ba-pfeil">&#8594;</span>
+        <b style="color:${p == null ? 'var(--text3)' : p > 0 ? 'var(--green)' : 'var(--orange)'}">${
+          p == null ? '--' : (p > 0 ? '+' : '') + Math.round(p) + ' W'}</b>
+        <span>Batterie</span>
+        <span class="ba-pfeil">&#8594;</span>
+      </div>
+      <div class="ba-seite">${verbrauch != null
+        ? zeile('Verbrauch', verbrauch, 'var(--orange)')
+        : '<span class="ba-name">Verbrauch unbekannt</span>'}</div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Karte 3 — Zellen als Abweichung vom Mittel.
+ * Absolute 3.335 gegen 3.340 sagt beim Draufschauen nichts; die Abweichung
+ * zeigt sofort, welche Zelle ausreisst.
+ */
+function _baZellen(data) {
+  const bms = data.bms ?? {};
+  const c = Array.isArray(bms.cells) ? bms.cells : [];
+  if (!c.length) return '';
+  const mv = c.map(z => (z && z.voltage != null) ? z.voltage * 1000 : null);
+  const gueltig = mv.filter(v => v != null);
+  if (!gueltig.length) return '';
+  const mittel = gueltig.reduce((a, x) => a + x, 0) / gueltig.length;
+  const abw = mv.map(v => v == null ? null : v - mittel);
+  const max = Math.max(8, ...abw.filter(v => v != null).map(Math.abs));
+
+  const zeilen = c.map((z, i) => {
+    const a = abw[i];
+    if (a == null) return '';
+    const breite = Math.abs(a) / max * 50;
+    const links = a < 0 ? 50 - breite : 50;
+    const f = Math.abs(a) > 15 ? 'var(--red)' : Math.abs(a) > 8 ? 'var(--yellow)' : 'var(--green)';
+    return `<div class="ba-zeile-z">
+      <span class="ba-znr">#${i + 1}</span>
+      <div class="ba-bahn-z"><div class="ba-null"></div>
+        <div class="ba-bar-z" style="left:${links}%;width:${breite}%;background:${f}"></div></div>
+      <span class="ba-mv" style="color:${f}">${a > 0 ? '+' : ''}${a.toFixed(0)} mV</span>
+    </div>`;
   }).join('');
 
   const flaggen = [
@@ -862,42 +1020,16 @@ function _sbKarte(data) {
     bms.comm_error                ? '<span class="chip err">Kommunikationsfehler</span>' : '',
   ].filter(Boolean).join('');
 
+  const temps = c.map((z, i) => (z && z.temp != null)
+    ? `#${i + 1} ${z.temp.toFixed(0)}°` : '').filter(Boolean).join(' · ');
+
   return `<div class="sb-card">
-    <div class="sb-hd">${icon('battery', {size: 14})} Servicebatterie
+    <div class="sb-hd">${icon('gauge', {size: 14})} Zellen
       ${flaggen}
-      <span class="chip on">${bms.cell_count ?? (bms.cells || []).length} Zellen${
-        bms.capacity_ah != null ? ' · ' + bms.capacity_ah.toFixed(1) + ' Ah' : ''}</span>
+      <span class="chip">Mittel ${(mittel / 1000).toFixed(3)} V</span>
     </div>
-    <div class="sb-grid">
-      <div class="bd-ring-wrap">${svg}</div>
-      <div class="bd-leg-spalte">
-        <div class="bd-legende">${legende}</div>
-        <div class="bd-ring-skala">Ringe auf gemeinsamer<br>Skala bis ${skala} W</div>
-      </div>
-      <div class="sb-stats">
-        ${_sbStat('Spannung', b.voltage != null ? b.voltage.toFixed(2) : null, 'V')}
-        ${_sbStat('Strom', b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) : null,
-                  'A', b.current == null ? null : b.current > 0 ? 'var(--green)' : 'var(--orange)')}
-        ${_sbStat('Leistung', b.power != null ? (b.power > 0 ? '+' : '') + Math.round(b.power) : null,
-                  'W', b.power == null ? null : b.power > 0 ? 'var(--green)' : 'var(--orange)')}
-        ${_sbStat('Verbleibend', bms.remaining_kwh != null
-                  ? Math.round(bms.remaining_kwh * 1000).toLocaleString('de-DE') : null, 'Wh')}
-        ${_sbStat('Verbraucht', b.consumed_ah != null ? b.consumed_ah.toFixed(1) : null, 'Ah')}
-        ${_sbStat('Zelldiff.', zellDiff, 'mV', zellDiff != null && zellDiff > 50 ? 'var(--yellow)' : null)}
-        ${_sbStat('Temperatur', bms.lowest_temp != null && bms.highest_temp != null
-                  ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)}` : null, '°C')}
-        ${_sbStat('Zyklen', b.cycles)}
-        ${_sbStat('Voll vor', b.time_since_full != null ? timeSince(b.time_since_full) : null)}
-        ${_sbStat('BMS', bms.voltage != null ? bms.voltage.toFixed(2) : null, 'V')}
-      </div>
-    </div>
-    ${zellen ? `<div class="sb-cells">
-      <div class="sb-cells-hd">Zellen
-        <span class="chip">${bms.lowest_cell_v != null ? bms.lowest_cell_v.toFixed(3) : '--'} – ${
-          bms.highest_cell_v != null ? bms.highest_cell_v.toFixed(3) : '--'} V</span>
-      </div>
-      <div class="cellrow">${zellen}</div>
-    </div>` : ''}
+    <div class="ba-zellen">${zeilen}</div>
+    ${temps ? `<div class="vl-hinweis">Abweichung vom Zellmittel · ${temps}</div>` : ''}
   </div>`;
 }
 
@@ -924,7 +1056,7 @@ function _starterKarte(b) {
  */
 function renderDeviceTiles(data) {
   const sec = $('deviceTilesSection');
-  if (sec) sec.innerHTML = _sbKarte(data);
+  if (sec) sec.innerHTML = _baAntwort(data) + _baBilanz(data) + _baZellen(data);
 
   const geraete = document.getElementById('bdSources');
   if (geraete) {
