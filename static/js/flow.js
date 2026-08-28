@@ -24,7 +24,10 @@ function _W(v) {
 }
 function _A(a) {
   if (a == null) return null;
-  return (Math.abs(a) >= 10 ? Math.round(a) : a.toFixed(1)) + ' A';
+  // Ohne das +0 stand bei -0.04 A ein "-0.0 A" im Schema — sieht aus wie ein
+  // Messfehler, ist aber nur eine gerundete Null.
+  const v = Math.abs(a) >= 10 ? Math.round(a) : Number(a.toFixed(1)) + 0;
+  return v + ' A';
 }
 function _dur(w) {
   return Math.max(0.3, Math.min(2.2, 400 / Math.max(20, Math.abs(w)))).toFixed(2);
@@ -90,24 +93,57 @@ function updateFlow(data) {
   const hasGrid    = chargerW != null && chargerW > 5;
   const bordActive = invW > 10 || hasGrid;
 
+  // Zweite Zeile je Geraet: nur was wirklich vorliegt, mit Mittelpunkt getrennt.
+  // Vorher trug ausser der Batterie kein Kasten eine Zusatzzeile — die Kaesten
+  // waren gross und sagten wenig.
+  // SVG-Text bricht nicht um und wird nicht abgeschnitten — zu lange Zeilen
+  // liefen aus dem Kasten heraus (Orion: "Remote, Motor-Absch. · Ein 12.6 V").
+  const _kurz = (t, max = 30) => t && t.length > max ? t.slice(0, max - 1) + '…' : t;
+  const _sub = (...teile) =>
+    _kurz(teile.filter(x => x != null && x !== '').join(' · ')) || null;
+  const _v2 = v => v != null ? v.toFixed(2) + ' V' : null;
+
   // ── Solar ─────────────────────────────────────────────────────────────
-  _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null, _A(data.solar?.current));
-  _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null, _A(data.solar2?.current));
-  _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null, _A(data.solar3?.current));
+  _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null,
+           _sub(s1w > 0 ? _A(data.solar?.dc_current) : null,
+                s1w > 0 ? _v2(data.solar?.dc_voltage) : null,
+                data.solar?.cs_label));
+  _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null,
+           _sub(_A(data.solar2?.current)));
+  _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null,
+           _sub(_A(data.solar3?.current)));
 
   // ── Landstrom / Ladegerät ─────────────────────────────────────────────
-  _setNode('grid',    hasGrid ? 'aktiv' : '—');
-  _setNode('charger', chargerW != null ? _W(chargerW) : '--', chargerW > 5 ? '#3b82f6' : null);
+  _setNode('grid', hasGrid ? 'aktiv' : '—', null,
+           _sub(data.inverter?.ac_voltage > 20
+                ? Math.round(data.inverter.ac_voltage) + ' V~' : null));
+  _setNode('charger', chargerW != null ? _W(chargerW) : '--',
+           chargerW > 5 ? '#3b82f6' : null,
+           _sub(data.charger?.cs_label, _v2(data.charger?.dc_voltage),
+                _A(data.charger?.dc_current)));
 
   // ── Inverter + AC-Lasten (= Inverterleistung) ─────────────────────────
-  _setNode('inv',  invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null);
-  _setNode('bord', invW != null && invW > 0 ? _W(invW) : (bordActive ? '—' : '—'),
-           invW > 10 ? '#a78bfa' : null);
+  _setNode('inv', invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null,
+           _sub(data.inverter?.cs_label,
+                data.inverter?.ac_voltage != null
+                  ? data.inverter.ac_voltage.toFixed(0) + ' V~' : null));
+  _setNode('bord', invW != null && invW > 0 ? _W(invW) : '—',
+           invW > 10 ? '#a78bfa' : null,
+           _sub(data.inverter?.ac_current != null
+                  ? data.inverter.ac_current.toFixed(1) + ' A~' : null));
 
   // ── Orion / Lichtmaschine / Starter ──────────────────────────────────
-  _setNode('orion',   orionW  != null ? _W(orionW)  : '--', orionW  > 0 ? '#22d3ee' : null);
-  _setNode('alt',     altW    != null ? _W(altW)    : '--');
-  _setNode('starter', bat.starter_voltage != null ? bat.starter_voltage.toFixed(1) + ' V' : '--');
+  _setNode('orion', orionW != null ? _W(orionW) : '--', orionW > 0 ? '#22d3ee' : null,
+           _sub(data.orion?.cs === 0 ? data.orion?.off_reason_label : data.orion?.cs_label,
+                data.orion?.input_voltage != null
+                  ? 'Ein ' + data.orion.input_voltage.toFixed(1) + ' V' : null));
+  _setNode('alt', altW != null ? _W(altW) : '--', null,
+           _sub(_A(data.alternator?.current), _v2(data.alternator?.voltage)));
+  _setNode('starter', bat.starter_voltage != null ? bat.starter_voltage.toFixed(1) + ' V' : '--',
+           null,
+           _sub(bat.starter_min_voltage != null && bat.starter_max_voltage != null
+                  ? `${Math.max(0, bat.starter_min_voltage).toFixed(1)}–${bat.starter_max_voltage.toFixed(1)} V`
+                  : null));
 
   // ── DC-Lasten ─────────────────────────────────────────────────────────
   _setNode('dcgrid', dcNetW != null ? _W(dcNetW) : '--',
@@ -115,19 +151,27 @@ function updateFlow(data) {
            dcNetW != null ? _A(dcRawA) : null);
 
   // ── Batterie (Hauptknoten) ────────────────────────────────────────────
-  const bv = $('fv-batt'), bs = $('fs-batt'), bg = $('fg-batt');
+  const bv = $('fv-batt'), bg = $('fg-batt');
   if (bv) {
     bv.textContent = shuntW != null ? _W(shuntW) : '--';
     // negativ = Entladen → orange; positiv = Laden → grün
     bv.style.fill = shuntW == null ? '' : shuntW < 0 ? '#f97316' : shuntW > 0 ? '#22c55e' : '#eef4fb';
   }
-  if (bs) {
-    const parts = [];
-    if (bat.soc     != null) parts.push(bat.soc + ' %');
-    if (bat.voltage != null) parts.push(bat.voltage.toFixed(2) + ' V');
-    if (shuntI      != null) parts.push(_A(shuntI));
-    bs.textContent = parts.join('  ·  ');
-  }
+  // Drei Zeilen statt einer langen: die Batterie ist der Mittelpunkt des
+  // Schemas und hat Platz. Fehlende Werte lassen ihre Zeile einfach leer.
+  const _bset = (id, txt) => { const e = $(id); if (e) e.textContent = txt || ''; };
+  _bset('fsa-batt', [bat.soc != null ? Math.round(bat.soc) + ' %' : null,
+                     bat.voltage != null ? bat.voltage.toFixed(2) + ' V' : null]
+                    .filter(Boolean).join('  ·  '));
+  _bset('fsb-batt', [shuntI != null ? _A(shuntI) : null,
+                     bms.remaining_kwh != null
+                       ? Math.round(bms.remaining_kwh * 1000).toLocaleString('de-DE') + ' Wh' : null]
+                    .filter(Boolean).join('  ·  '));
+  _bset('fsc-batt', [bms.highest_cell_v != null && bms.lowest_cell_v != null
+                       ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) + ' mV Zelldiff.' : null,
+                     bms.lowest_temp != null && bms.highest_temp != null
+                       ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)} °C` : null]
+                    .filter(Boolean).join('  ·  '));
   if (bg) bg.classList.remove('dim');
 
   // ── Kanten (alle einheitlich dunkelblau) ─────────────────────────────

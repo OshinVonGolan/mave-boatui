@@ -946,8 +946,10 @@
        eine leere Flaeche stehen bleibt. Platzierung deshalb zuruecksetzen. */
     .bd-pg-charts-only > .bd-pg-chart { grid-area: auto; }
     /* ── 7-Tage + Lade-Quellen nebeneinander ── */
+    /* Nur noch der 7-Tage-Trend steht hier — er ist die einzige Langzeitansicht
+       (der Verlaufsspeicher reicht ~16 h, daily_stats dagegen 30 Tage). */
     .bd-bottom-row {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+      display: grid; grid-template-columns: 1fr; gap: 14px;
       max-width: 1500px; margin: 0 auto; padding: 0 16px 16px; box-sizing: border-box;
     }
     .bd-week-wrap { background: var(--surface); border: 1px solid var(--border);
@@ -991,7 +993,10 @@
         "chart  chart   starter";
       gap: 14px; max-width: 1500px; margin: 0 auto; align-items: start;
     }
-    .bd-pg-chart canvas.chart { flex: 1; min-height: 300px; }
+    /* flex:1 ohne Deckel liess den Verlauf auf 647 px anwachsen — mehr Hoehe
+       macht eine Kurve nicht lesbarer, sie schiebt nur alles Weitere nach
+       unten aus dem Blick. */
+    .bd-pg-chart canvas.chart { flex: 1; min-height: 280px; max-height: 400px; }
     .bd-pg-batt    { grid-area: batt; }
     .bd-pg-chart   { grid-area: chart; }
     .bd-pg-cells   { grid-area: cells; }
@@ -1673,7 +1678,9 @@
     .flow-card { max-width: 1700px; margin: 0 auto; padding: 20px 28px;
       background: radial-gradient(120% 120% at 50% 0%, #16263f 0%, #0e1a2e 100%);
       border: 1px solid var(--border); border-radius: 18px; }
-    .flow-schema { width: 100%; display: block; }
+    /* Fuellt die Flaeche: vorher deckelte max-width:800px das Schema, in einem
+       1400px breiten Fenster stand es klein in der Mitte mit breiten Raendern. */
+    .flow-schema { width: 100%; height: 100%; display: block; }
     .flow-edge { fill: none; stroke: #3c5269; stroke-width: 1.6; }
     /* animierter Fluss (Menge bekannt): laufende Punkte */
     .flow-edge-dot { fill: none; stroke-width: 4.5; stroke-linecap: round;

@@ -1033,6 +1033,62 @@ function _baZellen(data) {
   </div>`;
 }
 
+
+/**
+ * Geraete unter dem Verlauf — einheitlich aufgebaut.
+ *
+ * Vorher waren das die alten Kacheln mit je 2 bis 8 Wertepaaren; dadurch waren
+ * sie unterschiedlich hoch und die Reihe lief unten als Treppe aus. Jetzt hat
+ * jedes Geraet dieselbe Form: Name, Zustands-Chip, eine grosse Wattzahl, eine
+ * Zusatzzeile. Was daran nicht passt, gehoert nicht auf die Batterieseite.
+ */
+function _baGeraete(data) {
+  const zeile = (...t) => t.filter(x => x != null && x !== '').join(' · ');
+  const v2 = v => v != null ? v.toFixed(2) + ' V' : null;
+  const a1 = v => v != null ? v.toFixed(1) + ' A' : null;
+
+  const c = data.charger, s = data.solar, o = data.orion, i = data.inverter;
+  const liste = [];
+
+  if (c && (c.cs != null || c.power != null)) liste.push({
+    name: 'Landstrom', icon: 'plug', watt: c.power, chip: c.cs_label ?? c.state,
+    an: c.cs != null && c.cs !== 0, sub: zeile(v2(c.dc_voltage), a1(c.dc_current)),
+  });
+  if (s && (s.cs != null || s.power != null)) liste.push({
+    name: 'Solar', icon: 'solar', watt: s.power, chip: s.cs_label ?? s.mppt_mode_label,
+    an: s.cs != null && s.cs !== 0,
+    sub: zeile(s.ppv != null ? 'Panel ' + Math.round(s.ppv) + ' W' : null,
+               s.yield_today_wh != null ? 'heute ' + Math.round(s.yield_today_wh) + ' Wh' : null),
+  });
+  if (o && (o.cs != null || o.power != null)) liste.push({
+    name: 'DC-DC Orion', icon: 'alternator', watt: o.power,
+    chip: o.cs === 0 ? (o.off_reason_label ?? 'Aus') : (o.cs_label ?? o.state),
+    an: o.cs != null && o.cs !== 0,
+    sub: zeile(o.input_voltage != null ? 'Ein ' + o.input_voltage.toFixed(1) + ' V' : null,
+               v2(o.dc_voltage)),
+  });
+  if (i && (i.cs != null || i.state != null)) liste.push({
+    name: 'Inverter', icon: 'bolt', watt: i.ac_power ?? i.power,
+    chip: i.cs_label ?? i.state, an: i.cs != null && i.cs !== 0, fehler: !!i.err,
+    sub: zeile(i.ac_voltage != null ? i.ac_voltage.toFixed(0) + ' V~' : null,
+               i.ac_current != null ? i.ac_current.toFixed(1) + ' A~' : null),
+  });
+
+  if (!liste.length) return '';
+  return liste.map(g => `<div class="bd-src bd-src-${
+      g.fehler ? 'err' : g.an ? 'ok' : 'idle'}">
+    <div class="bd-src-head">
+      <span style="display:inline-flex;color:var(--text2)">${icon(g.icon, {size: 15})}</span>
+      <span class="bd-src-name">${g.name}</span>
+      <span class="chip ${g.fehler ? 'err' : g.an ? 'on' : ''}">${_esc(g.chip ?? '--')}</span>
+    </div>
+    <div class="bd-src-main">
+      <b>${g.watt != null ? Math.round(g.watt) : '--'}</b><span>W</span>
+    </div>
+    <div class="bd-src-sub">${_esc(g.sub) || '&nbsp;'}</div>
+  </div>`).join('');
+}
+
 /** Starterbatterie: eigene, kleine Karte — gehoert NICHT zur Bank. */
 function _starterKarte(b) {
   if (!b || b.starter_voltage == null) return '';
@@ -1059,13 +1115,7 @@ function renderDeviceTiles(data) {
   if (sec) sec.innerHTML = _baAntwort(data) + _baBilanz(data) + _baZellen(data);
 
   const geraete = document.getElementById('bdSources');
-  if (geraete) {
-    geraete.innerHTML =
-      _tileCharger(data.charger) +
-      _tileMppt(data.solar) +
-      _tileOrion(data.orion) +
-      _tileInverter(data.inverter);
-  }
+  if (geraete) geraete.innerHTML = _baGeraete(data);
 
   const starter = document.getElementById('bdDiag');
   if (starter) starter.innerHTML = _starterKarte(data.battery ?? null);
