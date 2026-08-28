@@ -1296,8 +1296,6 @@
       cursor: pointer; transition: background .15s, border-color .15s; font-family: inherit;
     }
     .btn-secondary:hover { background: var(--surface); border-color: var(--accent2); }
-    .sl-sleep-row { display: flex; gap: 8px; margin-top: 12px; }
-    .sl-sleep-row .btn-secondary { flex: 1; }
     .settings-feedback {
       font-size: 13px; color: var(--green); margin-right: auto;
       align-self: center; opacity: 0; transition: opacity .3s;

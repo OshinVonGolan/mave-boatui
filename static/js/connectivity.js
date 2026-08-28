@@ -6,24 +6,9 @@ let _connData = {};
 // Poller in init.js rendert es mit (siehe fetchConnectivity).
 var _connOverlayTimer = null;
 
-// Starlink Mini schlafen legen / aufwecken (dish_power_save).
-function starlinkSleep(enable) {
-  const msg = enable
-    ? 'Starlink schlafen legen? Das Internet wird unterbrochen, bis sie wieder aufwacht.'
-    : 'Starlink aufwecken?';
-  if (!confirm(msg)) return;
-  fetch('/api/connectivity/starlink/sleep', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enable }),
-  })
-    .then(r => r.json().then(j => ({ ok: r.ok, j })))
-    .then(({ ok, j }) => {
-      const t = ok ? (enable ? 'Starlink schläft' : 'Starlink aufgeweckt')
-                   : ('Starlink: ' + (j.detail || 'Fehler'));
-      if (typeof _toast === 'function') _toast(t); else alert(t);
-    })
-    .catch(() => { if (typeof _toast === 'function') _toast('Starlink-Steuerung fehlgeschlagen'); });
-}
+// Hier stand starlinkSleep(): sie schickte einen Schlaf-/Weckbefehl an die
+// Antenne. Auf Anweisung des Eigners entfernt — Verdacht, dass die
+// Steuerbefehle der Starlink schaden. Der Status wird weiter angezeigt.
 
 function fmtUptime(s) {
   if (!s) return '--';
@@ -187,12 +172,6 @@ function renderConnectivity(d) {
             </div>
           </div>
           <div class="bms-flags-row">${alertHtml}</div>
-          <div class="sl-sleep-row">
-            <button class="btn-secondary" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"
-                    onclick="starlinkSleep(true)">${icon('moon', { size: 15 })} Schlafen legen</button>
-            <button class="btn-secondary" style="display:inline-flex;align-items:center;justify-content:center;gap:6px"
-                    onclick="starlinkSleep(false)">${icon('sun', { size: 15 })} Aufwecken</button>
-          </div>
         </div>
       </div>
 

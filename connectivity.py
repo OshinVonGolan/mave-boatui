@@ -148,8 +148,8 @@ class ConnectivityMonitor:
 
         Wird ausschliesslich aus dem Poll-Thread gerufen (_fetch_starlink).
         Damit schliesst nie ein fremder Thread einen Kanal, den der Poll gerade
-        benutzt; set_starlink_sleep setzt nur den Stub auf None und ueberlaesst
-        das Aufraeumen dem naechsten Poll.
+        benutzt. Seit die Steuerung entfernt ist, gibt es ohnehin nur noch
+        diesen einen, lesenden Zugriff auf die Dish.
         """
         ch, self._grpc_channel, self._grpc_stub = self._grpc_channel, None, None
         if ch is not None:
@@ -212,55 +212,8 @@ class ConnectivityMonitor:
             self._close_grpc()
             return {'reachable': False, 'error': str(e)}
 
-    def set_starlink_sleep(self, enable: bool) -> dict:
-        """Starlink Mini per dish_power_save schlafen legen / wecken.
-        enable=True: Power-Save ab jetzt für ~24 h (spart Strom; Dish schläft,
-        wenn kein Traffic). enable=False: Power-Save aus (Dish wach).
-        Kein motorisierter Mast -> bewusst dish_power_save statt dish_stow."""
-        ch = None
-        try:
-            import grpc
-            from yagrc import reflector as yr
-            from datetime import datetime
-
-            ch  = grpc.insecure_channel(self._starlink_host)
-            ref = yr.GrpcReflectionClient()
-            ref.load_protocols(ch, symbols=['SpaceX.API.Device.Device'])
-            Req = ref.message_class('SpaceX.API.Device.Request')
-            fld = Req.DESCRIPTOR.fields_by_name.get('dish_power_save')
-            if fld is None or fld.message_type is None:
-                return {'ok': False, 'error': 'dish_power_save von der Dish-API nicht unterstützt'}
-            PsType = ref.message_class(fld.message_type.full_name)
-            # Dish verlangt 1 <= duration <= 720 (Minuten). enable=True: Fenster
-            # ab jetzt für bis zu 12 h (innerhalb des Tages), sodass sofort
-            # gespart wird. enable=False: Power-Save aus (Dish wach).
-            now_min = datetime.now().hour * 60 + datetime.now().minute
-            if enable:
-                start = now_min
-                dur   = max(1, min(720, 1439 - now_min))
-            else:
-                start, dur = 0, 1
-            ps = PsType(
-                enable_power_save=enable,
-                power_save_start_minutes=start,
-                power_save_duration_minutes=dur,
-            )
-            stub = ref.service_stub_class('SpaceX.API.Device.Device')(ch)
-            stub.Handle(Req(dish_power_save=ps), timeout=8)
-            # Nur den Stub vergessen: der alte Status-Kanal gehoert dem
-            # Poll-Thread und wird dort beim naechsten Aufbau geschlossen.
-            # Ihn hier zu schliessen traefe evtl. einen laufenden Aufruf.
-            self._grpc_stub = None   # Status-Stub neu aufbauen lassen
-            log.info('Starlink power_save=%s gesetzt', enable)
-            return {'ok': True, 'power_save': enable}
-        except Exception as e:
-            log.warning('Starlink power_save fehlgeschlagen: %s', e)
-            return {'ok': False, 'error': str(e)}
-        finally:
-            # Dieser Kanal gehoert allein diesem Aufruf — auch beim fruehen
-            # return (dish_power_save nicht unterstuetzt) und im Fehlerfall.
-            if ch is not None:
-                try:
-                    ch.close()
-                except Exception as e:
-                    log.debug('Starlink-Steuerkanal schliessen: %s', e)
+    # Hier stand set_starlink_sleep(): sie schickte per gRPC ein
+    # dish_power_save an die Antenne. Auf Anweisung des Eigners entfernt —
+    # Verdacht, dass die Steuerbefehle der Antenne schaden. Es geht seither
+    # NICHTS Steuerndes mehr an die Starlink. Die Statusabfrage oben
+    # (dish_get_status) ist rein lesend und bleibt.

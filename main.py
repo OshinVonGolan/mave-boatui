@@ -53,7 +53,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.25.0'
+VERSION  = _git_semver() or '1.26.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -821,16 +821,10 @@ async def get_connectivity():
     return conn_mon.get_status()
 
 
-@app.post('/api/connectivity/starlink/sleep')
-async def starlink_sleep(body: dict):
-    if not conn_mon:
-        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
-    enable = bool(body.get('enable', True))
-    loop = asyncio.get_event_loop()
-    res = await loop.run_in_executor(None, conn_mon.set_starlink_sleep, enable)
-    if not res.get('ok'):
-        raise HTTPException(503, detail=res.get('error', 'Starlink-Steuerung fehlgeschlagen'))
-    return res
+# Hier lag POST /api/connectivity/starlink/sleep. Auf Anweisung des Eigners
+# entfernt: es geht nichts Steuerndes mehr an die Starlink-Antenne, weil der
+# Verdacht besteht, dass die Befehle ihr schaden. Der Status wird weiter
+# gelesen (connectivity.py, dish_get_status) und in /api/connectivity geliefert.
 
 
 @app.get('/api/alarms/rules')
