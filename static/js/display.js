@@ -4,7 +4,7 @@ const _DSP_KEY = 'mave_display_cfg';
 // Wird hochgezaehlt, wenn sich die Standard-Aufteilung aendert. Gespeicherte
 // Konfigurationen aus einer aelteren Version werden dann EINMALIG verworfen,
 // damit die neue Aufteilung auf schon benutzten Geraeten auch ankommt.
-const _DSP_VER = 2;
+const _DSP_VER = 3;
 
 const _TILES = [
   { id: 'battery',  label: 'Batterie',     sizes: ['hidden','normal','half','wide'] },
@@ -13,6 +13,7 @@ const _TILES = [
   { id: 'inverter', label: '230V',         sizes: ['hidden','normal','half']        },
   { id: 'wl',       label: 'Wasserstand',  sizes: ['hidden','normal','half']        },
   { id: 'weather',  label: 'Wetter',       sizes: ['hidden','normal','half']        },
+  { id: 'heizung',  label: 'Heizung',      sizes: ['hidden','normal','half','wide'] },
   { id: 'wartung',  label: 'Wartungsplan', sizes: ['hidden','normal','half','wide'] },
 ];
 
@@ -24,6 +25,7 @@ const _TILE_SEL = {
   inverter:'#inverterCard',
   wl:      '#wlCard',
   weather: '#wxCard',
+  heizung: '#heizungCard',
   wartung: '#wartungCard',
 };
 
@@ -38,9 +40,9 @@ const _PROFILES = [
 const _DSP_DEFAULTS = {
   activeProfile: 'auto',
   tiles: {
-    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'wide'   },
-    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', wartung:'wide'   },
-    mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'hidden',  weather:'half',   wartung:'hidden' },
+    kiosk:  { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', heizung:'normal', wartung:'wide'   },
+    laptop: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'normal',  weather:'normal', heizung:'normal', wartung:'wide'   },
+    mobile: { battery:'normal', tanks:'normal', lights:'normal', inverter:'normal', wl:'hidden',  weather:'half',   heizung:'normal', wartung:'hidden' },
   },
 };
 

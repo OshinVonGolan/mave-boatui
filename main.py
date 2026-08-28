@@ -27,6 +27,7 @@ from can_reader import BoatState, CanInterface
 from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
+from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
 
@@ -52,7 +53,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.23.0'
+VERSION  = _git_semver() or '1.24.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -126,6 +127,7 @@ BASE_DIR      = Path(__file__).parent
 PRESETS_FILE  = BASE_DIR / 'presets.json'
 STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
+HEIZUNG_FILE  = BASE_DIR / 'heizung.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 
@@ -193,6 +195,11 @@ _hist_last_mono: float = 0.0
 
 # Der Verlauf überlebt jetzt den Neustart: NDJSON-Datei, gepuffert im eigenen
 # Thread geschrieben (SD-Karte), beim Start wird das Zeitfenster nachgeladen.
+# Heizung: der Pi fragt den Stoker-Hub zentral ab und haelt den Zustand vor.
+# Die Geraetedoku begrenzt auf 1 Hz und vier WebSockets im GANZEN Netz —
+# jedes Handy einzeln pollen zu lassen waere schnell darueber.
+heizung = StokerClient(HEIZUNG_FILE)
+
 hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
                           max_entries=history.maxlen or 10800)
 
@@ -310,9 +317,12 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         log.warning("Verlauf konnte nicht geladen werden: %s", e)
     hist_store.start()
+    heizung.start()
+    log.info("Heizungs-Anbindung gestartet")
 
     yield
     can_if.stop()
+    heizung.stop()
     hist_store.close()
     log.info("CAN-Reader gestoppt")
 
@@ -338,7 +348,7 @@ _JS_FILES = [
     'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'weather.js', 'verlauf.js', 'init.js',
+    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js', 'init.js',
 ]
 _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
@@ -1515,3 +1525,69 @@ async def get_weather():
     _wx_cache['data'] = data
     _wx_cache['ts'] = now
     return data
+
+
+# ── Heizung (Stoker) ────────────────────────────────────────────────────────
+# Der Pi ist der einzige, der mit dem Hub spricht. Lesen kommt aus dem
+# Zwischenspeicher des Pollers, Schreiben wird durchgereicht — die Antwort der
+# Heizung IST bereits der neue Zustand, ein zweiter Abruf entfaellt.
+
+
+async def _heiz_ruf(fn, *args):
+    """Schaltbefehl im Executor — urllib blockiert sonst den Event-Loop."""
+    loop = asyncio.get_running_loop()
+    try:
+        return await loop.run_in_executor(None, fn, *args)
+    except StokerFehler as e:
+        raise HTTPException(e.status, detail=e.as_dict()['error']) from None
+
+
+@app.get('/api/heizung')
+async def heizung_state():
+    """Zustand der Heizung. Antwortet immer, auch wenn das Gerät fehlt."""
+    return heizung.snapshot()
+
+
+@app.get('/api/heizung/settings')
+async def heizung_settings():
+    return heizung.settings()
+
+
+@app.patch('/api/heizung/settings')
+async def heizung_settings_patch(body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    return heizung.update_settings(body)
+
+
+@app.post('/api/heizung/probe')
+async def heizung_probe(body: dict | None = None):
+    """Prüft eine Adresse per GET /api/info — für den Einstellungsdialog."""
+    host = (body or {}).get('host')
+    info = await _heiz_ruf(heizung.probe, host)
+    # Die Doku sagt: ist role nicht hub, hat man einen Raumknoten erwischt.
+    if info.get('role') != 'hub':
+        raise HTTPException(503, detail={
+            'code': 'wrong_role',
+            'message': f"Das ist kein Heizungsknoten (role: {info.get('role')})."})
+    return info
+
+
+@app.post('/api/heizung/room/{room_id}')
+async def heizung_room(room_id: int, body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    return await _heiz_ruf(heizung.set_room, room_id, body)
+
+
+@app.post('/api/heizung/heater')
+async def heizung_heater(body: dict):
+    if not isinstance(body, dict):
+        raise HTTPException(400, detail='Objekt erwartet')
+    return await _heiz_ruf(heizung.set_heater, body)
+
+
+@app.post('/api/heizung/preset/{index}')
+async def heizung_preset(index: str):
+    """index ist 0..3 oder 'none'. Abwählen ist ausdrücklich 'none', nicht 4."""
+    return await _heiz_ruf(heizung.set_preset, index)

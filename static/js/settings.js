@@ -68,12 +68,13 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'laden', 'wartung', 'netz', 'system', 'display'].forEach(c =>
+  ['tanks', 'batt', 'laden', 'heizung', 'wartung', 'netz', 'system', 'display'].forEach(c =>
     $(`setPane-${c}`)?.classList.toggle('active', c === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.cat === cat)
   );
+  if (cat === 'heizung') hzEinstellungenLaden();
   if (cat === 'netz') {
     fetchSettingsNetwork();
     if (!_settingsNetTimer) _settingsNetTimer = setInterval(fetchSettingsNetwork, 5000);

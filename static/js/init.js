@@ -17,3 +17,8 @@ setInterval(refreshChargerStatus, 300000);  // Badge alle 5 min aktualisieren
 
 fetchWaterLevel();
 setInterval(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
+
+// Heizung: eigener Poller, damit die Kachel auch ohne WebSocket-Daten lebt.
+// 6 s reichen — die Heizung aendert sich nicht in Sekundenbruchteilen, und der
+// Pi haelt den Zustand ohnehin vor.
+hzPoller.start();
