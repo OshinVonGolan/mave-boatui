@@ -70,11 +70,20 @@ function _setEdge(id, color, w, reverse = false, forceStatic = false) {
   }
 }
 
-function _setNode(id, text, color, ampText) {
-  const el = $('fv-' + id), g = $('fg-' + id), sa = $('fsa-' + id);
+/**
+ * Fuellt eine Kachel: grosse Zahl plus bis zu ZWEI Zusatzzeilen.
+ *
+ * Die zweite Zeile kam mit dem 3x3-Raster dazu — die Kacheln sind gross genug,
+ * und ohne sie muessten Angaben wie "Lader Storage" und "Wechselrichter aus"
+ * in eine Zeile gequetscht werden, die im SVG nicht umbricht.
+ */
+function _setNode(id, text, color, sub1, sub2) {
+  const el = $('fv-' + id), g = $('fg-' + id);
+  const sa = $('fsa-' + id), sb = $('fsb-' + id);
   if (el) { el.textContent = text; el.style.fill = color || ''; }
-  if (sa) { sa.textContent = ampText || ''; }
-  if (g)  g.classList.toggle('dim', text === '--' || text === '—');
+  if (sa) { sa.textContent = sub1 || ''; }
+  if (sb) { sb.textContent = sub2 || ''; }
+  if (g)  g.classList.toggle('dim', text === '--' || text === '—' || text === 'Aus');
 }
 
 function updateFlow(data) {
@@ -112,112 +121,114 @@ function updateFlow(data) {
     _kurz(teile.filter(x => x != null && x !== '').join(' · ')) || null;
   const _v2 = v => v != null ? v.toFixed(2) + ' V' : null;
 
-  // ── Solar ─────────────────────────────────────────────────────────────
-  _setNode('solar1', s1w != null ? _W(s1w) : '--', s1w > 0 ? '#eab308' : null,
-           _sub(s1w > 0 ? _A(data.solar?.dc_current) : null,
-                s1w > 0 ? _v2(data.solar?.dc_voltage) : null,
-                data.solar?.cs_label));
-  _setNode('solar2', s2w != null ? _W(s2w) : '--', s2w > 0 ? '#eab308' : null,
-           _sub(_A(data.solar2?.current)));
-  _setNode('solar3', s3w != null ? _W(s3w) : '--', s3w > 0 ? '#eab308' : null,
-           _sub(_A(data.solar3?.current)));
+  // ── Solar: alle Regler in EINER Kachel ────────────────────────────────
+  // Wie bei Victron ("Solar yield") zaehlt die Kachel zusammen, was alle
+  // Regler liefern; die Zusatzzeile nennt die Strings einzeln, damit die
+  // vorbereiteten Regler 2 und 3 sichtbar bleiben.
+  const solarSumme = [s1w, s2w, s3w].filter(v => v != null && v > 0)
+                                    .reduce((a, v) => a + v, 0);
+  const solarDa    = [s1w, s2w, s3w].some(v => v != null);
+  // Zusatzzeile: nur die Regler nennen, die auch etwas melden. Die noch nicht
+  // verbauten stehen als "vorbereitet" dahinter — "MPPT 1 0 W · 2 — · 3 —"
+  // las sich wie eine Stoerung, obwohl da schlicht nichts angeschlossen ist.
+  const _regler = [['1', s1w], ['2', s2w], ['3', s3w]];
+  const _melden = _regler.filter(([, w]) => w != null).map(([n, w]) => `MPPT ${n} ${_W(w)}`);
+  const _offen  = _regler.filter(([, w]) => w == null).map(([n]) => n);
+  _setNode('solar1', solarDa ? _W(solarSumme) : '--', solarSumme > 0 ? '#eab308' : null,
+           _sub(_melden.join(' · ') || null,
+                _offen.length ? `${_offen.join(', ')} vorbereitet` : null),
+           _sub(data.solar?.yield_today_wh != null
+                  ? 'heute ' + Math.round(data.solar.yield_today_wh) + ' Wh' : null,
+                s1w > 0 ? data.solar?.cs_label : null));
 
-  // ── Landstrom / Ladegerät ─────────────────────────────────────────────
-  _setNode('grid', hasGrid ? 'aktiv' : '—', null,
+  // ── Landstrom ─────────────────────────────────────────────────────────
+  _setNode('grid', hasGrid ? 'aktiv' : '—', hasGrid ? '#38bdf8' : null,
            _sub(data.inverter?.ac_voltage > 20
                 ? Math.round(data.inverter.ac_voltage) + ' V~' : null));
-  _setNode('charger', chargerW != null ? _W(chargerW) : '--',
-           chargerW > 5 ? '#3b82f6' : null,
-           _sub(data.charger?.cs_label, _v2(data.charger?.dc_voltage),
-                _A(data.charger?.dc_current)));
 
-  // ── Inverter + AC-Lasten (= Inverterleistung) ─────────────────────────
-  _setNode('inv', invW != null ? _W(invW) : '--', invW > 10 ? '#a78bfa' : null,
-           _sub(data.inverter?.cs_label,
-                data.inverter?.ac_voltage != null
+  // ── Wandlerstufe: Lader UND Wechselrichter in einer Kachel ────────────
+  // Beide sitzen zwischen AC und DC und laufen nie gleichzeitig. Die Kachel
+  // zeigt, was gerade passiert; die Zusatzzeilen nennen beide Geraete, damit
+  // keines verschwindet.
+  const laedt    = chargerW != null && chargerW > 5;
+  const invLaeuft = invW != null && invW > 10;
+  // Grosse Zeile ist der ZUSTAND, nicht die Leistung — wie beim Vorbild, wo
+  // dort "Absorption" steht. "Wechselrichten 430 W" lief bei 32 px schlicht
+  // aus dem Kasten heraus; SVG-Text bricht nicht um und wird nicht beschnitten.
+  _setNode('conv',
+           laedt ? 'Laden' : invLaeuft ? 'Wechselrichten' : 'Aus',
+           laedt ? '#3b82f6' : invLaeuft ? '#a78bfa' : null,
+           _sub(laedt ? _W(chargerW) : invLaeuft ? _W(invW) : null,
+                laedt ? data.charger?.cs_label : null,
+                laedt ? _v2(data.charger?.dc_voltage) : null),
+           _sub(laedt ? null : 'Lader ' + (data.charger?.cs_label ?? '—'),
+                invLaeuft && data.inverter?.ac_voltage != null
                   ? data.inverter.ac_voltage.toFixed(0) + ' V~' : null));
-  _setNode('bord', invW != null && invW > 0 ? _W(invW) : '—',
-           invW > 10 ? '#a78bfa' : null,
-           _sub(data.inverter?.ac_current != null
-                  ? data.inverter.ac_current.toFixed(1) + ' A~' : null));
 
-  // ── Orion / Lichtmaschine / Starter ──────────────────────────────────
-  _setNode('orion', orionW != null ? _W(orionW) : '--', orionW > 0 ? '#22d3ee' : null,
-           _sub(data.orion?.cs === 0 ? data.orion?.off_reason_label : data.orion?.cs_label,
-                data.orion?.input_voltage != null
-                  ? 'Ein ' + data.orion.input_voltage.toFixed(1) + ' V' : null));
-  _setNode('alt', altW != null ? _W(altW) : '--', null,
-           _sub(_A(data.alternator?.current), _v2(data.alternator?.voltage)));
-  _setNode('starter', bat.starter_voltage != null ? bat.starter_voltage.toFixed(1) + ' V' : '--',
-           null,
-           _sub(bat.starter_min_voltage != null && bat.starter_max_voltage != null
-                  ? `${Math.max(0, bat.starter_min_voltage).toFixed(1)}–${bat.starter_max_voltage.toFixed(1)} V`
-                  : null));
+  // ── AC-Lasten: nennen ihre Quelle selbst (frueher ein eigener Kasten) ──
+  const aufLandstrom = hasGrid && !invLaeuft;
+  _setNode('bord', invLaeuft ? _W(invW) : hasGrid ? 'am Netz' : '—',
+           invLaeuft ? '#a78bfa' : hasGrid ? '#38bdf8' : null,
+           _sub(aufLandstrom ? 'vom Landstrom' : invLaeuft ? 'vom Wechselrichter' : 'keine Quelle'),
+           _sub(invLaeuft && data.inverter?.ac_current != null
+                  ? data.inverter.ac_current.toFixed(1) + ' A~' : null));
 
   // ── DC-Lasten ─────────────────────────────────────────────────────────
   _setNode('dcgrid', dcNetW != null ? _W(dcNetW) : '--',
            dcNetW > 10 ? '#f87171' : null,
            dcNetW != null ? _A(dcRawA) : null);
 
-  // ── Batterie (Hauptknoten) ────────────────────────────────────────────
+  // ── Startbatteriekreis ────────────────────────────────────────────────
+  _setNode('alt', altW != null ? _W(altW) : '--', altW > 0 ? '#38bdf8' : null,
+           _sub(_A(data.alternator?.current), _v2(data.alternator?.voltage)));
+  _setNode('starter', bat.starter_voltage != null ? bat.starter_voltage.toFixed(1) + ' V' : '--',
+           null,
+           _sub(bat.starter_max_voltage != null && bat.starter_max_voltage <= 20
+                  ? 'max ' + bat.starter_max_voltage.toFixed(1) + ' V' : null));
+  _setNode('orion', orionW != null ? _W(orionW) : '--', orionW > 0 ? '#22d3ee' : null,
+           _sub(data.orion?.cs === 0 ? data.orion?.off_reason_label : data.orion?.cs_label),
+           _sub(data.orion?.input_voltage != null
+                  ? 'Ein ' + data.orion.input_voltage.toFixed(1) + ' V' : null));
+
+  // ── Batterie (Mittelpunkt) ────────────────────────────────────────────
   const bv = $('fv-batt'), bg = $('fg-batt');
   if (bv) {
-    bv.textContent = shuntW != null ? _W(shuntW) : '--';
-    // negativ = Entladen → orange; positiv = Laden → grün
-    bv.style.fill = shuntW == null ? '' : shuntW < 0 ? '#f97316' : shuntW > 0 ? '#22c55e' : '#eef4fb';
+    bv.textContent = bat.soc != null ? Math.round(bat.soc) + ' %' : '--';
+    bv.style.fill = bat.soc == null ? ''
+      : bat.soc >= 50 ? '#22c55e' : bat.soc >= 20 ? '#eab308' : '#ef4444';
   }
-  // Drei Zeilen statt einer langen: die Batterie ist der Mittelpunkt des
-  // Schemas und hat Platz. Fehlende Werte lassen ihre Zeile einfach leer.
   const _bset = (id, txt) => { const e = $(id); if (e) e.textContent = txt || ''; };
-  _bset('fsa-batt', [bat.soc != null ? Math.round(bat.soc) + ' %' : null,
-                     bat.voltage != null ? bat.voltage.toFixed(2) + ' V' : null]
+  _bset('fsa-batt', [shuntW != null ? _W(shuntW) : null,
+                     shuntW != null ? (shuntW < 0 ? 'entnimmt' : shuntW > 0 ? 'lädt' : 'ruht') : null]
                     .filter(Boolean).join('  ·  '));
-  _bset('fsb-batt', [shuntI != null ? _A(shuntI) : null,
-                     bms.remaining_kwh != null
-                       ? Math.round(bms.remaining_kwh * 1000).toLocaleString('de-DE') + ' Wh' : null]
+  _bset('fsb-batt', [bat.voltage != null ? bat.voltage.toFixed(2) + ' V' : null,
+                     shuntI != null ? _A(shuntI) : null]
                     .filter(Boolean).join('  ·  '));
-  _bset('fsc-batt', [bms.highest_cell_v != null && bms.lowest_cell_v != null
-                       ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) + ' mV Zelldiff.' : null,
-                     bms.lowest_temp != null && bms.highest_temp != null
-                       ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)} °C` : null]
+  _bset('fsc-batt', [bms.lowest_temp != null && bms.highest_temp != null
+                       ? `${bms.lowest_temp.toFixed(0)}–${bms.highest_temp.toFixed(0)} °C` : null,
+                     bms.highest_cell_v != null && bms.lowest_cell_v != null
+                       ? Math.round((bms.highest_cell_v - bms.lowest_cell_v) * 1000) + ' mV' : null]
                     .filter(Boolean).join('  ·  '));
   if (bg) bg.classList.remove('dim');
 
   // ── Kanten ────────────────────────────────────────────────────────────
-  // Grundsatz: eine Leitung wird nur gezeichnet, wenn dort auch Strom fliesst.
-  // Ein Geraet, das aus ist, haengt an keiner Linie.
-  _setEdge('fe-solar1',  C, s1w);
-  _setEdge('fe-solar2',  C, s2w);
-  _setEdge('fe-solar3',  C, s3w);
-  _setEdge('fe-charger', C, chargerW);
-  _setEdge('fe-inv',     C, invW);
-  _setEdge('fe-dcgrid',  C, dcNetW);
+  // Grundsatz bleibt: eine Leitung wird nur gezeichnet, wenn dort auch Strom
+  // fliesst. Ein Geraet, das aus ist, haengt an keiner Linie.
+  _setEdge('fe-gridconv',  C, null, false, laedt);
+  _setEdge('fe-convbord',  C, invLaeuft ? invW : null, false, aufLandstrom);
+  // Wandler <-> Batterie: beim Laden fliesst es nach UNTEN in die Batterie,
+  // beim Wechselrichten zieht der Wechselrichter nach OBEN aus ihr heraus.
+  // Vorher war nur der Ladefall verdrahtet — am Anker mit laufendem
+  // Wechselrichter fehlte die Leitung ganz, obwohl dort der meiste Strom floss.
+  _setEdge('fe-convbatt',  C, laedt ? chargerW : invLaeuft ? invW : null, invLaeuft);
+  _setEdge('fe-solarbatt', C, solarSumme > 0 ? solarSumme : null);
+  _setEdge('fe-battdc',    C, dcNetW);
 
-  // Landstrom -> Ladegeraet: nur wenn das Ladegeraet wirklich zieht.
-  _setEdge('fe-gridcharger', C, chargerW, false, hasGrid && chargerW == null);
-
-  // AC-Lasten haengen an einem NETZUMSCHALTER: entweder Landstrom ODER
-  // Inverter, nie beides. Der Umschalter legt sie auf den Inverter, wenn
-  // Landstrom fehlt und der Inverter laeuft. Vorher lief dauerhaft eine Linie
-  // vom Landstrom zu den AC-Lasten, auch wenn der Inverter versorgt haette.
-  const invLaeuft    = invW != null && invW > 10;
-  const aufLandstrom = hasGrid && !invLaeuft;
-  _setEdge('fe-gridbord', C, null, false, aufLandstrom);
-  _setEdge('fe-invbord',  C, invW, false, invLaeuft && invW == null);
-  // Der Umschalter steht jetzt als eigener Kasten im Schema. Seine
-  // Ausgangsleitung fuehrt Strom, sobald EINE der beiden Seiten speist —
-  // vorher lief die Landstromleitung optisch bis zu den AC-Lasten durch und
-  // liess offen, wo umgeschaltet wird.
-  _setEdge('fe-switchbord', C, null, false, aufLandstrom || invLaeuft);
-  _setNode('switch',
-    aufLandstrom ? 'Landstrom' : invLaeuft ? 'Inverter' : 'keine Quelle',
-    (aufLandstrom || invLaeuft) ? C : null, null);
-
-  // Ladekette Lichtmaschine -> Starter -> Orion -> Batterie: nur zeigen, wenn
-  // der Orion auch wirklich laedt. Steht er (Motor aus, Remote-Abschaltung),
-  // fliesst nichts, und dann gehoert da auch keine Linie hin.
+  // Ladekette Lichtmaschine -> Starter -> Orion -> Bordbatterie: nur zeigen,
+  // wenn der Orion auch wirklich laedt. Steht er (Motor aus,
+  // Remote-Abschaltung), fliesst nichts, und dann gehoert da keine Linie hin.
   const orionLaeuft = orionW != null && orionW > 1;
-  _setEdge('fe-orion',        C, orionW);
+  _setEdge('fe-orionbatt',    C, orionW);
   _setEdge('fe-starterorion', C, null, false, orionLaeuft);
   _setEdge('fe-altstarter',   C, altW, false, orionLaeuft && altW == null);
 }
