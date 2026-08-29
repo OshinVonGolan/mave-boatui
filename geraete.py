@@ -158,23 +158,34 @@ def n2k_index(netzwerk: list[dict] | None, namen: dict | None = None) -> dict[in
 
 
 def lan_index(conn: dict | None) -> dict:
-    """WLAN-Clients des Routers nach MAC.
+    """Was der Router ueber angeschlossene Geraete weiss — zwei Qualitaeten.
 
-    Achtung, bewusste Luecke: der Router liefert hier nur die FUNK-Clients.
-    Wer per Kabel am Router haengt, taucht nicht auf — dafuer braeuchte es die
-    DHCP-Leases (Pfad ist noch nicht ermittelt, siehe /api/debug/router-clients).
-    Ein Kabelgeraet gilt deshalb nie als offline, sondern als unbekannt.
+    Die WLAN-Liste ist eine Aussage ueber JETZT: wer dort steht, funkt gerade.
+    Eine DHCP-Lease ist etwas Schwaecheres: das Geraet hat hier einmal eine
+    Adresse bekommen, und die laeuft noch stundenlang weiter, auch wenn es
+    laengst von Bord ist. Beides in einen Topf zu werfen hiesse, ein
+    weggefahrenes Handy als "online" zu zeigen.
+
+    Die Leases sind trotzdem noetig: ein Geraet am KABEL taucht in der
+    WLAN-Liste grundsaetzlich nicht auf.
     """
     router = (conn or {}).get('router') or {}
     clients = router.get('wifi_clients')
-    if clients is None:
-        return {'verfuegbar': False, 'nach_mac': {}, 'clients': []}
-    nach_mac = {}
-    for c in clients:
+    leases  = router.get('dhcp_leases')
+    if clients is None and not leases:
+        return {'verfuegbar': False, 'funk': {}, 'leases': {}, 'clients': []}
+    funk = {}
+    for c in (clients or []):
         m = _mac(c.get('mac'))
         if m:
-            nach_mac[m] = c
-    return {'verfuegbar': True, 'nach_mac': nach_mac, 'clients': list(clients)}
+            funk[m] = c
+    nach_lease = {}
+    for l in (leases or []):
+        m = _mac(l.get('mac'))
+        if m:
+            nach_lease[m] = l
+    return {'verfuegbar': True, 'funk': funk, 'leases': nach_lease,
+            'clients': list(clients or [])}
 
 
 def stoker_index(snapshot: dict | None) -> dict:
@@ -387,20 +398,35 @@ def _zustand_eines(eintrag: dict, quellen: dict) -> dict:
         lan = quellen['lan']
         if not lan['verfuegbar']:
             return {'status': 'unbekannt', 'kennzahlen': [], 'live': None, 'quelle': 'lan'}
-        c = lan['nach_mac'].get(_mac(match.get('mac')))
-        if not c:
-            return {'status': 'offline', 'kennzahlen': [], 'live': None, 'quelle': 'lan'}
-        return {
-            'status': 'online',
-            'kennzahlen': _kennzahlen([
-                ('IP',    c.get('ip')),
-                ('WLAN',  f"{c['signal']} dBm" if c.get('signal') is not None else ''),
-                ('Band',  c.get('band')),
-                ('SSID',  c.get('ssid')),
-            ]),
-            'live': dict(c),
-            'quelle': 'lan',
-        }
+        mac = _mac(match.get('mac'))
+        c = lan['funk'].get(mac)
+        if c:
+            return {
+                'status': 'online',
+                'kennzahlen': _kennzahlen([
+                    ('IP',    c.get('ip')),
+                    ('WLAN',  f"{c['signal']} dBm" if c.get('signal') is not None else ''),
+                    ('Band',  c.get('band')),
+                    ('SSID',  c.get('ssid')),
+                ]),
+                'live': dict(c),
+                'quelle': 'lan',
+            }
+        lease = lan['leases'].get(mac)
+        if lease:
+            # Adresse ja, Verbindung ungeklaert. Bei einem Kabelgeraet ist das
+            # alles, was der Router hergibt — als "online" waere es geraten.
+            return {
+                'status': 'unbekannt',
+                'kennzahlen': _kennzahlen([
+                    ('IP',       lease.get('ip')),
+                    ('Anschluss', lease.get('interface')),
+                    ('Hinweis',  'Adresse vergeben, Verbindung nicht bestätigt'),
+                ]),
+                'live': dict(lease),
+                'quelle': 'lan',
+            }
+        return {'status': 'offline', 'kennzahlen': [], 'live': None, 'quelle': 'lan'}
 
     if typ == 'stoker':
         st = quellen['stoker']
@@ -463,6 +489,20 @@ def _dauer(sekunden) -> str:
 _STAMM_FELDER = ('id', 'name', 'kategorie', 'netz', 'ort', 'hersteller', 'modell',
                  'seriennr', 'baujahr', 'versorgung', 'sicherung', 'doku', 'notiz',
                  'verbunden_an', 'sprung')
+
+
+def _lan_fund(mac: str, name: str, status: str, kennzahlen: list, roh: dict) -> dict:
+    """Ein Geraet im Bordnetzwerk, das in keiner Liste steht."""
+    return {
+        'id': f'lan-{mac.replace(":", "")}', 'name': name or roh.get('ip') or mac,
+        'kategorie': 'netzwerk', 'netz': 'lan', 'netz_name': NETZE['lan'],
+        'ort': '', 'hersteller': '', 'modell': '', 'seriennr': '', 'baujahr': '',
+        'versorgung': '', 'sicherung': '', 'doku': '', 'notiz': '',
+        'verbunden_an': '', 'sprung': 'connectivity',
+        'status': status, 'status_text': STATUS_TEXT[status],
+        'kennzahlen': kennzahlen, 'live': dict(roh), 'quelle': 'lan',
+        'gepflegt': False, 'vorschlag': {'typ': 'lan', 'mac': mac},
+    }
 
 
 def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=None,
@@ -537,27 +577,30 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
                           'device_name': g['name']},
         })
 
-    for mac, c in sorted(quellen['lan']['nach_mac'].items()):
+    gesehen_lan: set[str] = set()
+    for mac, c in sorted(quellen['lan']['funk'].items()):
+        gesehen_lan.add(mac)
         if (mac in belegt_lan
                 or _txt(c.get('ip')) in belegt_ip
                 or _txt(c.get('hostname')).lower() in belegt_host):
             continue
-        name = _txt(c.get('hostname')) or _txt(c.get('ip')) or mac
-        geraete.append({
-            'id': f'lan-{mac.replace(":", "")}', 'name': name,
-            'kategorie': 'netzwerk', 'netz': 'lan', 'netz_name': NETZE['lan'],
-            'ort': '', 'hersteller': '', 'modell': '', 'seriennr': '', 'baujahr': '',
-            'versorgung': '', 'sicherung': '', 'doku': '', 'notiz': '',
-            'verbunden_an': '', 'sprung': 'connectivity',
-            'status': 'online', 'status_text': STATUS_TEXT['online'],
-            'kennzahlen': _kennzahlen([
-                ('IP', c.get('ip')),
-                ('WLAN', f"{c['signal']} dBm" if c.get('signal') is not None else ''),
-                ('MAC', mac),
-            ]),
-            'live': dict(c), 'quelle': 'lan', 'gepflegt': False,
-            'vorschlag': {'typ': 'lan', 'mac': mac},
-        })
+        geraete.append(_lan_fund(mac, _txt(c.get('hostname')), 'online', _kennzahlen([
+            ('IP', c.get('ip')),
+            ('WLAN', f"{c['signal']} dBm" if c.get('signal') is not None else ''),
+            ('MAC', mac),
+        ]), c))
+
+    for mac, l in sorted(quellen['lan']['leases'].items()):
+        if (mac in gesehen_lan or mac in belegt_lan
+                or _txt(l.get('ip')) in belegt_ip
+                or _txt(l.get('hostname')).lower() in belegt_host):
+            continue
+        geraete.append(_lan_fund(mac, _txt(l.get('hostname')), 'unbekannt', _kennzahlen([
+            ('IP', l.get('ip')),
+            ('Anschluss', l.get('interface')),
+            ('MAC', mac),
+            ('Hinweis', 'Adresse vergeben, Verbindung nicht bestätigt'),
+        ]), l))
 
     kategorien = []
     for key, name in KATEGORIEN:
@@ -581,7 +624,8 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
         'quellen': {
             'n2k':    {'verfuegbar': quellen['n2k_verfuegbar'], 'geraete': len(quellen['n2k'])},
             'lan':    {'verfuegbar': quellen['lan']['verfuegbar'],
-                       'clients': len(quellen['lan']['nach_mac'])},
+                       'clients': len(quellen['lan']['funk']),
+                       'adressen': len(quellen['lan']['leases'])},
             'stoker': {'verfuegbar': quellen['stoker']['verfuegbar'],
                        'hub': (quellen['stoker']['hub'] or {}).get('status', 'unbekannt')},
         },

@@ -91,14 +91,26 @@ Gelesen und geschrieben über `jsonio` (atomar), wie `stauplan.json`.
 | NMEA-2000-Bus | `can_reader.get_network_stats()` | vorhanden; um `name_hex` erweitert |
 | N2K-Identität | `_device_addrclaim` (PGN 60928) | wurde gesammelt, jetzt auch ausgeliefert |
 | WLAN-Clients | `connectivity.py`, Feld `router.wifi_clients` | **war schon da** — kein neuer Sammler nötig |
+| Vergebene Adressen | `connectivity.py`, Feld `router.dhcp_leases` (RutOS `/api/dhcp/leases/ipv4/status`, alle 100 s) | erfasst Geräte am **Kabel**, die in der WLAN-Liste nicht stehen können |
 | Uplink | `conn_mon.get_status()` | vorhanden |
 | Heizung | `heating.py` (`snapshot()`) | vorhanden, wird mitbenutzt — **kein zweiter Poll** |
 
-**Bekannte Lücke:** Der Router liefert nur die **Funk**-Clients. Wer per Kabel
-am Router hängt, taucht nicht auf. Dafür bräuchte es die DHCP-Leases; welcher
-RutOS-7-Pfad sie liefert, ist offen — die Kandidatenliste steht in
-`/api/debug/router-clients` (`main.py`). Bis dahin gilt für ein Kabelgerät
-`unbekannt`, nie `offline`.
+**Zwei Qualitäten von Wissen, bewusst getrennt.** Die WLAN-Liste ist eine
+Aussage über JETZT: wer dort steht, funkt gerade. Eine DHCP-Lease ist
+schwächer — das Gerät hat hier einmal eine Adresse bekommen, und die läuft
+stundenlang weiter, auch wenn es längst von Bord ist. Beides in einen Topf zu
+werfen hieße, ein weggefahrenes Handy als „online" zu zeigen. Deshalb:
+
+| Befund | Status |
+|---|---|
+| steht in der WLAN-Liste | `online` |
+| nur eine Lease | `unbekannt` — „Adresse vergeben, Verbindung nicht bestätigt" |
+| weder noch (bei erreichbarem Router) | `offline` |
+
+**Restlücke:** Ein Kabelgerät mit **fest eingetragener** Adresse hat keine
+Lease und funkt nicht — der Router weiß dann nichts von ihm, und es erscheint
+als `offline`. Wer so ein Gerät führt, lässt die Zuordnung (`match`) besser
+weg; dann steht es als `stumm` in der Liste, was der Wahrheit entspricht.
 
 ### 4.3 Zuordnung (`match`)
 
@@ -239,7 +251,7 @@ die technische Sicht auf den Bus, die Geräteseite die Sicht aufs Boot.
 | 3b | Schaltbild: Geräte als Knoten, Linien nach Verbindungsart | **fertig** (v1.30.0) |
 | 4 | Erstbefüllung: 29 Geräte inkl. Navigationsnetz | **fertig** — Modelle/Serien-Nr. teils offen, siehe Notizen in der Datei |
 | 5 | Version bumpen, committen, pushen | **offen** — gehört dem Eigner, außerdem arbeitet gerade ein zweiter Agent im Repo |
-| 6 | Am Boot prüfen: welcher RutOS-Pfad liefert DHCP-Leases (Kabelgeräte) | offen |
+| 6 | RutOS-Pfad für DHCP-Leases ermitteln und einbauen (Kabelgeräte) | **fertig** (v1.31.0): `/api/dhcp/leases/ipv4/status`, gegen den echten Router geprüft |
 | 7 | Ortsliste zusammenführen (stauplan.js + Markup → orte.js) | offen |
 | 8 | Bootsriss als große Karte mit allen Geräten (der Ort, nicht die Verkabelung) | offen, Datenmodell trägt es schon |
 | 9 | Wartungsplan an Geräte hängen; Alarm bei Ausfall | offen |

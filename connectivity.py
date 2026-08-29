@@ -33,6 +33,12 @@ class ConnectivityMonitor:
         # verwaister Kanal samt Hintergrund-Threads und Sockets zurueck —
         # alle 20 s einer, auf einem Pi Zero mit 512 MB nicht harmlos.
         self._grpc_channel  = None
+        # DHCP-Leases aendern sich traege; sie werden nicht bei jedem Poll neu
+        # geholt, sondern jeden fuenften (100 s). Ein Router-Aufruf mehr im
+        # 20-s-Takt waere fuer eine Liste, die sich stuendlich bewegt, Verschwendung.
+        self._leases: list  = []
+        self._leases_ok     = False
+        self._leases_zaehler = 0
 
     def start(self):
         t = threading.Thread(target=self._loop, daemon=True, name='connectivity')
@@ -117,6 +123,29 @@ class ConnectivityMonitor:
                 log.info('WLAN-Clients nicht verfügbar (%s) — Karte wird ausgeblendet', e)
                 self._wifi_warn_logged = True
 
+        # Vergebene Adressen (auch fuer Geraete am Kabel, die in der
+        # WLAN-Liste grundsaetzlich fehlen). ACHTUNG: Eine Lease sagt, dass ein
+        # Geraet hier eine Adresse bekommen hat — NICHT, dass es gerade da ist.
+        # Sie laeuft stundenlang weiter, wenn das Geraet abgezogen wurde.
+        if self._leases_zaehler <= 0:
+            self._leases_zaehler = 5
+            try:
+                antwort = self._http(f'{self._router_host}/api/dhcp/leases/ipv4/status',
+                                     headers=hdrs)
+                self._leases = [{
+                    'hostname':  l.get('hostname') or '',
+                    'mac':       l.get('macaddr', ''),
+                    'ip':        l.get('ipaddr', ''),
+                    'interface': l.get('interface', ''),
+                } for l in (antwort.get('data') or [])]
+                self._leases_ok = True
+            except Exception as e:
+                if not getattr(self, '_lease_warn_logged', False):
+                    log.info('DHCP-Leases nicht verfügbar (%s)', e)
+                    self._lease_warn_logged = True
+                self._leases_ok = False
+        self._leases_zaehler -= 1
+
         wan_ip = primary.get('ipaddr', '') or ''
         return {
             'active_type':    primary.get('network_type', 'unknown'),
@@ -125,6 +154,8 @@ class ConnectivityMonitor:
             'mobile_up':      mobile is not None,
             'wifi_clients':   wifi_clients,
             'wifi_client_count': len(wifi_clients),
+            'dhcp_leases':    list(self._leases),
+            'dhcp_ok':        self._leases_ok,
             'wan_ip':         wan_ip,
             'mobile': {
                 'operator':    modem.get('operator', ''),

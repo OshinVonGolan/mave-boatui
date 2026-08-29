@@ -205,7 +205,9 @@ function _gerRender() {
     </div>
     <div class="ger-quellen">
       ${quelle('Bordbus', q.n2k?.verfuegbar, `${q.n2k?.geraete ?? 0} Geräte`)}
-      ${quelle('WLAN', q.lan?.verfuegbar, q.lan?.verfuegbar ? `${q.lan.clients} Clients` : 'Router antwortet nicht')}
+      ${quelle('Netzwerk', q.lan?.verfuegbar, q.lan?.verfuegbar
+          ? `${q.lan.clients} im Funk · ${q.lan.adressen ?? 0} Adressen`
+          : 'Router antwortet nicht')}
       ${quelle('Heizung', q.stoker?.verfuegbar && q.stoker?.hub === 'online', q.stoker?.verfuegbar ? `Hub ${q.stoker.hub}` : 'nicht eingerichtet')}
     </div>
 

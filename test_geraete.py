@@ -287,3 +287,63 @@ class KeineDoppelten(unittest.TestCase):
         # ohne den Hinweis waere er ein Fremder im eigenen Netz
         erg = geraete.aggregiere([], conn_status=self.CONN)
         self.assertIn('mave-control', [g['name'] for g in erg['geraete']])
+
+
+class DhcpLeases(unittest.TestCase):
+    """Eine Lease ist etwas anderes als eine bestehende Verbindung."""
+
+    FUNK = {'hostname': 'stoker-bf38', 'mac': 'aa:bb:cc:dd:ee:ff', 'ip': '192.168.1.48',
+            'signal': -62, 'band': '2.4', 'ssid': 'SY_Mave'}
+    LEASE_FUNK = {'hostname': 'stoker-bf38', 'mac': 'AA:BB:CC:DD:EE:FF',
+                  'ip': '192.168.1.48', 'interface': 'lan'}
+    LEASE_KABEL = {'hostname': 'plotter', 'mac': '11:22:33:44:55:66',
+                   'ip': '192.168.1.60', 'interface': 'lan'}
+
+    def conn(self, funk=True, leases=True):
+        return {'router': {
+            'wifi_clients': [self.FUNK] if funk else [],
+            'wifi_client_count': 1 if funk else 0,
+            'dhcp_leases': ([self.LEASE_FUNK, self.LEASE_KABEL] if leases else []),
+            'dhcp_ok': leases,
+        }}
+
+    def test_nur_lease_heisst_nicht_online(self):
+        # Das Kabelgeraet steht in keiner WLAN-Liste — es kann dort gar nicht
+        # stehen. "online" waere geraten, "offline" waere falsch.
+        reg = [{'id': 'p', 'name': 'Plotter', 'kategorie': 'navigation',
+                'match': {'typ': 'lan', 'mac': '11:22:33:44:55:66'}}]
+        g = geraete.aggregiere(reg, conn_status=self.conn())['geraete'][0]
+        self.assertEqual(g['status'], 'unbekannt')
+        self.assertIn({'l': 'IP', 'v': '192.168.1.60'}, g['kennzahlen'])
+        self.assertTrue(any('nicht bestätigt' in k['v'] for k in g['kennzahlen']))
+
+    def test_funk_schlaegt_lease(self):
+        reg = [{'id': 's', 'name': 'Stoker', 'kategorie': 'netzwerk',
+                'match': {'typ': 'lan', 'mac': 'aa:bb:cc:dd:ee:ff'}}]
+        g = geraete.aggregiere(reg, conn_status=self.conn())['geraete'][0]
+        self.assertEqual(g['status'], 'online')
+        self.assertIn({'l': 'WLAN', 'v': '-62 dBm'}, g['kennzahlen'])
+
+    def test_weder_funk_noch_lease_ist_offline(self):
+        reg = [{'id': 'x', 'name': 'Fremd', 'kategorie': 'netzwerk',
+                'match': {'typ': 'lan', 'mac': '99:99:99:99:99:99'}}]
+        g = geraete.aggregiere(reg, conn_status=self.conn())['geraete'][0]
+        self.assertEqual(g['status'], 'offline')
+
+    def test_geraet_aus_lease_wird_gefunden_aber_nicht_als_online(self):
+        erg = geraete.aggregiere([], conn_status=self.conn())
+        nach_name = {g['name']: g for g in erg['geraete']}
+        self.assertEqual(nach_name['stoker-bf38']['status'], 'online')
+        self.assertEqual(nach_name['plotter']['status'], 'unbekannt')
+
+    def test_kein_doppelter_eintrag_bei_funk_und_lease(self):
+        erg = geraete.aggregiere([], conn_status=self.conn())
+        namen = [g['name'] for g in erg['geraete']]
+        self.assertEqual(namen.count('stoker-bf38'), 1)
+        self.assertEqual(erg['quellen']['lan'], {'verfuegbar': True, 'clients': 1, 'adressen': 2})
+
+    def test_leases_allein_reichen_als_quelle(self):
+        erg = geraete.aggregiere([], conn_status=self.conn(funk=False))
+        self.assertTrue(erg['quellen']['lan']['verfuegbar'])
+        self.assertEqual({g['name'] for g in erg['geraete']}, {'stoker-bf38', 'plotter'})
+        self.assertTrue(all(g['status'] == 'unbekannt' for g in erg['geraete']))
