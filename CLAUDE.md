@@ -145,6 +145,7 @@ Raspberry Pi
 | `static/js/icons.js` | SVG-Icon-System: `icon(name, {size})` und `weatherIcon(code)` — **keine Emojis im UI** |
 | `geraete.py` | Geräteübersicht: verbindet die gepflegte Liste (`devices.json`) mit den laufenden Quellen (Bus, WLAN, Stoker) zu einem Snapshot. Rein rechnend, ohne Netzzugriff — deshalb ohne Boot testbar (`test_geraete.py`). Konzept: `KONZEPT-GERAETE.md` |
 | `static/js/geraete.js` | Seite „Geräte an Bord": Kacheln, Liste mit Eltern-Kind-Baum, Detail-Popup, Bearbeiten der Stammdaten |
+| `static/js/topologie.js` | Das Schaltbild der Geräteseite: eine Schiene je Netz, Geräte als Knoten, Linienfarbe = Verbindungsart. Layout wird gerechnet, nicht simuliert |
 | `static/js/orte.js` | Gemeinsame Ortsliste (Namen, Farben, Flächen des Grundrisses) und der Mini-Schiffsriss fürs Popup |
 | `heating.py` | Anbindung an die Stoker-Heizung: pollt den Hub zentral (max. 1 Hz laut Gerätedoku), hält den Zustand vor, reicht Schaltbefehle durch. Relaisbetrieb bewusst nicht abgebildet |
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |

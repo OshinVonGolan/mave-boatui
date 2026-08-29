@@ -130,14 +130,18 @@ function _gerGruppenName(key) {
   return (_gerDaten?.kategorien || []).find(k => k.key === key)?.name || key;
 }
 
+function _gerPasst(g, suchtext) {
+  const q = (suchtext || '').trim().toLowerCase();
+  if (!q) return true;
+  return [g.name, g.hersteller, g.modell, g.notiz, g.id, g.netz_name, ortName(g.ort),
+          ...(g.kennzahlen || []).map(k => k.v)]
+    .some(t => (t || '').toLowerCase().includes(q));
+}
+
 function _gerGefiltert() {
-  const q = _gerSuche.trim().toLowerCase();
   return (_gerDaten?.geraete || []).filter(g => {
     if (_gerProbleme && g.status !== 'offline' && g.status !== 'unbekannt') return false;
-    if (!q) return true;
-    return [g.name, g.hersteller, g.modell, g.notiz, g.id, g.netz_name, ortName(g.ort),
-            ...(g.kennzahlen || []).map(k => k.v)]
-      .some(t => (t || '').toLowerCase().includes(q));
+    return _gerPasst(g, _gerSuche);
   });
 }
 
@@ -214,13 +218,16 @@ function _gerRender() {
       <div class="ger-seg">
         <button class="${_gerModus === 'kategorie' ? 'active' : ''}" onclick="gerModus('kategorie')">Kategorie</button>
         <button class="${_gerModus === 'netz' ? 'active' : ''}" onclick="gerModus('netz')">Netz</button>
+        <button class="${_gerModus === 'karte' ? 'active' : ''}" onclick="gerModus('karte')">Schaltbild</button>
       </div>
       <button class="ger-toggle ${_gerProbleme ? 'active' : ''}" onclick="gerProbleme()">
         ${icon('warning', { size: 14 })} nur Probleme
       </button>
     </div>
 
-    ${flach ? _gerListeHtml(gefiltert, _gerProbleme ? 'Geräte mit Problem' : 'Treffer', true)
+    ${_gerModus === 'karte'
+        ? gerKarteHtml(alle, _gerSuche, _gerProbleme)
+      : flach ? _gerListeHtml(gefiltert, _gerProbleme ? 'Geräte mit Problem' : 'Treffer', true)
             : _gerGruppe === '*' ? _gerListeHtml(gefiltert, 'Alle Geräte', false)
             : _gerGruppe ? _gerListeHtml(gefiltert.filter(g => _gerGruppeVon(g) === _gerGruppe),
                                          _gerGruppenName(_gerGruppe), false)

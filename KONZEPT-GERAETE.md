@@ -190,6 +190,7 @@ stört.
 ## 7. Oberfläche
 
 - `static/js/geraete.js` — Seite, Liste, Detail-Popup, Bearbeiten
+- `static/js/topologie.js` — das Schaltbild (Verbindungskarte)
 - `static/js/orte.js` — Ortsliste und Mini-Schiffsriss
 - `static/css/geraete.css` — eigene Datei, ausschließlich vorhandene Tokens
 - Einstieg über Kopfleiste und Burger-Menü; die Zurück-Geste kennt `#geraete`
@@ -197,8 +198,31 @@ stört.
 Drei Ebenen: Kacheln (mit Balken aus online/träge/offline/neutral) → Liste mit
 Eltern-Kind-Einrückung → Popup mit Stammdaten, Zustand, PGN-Tabelle
 (führt in das vorhandene Rohdaten-Popup), Verbindungen, Mini-Riss und Sprung
-zur Fachseite. Umschalter **Kategorie/Netz**; Suche und „nur Probleme" wirken
-immer über alle Geräte. Icons ausschließlich über `icon(...)`, keine Emojis.
+zur Fachseite. Umschalter **Kategorie / Netz / Schaltbild**; Suche und „nur
+Probleme" wirken immer über alle Geräte. Icons ausschließlich über `icon(...)`,
+keine Emojis.
+
+### Das Schaltbild
+
+Je Netz eine Schiene, daran die Geräte, darunter als Baum, was an ihnen hängt.
+Die **Farbe der Linie** sagt, worüber verbunden ist: VE.Direct zum MPPT ist
+etwas anderes als SeaTalk zum Autopiloten, auch wenn beides „hängt an" heißt.
+Gestrichelt heißt: meldet sich nicht selbst (stumm oder Fremdnetz).
+Gestrichelter Rahmen heißt: gesehen, aber in keiner Liste. Ein Klick öffnet
+dasselbe Detail-Popup wie in der Liste.
+
+Zwei Festlegungen, die das Bild brauchbar halten:
+
+- **Gerechnet, nicht simuliert.** Kein Kräftemodell, keine Zufallslage, kein
+  Nachwackeln: dasselbe Boot ergibt immer dasselbe Bild, und der Pi Zero
+  zeichnet einmal statt zu iterieren.
+- **Ab vier Kindern untereinander statt nebeneinander.** Die sechs Kinder des
+  Stoker-Hubs nebeneinander machten die Karte 2100 px breit — breiter als jeder
+  Bildschirm an Bord. Als Kabelbaum bleibt sie unter 1200 px. Jede Leitung
+  bekommt dabei einen eigenen senkrechten Kanal, sonst lägen sechs
+  verschiedenfarbige Linien exakt übereinander.
+- **Suche filtert hier nicht, sie hebt hervor.** Ein Schaltbild, aus dem Geräte
+  herausgeschnitten sind, zeigt Verbindungen ins Nichts.
 
 Die vorhandene Bus-Ansicht (`renderNetworkInto()`) bleibt unangetastet: sie ist
 die technische Sicht auf den Bus, die Geräteseite die Sicht aufs Boot.
@@ -212,11 +236,12 @@ die technische Sicht auf den Bus, die Geräteseite die Sicht aufs Boot.
 | 1 | `geraete.py`, `devices.json`, drei Endpunkte, Aggregation | **fertig**, 23 Tests grün |
 | 2 | `name_hex` aus PGN 60928 in `/api/network` | **fertig** |
 | 3 | Oberfläche samt Detail-Popup und Bearbeiten | **fertig**, im Browser geprüft (Desktop und Handy) |
+| 3b | Schaltbild: Geräte als Knoten, Linien nach Verbindungsart | **fertig** (v1.30.0) |
 | 4 | Erstbefüllung: 29 Geräte inkl. Navigationsnetz | **fertig** — Modelle/Serien-Nr. teils offen, siehe Notizen in der Datei |
 | 5 | Version bumpen, committen, pushen | **offen** — gehört dem Eigner, außerdem arbeitet gerade ein zweiter Agent im Repo |
 | 6 | Am Boot prüfen: welcher RutOS-Pfad liefert DHCP-Leases (Kabelgeräte) | offen |
 | 7 | Ortsliste zusammenführen (stauplan.js + Markup → orte.js) | offen |
-| 8 | Bootsriss als große Karte mit allen Geräten | offen, Datenmodell trägt es schon |
+| 8 | Bootsriss als große Karte mit allen Geräten (der Ort, nicht die Verkabelung) | offen, Datenmodell trägt es schon |
 | 9 | Wartungsplan an Geräte hängen; Alarm bei Ausfall | offen |
 
 **Nicht vergessen beim Commit:** `VERSION` in `main.py` hochzählen, JS prüfen

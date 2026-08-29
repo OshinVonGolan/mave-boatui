@@ -223,3 +223,38 @@
 
 .ger-leer { text-align: center; color: var(--text3); padding: 44px 20px; font-size: 14px; }
 .ger-hinweis { font-size: 12px; color: var(--text3); line-height: 1.55; }
+
+/* ── Verbindungskarte (Schaltbild) ─────────────────────────────────────────
+   Die Karte ist so breit, wie die Anlage es verlangt. Sie wird NICHT
+   kleingerechnet — lieber im eigenen Rahmen schieben als unlesbar stauchen. */
+.topo-hinweis { font-size: 12px; color: var(--text3); line-height: 1.5; margin-bottom: 10px; }
+.topo-legende { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.topo-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+.topo-leg i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+.topo-rahmen {
+  overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border);
+  border-radius: var(--radius); background:
+    radial-gradient(circle at 18% 12%, rgba(6,182,212,.05), transparent 55%),
+    var(--surface);
+  padding: 6px 2px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.topo-svg { display: block; }
+.topo-schiene-titel { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+
+.topo-knoten { cursor: pointer; }
+.topo-knoten rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1.4; transition: stroke .12s, fill .12s; }
+.topo-knoten text { fill: var(--text); font-size: 12.5px; font-weight: 550; }
+.topo-knoten:hover rect { stroke: var(--accent); fill: #2b3b52; }
+.topo-knoten.topo-treffer rect { stroke: var(--accent); stroke-width: 2.2; }
+/* Am Bus oder im WLAN gesehen, aber in keiner Liste: gestrichelter Rahmen,
+   damit im Schaltbild sofort auffaellt, was noch niemand eingeordnet hat. */
+.topo-knoten.topo-neu rect { stroke-dasharray: 5 4; fill: transparent; }
+
+.topo-punkt.s-online    { fill: var(--green); }
+.topo-punkt.s-traege    { fill: var(--yellow); }
+.topo-punkt.s-offline   { fill: var(--red); }
+.topo-punkt.s-unbekannt { fill: var(--text3); }
+.topo-punkt.s-stumm     { fill: #475569; }
+.topo-punkt.s-fremdnetz { fill: #a78bfa; }

@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.29.0'
+VERSION  = _git_semver() or '1.30.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -353,7 +353,7 @@ _JS_FILES = [
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
     'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
-    'orte.js', 'geraete.js', 'init.js',
+    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
 ]
 _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
