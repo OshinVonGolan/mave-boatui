@@ -554,9 +554,42 @@ const _baW = v => v == null ? '--'
 /** Zeitspanne menschenlesbar. */
 function _baDauer(h) {
   if (h == null || !isFinite(h) || h <= 0) return null;
-  if (h >= 48) return Math.round(h / 24) + ' Tage';
-  if (h >= 1)  return Math.floor(h) + ' h ' + Math.round((h % 1) * 60) + ' min';
+  // Unter zehn Tagen mit einer Nachkommastelle. Mit ganzen Tagen sprang die
+  // Ueberschrift am Geraet zwischen "6 Tage" und "7 Tage", sobald der
+  // Verbrauch um zwei Watt schwankte — die Rundungsgrenze lag mitten im
+  // normalen Rauschen.
+  if (h >= 240) return Math.round(h / 24) + ' Tage';
+  if (h >= 48)  return (h / 24).toFixed(1).replace('.', ',') + ' Tage';
+  if (h >= 1)   return Math.floor(h) + ' h ' + Math.round((h % 1) * 60) + ' min';
   return Math.round(h * 60) + ' min';
+}
+
+/**
+ * Geglaetteter Verbrauch fuer die Reichweiten-Schaetzung.
+ *
+ * Der Momentanwert schwankt um einige Watt (Kuehlschrank, Lader-Regelung).
+ * Die Ueberschrift wird bei jedem WebSocket-Frame neu gerechnet und zappelte
+ * deshalb sichtbar. Median statt Mittelwert: ein einzelner Ausreisser — etwa
+ * der Anlaufstrom einer Pumpe — soll die Schaetzung nicht mitreissen.
+ *
+ * Die Reihe haengt an der Zeit, nicht an der Anzahl Frames: bei rund 2,4
+ * Frames je Sekunde deckt sie etwa 25 Sekunden ab.
+ */
+const _BA_VERBRAUCH_FENSTER_S = 25;
+let _baVerbrauchReihe = [];
+
+function _baVerbrauchGeglaettet(w) {
+  if (w == null || !isFinite(w)) return null;
+  const jetzt = nowTs();
+  _baVerbrauchReihe.push({ ts: jetzt, w });
+  const grenze = jetzt - _BA_VERBRAUCH_FENSTER_S;
+  // Nach einem Sprung der Serverzeit (der Pi hat keine Echtzeituhr) koennen
+  // alte Stempel in der Zukunft liegen — dann lieber neu anfangen.
+  if (_baVerbrauchReihe.some(e => e.ts > jetzt + 5)) _baVerbrauchReihe = [{ ts: jetzt, w }];
+  else _baVerbrauchReihe = _baVerbrauchReihe.filter(e => e.ts >= grenze);
+  const werte = _baVerbrauchReihe.map(e => e.w).sort((a, b) => a - b);
+  const m = werte.length >> 1;
+  return werte.length % 2 ? werte[m] : (werte[m - 1] + werte[m]) / 2;
 }
 
 /** SOC als Ring — Prozent ist radial richtig aufgehoben. */
@@ -629,11 +662,15 @@ function _baAntwort(data) {
   const rein = q.reduce((sum, x) => sum + x.w, 0);
   const p = b.power;
   const verbrauch = p != null ? Math.max(0, rein - p) : null;
+  // Fuer die Reichweite den geglaetteten Wert, fuer die Anzeige darunter den
+  // aktuellen — "reicht X" soll ruhig stehen, "aktuell Y W" darf zappeln.
+  const verbrauchGl = _baVerbrauchGeglaettet(verbrauch);
   const amNetz = q.some(x => x.name !== 'Solar' && x.w > 5);
 
   let kopf = 'Ladezustand', unter = '';
   if (verbrauch != null && verbrauch > 2 && restWh != null) {
-    kopf = (amNetz ? 'ohne Landstrom ' : '') + 'reicht ' + (_baDauer(restWh / verbrauch) || '--');
+    kopf = (amNetz ? 'ohne Landstrom ' : '') + 'reicht '
+         + (_baDauer(restWh / (verbrauchGl || verbrauch)) || '--');
     unter = `bei aktuell ${_baW(verbrauch)} Verbrauch`
       + (p > 1 ? ` · lädt mit ${_baW(p)}` : p < -1 ? ` · entnimmt ${_baW(Math.abs(p))}` : '');
   } else if (p != null && p > 1 && restWh != null && soc) {
@@ -662,7 +699,14 @@ function _baAntwort(data) {
     ? (b.voltage != null ? Math.round(capAh * b.voltage) : null)
     : (restWh != null && bmsSoc != null && bmsSoc >= 20
         ? Math.round(restWh / (bmsSoc / 100)) : null);
-  const wh = n => n.toLocaleString('de-DE') + ' Wh';
+  // Ab einer Kilowattstunde in kWh: "11.969 Wh von 11.970 Wh" waren zwei
+  // praktisch gleiche Zahlen mit vorgetaeuschter Wattstunden-Genauigkeit.
+  // BEIDE Zahlen des Satzes teilen sich die Einheit — "784 Wh von 1,3 kWh"
+  // waere derselbe Einheitenmix, den diese Karte gerade losgeworden ist.
+  const einheitAbKwh = Math.max(restWh ?? 0, gesamtWh ?? 0) >= 1000;
+  const wh = n => einheitAbKwh
+    ? (n / 1000).toFixed(n / 1000 < 10 ? 2 : 1).replace('.', ',') + ' kWh'
+    : Math.round(n) + ' Wh';
 
   // Zelldiff. steht ab jetzt als "Spreizung" in der Zellen-Karte direkt
   // darunter — hier waere es dieselbe Zahl ein zweites Mal.
@@ -683,7 +727,8 @@ function _baAntwort(data) {
         <div class="ba-kopf">${kopf}<small>${unter}</small></div>
         <div class="ba-kette">
           ${restWh != null ? `<span>Verfügbar <b>${wh(restWh)}</b>${
-            gesamtWh != null ? ` von ${wh(gesamtWh)}` : ''}</span>` : ''}
+            (gesamtWh != null && restWh / gesamtWh < 0.99)
+              ? ` von ${wh(gesamtWh)}` : ''}</span>` : ''}
           ${kette}
         </div>
         ${streit ? `<div class="ba-streit">${icon('warning', {size: 13})}
@@ -925,12 +970,13 @@ function _starterKarte(b) {
  * ergaenzt, haengt es in _baGeraete() an die Liste — nicht mehr an _tile()/_kv().
  */
 function renderDeviceTiles(data) {
-  const sec = $('deviceTilesSection');
-  if (sec) sec.innerHTML = _baAntwort(data) + _baBilanz(data) + _baZellen(data);
-
-  const geraete = document.getElementById('bdSources');
-  if (geraete) geraete.innerHTML = _baGeraete(data);
-
-  const starter = document.getElementById('bdDiag');
-  if (starter) starter.innerHTML = _starterKarte(data.battery ?? null);
+  // Jede Karte in ihr eigenes Rasterfeld. Vorher landeten Antwort, Bilanz und
+  // Zellen zusammen in EINEM Container und konnten deshalb nur untereinander
+  // stehen — das war der Grund fuer den langen Stapel.
+  const setz = (id, html) => { const e = $(id); if (e) e.innerHTML = html; };
+  setz('bdAntwort', _baAntwort(data));
+  setz('bdBilanz',  _baBilanz(data));
+  setz('bdZellen',  _baZellen(data));
+  setz('bdSources', _baGeraete(data));
+  setz('bdDiag',    _starterKarte(data.battery ?? null));
 }

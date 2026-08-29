@@ -182,12 +182,36 @@ function fmtAxisTime(ts, nowTs) {
   return date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
 }
 
-function fmtYVal(v, key) {
-  if (key === 'soc')      return Math.round(v) + '%';
-  if (key === 'voltage')  return v.toFixed(1) + 'V';
-  if (key === 'current')  return v.toFixed(0) + 'A';
+/**
+ * Achsenbeschriftung.
+ *
+ * Die Nachkommastellen richten sich nach dem TICK-ABSTAND, nicht nach der
+ * Groesse. Vorher stand fest `toFixed(0)` fuer Strom: liegt der Strom nahe
+ * null, waehlt _niceTicks Schritte von 0,5 A — und die Achse las sich am
+ * Geraet als "1A / 0A / -1A / -1A", zwei gleiche Zahlen auf verschiedenen
+ * Hoehen. Bei Spannung dieselbe Falle (13,30 gegen 13,31 V).
+ */
+function _achsenDez(step) {
+  if (!isFinite(step) || step <= 0) return 0;
+  if (step >= 1)   return 0;
+  if (step >= 0.1) return 1;
+  if (step >= 0.01) return 2;
+  return 3;
+}
+
+function fmtYVal(v, key, step) {
+  const d = _achsenDez(step);
+  if (key === 'soc')      return v.toFixed(Math.min(d, 1)) + '%';
+  if (key === 'voltage')  return v.toFixed(Math.max(1, d)) + 'V';
+  if (key === 'current')  return v.toFixed(d) + 'A';
   if (key === 'zelldiff') return Math.round(v * 1000) + 'mV';
-  return String(Math.round(v));
+  return v.toFixed(d);
+}
+
+/** Abstand zweier Ticks — Grundlage fuer die Nachkommastellen. */
+function _tickStep(ticks) {
+  return (Array.isArray(ticks) && ticks.length > 1)
+    ? Math.abs(ticks[1] - ticks[0]) : 1;
 }
 
 const CHART_PAD_L = 38, CHART_PAD_R = 40;
@@ -421,7 +445,7 @@ function _zeichneCharts() {
       const y = yLeft.yOf(v);
       if (y < PAD_T - 2 || y > PAD_T + CH + 2) return;
       ctx.fillStyle = col + 'cc';
-      ctx.fillText(fmtYVal(v, yLeft.key), PAD_L - 4, y);
+      ctx.fillText(fmtYVal(v, yLeft.key, _tickStep(yTicks)), PAD_L - 4, y);
     });
     ctx.fillStyle = col + '88';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -440,7 +464,7 @@ function _zeichneCharts() {
       // kleiner Strich als Tick
       ctx.beginPath(); ctx.moveTo(PAD_L + CW, y); ctx.lineTo(PAD_L + CW + 3, y);
       ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillText(fmtYVal(v, yRight.key), PAD_L + CW + 5, y);
+      ctx.fillText(fmtYVal(v, yRight.key, _tickStep(rTicks)), PAD_L + CW + 5, y);
     });
     ctx.fillStyle = col + '88';
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';

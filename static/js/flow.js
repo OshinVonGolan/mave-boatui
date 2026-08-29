@@ -200,10 +200,18 @@ function updateFlow(data) {
   // Inverter, nie beides. Der Umschalter legt sie auf den Inverter, wenn
   // Landstrom fehlt und der Inverter laeuft. Vorher lief dauerhaft eine Linie
   // vom Landstrom zu den AC-Lasten, auch wenn der Inverter versorgt haette.
-  const invLaeuft   = invW != null && invW > 10;
+  const invLaeuft    = invW != null && invW > 10;
   const aufLandstrom = hasGrid && !invLaeuft;
   _setEdge('fe-gridbord', C, null, false, aufLandstrom);
   _setEdge('fe-invbord',  C, invW, false, invLaeuft && invW == null);
+  // Der Umschalter steht jetzt als eigener Kasten im Schema. Seine
+  // Ausgangsleitung fuehrt Strom, sobald EINE der beiden Seiten speist —
+  // vorher lief die Landstromleitung optisch bis zu den AC-Lasten durch und
+  // liess offen, wo umgeschaltet wird.
+  _setEdge('fe-switchbord', C, null, false, aufLandstrom || invLaeuft);
+  _setNode('switch',
+    aufLandstrom ? 'Landstrom' : invLaeuft ? 'Inverter' : 'keine Quelle',
+    (aufLandstrom || invLaeuft) ? C : null, null);
 
   // Ladekette Lichtmaschine -> Starter -> Orion -> Batterie: nur zeigen, wenn
   // der Orion auch wirklich laedt. Steht er (Motor aus, Remote-Abschaltung),

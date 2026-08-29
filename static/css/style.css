@@ -938,28 +938,54 @@
     .bd2-stat { font-size: 13px; color: var(--text2); display: flex; gap: 5px; align-items: baseline; }
     .bd2-stat-l { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing:.04em; }
 
-    /* ── Device-Tiles (Battery Detail Overlay) ── */
-    .dt-section {
-      display: flex; flex-wrap: wrap; gap: 12px;
-      padding: 16px 16px 4px; max-width: 1500px; margin: 0 auto; width: 100%; box-sizing: border-box;
+    /* ── Batterie-Detailseite: Raster ─────────────────────────────────────
+       Vorher lagen fuenf Karten in voller Breite untereinander (Desktop
+       1485 px hoch). Die Kennzahlenzeile endete bei 40 % der Breite, ein
+       78-W-Balken war 1300 px lang, und man musste dreimal scrollen, um die
+       Geraete zu sehen. Zwei Spalten nutzen die Breite; unter 1100 px faellt
+       das Raster auf eine Spalte zurueck, die Reihenfolge bleibt dieselbe. */
+    .bd-grid {
+      display: grid; gap: var(--gap);
+      max-width: 1500px; margin: 0 auto; padding: 16px; box-sizing: border-box;
+      grid-template-columns: 1fr;
+      grid-template-areas: "antwort" "bilanz" "zellen" "geraete" "verlauf" "starter";
     }
-
-    /* Charts-only Grid (für battOverlay nach Umbau) */
-    .bd-pg-charts-only {
-      display: grid; grid-template-columns: 1fr; gap: 14px;
-      max-width: 1500px; margin: 0 auto; padding: 0 16px 14px; box-sizing: border-box;
+    @media (min-width: 1100px) {
+      .bd-grid {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        /* Links die Energie (was fliesst jetzt, was floss vorher), rechts der
+           Zustand der Hardware (Zellen, Geraete). Die beiden Spalten sind so
+           auch ungefaehr gleich hoch — bei "Verlauf ueber die volle Breite"
+           stand rechts eine halbe Bildschirmhoehe leer. */
+        grid-template-areas:
+          "antwort antwort"
+          "bilanz  zellen"
+          "verlauf geraete"
+          "verlauf starter";
+        align-items: start;
+      }
     }
-    /* .bd-pg-chart traegt grid-area:chart aus einem anderen Seitenlayout. Hier
-       gibt es diesen benannten Bereich nicht — der Browser legt daraufhin eine
-       implizite Spalte an und schiebt den Verlauf nach rechts, waehrend links
-       eine leere Flaeche stehen bleibt. Platzierung deshalb zuruecksetzen. */
-    .bd-pg-charts-only > .bd-pg-chart { grid-area: auto; }
-    /* ── 7-Tage + Lade-Quellen nebeneinander ── */
-    @media (max-width: 639px) {
-      .bd-pg-charts-only { padding: 0 10px 12px; }
-      /* Mobile Battery-Detail: nur Graph + 7-Tage + Pie + Zellen */
-      /* Device-Tiles auf Desktop: 2-spaltig, kompakter */
+    .bd-a-antwort { grid-area: antwort; }
+    .bd-a-bilanz  { grid-area: bilanz; }
+    .bd-a-zellen  { grid-area: zellen; }
+    .bd-a-geraete { grid-area: geraete; }
+    .bd-a-verlauf { grid-area: verlauf; }
+    .bd-a-starter { grid-area: starter; }
+    /* Im Raster erzeugt jede Karte ihren eigenen Abstand ueber gap — die alten
+       Einzel-Abstaende wuerden sich addieren. */
+    .bd-grid .sb-card,
+    .bd-grid .starter,
+    .bd-grid .bd-flow { margin-bottom: 0; }
+    /* Die Geraetekacheln stehen jetzt in einer halben Spalte: zwei nebeneinander
+       statt vier, damit die Wattzahl gross bleibt. */
+    @media (min-width: 1100px) {
+      .bd-a-geraete { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
+    /* Der Verlauf spannt links zwei Rasterzeilen, damit rechts unter den
+       Geraeten kein toter Raum bleibt. Er darf die Hoehe ausfuellen. */
+    @media (min-width: 1100px) { .bd-a-verlauf { align-self: stretch; } }
+    .bd-a-verlauf { display: flex; }
+    .bd-a-verlauf > .bd-pg-chart { grid-area: auto; flex: 1; min-width: 0; }
 
     /* Altes Grid (nicht mehr für battOverlay genutzt, kann bleiben) */
     .bd-pg {
@@ -973,7 +999,9 @@
     /* flex:1 ohne Deckel liess den Verlauf auf 647 px anwachsen — mehr Hoehe
        macht eine Kurve nicht lesbarer, sie schiebt nur alles Weitere nach
        unten aus dem Blick. */
-    .bd-pg-chart canvas.chart { flex: 1; min-height: 280px; max-height: 400px; }
+    /* Im Raster liegt der Verlauf ueber die volle Breite: flacher als frueher,
+       sonst nimmt eine meist ruhige Kurve wieder das halbe Bild. */
+    .bd-pg-chart canvas.chart { flex: 1; min-height: 200px; max-height: 260px; }
     .bd-pg-batt    { grid-area: batt; }
     .bd-pg-chart   { grid-area: chart; }
     .bd-pg-cells   { grid-area: cells; }
