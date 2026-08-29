@@ -417,7 +417,7 @@
 
     /* Starterbatterie: eigene, bewusst kleinere Karte — hat mit der Bank nichts zu tun */
     .starter { background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 14px 18px; margin-bottom: var(--gap);
+      border-radius: var(--radius); padding: 20px; margin-bottom: var(--gap);
       display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
     /* Erklaert einen unterschlagenen Schleppzeiger — bricht auf eine eigene
        Zeile um, damit die Kennzahlen daneben nicht schmal gequetscht werden. */
@@ -437,7 +437,11 @@
       grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); align-items: stretch; }
     .bd-src  { background: var(--surface); border: 1px solid var(--border);
       border-left: 3px solid var(--border); border-radius: var(--radius);
-      padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+      padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0;
+      /* Die Kacheln fuellen die Rasterzeile. Ohne space-between klebt alles
+         oben und unten bleibt ein Streifen Luft — die Kachel sieht dann aus,
+         als waere sie zu gross geraten, statt bewusst so hoch zu sein. */
+      justify-content: space-between; }
     .bd-src-ok { border-left-color: var(--green); }
     .bd-src-warn { border-left-color: var(--yellow); }
     .bd-src-err { border-left-color: var(--red); }
@@ -949,7 +953,23 @@
       max-width: 1500px; margin: 0 auto; padding: 16px; box-sizing: border-box;
       grid-template-columns: 1fr;
       grid-template-areas: "antwort" "bilanz" "zellen" "geraete" "verlauf" "starter";
+      /* Die Rasterflaeche ist so hoch wie das Fenster. Ohne align-content
+         verteilt der Browser die Restzhoehe auf die Zeilen: die Zeilen werden
+         hoeher als ihr Inhalt, und mit align-items:start klebten die Karten
+         oben darin. Am Geraet gemessen ergab das 53 px Luft zwischen
+         Geraetekacheln und Starterkarte, waehrend ueberall sonst 16 px stehen.
+         Zeilen also nach Inhalt, ueberschuessige Hoehe bleibt unten. */
+      align-content: start;
+      /* Und innerhalb einer Zeile fuellen die Karten die volle Zeilenhoehe —
+         sonst standen Bilanz (168 px) und Zellen (185 px) nebeneinander
+         unterschiedlich hoch. */
+      align-items: stretch;
     }
+    /* Die Karte selbst muss die Zelle auch ausfuellen, nicht nur das Rasterfeld. */
+    .bd-grid > div > .sb-card,
+    .bd-grid > .bd-flow,
+    .bd-grid > div > .starter,
+    .bd-grid > div > .bd-card { height: 100%; box-sizing: border-box; }
     @media (min-width: 1100px) {
       .bd-grid {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -962,7 +982,6 @@
           "bilanz  zellen"
           "verlauf geraete"
           "verlauf starter";
-        align-items: start;
       }
     }
     .bd-a-antwort { grid-area: antwort; }
@@ -1027,7 +1046,10 @@
     .bd-page { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
     .bd-card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 18px 20px;
+      /* Ein Innenabstand fuer alle Karten (20 px), einer fuer die kleineren
+         Geraetekacheln (16 px). Vorher waren es vier verschiedene:
+         20 / 14+16 / 14+18 / 18+20. */
+      border-radius: var(--radius); padding: 20px;
       display: flex; flex-direction: column; gap: 14px;
     }
     .bd-card-hd {
