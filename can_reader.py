@@ -364,6 +364,11 @@ class CanInterface:
                 'src':         src,
                 'instance':    instance,
                 'device_name': self._device_names.get(src, ''),
+                # 64-Bit-NAME aus dem Address Claim (PGN 60928). Die Quelladresse
+                # wird beim Claim ausgehandelt und kann sich nach einem Neustart
+                # aendern; das NAME nicht. Wer ein Geraet wiedererkennen will,
+                # nimmt dieses Feld — die Geraeteuebersicht tut genau das.
+                'name_hex':    self._device_addrclaim.get(src, ''),
                 'description': PGN_NAMES.get(pgn, f'PGN {pgn}'),
                 'count':       e['count'],
                 'interval_ms': avg_ms,

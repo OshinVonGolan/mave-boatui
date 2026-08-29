@@ -57,6 +57,13 @@ ist die Wahrheit.** Stand 27.08.2026 hängen genau vier Geräte am Bus:
 
 **Nicht am Bus: 127506 und 130312.** Parser dafür existieren, laufen aber leer.
 
+**Es gibt ein ZWEITES NMEA-2000-Netz an Bord — das Navigationsnetz.** Der Pi hängt dort
+nicht dran und sieht davon nichts: Raymarine ITC-5 (mit Airmar-Geber für Tiefe, Speed,
+Temperatur), Garmin AIS, Yacht Devices WLAN-Gateway, Garmin GMI 10, SeaTalk-auf-SeaTalk-NG-
+Adapter und daran der alte Raymarine-Autopilot. Diese Geräte stehen in `devices.json` und
+tragen in der Geräteübersicht den Status `fremdnetz` — **kein Ausfall, sondern außer
+Reichweite**. Wer dort Live-Daten will, muss zuerst das Yacht-Devices-Gateway anbinden.
+
 **Das ist KEIN Grund zum Aufräumen.** Es gibt Vorbereitungen für Hardware, die noch nicht
 verbaut ist — PGN 127506, PGN 130312, `alternator`, `solar2`, `solar3`, `wind`. Die Pfade
 bleiben stehen, sie kosten nichts (fehlt die Quelle, liefert `.get()` None) und werden
@@ -136,6 +143,9 @@ Raspberry Pi
 | `jsonio.py` | `read_json` (wirft nie) und `write_json` (atomar: tmp + fsync + replace) — alle JSON-Dateien laufen darüber |
 | `history_store.py` | Verlauf als NDJSON auf der Platte, gepuffert im eigenen Thread geschrieben, beim Start zurückgeladen |
 | `static/js/icons.js` | SVG-Icon-System: `icon(name, {size})` und `weatherIcon(code)` — **keine Emojis im UI** |
+| `geraete.py` | Geräteübersicht: verbindet die gepflegte Liste (`devices.json`) mit den laufenden Quellen (Bus, WLAN, Stoker) zu einem Snapshot. Rein rechnend, ohne Netzzugriff — deshalb ohne Boot testbar (`test_geraete.py`). Konzept: `KONZEPT-GERAETE.md` |
+| `static/js/geraete.js` | Seite „Geräte an Bord": Kacheln, Liste mit Eltern-Kind-Baum, Detail-Popup, Bearbeiten der Stammdaten |
+| `static/js/orte.js` | Gemeinsame Ortsliste (Namen, Farben, Flächen des Grundrisses) und der Mini-Schiffsriss fürs Popup |
 | `heating.py` | Anbindung an die Stoker-Heizung: pollt den Hub zentral (max. 1 Hz laut Gerätedoku), hält den Zustand vor, reicht Schaltbefehle durch. Relaisbetrieb bewusst nicht abgebildet |
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |
 | `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
@@ -149,6 +159,7 @@ Raspberry Pi
 | `connectivity.json` | Konfiguration für Connectivity-Monitor |
 | `monday.json` | Monday.com Token, Board-IDs |
 | `PROTOCOL.md` | Vollständige NMEA 2000 PGN-Spezifikation dieses Systems |
+| `devices.json` | Geräteliste an Bord: Stammdaten, Einbauort, Netz, Zuordnung zur Live-Quelle |
 
 ### Frontend (static/)
 

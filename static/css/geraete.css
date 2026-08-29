@@ -1,0 +1,225 @@
+/* ── Geräteübersicht ───────────────────────────────────────────────────────
+   Eigene Datei statt Anhang an style.css: die Seite ist neu, und so bleibt
+   die gewachsene Datei unangetastet. Farben, Radien und Abstände kommen
+   ausschließlich aus den vorhandenen Design-Tokens (--surface, --accent, …).  */
+
+.ger-wrap { max-width: 1180px; margin: 0 auto; padding: 18px 18px 40px; }
+
+/* ── Kopf: vier Zahlen, die die Lage beschreiben ── */
+.ger-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 12px; }
+.ger-stat {
+  background: linear-gradient(160deg, var(--surface) 0%, var(--surface2) 130%);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; position: relative; overflow: hidden;
+}
+.ger-stat::after {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--stat-farbe, var(--border));
+}
+.ger-stat b { display: block; font-size: 27px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
+.ger-stat span { display: block; margin-top: 3px; font-size: 12px; color: var(--text3); }
+
+/* ── Quellen: was liefert gerade Daten ── */
+.ger-quellen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.ger-quelle {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 12px; font-size: 12px; color: var(--text2); background: var(--surface);
+}
+.ger-quelle .ger-dot { width: 7px; height: 7px; }
+
+/* ── Werkzeugleiste ── */
+.ger-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 14px; }
+.ger-suche { position: relative; flex: 1 1 210px; min-width: 180px; }
+.ger-suche svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text3); }
+.ger-suche input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px; padding: 9px 12px 9px 34px;
+  outline: none; transition: border-color .15s;
+}
+.ger-suche input:focus { border-color: var(--accent2); }
+.ger-suche input::placeholder { color: var(--text3); }
+
+.ger-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.ger-seg button {
+  background: none; border: none; color: var(--text2); cursor: pointer;
+  padding: 9px 14px; font-size: 13px; transition: background .12s, color .12s;
+}
+.ger-seg button + button { border-left: 1px solid var(--border); }
+.ger-seg button.active { background: var(--surface2); color: var(--accent); }
+
+.ger-toggle {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  color: var(--text2); font-size: 13px; padding: 9px 13px; transition: all .12s;
+}
+.ger-toggle.active { border-color: var(--red); color: var(--red); }
+
+/* ── Kacheln ── */
+.ger-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 14px; }
+.ger-tile {
+  position: relative; overflow: hidden; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  transition: transform .16s ease, border-color .16s, box-shadow .16s;
+}
+.ger-tile::before {
+  content: ''; position: absolute; right: -46px; top: -46px; width: 120px; height: 120px;
+  border-radius: 50%; background: var(--kachel-farbe, var(--accent)); opacity: .07;
+  transition: opacity .16s, transform .16s;
+}
+.ger-tile:hover { transform: translateY(-2px); border-color: var(--accent2);
+  box-shadow: 0 12px 26px rgba(0,0,0,.34); }
+.ger-tile:hover::before { opacity: .16; transform: scale(1.12); }
+.ger-tile-head { display: flex; align-items: center; gap: 9px; color: var(--kachel-farbe, var(--accent));
+  font-size: 13px; font-weight: 600; position: relative; }
+.ger-tile-head span { color: var(--text); }
+.ger-tile-zahl { font-size: 30px; font-weight: 700; margin-top: 12px; letter-spacing: -.02em; position: relative; }
+.ger-tile-zahl small { font-size: 13px; font-weight: 500; color: var(--text3); margin-left: 5px; letter-spacing: 0; }
+.ger-tile-sub { font-size: 12px; color: var(--text3); margin-top: 2px; position: relative; }
+.ger-balken { display: flex; height: 5px; border-radius: 999px; overflow: hidden;
+  background: var(--surface2); margin-top: 13px; position: relative; }
+.ger-balken i { display: block; height: 100%; }
+
+/* Auf dem Handy zwei Kacheln nebeneinander: einspaltig wäre die Übersicht
+   drei Bildschirme lang und damit keine Übersicht mehr. */
+@media (max-width: 620px) {
+  .ger-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .ger-tile { padding: 13px; }
+  .ger-tile-zahl { font-size: 25px; margin-top: 9px; }
+  .ger-tile-head { font-size: 12px; gap: 7px; }
+  .ger-wrap { padding: 14px 12px 32px; }
+}
+
+/* ── Listenansicht ── */
+.ger-kopf { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.ger-zurueck {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text2); font-size: 13px; padding: 8px 13px; transition: all .12s;
+}
+.ger-zurueck:hover { border-color: var(--accent2); color: var(--accent); }
+.ger-kopf h3 { font-size: 17px; font-weight: 650; }
+.ger-kopf .ger-kopf-sub { color: var(--text3); font-size: 12px; }
+
+.ger-liste { display: flex; flex-direction: column; gap: 8px; }
+.ger-row {
+  display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 14px; transition: border-color .12s, background .12s, transform .12s;
+}
+.ger-row:hover { border-color: var(--accent2); background: var(--surface2); transform: translateX(2px); }
+.ger-row-name { font-size: 14px; font-weight: 600; }
+.ger-row-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+.ger-row-mitte { flex: 1; min-width: 0; }
+.ger-row-name, .ger-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ger-row-rechts { display: flex; align-items: center; gap: 10px; flex-shrink: 0; color: var(--text2); }
+.ger-kennzahl { font-size: 12px; color: var(--text2); white-space: nowrap; }
+.ger-kennzahl b { color: var(--text); font-weight: 600; }
+@media (max-width: 620px) { .ger-kennzahl.ger-weg-mobil { display: none; } }
+
+/* Kindgeräte hängen sichtbar an ihrem Elterngerät */
+.ger-kind { position: relative; }
+.ger-kind::before {
+  content: ''; position: absolute; left: -13px; top: -8px; bottom: 50%;
+  border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  width: 11px; border-bottom-left-radius: 8px;
+}
+
+/* ── Statuspunkte ── */
+.ger-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--text3); }
+.ger-dot.s-online     { background: var(--green); box-shadow: 0 0 0 3px rgba(34,197,94,.16); }
+.ger-dot.s-traege     { background: var(--yellow); box-shadow: 0 0 0 3px rgba(234,179,8,.16); }
+.ger-dot.s-offline    { background: var(--red); box-shadow: 0 0 0 3px rgba(239,68,68,.18); }
+.ger-dot.s-unbekannt  { background: var(--text3); }
+.ger-dot.s-stumm      { background: #475569; }
+.ger-dot.s-fremdnetz  { background: #a78bfa; box-shadow: 0 0 0 3px rgba(167,139,250,.16); }
+
+.ger-pill {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  padding: 3px 10px; font-size: 11px; font-weight: 600; border: 1px solid var(--border);
+  color: var(--text2); background: var(--surface2); white-space: nowrap;
+}
+.ger-pill.s-online    { color: var(--green);  border-color: rgba(34,197,94,.4); }
+.ger-pill.s-traege    { color: var(--yellow); border-color: rgba(234,179,8,.4); }
+.ger-pill.s-offline   { color: var(--red);    border-color: rgba(239,68,68,.45); }
+.ger-pill.s-fremdnetz { color: #a78bfa;       border-color: rgba(167,139,250,.4); }
+.ger-pill.s-unbekannt,
+.ger-pill.s-stumm     { color: var(--text3); }
+
+.ger-tag {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+  color: var(--text3); border: 1px solid var(--border); border-radius: 7px; padding: 2px 8px;
+}
+
+/* ── Detail-Popup ── */
+.ger-modal-bg {
+  position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: rgba(2,6,23,.74); backdrop-filter: blur(3px);
+  animation: ger-fade .16s ease;
+}
+@keyframes ger-fade { from { opacity: 0 } to { opacity: 1 } }
+.ger-modal {
+  width: min(700px, 100%); max-height: 88vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: 0 26px 64px rgba(0,0,0,.55); animation: ger-auf .18s ease;
+}
+@keyframes ger-auf { from { transform: translateY(10px) scale(.985); opacity: .6 } to { transform: none; opacity: 1 } }
+.ger-modal-kopf {
+  display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border); position: sticky; top: 0;
+  background: var(--surface); z-index: 1; border-radius: 18px 18px 0 0;
+}
+.ger-modal-kopf h3 { font-size: 18px; font-weight: 650; line-height: 1.25; }
+.ger-modal-kopf .ger-modal-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.ger-modal-zu {
+  margin-left: auto; background: none; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text2); cursor: pointer; padding: 6px 8px; display: flex; transition: all .12s;
+}
+.ger-modal-zu:hover { color: var(--red); border-color: var(--red); }
+.ger-modal-koerper { padding: 18px 20px 20px; display: grid; grid-template-columns: 1fr 168px; gap: 20px; }
+@media (max-width: 560px) { .ger-modal-koerper { grid-template-columns: 1fr; } .ger-riss { order: -1; } }
+.ger-riss { display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--text3); font-size: 11px; text-align: center; }
+
+.ger-block + .ger-block { margin-top: 18px; }
+.ger-block h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--text3); margin-bottom: 9px; font-weight: 600; }
+.ger-daten { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px 16px; }
+.ger-daten div span { display: block; font-size: 11px; color: var(--text3); }
+.ger-daten div b { font-size: 13px; font-weight: 600; }
+.ger-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ger-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 9px;
+  padding: 7px 11px; font-size: 12px; color: var(--text2); }
+.ger-chip b { color: var(--text); font-weight: 600; margin-left: 5px; }
+
+.ger-pgn { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ger-pgn th { text-align: left; color: var(--text3); font-weight: 600; padding: 5px 8px; font-size: 11px; }
+.ger-pgn td { padding: 7px 8px; border-top: 1px solid var(--border); }
+.ger-pgn tr.klickbar { cursor: pointer; }
+.ger-pgn tr.klickbar:hover td { background: var(--surface2); color: var(--accent); }
+
+.ger-aktionen { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 20px;
+  padding-top: 16px; border-top: 1px solid var(--border); }
+.ger-btn {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 9px 14px; transition: all .12s;
+}
+.ger-btn:hover { border-color: var(--accent2); color: var(--accent); }
+.ger-btn.primaer { background: var(--accent2); border-color: var(--accent2); color: #04222a; font-weight: 600; }
+.ger-btn.primaer:hover { background: var(--accent); border-color: var(--accent); color: #04222a; }
+
+/* Bearbeiten-Formular */
+.ger-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.ger-form label { display: block; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+.ger-form input, .ger-form select, .ger-form textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text); font-size: 13px; padding: 8px 10px; outline: none; font-family: inherit;
+}
+.ger-form input:focus, .ger-form select:focus, .ger-form textarea:focus { border-color: var(--accent2); }
+.ger-form .ger-breit { grid-column: 1 / -1; }
+.ger-fehler { color: var(--red); font-size: 12px; margin-top: 10px; }
+
+.ger-leer { text-align: center; color: var(--text3); padding: 44px 20px; font-size: 14px; }
+.ger-hinweis { font-size: 12px; color: var(--text3); line-height: 1.55; }

@@ -223,6 +223,7 @@ window.addEventListener('popstate', () => {
       // openWaterLevel() setzt inzwischen einen History-Eintrag #waterlevel —
       // ohne diesen Eintrag hier bliebe die Ansicht beim Vorwaerts-Blaettern leer.
       waterlevel: () => { _wlOverlayAnzeigen(); },
+      geraete:    () => { _gerOverlayAnzeigen(); },
       stauplan: () => { $('stauplanOverlay').classList.remove('hidden'); renderStauTable(''); },
       monday: () => {
         $('mondayOverlay').classList.remove('hidden');

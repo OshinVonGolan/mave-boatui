@@ -7,6 +7,7 @@ import math
 import os
 import re
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -27,6 +28,7 @@ from can_reader import BoatState, CanInterface
 from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
+import geraete
 from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
@@ -53,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.28.0'
+VERSION  = _git_semver() or '1.29.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -129,6 +131,8 @@ STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 HEIZUNG_FILE  = BASE_DIR / 'heizung.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
+DEVICES_FILE  = BASE_DIR / 'devices.json'
+DEVICES_VORLAGE = BASE_DIR / 'devices.example.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 
 state       = BoatState()
@@ -348,7 +352,8 @@ _JS_FILES = [
     'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js', 'init.js',
+    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
+    'orte.js', 'geraete.js', 'init.js',
 ]
 _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
@@ -1585,3 +1590,78 @@ async def heizung_heater(body: dict):
 async def heizung_preset(index: str):
     """index ist 0..3 oder 'none'. Abwählen ist ausdrücklich 'none', nicht 4."""
     return await _heiz_ruf(heizung.set_preset, index)
+
+
+# ── Geraeteuebersicht ───────────────────────────────────────────────────────
+# Zwei Haelften: die gepflegte Liste in devices.json und die Quellen, die
+# ohnehin laufen. Zusammengesetzt wird in geraete.py — hier steht nur die
+# Verdrahtung.
+
+# Die Registry aendert sich selten, wird aber bei jedem Aufruf der Seite
+# gebraucht. Ohne diesen Zwischenspeicher laege bei jedem Abruf ein Lesezugriff
+# auf der SD-Karte — auf dem Pi Zero teurer, als es aussieht.
+_devices_cache: dict = {'reg_mtime': 0.0, 'registry': [],
+                        'pre_mtime': 0.0, 'namen': {}}
+
+
+def _devices_lesen() -> tuple[list, dict]:
+    """Registry und die Namensliste aus presets.json — nur bei Aenderung neu.
+
+    Laeuft im Thread-Pool (Dateizugriff), nie direkt im Event-Loop.
+    """
+    # devices.json ist Laufzeitdatei: sie wird ueber die Oberflaeche gepflegt und
+    # gehoert deshalb NICHT ins Repo (sonst scheitert am Pi jeder `git pull`).
+    # Damit ein frisches Geraet trotzdem nicht mit leerer Liste dasteht, wird
+    # sie beim ersten Mal aus der mitgelieferten Vorlage angelegt. Danach fasst
+    # sie niemand mehr an — eine vorhandene Datei wird nie ueberschrieben.
+    if not DEVICES_FILE.exists() and DEVICES_VORLAGE.exists():
+        vorlage = read_json(DEVICES_VORLAGE, [])
+        if vorlage:
+            write_json(DEVICES_FILE, vorlage)
+            log.info("devices.json aus Vorlage angelegt: %d Geräte", len(vorlage))
+    for datei, schluessel_zeit, schluessel_wert, vorgabe in (
+            (DEVICES_FILE, 'reg_mtime', 'registry', []),
+            (PRESETS_FILE, 'pre_mtime', 'namen', {})):
+        try:
+            mtime = datei.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        if mtime != _devices_cache[schluessel_zeit]:
+            daten = read_json(datei, vorgabe)
+            if datei is PRESETS_FILE:
+                daten = (daten or {}).get('devices') or {}
+            _devices_cache[schluessel_wert] = daten if daten is not None else vorgabe
+            _devices_cache[schluessel_zeit] = mtime
+    return _devices_cache['registry'], _devices_cache['namen']
+
+
+@app.get('/api/devices')
+async def get_devices():
+    """Ein Aufruf, eine fertige Geraeteliste samt Zustand."""
+    registry, namen = await _run_blocking(_devices_lesen)
+    return geraete.aggregiere(
+        registry,
+        netzwerk=can_if.get_network_stats(),
+        presets_devices=namen,
+        stoker_snapshot=heizung.snapshot(),
+        conn_status=conn_mon.get_status() if conn_mon else None,
+        eigener_host=socket.gethostname(),
+    )
+
+
+@app.get('/api/devices/registry')
+async def get_devices_registry():
+    return await _run_blocking(read_json, DEVICES_FILE, [])
+
+
+@app.put('/api/devices/registry')
+async def save_devices_registry(request: Request):
+    body = await _json_body(request)
+    try:
+        sauber = geraete.pruefe_registry(body)
+    except geraete.RegistryFehler as e:
+        # Der Text ist fuer den Bediener geschrieben und geht wortwoertlich raus.
+        raise HTTPException(400, detail=str(e)) from None
+    await _run_blocking(write_json, DEVICES_FILE, sauber)
+    _devices_cache['reg_mtime'] = 0.0        # Zwischenspeicher verwerfen
+    return sauber

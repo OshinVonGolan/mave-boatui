@@ -46,6 +46,21 @@ const ICON_PATHS = {
   clock:      '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   info:       '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
   arrowRight: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+
+  // Geräteübersicht — Kategorien und Bedienelemente
+  wifi:       '<path d="M2 8.5a15 15 0 0 1 20 0M5.5 12a10 10 0 0 1 13 0M9 15.5a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>',
+  chip:       '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+  compass:    '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5.2-5.2 2 2-5.2z"/>',
+  flame:      '<path d="M12 22a6 6 0 0 0 6-6c0-4-3-5.5-3.5-9.5C13 8 11.5 9 10.5 11 9.5 9.8 9 8.6 9 7.5 7.2 9 6 12.2 6 16a6 6 0 0 0 6 6z"/>',
+  propeller:  '<circle cx="12" cy="12" r="2"/><path d="M12 10c0-3.5-1-6-3-7-1.5 2 0 5 3 7zM14 12c3.5 0 6-1 7-3-2-1.5-5 0-7 3zM10 14c-3.5 0-6 1-7 3 2 1.5 5 0 7-3zM12 14c0 3.5 1 6 3 7 1.5-2 0-5-3-7z"/>',
+  shield:     '<path d="M12 2.5l8 3.2v5.6c0 5-3.4 9.2-8 10.2-4.6-1-8-5.2-8-10.2V5.7z"/>',
+  box:        '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+  pin:        '<path d="M12 21c4-5.5 7-8.9 7-12a7 7 0 1 0-14 0c0 3.1 3 6.5 7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+  link:       '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
+  search:     '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  pencil:     '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  plus:       '<path d="M12 5v14M5 12h14"/>',
+  refresh:    '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
 };
 
 /** Liefert ein Inline-SVG als String. Farbe erbt via currentColor. */
