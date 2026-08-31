@@ -1,17 +1,20 @@
 // ── Verbindungskarte ───────────────────────────────────────────────────────
-// EIN Bild für die ganze Anlage: jedes Netz ist ein Knoten, die Geräte liegen
-// sternförmig darum, und was an einem Gerät hängt, sitzt weiter außen in
-// dessen Richtung. Die FARBE der Leitung sagt, worüber verbunden ist —
-// VE.Direct zum MPPT ist etwas anderes als SeaTalk zum Autopiloten.
+// Je Netz eine Spalte, darin ein aufgeklappter Baum: die SPALTE sagt, an
+// welchem Netz der Strang haengt, die ZEILE die Reihenfolge, die EINRUeCKUNG,
+// woran ein Geraet haengt. Drei Angaben, drei Achsen — jede Position im Bild
+// ist damit in einem Satz erklaerbar.
 //
-// Netze lassen sich über die Schalter oben ausblenden; mit einem Netz
-// verschwindet alles, was daran hängt, sonst blieben Leitungen ins Leere.
+// Vorgaenger war ein Sternbild mit geschwungenen Leitungen. Es sah aus wie ein
+// Nervengeflecht: die Lage eines Kaestchens liess sich nicht begruenden. Ein
+// Verzeichnisbaum kennt dagegen jeder, bevor er dieses Bild zum ersten Mal
+// sieht.
 //
-// Das Layout wird gerechnet, nicht simuliert: kein Kräftemodell, keine
-// Zufallslage, kein Nachwackeln. Dasselbe Boot ergibt immer dasselbe Bild, und
-// der Pi Zero zeichnet einmal statt zu iterieren. Wo zwei Kästchen trotzdem
-// übereinander lägen, schiebt ein Nachlauf sie nach außen — auch das
-// deterministisch, in fester Reihenfolge.
+// Die FARBE einer Leitung (und der Kante links am Kaestchen) sagt weiterhin,
+// worueber verbunden ist: die vier Victron-Geraete stehen in der Bordnetz-
+// Spalte, weil ihr Gateway dort haengt, tragen aber gruene VE.Direct-Leitungen.
+//
+// Gerechnet, nicht simuliert: ganze Zahlen, ein Durchlauf, keine Messung im
+// DOM, keine Ausweichschleife. Ueberlappung ist im Raster unmoeglich.
 
 const TOPO_NETZ_FARBE = {
   'n2k-bord': '#06b6d4',   // Bordbus
@@ -22,49 +25,38 @@ const TOPO_NETZ_FARBE = {
   'analog':   '#94a3b8',   // fest verdrahtet
   'keins':    '#64748b',
 };
-// Reihenfolge der Schalter und der Cluster im Bild.
+// Reihenfolge der Spalten und der Schalter.
 const TOPO_NETZ_REIHE = ['n2k-bord', 'lan', 'n2k-nav', 'vedirect', 'seatalk', 'analog', 'keins'];
 
 const TOPO = {
-  knotenH:   32,
-  netzH:     44,
-  ring1:    150,   // kleinster Abstand Netzknoten → Gerät
-  ringLuft:  92,   // Abstand von einer Ebene zur nächsten
-  luft:      10,   // Mindestabstand zwischen zwei Kästchen
-  schritt:   18,   // Ausweichschritt nach außen bei Überlappung
-  clusterLuft: 96, // Abstand zwischen zwei Netzen
-  faecher:  2.15,  // Winkel eines Halbfächers (rad)
-  rand:      30,
-  // Platzbedarf eines Knotens auf dem Ring. Bewusst kleiner als die
-  // Kästchenbreite: benachbarte Kästchen duerfen sich radial versetzen, dafuer
-  // sorgt der Ausweichlauf. Mit der vollen Breite gerechnet wuerde der Ring
-  // dreimal so groß und das Bild bestuende aus Leere.
-  proKnoten: 104,
+  spalteB:   354,   // Breite einer Netzspalte
+  spalteLuft: 34,
+  rand:       14,
+  kopfH:      44,   // Kopfzeile der Spalte
+  zeile:      40,   // Zeilenabstand
+  kastenH:    32,
+  einzug0:    22,   // Einzug der ersten Ebene im Panel
+  einzugTiefe: 26,  // je weitere Ebene
+  maxTiefe:    4,
+  trennerH:   24,   // Platz fuer die Zeile "nur erkannt"
+  band:       22,   // Hoehe der Bahn fuer Bruecken zwischen Spalten
+  rail:       11,   // Abstand Kaestchenkante → senkrechte Sammellinie
 };
 
-function _topoBreite(name, gross) {
-  // Textbreite geschätzt statt gemessen: Messen hieße, jeden Knoten einmal in
-  // den Baum zu hängen und wieder zu entfernen — auf dem Pi Zero teuer und für
-  // ein Kästchen mit gekürztem Text unnötig genau.
-  const n = String(name || '');
-  const zeichen = Math.min(n.length, gross ? 26 : 20);
-  return gross ? Math.max(140, 44 + 7.4 * zeichen)
-               : Math.max(104, 32 + 6.5 * zeichen);
-}
-
-function _topoKuerzen(name, max) {
+function _topoKuerzen(name, breite) {
+  const max = Math.max(6, Math.floor((breite - 46) / 6.4));
   const n = String(name || '');
   return n.length > max ? n.slice(0, max - 1) + '…' : n;
 }
 
 // ── Sichtbarkeit ───────────────────────────────────────────────────────────
 
-/** Geräte, die nach dem Ausblenden übrig bleiben — samt allem, was daran hängt. */
+/** Geraete, die nach dem Ausblenden uebrig bleiben — samt allem, was daran haengt. */
 function _topoSichtbar(alle, aus) {
   const nachId = new Map(alle.map(g => [g.id, g]));
   const versteckt = new Set();
   const pruefen = (g, tiefe) => {
-    if (tiefe > 12) return true;                       // Schutz vor Ringen
+    if (tiefe > 12) return true;                     // Schutz vor Ringen
     if (aus.has(g.netz || 'keins')) return true;
     const eltern = g.verbunden_an && nachId.get(g.verbunden_an);
     return eltern ? pruefen(eltern, tiefe + 1) : false;
@@ -73,164 +65,64 @@ function _topoSichtbar(alle, aus) {
   return alle.filter(g => !versteckt.has(g.id));
 }
 
-// ── Baum und Platzbedarf ───────────────────────────────────────────────────
+// ── Reihenfolge ────────────────────────────────────────────────────────────
 
-function _topoBaum(liste) {
-  const nachId = new Map(liste.map(g => [g.id, g]));
-  const kinder = new Map();
-  const wurzeln = [];
-  liste.forEach(g => {
-    const eltern = g.verbunden_an && nachId.has(g.verbunden_an) ? g.verbunden_an : null;
-    if (eltern) {
-      if (!kinder.has(eltern)) kinder.set(eltern, []);
-      kinder.get(eltern).push(g);
-    } else {
-      wurzeln.push(g);
-    }
+/** Verteiler zuerst, dann Einzelgeraete, zuletzt nur Erkanntes — je alphabetisch.
+ *  Eine gesetzte Ordnung, aber eine ablesbare: was etwas traegt, steht oben. */
+function _topoSortieren(liste, kinderVon) {
+  return [...liste].sort((a, b) => {
+    const ak = (kinderVon.get(a.id) || []).length, bk = (kinderVon.get(b.id) || []).length;
+    if (!!a.gepflegt !== !!b.gepflegt) return a.gepflegt ? -1 : 1;
+    if ((ak > 0) !== (bk > 0)) return ak > 0 ? -1 : 1;
+    return a.name.localeCompare(b.name, 'de');
   });
-  const bauen = (g, tiefe) => ({
-    g, tiefe,
-    kinder: tiefe > 6 ? [] : (kinder.get(g.id) || [])
-      .sort((a, b) => a.name.localeCompare(b.name, 'de'))
-      .map(k => bauen(k, tiefe + 1)),
+}
+
+/** Kinder in der Reihenfolge der Netze, damit gleiche Anschlussarten beieinander liegen. */
+function _topoKinderSortieren(liste) {
+  return [...liste].sort((a, b) => {
+    const an = TOPO_NETZ_REIHE.indexOf(a.netz || 'keins');
+    const bn = TOPO_NETZ_REIHE.indexOf(b.netz || 'keins');
+    if (an !== bn) return an - bn;
+    return a.name.localeCompare(b.name, 'de');
   });
-  return wurzeln.map(g => bauen(g, 0));
 }
 
-/** Blätter zählen — sie bestimmen, wie viel Winkel ein Zweig bekommt. */
-function _topoBlaetter(k) {
-  k.blaetter = k.kinder.length
-    ? k.kinder.reduce((s, x) => s + _topoBlaetter(x), 0)
-    : 1;
-  k.ebenen = k.kinder.length ? 1 + Math.max(...k.kinder.map(x => x.ebenen)) : 1;
-  return k.blaetter;
-}
-
-// ── Platzieren ─────────────────────────────────────────────────────────────
-
-function _topoUeberlappt(a, b, luft) {
-  return Math.abs(a.x - b.x) * 2 < a.b + b.b + luft * 2
-      && Math.abs(a.y - b.y) * 2 < a.h + b.h + luft;
-}
-
-/** Setzt einen Knoten auf den Winkel, rückt bei Überlappung nach außen. */
-function _topoSetzen(belegt, cx, cy, winkel, radius, breite, hoehe) {
-  for (let versuch = 0; versuch < 16; versuch++) {
-    const r = radius + versuch * TOPO.schritt;
-    const kasten = {
-      x: cx + Math.cos(winkel) * r,
-      y: cy + Math.sin(winkel) * r,
-      b: breite, h: hoehe,
-    };
-    if (!belegt.some(v => _topoUeberlappt(kasten, v, TOPO.luft))) {
-      belegt.push(kasten);
-      return kasten;
+/** Eine Spalte als flache Zeilenliste in Baumreihenfolge (Tiefensuche). */
+function _topoZeilen(wurzeln, kinderVon) {
+  const zeilen = [];
+  const gehen = (g, tiefe, eltern) => {
+    const eintrag = { g, tiefe, eltern, kinder: [] };
+    zeilen.push(eintrag);
+    if (tiefe < TOPO.maxTiefe) {
+      _topoKinderSortieren(kinderVon.get(g.id) || []).forEach(k => {
+        eintrag.kinder.push(gehen(k, tiefe + 1, eintrag));
+      });
     }
-  }
-  const kasten = {
-    x: cx + Math.cos(winkel) * (radius + 16 * TOPO.schritt),
-    y: cy + Math.sin(winkel) * (radius + 16 * TOPO.schritt),
-    b: breite, h: hoehe,
+    return eintrag;
   };
-  belegt.push(kasten);
-  return kasten;
-}
-
-/** Ein Netz mit allem, was daran hängt. Der Fächer öffnet sich nach außen. */
-function _topoCluster(baeume, cx, cy, mitte, spanne, belegt, ablage) {
-  const gewicht = baeume.reduce((s, b) => s + b.blaetter, 0) || 1;
-  // Der Ring muss so weit außen liegen, dass die Kästchen nebeneinander passen.
-  const ring1 = Math.max(TOPO.ring1, (baeume.length * TOPO.proKnoten) / Math.max(spanne, 0.8));
-
-  let a = mitte - spanne / 2;
-  baeume.forEach(b => {
-    const anteil = spanne * (b.blaetter / gewicht);
-    _topoZweig(b, cx, cy, a + anteil / 2, anteil, ring1, belegt, ablage);
-    a += anteil;
-  });
-}
-
-function _topoZweig(k, cx, cy, winkel, spanne, radius, belegt, ablage) {
-  const breite = _topoBreite(k.g.name);
-  const kasten = _topoSetzen(belegt, cx, cy, winkel, radius, breite, TOPO.knotenH);
-  ablage.push({ knoten: k, kasten, winkel });
-
-  if (!k.kinder.length) return;
-  const gewicht = k.kinder.reduce((s, x) => s + x.blaetter, 0) || 1;
-  // Kinder bleiben im Winkelbereich ihres Geräts, sonst zeigt die Karte eine
-  // Nähe, die es nicht gibt. Bei nur einem Kind sitzt es genau dahinter.
-  const kSpanne = Math.min(spanne * 0.94, 1.5);
-  let a = winkel - kSpanne / 2;
-  k.kinder.forEach(kind => {
-    const anteil = kSpanne * (kind.blaetter / gewicht);
-    _topoZweig(kind, cx, cy, k.kinder.length === 1 ? winkel : a + anteil / 2,
-               anteil, radius + TOPO.ringLuft, belegt, ablage);
-    a += anteil;
-  });
+  wurzeln.forEach(w => gehen(w, 0, null));
+  return zeilen;
 }
 
 // ── Zeichnen ───────────────────────────────────────────────────────────────
 
-function _topoKnotenSvg(g, kasten, hervor) {
+function _topoKasten(z, x, y, breite, hervor) {
+  const g = z.g;
   const treffer = hervor && hervor.has(g.id);
   const gedimmt = hervor && !treffer;
-  const x = kasten.x - kasten.b / 2;
-  const y = kasten.y - kasten.h / 2;
+  const farbe = TOPO_NETZ_FARBE[g.netz] || TOPO_NETZ_FARBE.keins;
   return `
     <g class="topo-knoten ${treffer ? 'topo-treffer' : ''} ${g.gepflegt ? '' : 'topo-neu'}"
-       opacity="${gedimmt ? 0.25 : 1}" onclick="gerDetail(${_jsAttr(g.id)})">
-      <rect x="${x}" y="${y}" width="${kasten.b}" height="${kasten.h}" rx="8"/>
-      <circle class="topo-punkt s-${_esc(g.status)}" cx="${x + 14}" cy="${kasten.y}" r="4.2"/>
-      <text x="${x + 24}" y="${kasten.y + 4}">${_esc(_topoKuerzen(g.name, 20))}</text>
+       opacity="${gedimmt ? 0.3 : 1}" onclick="gerDetail(${_jsAttr(g.id)})">
+      <rect class="topo-ziel" x="${x}" y="${y - 4}" width="${breite}" height="${TOPO.zeile}"/>
+      <rect class="topo-rahmen-kasten" x="${x}" y="${y}" width="${breite}" height="${TOPO.kastenH}" rx="7"/>
+      <rect class="topo-kante" x="${x}" y="${y + 5}" width="3" height="${TOPO.kastenH - 10}"
+            rx="1.5" fill="${farbe}"/>
+      <circle class="topo-punkt s-${_esc(g.status)}" cx="${x + 17}" cy="${y + TOPO.kastenH / 2}" r="4.2"/>
+      <text x="${x + 29}" y="${y + TOPO.kastenH / 2 + 4}">${_esc(_topoKuerzen(g.name, breite))}</text>
       <title>${_esc(g.name)} — ${_esc(g.status_text)}${g.netz_name ? ' · ' + _esc(g.netz_name) : ''}</title>
     </g>`;
-}
-
-function _topoNetzSvg(netz, name, anzahl, kasten) {
-  const farbe = TOPO_NETZ_FARBE[netz] || TOPO_NETZ_FARBE.keins;
-  const x = kasten.x - kasten.b / 2;
-  const y = kasten.y - kasten.h / 2;
-  return `
-    <g class="topo-netz" onclick="gerNetzToggle(${_jsAttr(netz)})">
-      <rect x="${x}" y="${y}" width="${kasten.b}" height="${kasten.h}" rx="12"
-            fill="${farbe}" fill-opacity="0.13" stroke="${farbe}" stroke-width="2"/>
-      <text x="${kasten.x}" y="${kasten.y - 1}" text-anchor="middle" fill="${farbe}"
-            class="topo-netz-name">${_esc(name)}</text>
-      <text x="${kasten.x}" y="${kasten.y + 13}" text-anchor="middle"
-            class="topo-netz-zahl">${anzahl} ${anzahl === 1 ? 'Gerät' : 'Geräte'}</text>
-      <title>${_esc(name)} — antippen blendet dieses Netz aus</title>
-    </g>`;
-}
-
-/** Punkt auf dem Rand eines Kaestchens in Richtung eines Ziels.
-
-    Ohne das laufen alle Leitungen durch die Mitte der Kaestchen und damit quer
-    ueber die Beschriftung — besonders beim Netzknoten, an dem ein Dutzend
-    Leitungen zusammenkommen. */
-function _topoRand(kasten, zielX, zielY) {
-  const dx = zielX - kasten.x, dy = zielY - kasten.y;
-  if (!dx && !dy) return { x: kasten.x, y: kasten.y };
-  const t = Math.min((kasten.b / 2 + 3) / Math.max(Math.abs(dx), 0.001),
-                     (kasten.h / 2 + 3) / Math.max(Math.abs(dy), 0.001));
-  return { x: kasten.x + dx * t, y: kasten.y + dy * t };
-}
-
-function _topoLeitung(vonK, nachK, farbe, gestrichelt, deckkraft) {
-  const von  = _topoRand(vonK,  nachK.x, nachK.y);
-  const nach = _topoRand(nachK, vonK.x,  vonK.y);
-  // Sanfter Bogen statt Gerade: bei vielen Leitungen aus einem Knoten bleiben
-  // die einzelnen Verläufe unterscheidbar.
-  const mx = (von.x + nach.x) / 2;
-  const my = (von.y + nach.y) / 2;
-  const dx = nach.x - von.x, dy = nach.y - von.y;
-  const laenge = Math.hypot(dx, dy) || 1;
-  const bauch = Math.min(laenge * 0.12, 26);
-  const kx = mx - (dy / laenge) * bauch;
-  const ky = my + (dx / laenge) * bauch;
-  return `<path d="M ${von.x.toFixed(1)} ${von.y.toFixed(1)}
-                   Q ${kx.toFixed(1)} ${ky.toFixed(1)} ${nach.x.toFixed(1)} ${nach.y.toFixed(1)}"
-                fill="none" stroke="${farbe}" stroke-width="1.8" opacity="${deckkraft ?? 0.8}"
-                ${gestrichelt ? 'stroke-dasharray="5 4"' : ''}/>`;
 }
 
 // ── Die Karte ──────────────────────────────────────────────────────────────
@@ -253,13 +145,12 @@ function gerKarteHtml(alle, suche, nurProbleme, ausgeblendet) {
   const kopf = `
     <div class="topo-kopf">
       <div class="topo-chips">${schalter}</div>
-      <div class="topo-hinweis">Farbe der Leitung = Art der Verbindung. Gestrichelt: meldet sich
-        nicht selbst. Ein Netz antippen blendet es samt allem aus, was daran hängt.</div>
+      <div class="topo-hinweis">Spalte = an welchem Netz der Strang hängt · Einrückung = woran ein
+        Gerät hängt · Farbe der Leitung und der Kante = Art des Anschlusses. Ein Netz antippen
+        blendet es samt allem aus, was daran hängt.</div>
     </div>`;
 
-  if (!sichtbar.length) {
-    return kopf + '<div class="ger-leer">Alle Netze ausgeblendet.</div>';
-  }
+  if (!sichtbar.length) return kopf + '<div class="ger-leer">Alle Netze ausgeblendet.</div>';
 
   let hervor = null;
   if (nurProbleme) {
@@ -268,97 +159,150 @@ function gerKarteHtml(alle, suche, nurProbleme, ausgeblendet) {
     hervor = new Set(sichtbar.filter(g => _gerPasst(g, suche)).map(g => g.id));
   }
 
-  // Wurzeln nach Netz gruppieren — jede Gruppe wird ein Stern.
-  const baeume = _topoBaum(sichtbar);
-  baeume.forEach(_topoBlaetter);
-  const gruppen = [];
+  // Baum aufbauen
+  const nachId = new Map(sichtbar.map(g => [g.id, g]));
+  const kinderVon = new Map();
+  const wurzeln = [];
+  sichtbar.forEach(g => {
+    const e = g.verbunden_an && nachId.has(g.verbunden_an) ? g.verbunden_an : null;
+    if (e) { if (!kinderVon.has(e)) kinderVon.set(e, []); kinderVon.get(e).push(g); }
+    else wurzeln.push(g);
+  });
+
+  // Eine Spalte je Netz, das Wurzelgeraete traegt. Netze, die nur als
+  // Anschlussart vorkommen (VE.Direct, SeaTalk, analog), bekommen keine
+  // Spalte — sie sind Leitungsfarbe innerhalb einer fremden Spalte.
+  const spalten = [];
   TOPO_NETZ_REIHE.forEach(netz => {
-    const teil = baeume.filter(b => (b.g.netz || 'keins') === netz);
+    const teil = wurzeln.filter(g => (g.netz || 'keins') === netz);
     if (teil.length) {
-      teil.sort((a, b) => b.blaetter - a.blaetter || a.g.name.localeCompare(b.g.name, 'de'));
-      gruppen.push({ netz, baeume: teil });
+      spalten.push({ netz, zeilen: _topoZeilen(_topoSortieren(teil, kinderVon), kinderVon) });
     }
   });
+  if (!spalten.length) return kopf + '<div class="ger-leer">Nichts anzuzeigen.</div>';
 
-  const belegt = [];
-  const ablage = [];
-  const netzKasten = {};
+  const bruecken = sichtbar.filter(g => (g.bruecke_zu || []).length);
+  const bandH = bruecken.length ? TOPO.band * bruecken.length + 8 : 0;
+  const y0 = TOPO.rand + TOPO.kopfH + bandH + 12;
 
-  // Die Sterne stehen NEBENEINANDER, jeder faechert nach oben und nach unten.
-  // Zwei Gruende: Bildschirme sind breit, und bei Sternen auf einem Kreis
-  // bleibt die Mitte leer, waehrend die Raender ueberlaufen. Nebeneinander
-  // waechst das Bild dort, wo Platz ist.
-  // Die Breite eines Sterns steht erst fest, wenn er gezeichnet ist: wie weit
-  // die Kinder ausschlagen, haengt am Ausweichlauf. Deshalb wird jeder Stern
-  // gesetzt, danach gemessen, und der naechste beginnt hinter seinem Rand.
-  let lauf = 0;
-  gruppen.forEach(gr => {
-    const vorher = belegt.length;
-    const haelfte = Math.ceil(gr.baeume.length / 2);
-    const cx = lauf + Math.max(2, haelfte) * TOPO.proKnoten * 0.6;
-    const cy = 0;
-
-    const name = (_gerDaten?.netze || []).find(x => x.key === gr.netz)?.name || gr.netz;
-    const kasten = { x: cx, y: cy, b: _topoBreite(name, true), h: TOPO.netzH };
-    belegt.push(kasten);
-    netzKasten[gr.netz] = kasten;
-
-    // Groesste Zweige zuerst und abwechselnd oben/unten: so verteilt sich die
-    // Last gleichmaessig, statt dass eine Seite ausfranst.
-    const oben = [], unten = [];
-    gr.baeume.forEach((b, i) => ((i % 2) ? unten : oben).push(b));
-    if (oben.length)  _topoCluster(oben,  cx, cy, -Math.PI / 2, TOPO.faecher, belegt, ablage);
-    if (unten.length) _topoCluster(unten, cx, cy,  Math.PI / 2, TOPO.faecher, belegt, ablage);
-
-    const neue = belegt.slice(vorher);
-    lauf = Math.max(...neue.map(k => k.x + k.b / 2)) + TOPO.clusterLuft;
-  });
-
-  // Leitungen
-  const linien = [];
-  const nachId = new Map(ablage.map(e => [e.knoten.g.id, e]));
-  ablage.forEach(e => {
-    const g = e.knoten.g;
-    const eltern = g.verbunden_an && nachId.get(g.verbunden_an);
-    const farbe = TOPO_NETZ_FARBE[g.netz] || TOPO_NETZ_FARBE.keins;
-    const still = g.status === 'stumm' || g.status === 'fremdnetz';
-    if (eltern) {
-      linien.push(_topoLeitung(eltern.kasten, e.kasten, farbe, still));
-    } else if (netzKasten[g.netz || 'keins']) {
-      linien.push(_topoLeitung(netzKasten[g.netz || 'keins'], e.kasten, farbe, still));
-    }
-    // Zweite Zugehörigkeit: der Pi hängt im Bordnetzwerk und liest den Bus.
-    (g.bruecke_zu || []).forEach(netz => {
-      if (netzKasten[netz]) {
-        linien.push(_topoLeitung(e.kasten, netzKasten[netz], TOPO_NETZ_FARBE[netz], true, 0.45));
-      }
+  // Lage jedes Kaestchens: ganze Zahlen, ein Durchlauf.
+  const platz = new Map();
+  let maxY = y0;
+  spalten.forEach((sp, ci) => {
+    sp.x = TOPO.rand + ci * (TOPO.spalteB + TOPO.spalteLuft);
+    const trennerAb = sp.zeilen.findIndex(z => !z.g.gepflegt);
+    sp.trennerAb = trennerAb;
+    sp.zeilen.forEach((z, i) => {
+      const tiefe = Math.min(z.tiefe, TOPO.maxTiefe);
+      z.x = sp.x + TOPO.einzug0 + TOPO.einzugTiefe * tiefe;
+      z.b = TOPO.spalteB - TOPO.einzug0 - TOPO.einzugTiefe * tiefe;
+      z.y = y0 + i * TOPO.zeile + (trennerAb >= 0 && i >= trennerAb ? TOPO.trennerH : 0);
+      platz.set(z.g.id, z);
+      maxY = Math.max(maxY, z.y + TOPO.kastenH);
     });
   });
 
-  const knoten = ablage.map(e => _topoKnotenSvg(e.knoten.g, e.kasten, hervor)).join('');
-  const netze = gruppen.map(gr => {
-    const name = (_gerDaten?.netze || []).find(x => x.key === gr.netz)?.name || gr.netz;
-    const anzahl = sichtbar.filter(g => (g.netz || 'keins') === gr.netz).length;
-    return _topoNetzSvg(gr.netz, name, anzahl, netzKasten[gr.netz]);
+  const breite = TOPO.rand * 2 + spalten.length * TOPO.spalteB
+               + (spalten.length - 1) * TOPO.spalteLuft;
+  const hoehe = maxY + TOPO.rand + 6;
+
+  // Leitungen: senkrecht an der Sammellinie des Elternteils, dann waagerecht
+  // in das Kaestchen. Von unten nach oben gezeichnet, damit die Farbe direkt
+  // ueber jedem Stich die des zugehoerigen Geraets ist.
+  const leitungen = [];
+  spalten.forEach(sp => {
+    sp.zeilen.forEach(z => {
+      if (!z.kinder.length) return;
+      // EINE ruhige Sammellinie je Verteiler, in seiner eigenen Netzfarbe,
+      // dazu je Kind ein kurzer farbiger Stich. Vorher lief pro Kind eine
+      // eigene lange Linie an derselben Stelle — sechs Kinder ergaben sechs
+      // uebereinanderliegende Striche in verschiedenen Farben.
+      const railX = z.x + TOPO.rail;
+      const letztes = z.kinder[z.kinder.length - 1];
+      leitungen.push(
+        `<path d="M ${railX} ${z.y + TOPO.kastenH} V ${letztes.y + TOPO.kastenH / 2}"
+               fill="none" stroke="${TOPO_NETZ_FARBE[z.g.netz] || TOPO_NETZ_FARBE.keins}"
+               stroke-width="1.2" opacity="0.4"/>`);
+      z.kinder.forEach(k => {
+        const farbe = TOPO_NETZ_FARBE[k.g.netz] || TOPO_NETZ_FARBE.keins;
+        const still = k.g.status === 'stumm' || k.g.status === 'fremdnetz';
+        const y = k.y + TOPO.kastenH / 2;
+        leitungen.push(
+          `<path d="M ${railX} ${y - 7} Q ${railX} ${y} ${railX + 8} ${y} H ${k.x}"
+                 fill="none" stroke="${farbe}" stroke-width="1.8" opacity="0.9"
+                 ${still ? 'stroke-dasharray="4 3"' : ''}/>`);
+      });
+    });
+  });
+
+  // Bruecken: ein Geraet, das in einem zweiten Netz haengt. Die Leitung laeuft
+  // rechts an der Spalte hoch in eine eigene Bahn und von dort zum Kopf der
+  // anderen Spalte — so kreuzt sie kein Kaestchen.
+  const spalteVon = {};
+  spalten.forEach(sp => { spalteVon[sp.netz] = sp; });
+  bruecken.forEach((g, i) => {
+    const z = platz.get(g.id);
+    if (!z) return;
+    (g.bruecke_zu || []).forEach(netz => {
+      const ziel = spalteVon[netz];
+      if (!ziel || !z) return;
+      const bahnY = TOPO.rand + TOPO.kopfH + 10 + i * TOPO.band;
+      const eigene = spalten.find(sp => sp.zeilen.includes(z));
+      // Auf der Seite austreten, auf der das andere Netz liegt, und in der
+      // Gasse zwischen den Spalten hochlaufen. Andersherum umschloesse die
+      // Leitung die eigene Spalte wie ein Rahmen.
+      const linksHerum = ziel.x < (eigene ? eigene.x : z.x);
+      const gasse = linksHerum
+        ? (eigene ? eigene.x : z.x) - TOPO.spalteLuft / 2
+        : (eigene ? eigene.x + TOPO.spalteB : z.x + z.b) + TOPO.spalteLuft / 2;
+      const start = linksHerum ? z.x : z.x + z.b;
+      const zielX = linksHerum ? ziel.x + TOPO.spalteB - 26 : ziel.x + 26;
+      const farbe = TOPO_NETZ_FARBE[netz] || TOPO_NETZ_FARBE.keins;
+      leitungen.push(
+        `<path d="M ${start} ${z.y + TOPO.kastenH / 2} H ${gasse} V ${bahnY} H ${zielX} V ${TOPO.rand + TOPO.kopfH}"
+               fill="none" stroke="${farbe}" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.65"/>
+         <title>${_esc(g.name)} hängt auch am ${_esc((_gerDaten?.netze || []).find(x => x.key === netz)?.name || netz)}</title>`);
+    });
+  });
+
+  // Spaltenpanel und Kopfzeile
+  const panels = spalten.map(sp => {
+    const name = (_gerDaten?.netze || []).find(x => x.key === sp.netz)?.name || sp.netz;
+    const farbe = TOPO_NETZ_FARBE[sp.netz];
+    const unten = (sp.zeilen.length ? sp.zeilen[sp.zeilen.length - 1].y + TOPO.kastenH : y0) + 12;
+    const trenner = sp.trennerAb >= 0 ? (() => {
+      const z = sp.zeilen[sp.trennerAb];
+      const ty = z.y - TOPO.trennerH / 2 - 4;
+      return `<line x1="${sp.x + 10}" y1="${ty}" x2="${sp.x + TOPO.spalteB - 10}" y2="${ty}"
+                    stroke="var(--border)" stroke-width="1" stroke-dasharray="3 4"/>
+              <text class="topo-trenner" x="${sp.x + TOPO.spalteB - 10}" y="${ty - 5}"
+                    text-anchor="end">nur erkannt</text>`;
+    })() : '';
+    return `
+      <g class="topo-spalte" onclick="gerNetzToggle(${_jsAttr(sp.netz)})">
+        <rect x="${sp.x}" y="${TOPO.rand + TOPO.kopfH + bandH}" width="${TOPO.spalteB}"
+              height="${unten - TOPO.rand - TOPO.kopfH - bandH}" rx="12"
+              fill="${farbe}" fill-opacity="0.035" stroke="${farbe}" stroke-opacity="0.28"/>
+        <rect x="${sp.x}" y="${TOPO.rand}" width="${TOPO.spalteB}" height="${TOPO.kopfH}" rx="10"
+              fill="${farbe}" fill-opacity="0.13" stroke="${farbe}" stroke-width="1.6"/>
+        <text class="topo-spalte-name" x="${sp.x + 14}" y="${TOPO.rand + 27}"
+              fill="${farbe}">${_esc(name)}</text>
+        <text class="topo-spalte-zahl" x="${sp.x + TOPO.spalteB - 14}" y="${TOPO.rand + 27}"
+              text-anchor="end">${sp.zeilen.length}</text>
+        <title>${_esc(name)} — antippen blendet diese Spalte aus</title>
+      </g>${trenner}`;
   }).join('');
 
-  // Alles in den sichtbaren Bereich schieben
-  const alleKasten = belegt;
-  const minX = Math.min(...alleKasten.map(k => k.x - k.b / 2)) - TOPO.rand;
-  const maxX = Math.max(...alleKasten.map(k => k.x + k.b / 2)) + TOPO.rand;
-  const minY = Math.min(...alleKasten.map(k => k.y - k.h / 2)) - TOPO.rand;
-  const maxY = Math.max(...alleKasten.map(k => k.y + k.h / 2)) + TOPO.rand;
-  const breite = Math.round(maxX - minX);
-  const hoehe  = Math.round(maxY - minY);
+  const kaesten = spalten.map(sp =>
+    sp.zeilen.map(z => _topoKasten(z, z.x, z.y, z.b, hervor)).join('')).join('');
 
   return `${kopf}
     <div class="topo-rahmen">
       <svg class="topo-svg" width="${breite}" height="${hoehe}"
-           viewBox="${minX.toFixed(1)} ${minY.toFixed(1)} ${breite} ${hoehe}"
-           xmlns="http://www.w3.org/2000/svg">
-        <g class="topo-leitungen">${linien.join('')}</g>
-        ${netze}
-        ${knoten}
+           viewBox="0 0 ${breite} ${hoehe}" xmlns="http://www.w3.org/2000/svg">
+        ${panels}
+        <g class="topo-leitungen">${leitungen.join('')}</g>
+        ${kaesten}
       </svg>
     </div>`;
 }

@@ -216,41 +216,55 @@ keine Emojis.
 
 ### Das Schaltbild
 
-**Ein Bild für die ganze Anlage.** Jedes Netz ist ein Knoten, die Geräte liegen
-sternförmig darum, und was an einem Gerät hängt, sitzt weiter außen in dessen
-Richtung. Die **Farbe der Leitung** sagt, worüber verbunden ist: VE.Direct zum
-MPPT ist etwas anderes als SeaTalk zum Autopiloten, auch wenn beides „hängt an"
-heißt. Gestrichelt heißt: meldet sich nicht selbst. Gestrichelter Rahmen heißt:
-gesehen, aber in keiner Liste.
+**Je Netz eine Spalte, darin ein aufgeklappter Baum.** Drei Angaben, drei
+Achsen, jede Position in einem Satz erklärbar:
+
+| Was man sieht | Was es bedeutet |
+|---|---|
+| die **Spalte** | an welchem Netz dieser Strang hängt |
+| die **Zeile** | die Reihenfolge: Verteiler oben, Einzelgeräte darunter, nur Erkanntes zuletzt |
+| die **Einrückung** | woran ein Gerät hängt — wie ein aufgeklappter Verzeichnisbaum |
+| die **Farbe** von Leitung und Kante | die Art des Anschlusses |
+
+Deshalb stehen die vier Victron-Geräte in der **Bordnetz**-Spalte (dort hängt
+ihr Gateway), tragen aber **grüne VE.Direct**-Leitungen. Netze, die nur als
+Anschlussart vorkommen — VE.Direct, SeaTalk, analog —, bekommen keine eigene
+Spalte; sie sind Leitungsfarbe innerhalb einer fremden Spalte.
 
 Über den Schaltern lässt sich jedes Netz ausblenden. **Mit einem Netz
-verschwindet alles, was daran hängt** — blendet man das Bordnetzwerk aus, gehen
-die vier Raumknoten des Stoker-Hubs mit, sonst blieben Leitungen ins Leere.
+verschwindet alles, was daran hängt**; die übrigen Spalten rücken zusammen.
 
-Vier Festlegungen, die das Bild brauchbar halten:
+Zwei Wege, die verworfen wurden, und warum:
 
-- **Gerechnet, nicht simuliert.** Kein Kräftemodell, keine Zufallslage, kein
-  Nachwackeln: dasselbe Boot ergibt immer dasselbe Bild, und der Pi Zero
-  zeichnet einmal statt zu iterieren. Wo zwei Kästchen übereinander lägen,
-  schiebt ein Nachlauf sie nach außen — auch das in fester Reihenfolge.
-- **Sterne nebeneinander, Fächer nach oben und unten.** Bildschirme sind breit.
-  Auf einem Kreis angeordnet blieb die Mitte leer, während die Ränder
-  überliefen; nebeneinander wächst das Bild dort, wo Platz ist. Die Breite
-  eines Sterns wird nach dem Zeichnen gemessen, nicht geschätzt — wie weit die
-  Kinder ausschlagen, steht vorher nicht fest.
-- **Leitungen setzen am Kästchenrand an**, nicht im Mittelpunkt. Sonst laufen
-  am Netzknoten ein Dutzend Leitungen quer über die Beschriftung.
-- **Netze, die ein Gerät verbindet, stehen nebeneinander.** Der Pi hängt im
-  Bordnetzwerk und liest den Bus; stünden die beiden Netze an den Bildrändern,
-  liefe diese Leitung quer durch alles.
+- **Ein Block je Netz, untereinander, mit waagerechter Sammelschiene.** Das war
+  eher eine Liste als eine Karte, und man sah die Anlage nie als Ganzes.
+- **Sternbild: Netze als Knoten, Geräte radial darum, geschwungene Leitungen.**
+  Es sah aus wie ein Nervengeflecht — die Lage eines Kästchens ließ sich nicht
+  begründen. Genau das ist der Maßstab: Ein Betrachter muss sagen können, warum
+  ein Kästchen dort liegt, wo es liegt.
+
+Der Verzeichnisbaum gewinnt, weil jeder ihn kennt, bevor er dieses Bild zum
+ersten Mal sieht. Er passt außerdem vollständig auf einen Bildschirm
+(1158 × 656 px für 32 Geräte, gegen 2129 × 2038 beim Sternbild), und auf dem
+Handy ist eine Spalte genau eine Bildschirmbreite.
+
+Weitere Festlegungen:
+
+- **Gerechnet, nicht simuliert.** Ganze Zahlen, ein Durchlauf, keine Messung im
+  DOM, keine Ausweichschleife: im Raster ist Überlappung unmöglich. Der Pi Zero
+  zeichnet einmal.
+- **Eine ruhige Sammellinie je Verteiler**, dazu je Kind ein kurzer farbiger
+  Stich. Eine eigene lange Linie pro Kind ergab bei sechs Kindern sechs
+  übereinanderliegende Striche in verschiedenen Farben.
+- **Brücken treten zu der Seite aus, auf der das andere Netz liegt**, und laufen
+  in der Gasse zwischen den Spalten hoch. Andersherum umschloss die Leitung des
+  Pi die eigene Spalte wie ein Rahmen.
+- **Suche und Problemfilter heben hervor, statt zu filtern** — ein Bild, aus dem
+  Geräte herausgeschnitten sind, zeigt Verbindungen ins Nichts.
 
 Die zweite Zugehörigkeit des Pi ist **abgeleitet, nicht gepflegt**: Er ist das
 Gerät, das die Antwort schreibt, also weiß der Server es besser als jede Liste.
-Für weitere Brücken (etwa das Yacht-Devices-Gateway, wenn es einmal angebunden
-ist) gibt es das Registry-Feld `bruecke_zu`.
-
-Suche und Problemfilter **heben hervor, statt zu filtern** — ein Bild, aus dem
-Geräte herausgeschnitten sind, zeigt Verbindungen ins Nichts.
+Für weitere Brücken gibt es das Registry-Feld `bruecke_zu`.
 
 ---
 

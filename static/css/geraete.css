@@ -225,8 +225,8 @@
 .ger-hinweis { font-size: 12px; color: var(--text3); line-height: 1.55; }
 
 /* ── Verbindungskarte (Schaltbild) ─────────────────────────────────────────
-   Ein Bild fuer die ganze Anlage. Es wird NICHT kleingerechnet — lieber im
-   eigenen Rahmen schieben als unlesbar stauchen. */
+   Je Netz eine Spalte, darin ein aufgeklappter Baum. Das Bild wird NICHT
+   kleingerechnet — lieber im eigenen Rahmen schieben als unlesbar stauchen. */
 .topo-kopf { margin-bottom: 12px; }
 .topo-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .topo-chip {
@@ -244,28 +244,28 @@
 
 .topo-rahmen {
   overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border);
-  border-radius: var(--radius); background:
-    radial-gradient(circle at 50% 45%, rgba(6,182,212,.055), transparent 62%),
-    var(--surface);
+  border-radius: var(--radius); background: var(--surface);
   padding: 6px; -webkit-overflow-scrolling: touch;
 }
 .topo-svg { display: block; margin: 0 auto; }
-
 .topo-leitungen { pointer-events: none; }
 
-.topo-netz { cursor: pointer; }
-.topo-netz-name { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.topo-netz-zahl { font-size: 11px; fill: var(--text3); }
-.topo-netz:hover rect { fill-opacity: .26; }
+.topo-spalte { cursor: pointer; }
+.topo-spalte-name { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.topo-spalte-zahl { font-size: 12px; fill: var(--text3); font-weight: 600; }
+.topo-spalte:hover rect:nth-of-type(2) { fill-opacity: .24; }
+.topo-trenner { font-size: 10px; fill: var(--text3); letter-spacing: .08em; text-transform: uppercase; }
+.topo-bruecke-text { font-size: 10px; fill: var(--text3); }
 
 .topo-knoten { cursor: pointer; }
-.topo-knoten rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1.3;
-  transition: stroke .12s, fill .12s; }
-.topo-knoten text { fill: var(--text); font-size: 12px; font-weight: 550; }
-.topo-knoten:hover rect { stroke: var(--accent); fill: #2b3b52; }
-.topo-knoten.topo-treffer rect { stroke: var(--accent); stroke-width: 2.2; }
+.topo-knoten .topo-ziel { fill: transparent; }        /* grosses Fingerziel am Kiosk */
+.topo-knoten .topo-rahmen-kasten { fill: var(--surface2); stroke: var(--border);
+  stroke-width: 1.2; transition: stroke .12s, fill .12s; }
+.topo-knoten text { fill: var(--text); font-size: 12px; font-weight: 500; }
+.topo-knoten:hover .topo-rahmen-kasten { stroke: var(--accent); fill: #2b3b52; }
+.topo-knoten.topo-treffer .topo-rahmen-kasten { stroke: var(--accent); stroke-width: 2.2; }
 /* Am Bus oder im WLAN gesehen, aber in keiner Liste. */
-.topo-knoten.topo-neu rect { stroke-dasharray: 5 4; fill: transparent; }
+.topo-knoten.topo-neu .topo-rahmen-kasten { stroke-dasharray: 5 4; fill: transparent; }
 
 .topo-punkt.s-online    { fill: var(--green); }
 .topo-punkt.s-traege    { fill: var(--yellow); }
