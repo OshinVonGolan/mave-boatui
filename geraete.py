@@ -488,7 +488,7 @@ def _dauer(sekunden) -> str:
 # Felder, die aus der Registry unveraendert nach vorn durchgereicht werden.
 _STAMM_FELDER = ('id', 'name', 'kategorie', 'netz', 'ort', 'hersteller', 'modell',
                  'seriennr', 'baujahr', 'versorgung', 'sicherung', 'doku', 'notiz',
-                 'verbunden_an', 'sprung')
+                 'verbunden_an', 'sprung', 'bruecke_zu')
 
 
 def _lan_fund(mac: str, name: str, status: str, kennzahlen: list, roh: dict) -> dict:
@@ -503,6 +503,24 @@ def _lan_fund(mac: str, name: str, status: str, kennzahlen: list, roh: dict) -> 
         'kennzahlen': kennzahlen, 'live': dict(roh), 'quelle': 'lan',
         'gepflegt': False, 'vorschlag': {'typ': 'lan', 'mac': mac},
     }
+
+
+def _bruecken(eintrag: dict) -> list[str]:
+    """Weitere Netze, in denen ein Geraet haengt — fuer die Verbindungskarte.
+
+    Der Pi ist der Fall, der niemandem auffaellt und den niemand pflegen sollte:
+    er haengt im Bordnetzwerk UND liest den CAN-Bus. Das ist keine Angabe aus
+    der Liste, sondern eine Eigenschaft dieses Rechners — er ist ja das Geraet,
+    das diese Antwort schreibt. Ohne ihn staenden die beiden Netze in der Karte
+    beziehungslos nebeneinander.
+    """
+    roh = eintrag.get('bruecke_zu')
+    raus = [n for n in (roh or []) if _txt(n) in NETZE and _txt(n) != _txt(eintrag.get('netz'))]
+    match = eintrag.get('match') or {}
+    if _txt(match.get('typ')) == 'intern' and _txt(match.get('key')) == 'pi':
+        if 'n2k-bord' not in raus and _txt(eintrag.get('netz')) != 'n2k-bord':
+            raus.append('n2k-bord')
+    return raus
 
 
 def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=None,
@@ -535,6 +553,7 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
         geraet['kategorie'] = (_txt(eintrag.get('kategorie')) if _txt(eintrag.get('kategorie')) in KATEGORIE_KEYS
                                else 'sonstiges')
         geraet['netz_name'] = NETZE.get(_txt(eintrag.get('netz')), '')
+        geraet['bruecke_zu'] = _bruecken(eintrag)
         geraet['status'] = zustand['status']
         geraet['status_text'] = STATUS_TEXT.get(zustand['status'], zustand['status'])
         geraet['kennzahlen'] = zustand['kennzahlen']
@@ -672,6 +691,13 @@ def pruefe_registry(daten) -> list[dict]:
         netz = _txt(e.get('netz'))
         if netz and netz not in NETZE:
             raise RegistryFehler(f'{kennung}: Netz {netz!r} gibt es nicht.')
+        bruecke = e.get('bruecke_zu')
+        if bruecke is not None:
+            if not isinstance(bruecke, list):
+                raise RegistryFehler(f'{kennung}: bruecke_zu muss eine Liste sein.')
+            for n in bruecke:
+                if _txt(n) not in NETZE:
+                    raise RegistryFehler(f'{kennung}: Netz {n!r} gibt es nicht.')
         match = e.get('match')
         if match is not None:
             if not isinstance(match, dict):

@@ -225,31 +225,46 @@
 .ger-hinweis { font-size: 12px; color: var(--text3); line-height: 1.55; }
 
 /* ── Verbindungskarte (Schaltbild) ─────────────────────────────────────────
-   Die Karte ist so breit, wie die Anlage es verlangt. Sie wird NICHT
-   kleingerechnet — lieber im eigenen Rahmen schieben als unlesbar stauchen. */
-.topo-hinweis { font-size: 12px; color: var(--text3); line-height: 1.5; margin-bottom: 10px; }
-.topo-legende { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
-.topo-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
-.topo-leg i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+   Ein Bild fuer die ganze Anlage. Es wird NICHT kleingerechnet — lieber im
+   eigenen Rahmen schieben als unlesbar stauchen. */
+.topo-kopf { margin-bottom: 12px; }
+.topo-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.topo-chip {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+  color: var(--text2); font-size: 12.5px; padding: 6px 13px; transition: all .12s;
+}
+.topo-chip:hover { border-color: var(--accent2); color: var(--text); }
+.topo-chip i { width: 15px; height: 3px; border-radius: 2px; display: inline-block; }
+.topo-chip b { font-weight: 600; color: var(--text3); font-size: 11.5px; }
+/* Ausgeblendet: der Schalter bleibt sichtbar, aber sichtlich aus. */
+.topo-chip.inaktiv { opacity: .45; text-decoration: line-through; }
+.topo-chip.inaktiv i { background: var(--text3) !important; }
+.topo-hinweis { font-size: 12px; color: var(--text3); line-height: 1.5; margin-top: 10px; }
 
 .topo-rahmen {
   overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border);
   border-radius: var(--radius); background:
-    radial-gradient(circle at 18% 12%, rgba(6,182,212,.05), transparent 55%),
+    radial-gradient(circle at 50% 45%, rgba(6,182,212,.055), transparent 62%),
     var(--surface);
-  padding: 6px 2px 12px;
-  -webkit-overflow-scrolling: touch;
+  padding: 6px; -webkit-overflow-scrolling: touch;
 }
-.topo-svg { display: block; }
-.topo-schiene-titel { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.topo-svg { display: block; margin: 0 auto; }
+
+.topo-leitungen { pointer-events: none; }
+
+.topo-netz { cursor: pointer; }
+.topo-netz-name { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.topo-netz-zahl { font-size: 11px; fill: var(--text3); }
+.topo-netz:hover rect { fill-opacity: .26; }
 
 .topo-knoten { cursor: pointer; }
-.topo-knoten rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1.4; transition: stroke .12s, fill .12s; }
-.topo-knoten text { fill: var(--text); font-size: 12.5px; font-weight: 550; }
+.topo-knoten rect { fill: var(--surface2); stroke: var(--border); stroke-width: 1.3;
+  transition: stroke .12s, fill .12s; }
+.topo-knoten text { fill: var(--text); font-size: 12px; font-weight: 550; }
 .topo-knoten:hover rect { stroke: var(--accent); fill: #2b3b52; }
 .topo-knoten.topo-treffer rect { stroke: var(--accent); stroke-width: 2.2; }
-/* Am Bus oder im WLAN gesehen, aber in keiner Liste: gestrichelter Rahmen,
-   damit im Schaltbild sofort auffaellt, was noch niemand eingeordnet hat. */
+/* Am Bus oder im WLAN gesehen, aber in keiner Liste. */
 .topo-knoten.topo-neu rect { stroke-dasharray: 5 4; fill: transparent; }
 
 .topo-punkt.s-online    { fill: var(--green); }

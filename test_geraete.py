@@ -347,3 +347,32 @@ class DhcpLeases(unittest.TestCase):
         self.assertTrue(erg['quellen']['lan']['verfuegbar'])
         self.assertEqual({g['name'] for g in erg['geraete']}, {'stoker-bf38', 'plotter'})
         self.assertTrue(all(g['status'] == 'unbekannt' for g in erg['geraete']))
+
+
+class Bruecken(unittest.TestCase):
+    """Geraete, die in zwei Netzen haengen — fuer die Verbindungskarte."""
+
+    def test_pi_verbindet_bordnetz_und_bordnetzwerk(self):
+        # Der Pi haengt im WLAN und liest den CAN-Bus. Das ist keine Angabe aus
+        # der Liste, sondern eine Eigenschaft dieses Rechners.
+        reg = [{'id': 'pi', 'name': 'Pi', 'kategorie': 'netzwerk', 'netz': 'lan',
+                'match': {'typ': 'intern', 'key': 'pi'}}]
+        g = geraete.aggregiere(reg)['geraete'][0]
+        self.assertEqual(g['bruecke_zu'], ['n2k-bord'])
+
+    def test_gepflegte_bruecke_wird_uebernommen(self):
+        reg = [{'id': 'gw', 'name': 'Gateway', 'kategorie': 'navigation',
+                'netz': 'n2k-nav', 'bruecke_zu': ['lan']}]
+        g = geraete.aggregiere(reg)['geraete'][0]
+        self.assertEqual(g['bruecke_zu'], ['lan'])
+
+    def test_eigenes_netz_zaehlt_nicht_als_bruecke(self):
+        reg = [{'id': 'x', 'name': 'X', 'kategorie': 'netzwerk', 'netz': 'lan',
+                'bruecke_zu': ['lan']}]
+        self.assertEqual(geraete.aggregiere(reg)['geraete'][0]['bruecke_zu'], [])
+
+    def test_unbekanntes_netz_wird_abgelehnt(self):
+        with self.assertRaises(geraete.RegistryFehler):
+            geraete.pruefe_registry([{'id': 'x', 'bruecke_zu': ['quark']}])
+        with self.assertRaises(geraete.RegistryFehler):
+            geraete.pruefe_registry([{'id': 'x', 'bruecke_zu': 'lan'}])

@@ -216,28 +216,41 @@ keine Emojis.
 
 ### Das Schaltbild
 
-Je Netz eine Schiene, daran die Geräte, darunter als Baum, was an ihnen hängt.
-Die **Farbe der Linie** sagt, worüber verbunden ist: VE.Direct zum MPPT ist
-etwas anderes als SeaTalk zum Autopiloten, auch wenn beides „hängt an" heißt.
-Gestrichelt heißt: meldet sich nicht selbst (stumm oder Fremdnetz).
-Gestrichelter Rahmen heißt: gesehen, aber in keiner Liste. Ein Klick öffnet
-dasselbe Detail-Popup wie in der Liste.
+**Ein Bild für die ganze Anlage.** Jedes Netz ist ein Knoten, die Geräte liegen
+sternförmig darum, und was an einem Gerät hängt, sitzt weiter außen in dessen
+Richtung. Die **Farbe der Leitung** sagt, worüber verbunden ist: VE.Direct zum
+MPPT ist etwas anderes als SeaTalk zum Autopiloten, auch wenn beides „hängt an"
+heißt. Gestrichelt heißt: meldet sich nicht selbst. Gestrichelter Rahmen heißt:
+gesehen, aber in keiner Liste.
 
-Zwei Festlegungen, die das Bild brauchbar halten:
+Über den Schaltern lässt sich jedes Netz ausblenden. **Mit einem Netz
+verschwindet alles, was daran hängt** — blendet man das Bordnetzwerk aus, gehen
+die vier Raumknoten des Stoker-Hubs mit, sonst blieben Leitungen ins Leere.
+
+Vier Festlegungen, die das Bild brauchbar halten:
 
 - **Gerechnet, nicht simuliert.** Kein Kräftemodell, keine Zufallslage, kein
   Nachwackeln: dasselbe Boot ergibt immer dasselbe Bild, und der Pi Zero
-  zeichnet einmal statt zu iterieren.
-- **Ab vier Kindern untereinander statt nebeneinander.** Die sechs Kinder des
-  Stoker-Hubs nebeneinander machten die Karte 2100 px breit — breiter als jeder
-  Bildschirm an Bord. Als Kabelbaum bleibt sie unter 1200 px. Jede Leitung
-  bekommt dabei einen eigenen senkrechten Kanal, sonst lägen sechs
-  verschiedenfarbige Linien exakt übereinander.
-- **Suche filtert hier nicht, sie hebt hervor.** Ein Schaltbild, aus dem Geräte
-  herausgeschnitten sind, zeigt Verbindungen ins Nichts.
+  zeichnet einmal statt zu iterieren. Wo zwei Kästchen übereinander lägen,
+  schiebt ein Nachlauf sie nach außen — auch das in fester Reihenfolge.
+- **Sterne nebeneinander, Fächer nach oben und unten.** Bildschirme sind breit.
+  Auf einem Kreis angeordnet blieb die Mitte leer, während die Ränder
+  überliefen; nebeneinander wächst das Bild dort, wo Platz ist. Die Breite
+  eines Sterns wird nach dem Zeichnen gemessen, nicht geschätzt — wie weit die
+  Kinder ausschlagen, steht vorher nicht fest.
+- **Leitungen setzen am Kästchenrand an**, nicht im Mittelpunkt. Sonst laufen
+  am Netzknoten ein Dutzend Leitungen quer über die Beschriftung.
+- **Netze, die ein Gerät verbindet, stehen nebeneinander.** Der Pi hängt im
+  Bordnetzwerk und liest den Bus; stünden die beiden Netze an den Bildrändern,
+  liefe diese Leitung quer durch alles.
 
-Die vorhandene Bus-Ansicht (`renderNetworkInto()`) bleibt unangetastet: sie ist
-die technische Sicht auf den Bus, die Geräteseite die Sicht aufs Boot.
+Die zweite Zugehörigkeit des Pi ist **abgeleitet, nicht gepflegt**: Er ist das
+Gerät, das die Antwort schreibt, also weiß der Server es besser als jede Liste.
+Für weitere Brücken (etwa das Yacht-Devices-Gateway, wenn es einmal angebunden
+ist) gibt es das Registry-Feld `bruecke_zu`.
+
+Suche und Problemfilter **heben hervor, statt zu filtern** — ein Bild, aus dem
+Geräte herausgeschnitten sind, zeigt Verbindungen ins Nichts.
 
 ---
 

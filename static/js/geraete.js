@@ -45,6 +45,7 @@ let _gerDetailId  = null;     // offenes Popup
 let _gerBearbeiten = false;
 let _gerFehler    = '';
 let _gerPoller    = null;
+let _gerNetzeAus  = new Set();   // im Schaltbild ausgeblendete Netze
 
 // ── Öffnen und Schließen ───────────────────────────────────────────────────
 
@@ -228,7 +229,7 @@ function _gerRender() {
     </div>
 
     ${_gerModus === 'karte'
-        ? gerKarteHtml(alle, _gerSuche, _gerProbleme)
+        ? gerKarteHtml(alle, _gerSuche, _gerProbleme, _gerNetzeAus)
       : flach ? _gerListeHtml(gefiltert, _gerProbleme ? 'Geräte mit Problem' : 'Treffer', true)
             : _gerGruppe === '*' ? _gerListeHtml(gefiltert, 'Alle Geräte', false)
             : _gerGruppe ? _gerListeHtml(gefiltert.filter(g => _gerGruppeVon(g) === _gerGruppe),
@@ -346,6 +347,13 @@ function gerSuchen(wert)  { _gerSuche = wert; _gerRender(); }
 function gerProbleme()    { _gerProbleme = !_gerProbleme; _gerRender(); }
 function gerGruppe(key)   { _gerGruppe = key; _gerRender(); }
 function gerModus(modus)  { _gerModus = modus; _gerGruppe = null; _gerRender(); }
+
+/** Netz im Schaltbild ein- oder ausblenden. */
+function gerNetzToggle(netz) {
+  if (_gerNetzeAus.has(netz)) _gerNetzeAus.delete(netz);
+  else _gerNetzeAus.add(netz);
+  _gerRender();
+}
 
 // ── Detail-Popup ───────────────────────────────────────────────────────────
 
