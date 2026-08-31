@@ -43,13 +43,12 @@
   <span id="topbarClock" style="font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.04em;text-align:center">00:00</span>
 
   <div class="header-right">
-    <button class="wl-chip" id="wlChip" onclick="openWaterLevel()" title="Wasserstand Travemünde" style="display:none">
-      <span id="wlValue">--</span>
-      <span id="wlTrend"></span>
-    </button>
-    <div class="conn-badge">
+    <!-- Der Pegel-Chip stand hier. Der Wasserstand hat ein eigenes Feld in der
+         Statusleiste ("PEGEL"), das per Tap dieselbe Seite oeffnet — in der
+         Kopfzeile war er doppelt. Auf Wunsch des Eigners entfernt.
+         Der "Verbunden"-Schriftzug ebenso: der Punkt daneben sagt dasselbe. -->
+    <div class="conn-badge" title="Verbindung zum Boot">
       <div class="conn-dot" id="connDot"></div>
-      <span id="connLabel">Verbinde…</span>
     </div>
     <div class="topbar-batt" id="topbarBatt" title="Ladestand Servicebatterie">
       <svg width="24" height="13" viewBox="0 0 24 13" fill="none">

@@ -669,10 +669,18 @@ function updateStatusBar(data) {
       : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
   });
 
-  // Wasserstand: kommt aus einer eigenen Quelle, wir lesen den Header-Chip mit
-  const chip = document.getElementById('wlValue');
-  const m = chip && chip.textContent.match(/(-?\d+)/);
-  _sbSet('sbWl', m ? m[1] : '--');
+  // Wasserstand kommt aus einer eigenen Quelle (waterlevel.js, /api/waterlevel).
+  // Frueher wurde die Zahl aus dem Text des Pegel-Chips in der Kopfzeile
+  // GEKRATZT — dieser Chip ist entfernt, und damit haette hier dauerhaft "--"
+  // gestanden. Jetzt direkt aus den Daten.
+  // Gezeigt wird die Hoehe ueber NHN (current_nhn_cm), NICHT der Rohwert ueber
+  // Pegelnull (current_cm) — das sind an der Ostsee rund 500 cm Unterschied.
+  // Frueher wurde die Zahl aus dem Text des Pegel-Chips in der Kopfzeile
+  // GEKRATZT; der Chip ist entfernt, und der Regex hatte genau den NHN-Wert
+  // erwischt. Jetzt direkt aus den Daten, mit demselben Bezug.
+  // Kein typeof-Schutz noetig: zum Aufrufzeitpunkt ist das Bundle durchlaufen.
+  _sbSet('sbWl', _wlData?.current_nhn_cm != null
+    ? String(Math.round(_wlData.current_nhn_cm)) : '--');
 
   _sbRenderWartung();
 }

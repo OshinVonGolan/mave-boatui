@@ -208,3 +208,36 @@ document.addEventListener('click', e => {
   const wrap = $('burgerWrap');
   if (wrap && !wrap.contains(e.target)) closeBurger();
 });
+
+// ── Kopfzeilenhoehe ────────────────────────────────────────────────────────
+// --header-h war eine feste Zahl (57 px, schmal 51 px). Die Kopfzeile liegt
+// aber position:fixed, und ALLES darunter richtet sich nach dieser Konstante:
+// die Statusleiste ueber ihren margin-top und jede Detailseite ueber
+// .overlay { top: var(--header-h) }. Sobald die Kopfzeile umbrach, stimmte die
+// Zahl nicht mehr — am Geraet gemessen 96 px statt 57 bei 640 px Fensterbreite,
+// wodurch 23 px der Statusleiste hinter der Kopfzeile verschwanden.
+//
+// Statt die Zahl zu pflegen, wird sie jetzt gemessen. Damit kann kein
+// kuenftiger Umbau der Kopfzeile das Layout mehr aus dem Tritt bringen.
+// Im Kiosk ist die Kopfzeile ausgeblendet — dann ist die Hoehe 0, und genau
+// das ist auch richtig.
+function _kopfhoeheFuehren() {
+  const kopf = document.querySelector('header');
+  if (!kopf) return;
+  let letzte = -1;
+  const setzen = () => {
+    const h = Math.round(kopf.getBoundingClientRect().height);
+    if (h === letzte) return;              // nichts tun, wenn sich nichts aendert
+    letzte = h;
+    document.documentElement.style.setProperty('--header-h', h + 'px');
+  };
+  setzen();
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(setzen).observe(kopf);
+  } else {
+    window.addEventListener('resize', setzen);       // Rueckfall fuer alte Browser
+    window.addEventListener('orientationchange', setzen);
+  }
+  // Schriften kommen spaeter an und aendern die Hoehe noch einmal.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(setzen).catch(() => {});
+}

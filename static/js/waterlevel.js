@@ -21,21 +21,10 @@ function _nhnLabel(data) {
   return `${sign}${cm} cm NHN`;
 }
 
-function _updateTopbarChip(data) {
-  const chip  = $('wlChip');
-  const val   = $('wlValue');
-  const trend = $('wlTrend');
-  if (!chip || !data || data.current_cm == null) return;
-  chip.style.display = '';
-  val.textContent = _nhnLabel(data) ?? (Math.round(data.current_cm) + ' cm');
-  trend.textContent = _trendArrow(data.trend);
-  trend.style.color = _trendColor(data.trend);
-  if (data.forecast_alarm) {
-    chip.classList.add('wl-alarm');
-  } else {
-    chip.classList.remove('wl-alarm');
-  }
-}
+// _updateTopbarChip() stand hier: sie fuellte den Pegel-Chip in der
+// Kopfzeile. Der Chip ist entfernt (doppelt zur Statusleiste), die
+// Funktion damit gegenstandslos. Alles Uebrige der Wasserstandsseite
+// bleibt unveraendert.
 
 // Eine einzelne Messlücke (v: null) darf die Grafik nicht kippen: null wird in
 // JavaScript zu 0 gerechnet, Math.min/Math.max lieferten dadurch eine unsinnige
@@ -234,7 +223,6 @@ function fetchWaterLevel() {
     .then(d => {
       if (!d) return;
       _wlData = d;
-      _updateTopbarChip(d);
       _updateWlTile(d);
     })
     .catch(() => {});
@@ -257,7 +245,7 @@ function openWaterLevel() {
 function _wlOverlayAnzeigen() {
   $('wlOverlay').classList.remove('hidden');
   _updateWlOverlay(_wlData);
-  if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); _updateTopbarChip(d); } }).catch(() => {});
+  if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); } }).catch(() => {});
 }
 
 function closeWaterLevel() {

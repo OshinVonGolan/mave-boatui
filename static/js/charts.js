@@ -34,10 +34,10 @@ function trimHist(arr, maxAgeS, maxLen) {
 // domain: feste Achsen-Grenzen [min,max] oder null = automatisch aus Daten
 const SERIES_DEF = {
   soc:      { color: '#22c55e', unit: '%',  label: 'SOC',       fmt: v => Math.round(v) + ' %',         domain: [0, 100] },
-  voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4, smooth: 0.04 },
-  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, smooth: 0.04 },
-  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, smooth: 0.12 },
-  zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.03, zero: true, smooth: 0.02 },
+  voltage:  { color: '#06b6d4', unit: 'V',  label: 'Spannung',  fmt: v => v.toFixed(2) + ' V',          minSpan: 0.4, tau: 125 },
+  current:  { color: '#f97316', unit: 'A',  label: 'Strom',     fmt: v => v.toFixed(1) + ' A',          minSpan: 2.0, zero: true, tau: 125 },
+  solar:    { color: '#eab308', unit: 'W',  label: 'Solar',     fmt: v => Math.round(v) + ' W',         minSpan: 20,  zero: true, tau: 42 },
+  zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.03, zero: true, tau: 250 },
 };
 
 const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
@@ -67,6 +67,16 @@ function recordHistory(b) {
   const letzter = histData.length ? histData[histData.length - 1] : null;
   if (letzter && (ts - letzter.ts) < HIST_MIN_GAP_S) return;
 
+  // Zelldiff hier selbst nachziehen, statt auf die Reihenfolge in handleData
+  // zu vertrauen: dort laeuft updateBattery (und damit diese Funktion) VOR
+  // updateBms, das _lastZelldiff setzt. Der erste lokal aufgezeichnete Eintrag
+  // nach jedem Seitenaufbau hatte deshalb gar keinen Zelldiff-Wert — die
+  // Glaettung setzte dort zurueck und das Segment riss auf. Nebenbei ist der
+  // Wert damit auch nicht mehr einen WebSocket-Frame alt.
+  const _bmsJetzt = _lastData?.bms;
+  if (_bmsJetzt?.highest_cell_v != null && _bmsJetzt?.lowest_cell_v != null)
+    _lastZelldiff = _bmsJetzt.highest_cell_v - _bmsJetzt.lowest_cell_v;
+
   const entry = { ts };
   if (b.soc      != null) entry.soc      = b.soc;
   if (b.voltage  != null) entry.voltage  = b.voltage;
@@ -78,13 +88,33 @@ function recordHistory(b) {
   trimHist(histData, HIST_MAX_AGE_S, HIST_MAX);
 }
 
-// Exponential Moving Average — glättet stark springende Werte (z.B. Strom)
-function _ema(pts, key, alpha = 0.12) {
-  let s = null;
+/**
+ * Glaettung mit ZEITKONSTANTE statt festem Faktor je Punkt.
+ *
+ * Vorher rechnete _ema  s = alpha*v + (1-alpha)*s  pro PUNKT, ohne den
+ * zeitlichen Abstand. Der Puffer besteht aber aus zwei Abschnitten mit sehr
+ * verschiedener Dichte: links die vom Server ausgeduennten History-Punkte
+ * (~36 s auseinander), rechts die lokal aufgezeichneten (5 s). Die wirksame
+ * Zeitkonstante war damit Abstand/alpha — im Serverteil 1800 s, im lokalen
+ * Teil 250 s, also Faktor 7 genau an der Nahtstelle. Dort knickte die Kurve
+ * sichtbar ab; bei Zelldiff am staerksten, weil die Serie das kleinste alpha
+ * hatte und ihre Achse auf wenige Millivolt zoomt.
+ *
+ * Jetzt ist die Zeitkonstante tau (in Sekunden) definiert und der Faktor wird
+ * aus dem tatsaechlichen Abstand gerechnet: w = 1 - e^(-dt/tau). In beiden
+ * Abschnitten glaettet es damit gleich stark. Kein Messwert wird veraendert,
+ * und ein echter Zellausreisser schlaegt mit derselben, jetzt definierten
+ * Zeitkonstante durch.
+ */
+function _emaZeit(pts, key, tauS, maxGapS) {
+  let s = null, tVor = null;
   return pts.map(d => {
     const v = d[key];
-    if (v == null) { s = null; return d; }
-    s = (s === null) ? v : alpha * v + (1 - alpha) * s;
+    if (v == null) { s = null; tVor = null; return d; }
+    const dt = tVor === null ? null : d.ts - tVor;
+    if (dt === null || dt <= 0 || dt > maxGapS) s = v;   // Neustart nach Luecke
+    else { const w = 1 - Math.exp(-dt / tauS); s = w * v + (1 - w) * s; }
+    tVor = d.ts;
     const r = Object.assign({}, d); r[key] = s; return r;
   });
 }
@@ -131,6 +161,10 @@ function setChartRange(btn, secs) {
   document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderCharts(true);
+  // Fuer kurze Fenster den Verlauf feiner nachladen: der grosse Abruf liefert
+  // fuer 24 h nur alle ~36 s einen Punkt, was am linken Rand eines
+  // 30-Minuten-Fensters einen leeren Streifen stehen laesst.
+  fetchHistoryFenster(secs);
 }
 
 /**
@@ -373,11 +407,14 @@ function _zeichneCharts() {
   }
   const scrubTs = _scrubTs;
 
-  // Sekundär-Punkte ggf. glätten (EMA): alpha kommt direkt aus SERIES_DEF
-  const secDef   = chartSecondary ? SERIES_DEF[chartSecondary] : null;
-  const secAlpha = typeof secDef?.smooth === 'number' ? secDef.smooth : 0.12;
-  const secPts   = chartSecondary && secDef?.smooth
-    ? _ema(pts, chartSecondary, secAlpha)
+  // Groesster Abstand, ueber den hinweg noch verbunden (und geglaettet) wird.
+  // Stand frueher weiter unten; die Glaettung braucht ihn jetzt auch.
+  const maxGapSec = Math.max(30, chartRangeSec / 30);
+
+  // Sekundaer-Punkte glaetten: die Zeitkonstante kommt aus SERIES_DEF.
+  const secDef = chartSecondary ? SERIES_DEF[chartSecondary] : null;
+  const secPts = (chartSecondary && typeof secDef?.tau === 'number')
+    ? _emaZeit(pts, chartSecondary, secDef.tau, maxGapSec)
     : pts;
 
   const gezeichnet = { soc: pts };
@@ -486,7 +523,7 @@ function _zeichneCharts() {
   ctx.beginPath(); ctx.rect(PAD_L, PAD_T, CW, CH); ctx.clip();
 
   // Adaptiver Gap-Schwellwert: 1/30 des Zeitfensters (z.B. 60s bei 30min, 12min bei 6h)
-  const maxGapSec = Math.max(30, chartRangeSec / 30);
+  // maxGapSec steht weiter oben — die Glaettung braucht denselben Wert.
 
   const fillKey = yLeft?.key ?? null;
 
@@ -577,10 +614,50 @@ function _scrollLock(lock) {
 // Sicherheits-Reset beim Seitenstart — stellt sicher dass kein Altstand vorliegt.
 document.addEventListener('DOMContentLoaded', () => { _scrollLocked = false; });
 
+/**
+ * Jede Detailseite oeffnet oben.
+ *
+ * Gescrollt wird nicht das Fenster, sondern .ov-body im Overlay (style.css:
+ * .overlay ist position:fixed, .ov-body hat flex:1 und overflow-y:auto).
+ * Beim Schliessen bekommt das Overlay nur .hidden (display:none) — das
+ * Element bleibt bestehen, und der Browser stellt den gemerkten Scrollstand
+ * des Containers wieder her, sobald es erneut sichtbar wird. Zurueckgesetzt
+ * hat das bisher niemand: keiner der 23 Aufrufe von classList.remove('hidden')
+ * fasst scrollTop an. Die Batterieseite fiel nur am staerksten auf, weil sie
+ * die laengste ist — betroffen waren alle.
+ *
+ * Deshalb hier zentral statt an 23 Stellen: der Beobachter laeuft ohnehin.
+ * Zurueckgesetzt wird NUR beim Uebergang versteckt -> sichtbar; ein Schreiben
+ * auf scrollTop erzwingt Layout, das soll nicht bei jeder Klassenaenderung
+ * irgendwo im Dokument passieren.
+ */
+const _ovWarSichtbar = new WeakSet();
+
+function _ovNachOben(ov) {
+  // Das Overlay selbst mitnehmen: #wlOverlay hat als einziges keine .ov-body.
+  if (ov.scrollTop) ov.scrollTop = 0;
+  ov.querySelectorAll('.ov-body').forEach(b => { if (b.scrollTop) b.scrollTop = 0; });
+}
+
 // Beobachte alle .overlay-Elemente auf class-Änderungen
 new MutationObserver(() => {
-  const anyOpen = [...document.querySelectorAll('.overlay')]
-    .some(el => !el.classList.contains('hidden'));
+  let anyOpen = false;
+  document.querySelectorAll('.overlay').forEach(el => {
+    const offen = !el.classList.contains('hidden');
+    if (offen) anyOpen = true;
+    if (offen && !_ovWarSichtbar.has(el)) {
+      _ovWarSichtbar.add(el);
+      // Jetzt ist .hidden gerade weg, das Element hat wieder ein Layoutobjekt —
+      // vorher (oder in den close-Funktionen) waere der Schreibzugriff
+      // wirkungslos, weil display:none kein scrollTop kennt.
+      _ovNachOben(el);
+      // Einmal nachfassen: manche Browser stellen die gemerkte Position erst
+      // im naechsten Frame wieder her.
+      requestAnimationFrame(() => _ovNachOben(el));
+    } else if (!offen) {
+      _ovWarSichtbar.delete(el);
+    }
+  });
   _scrollLock(anyOpen);
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
@@ -609,6 +686,11 @@ function openBattDetail() {
   // Der 7-Tage-Trend ist auf die Stromverlauf-Seite umgezogen und wird dort
   // geladen; hier bleibt der Feinverlauf.
   requestAnimationFrame(() => requestAnimationFrame(() => renderCharts(true)));
+  // Beim Oeffnen steht der Verlauf auf 30 Minuten — dafuer ist der grosse
+  // 24-Stunden-Abruf zu grob (dort liegen die Punkte ~36 s auseinander).
+  // Einmal fein nachfassen, sonst bleibt links ein leerer Streifen stehen,
+  // bis jemand den Bereich umschaltet.
+  fetchHistoryFenster(chartRangeSec);
 }
 
 function _loadAndRenderWeekChart() {

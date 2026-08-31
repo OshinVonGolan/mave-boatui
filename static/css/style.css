@@ -36,9 +36,6 @@
       letter-spacing: .04em; margin-left: 10px; }
     .header-right { display: flex; align-items: center; gap: 10px; justify-self: end; grid-column: 3; }
     .conn-badge { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text2); }
-    .wl-chip { display: flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; white-space: nowrap; transition: border-color .3s, color .3s; }
-    .wl-chip.wl-alarm { border-color: var(--red); color: var(--red); animation: wl-pulse 1.5s ease-in-out infinite; }
-    @keyframes wl-pulse { 0%,100% { opacity:1 } 50% { opacity:.6 } }
     .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); transition: background .4s; }
     .conn-dot.ok   { background: var(--green); }
     .conn-dot.warn { background: var(--yellow); animation: pulse 1.5s infinite; }
@@ -74,7 +71,15 @@
     #burgerBtn.has-alarm::after { content: ''; position: absolute; top: 4px; right: 4px;
       width: 7px; height: 7px; background: var(--red); border-radius: 50%; border: 1.5px solid var(--surface); }
     #burgerBtn { position: relative; }
-    @media (max-width: 600px) {
+    /* Ab hier traegt das Burger-Menue die Werkzeugknoepfe.
+       Die Schwelle lag bei 600 px — und genau darueber erschienen ALLE acht
+       Icon-Knoepfe auf einmal. Am Geraet gemessen: .header-right springt damit
+       von 213 auf 501 px, zusammen mit dem Logo passt das nicht in eine Zeile,
+       und die Kopfzeile bricht auf 96 px um (bei 640 px Fensterbreite). Weil
+       --header-h eine feste Zahl war, verschwanden dann 23 px der Statusleiste
+       dahinter, und die Detailseiten begannen ebenfalls zu hoch.
+       Erst ab rund 830 px passt die volle Knopfreihe neben Logo und Uhr. */
+    @media (max-width: 900px) {
       .burger-hide { display: none !important; }
       .burger-wrap { display: block; }
       .header-right { justify-content: flex-end; margin-left: auto; gap: 6px; }
@@ -419,9 +424,6 @@
     .starter { background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px; margin-bottom: var(--gap);
       display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-    /* Erklaert einen unterschlagenen Schleppzeiger — bricht auf eine eigene
-       Zeile um, damit die Kennzahlen daneben nicht schmal gequetscht werden. */
-    .starter-hinweis { flex-basis: 100%; font-size: 11px; color: var(--text3); line-height: 1.45; }
 
     /* Widerspruch zwischen eingestellter Bankkapazitaet und BMS-Restenergie.
        Bewusst auffaellig: die Autonomie-Aussage darueber haengt daran. */
@@ -1641,7 +1643,6 @@
     @media (max-width: 500px) {
       :root { --header-h: 51px; }
       .logo-sub, .logo-ver { display: none; }
-      #connLabel { display: none; }
       .topbar-batt-pct, #topbarClock { display: none !important; }
       header { padding: 10px 12px 9px; }
       .header-right { gap: 6px; }

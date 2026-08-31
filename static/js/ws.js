@@ -2,11 +2,20 @@
 
 let ws = null, reconnectTimer = null;
 
+// Der Schriftzug neben dem Punkt ist entfallen; der Zustand steckt jetzt in
+// der Farbe des Punktes und im title-Attribut. lbl bleibt optional, damit ein
+// spaeteres Wiedereinsetzen des Labels ohne Aenderung hier funktioniert.
+const _CONN_TEXT = { ok: 'Verbunden', warn: 'Verbinde…', off: 'Getrennt' };
+
 function setConnState(state) {
   const dot = $('connDot'), lbl = $('connLabel');
-  if (state==='ok')   { dot.className='conn-dot ok';   lbl.textContent='Verbunden'; }
-  else if (state==='warn') { dot.className='conn-dot warn'; lbl.textContent='Verbinde…'; }
-  else                { dot.className='conn-dot';       lbl.textContent='Getrennt'; }
+  const art = state === 'ok' ? 'ok' : state === 'warn' ? 'warn' : 'off';
+  if (dot) {
+    dot.className = art === 'off' ? 'conn-dot' : 'conn-dot ' + art;
+    const badge = dot.parentElement;
+    if (badge) badge.title = _CONN_TEXT[art];
+  }
+  if (lbl) lbl.textContent = _CONN_TEXT[art];
 }
 
 // ── Ladeströme ─────────────────────────────────────────────────────────────
@@ -454,6 +463,51 @@ let _histFetchOk      = 0;      // Zeitpunkt des letzten ERFOLGREICHEN Abrufs
 // den die Zeitknöpfe im Chart anbieten (24 h).
 const HIST_FETCH_RANGE_S = 24 * 3600;
 const HIST_REFETCH_AFTER_S = 300;   // nach 5 min darf erneut geholt werden
+
+/**
+ * Feinaufloesung fuer ein kurzes Zeitfenster nachladen.
+ *
+ * Der grosse Abruf holt 24 h mit 1500 Punkten. Der Server duennt dafuer
+ * indexweise aus (main.py, _decimate_history): der Ringpuffer fasst 10800
+ * Eintraege, macht 7,2 je Bucket, also rund 36 s zwischen zwei Punkten.
+ * Fuer das 30-Minuten-Fenster ist das zu grob — der erste zeichenbare Punkt
+ * liegt bis zu 41 s hinter dem linken Rand, und weil die Achse fest an der Uhr
+ * haengt (tMin0 = jetzt - Fenster), bleibt dort ein leerer Streifen stehen.
+ * Bei 1800 s sind 41 s gut 2 % der Breite und damit sichtbar; bei 6 Stunden
+ * sind dieselben 41 s 0,19 % und fallen nicht auf. Genau das beschriebene
+ * Muster.
+ *
+ * Deshalb fuer kurze Fenster gezielt nachfassen: dasselbe Fenster mit so
+ * vielen Punkten, dass die 5-Sekunden-Kadenz der Aufzeichnung erhalten bleibt.
+ * 30 Minuten sind damit 360 Punkte — ein kleiner Abruf, der unter der
+ * 400-Eintraege-Schwelle bleibt, ab der die Serialisierung in den Executor
+ * wandert.
+ */
+const HIST_FEIN_BIS_S = 6 * 3600;      // darueber ist der Streifen unsichtbar
+const _histFeinGeholt = {};            // je Fenster: Zeitpunkt des letzten Abrufs
+
+function fetchHistoryFenster(secs) {
+  if (!secs || secs > HIST_FEIN_BIS_S) return;
+  const jetzt = Date.now() / 1000;
+  if (_histFeinGeholt[secs] && (jetzt - _histFeinGeholt[secs]) < 60) return;
+  _histFeinGeholt[secs] = jetzt;
+  const punkte = Math.min(900, Math.ceil(secs / HIST_MIN_GAP_S) + 10);
+  fetch(`/api/history?range=${secs}&max_points=${punkte}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(res => {
+      if (!res) return;
+      if (typeof res.server_now === 'number') setClockOffset(res.server_now);
+      const eintraege = Array.isArray(res) ? res : (res.entries || []);
+      if (!eintraege.length) return;
+      // Gleiche Abbildung wie beim grossen Abruf: der Server fuehrt die
+      // Solarleistung als 'solar1', die Chart-Serie liest 'solar'.
+      eintraege.forEach(e => { if (e.solar == null && e.solar1 != null) e.solar = e.solar1; });
+      _mergeHist(histData, eintraege);
+      trimHist(histData, HIST_MAX_AGE_S, HIST_MAX);
+      if (!$('battOverlay').classList.contains('hidden')) renderCharts(true);
+    })
+    .catch(err => console.warn('Feinverlauf konnte nicht geladen werden:', err));
+}
 
 /**
  * Holt den Verlauf vom Server und führt ihn mit dem zusammen, was der Client

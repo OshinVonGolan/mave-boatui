@@ -947,17 +947,10 @@ function _starterKarte(b) {
   const farbe = v < 11.8 ? 'var(--red)' : v < 12.2 ? 'var(--yellow)' : null;
   const min = _stPlausibel(b.starter_min_voltage);
   const max = _stPlausibel(b.starter_max_voltage);
-  // Nur erklaeren, wenn wirklich etwas unterschlagen wurde — sonst steht da
-  // eine Fussnote ohne Anlass.
-  const verworfen = (b.starter_min_voltage != null && min == null)
-                 || (b.starter_max_voltage != null && max == null);
   return `<div class="starter">
     ${_sbStat('Starterbatterie', v.toFixed(2), 'V', farbe)}
     ${_sbStat('Min', min != null ? min.toFixed(2) : null, 'V')}
     ${_sbStat('Max', max != null ? max.toFixed(2) : null, 'V')}
-    ${verworfen ? `<div class="starter-hinweis">Ein Schleppzeiger liegt ausserhalb
-      des plausiblen Bereichs (${_ST_MIN_PLAUSIBEL}–${_ST_MAX_PLAUSIBEL} V) und wird
-      nicht angezeigt.</div>` : ''}
   </div>`;
 }
 

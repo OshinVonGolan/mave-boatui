@@ -1,6 +1,7 @@
 // ── Init ───────────────────────────────────────────────────────────────────
 
 applyDisplayConfig();
+_kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 loadPresets();
 
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern
