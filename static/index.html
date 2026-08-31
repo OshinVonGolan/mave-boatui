@@ -1739,97 +1739,83 @@
     </div>
   </div>
   <div class="ov-body" style="padding:14px;background:#0c1828;display:flex;align-items:stretch;justify-content:center;overflow:hidden">
-    <svg class="flow-schema" viewBox="0 0 1040 650" xmlns="http://www.w3.org/2000/svg"
+    <svg class="flow-schema" viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg"
          preserveAspectRatio="xMidYMid meet">
-
-      <!-- Aufbau nach dem Vorbild der Victron-Uebersicht: gleich grosse
-           Kacheln in einem 3x3-Raster, kurze Verbinder zwischen Nachbarn,
-           grosse Zahlen. Links die Quellen, in der Mitte Wandlung und
-           Speicher, rechts die Verbraucher. Die dritte Zeile ist der
-           Startbatteriekreis — er haengt ueber den Orion an der Bordbatterie.
-
-           Wechselrichter und Ladegeraet stehen in EINEM Kasten: beide sind
-           dieselbe Stufe zwischen AC und DC, und sie laufen nie gleichzeitig.
-           Der Kasten sagt, was gerade passiert (Laden oder Wechselrichten) —
-           damit braucht es auch keinen eigenen Umschalter-Kasten mehr, die
-           AC-Lasten nennen ihre Quelle selbst.
-
-           Die drei Solarregler sind wie bei Victron zu EINER Kachel
-           zusammengefasst; die Zusatzzeile nennt die einzelnen Strings.
-
-           Eine Leitung wird nur gezeichnet, wenn dort Strom fliesst. -->
-      <path class="flow-edge-dot" id="fe-gridconv"     d="M 300,95 H 380"/>
-      <path class="flow-edge-dot" id="fe-convbord"     d="M 660,95 H 740"/>
-      <path class="flow-edge-dot" id="fe-convbatt"     d="M 520,170 V 250"/>
-      <path class="flow-edge-dot" id="fe-solarbatt"    d="M 300,325 H 380"/>
-      <path class="flow-edge-dot" id="fe-battdc"       d="M 660,325 H 740"/>
-      <path class="flow-edge-dot" id="fe-altstarter"   d="M 300,555 H 380"/>
-      <path class="flow-edge-dot" id="fe-starterorion" d="M 660,555 H 740"/>
-      <path class="flow-edge-dot" id="fe-orionbatt"    d="M 880,480 V 440 H 520 V 400"/>
+      <path class="flow-edge-dot" id="fe-gridbord" d="M 130,50 V 22 H 910 V 50"/>
+      <path class="flow-edge-dot" id="fe-gridcharger" d="M 240,115 H 370"/>
+      <path class="flow-edge-dot" id="fe-chargerbatt" d="M 441,180 V 230"/>
+      <path class="flow-edge-dot" id="fe-battinv" d="M 599,230 V 180"/>
+      <path class="flow-edge-dot" id="fe-invbord" d="M 670,115 H 800"/>
+      <path class="flow-edge-dot" id="fe-solarbatt" d="M 240,295 H 370"/>
+      <path class="flow-edge-dot" id="fe-battdc" d="M 670,295 H 800"/>
+      <path class="flow-edge-dot" id="fe-orionbatt" d="M 130,410 V 385 H 450 V 360"/>
 
       <g id="fg-grid" class="flow-g">
-        <rect class="flow-box" x="20" y="20" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="160" y="50">Landstrom</text>
-        <text class="flow-val" id="fv-grid" x="160" y="106" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-grid" x="160" y="134" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-grid" x="160" y="156" style="font-size:15px"></text>
+        <rect class="flow-box" x="20" y="50" width="220" height="130" rx="14"/>
+        <text class="flow-name" x="130" y="76" style="font-size:13px">Landstrom</text>
+        <text class="flow-val" id="fv-grid" x="130" y="114" style="font-size:32px">--</text>
+        <text class="flow-sub" id="fsa-grid" x="130" y="134" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-grid" x="130" y="151" style="font-size:11px"></text>
       </g>
-      <g id="fg-conv" class="flow-g">
-        <rect class="flow-box" x="380" y="20" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="520" y="50">Wechselrichter / Lader</text>
-        <text class="flow-val" id="fv-conv" x="520" y="106" style="font-size:32px">--</text>
-        <text class="flow-sub" id="fsa-conv" x="520" y="134" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-conv" x="520" y="156" style="font-size:15px"></text>
+      <g id="fg-charger" class="flow-g">
+        <rect class="flow-box" x="370" y="50" width="142" height="130" rx="14"/>
+        <text class="flow-name" x="441" y="76" style="font-size:11px">Ladegerät</text>
+        <text class="flow-val" id="fv-charger" x="441" y="114" style="font-size:24px">--</text>
+        <text class="flow-sub" id="fsa-charger" x="441" y="134" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-charger" x="441" y="151" style="font-size:11px"></text>
+      </g>
+      <g id="fg-inv" class="flow-g">
+        <rect class="flow-box" x="528" y="50" width="142" height="130" rx="14"/>
+        <text class="flow-name" x="599" y="76" style="font-size:11px">Inverter</text>
+        <text class="flow-val" id="fv-inv" x="599" y="114" style="font-size:24px">--</text>
+        <text class="flow-sub" id="fsa-inv" x="599" y="134" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-inv" x="599" y="151" style="font-size:11px"></text>
       </g>
       <g id="fg-bord" class="flow-g">
-        <rect class="flow-box" x="740" y="20" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="880" y="50">AC-Lasten</text>
-        <text class="flow-val" id="fv-bord" x="880" y="106" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-bord" x="880" y="134" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-bord" x="880" y="156" style="font-size:15px"></text>
-      </g>
-      <g id="fg-solar1" class="flow-g">
-        <rect class="flow-box" x="20" y="250" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="160" y="280">Solar</text>
-        <text class="flow-val" id="fv-solar1" x="160" y="336" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-solar1" x="160" y="364" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-solar1" x="160" y="386" style="font-size:15px"></text>
+        <rect class="flow-box" x="800" y="50" width="220" height="130" rx="14"/>
+        <text class="flow-name" x="910" y="76" style="font-size:13px">AC-Lasten</text>
+        <text class="flow-val" id="fv-bord" x="910" y="114" style="font-size:32px">--</text>
+        <text class="flow-sub" id="fsa-bord" x="910" y="134" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-bord" x="910" y="151" style="font-size:11px"></text>
       </g>
       <g id="fg-batt" class="flow-g">
-        <rect class="flow-box-main" x="380" y="250" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="520" y="280">Batterie</text>
-        <text class="flow-val" id="fv-batt" x="520" y="330" style="font-size:34px">--</text>
-        <text class="flow-sub" id="fsa-batt" x="520" y="356" style="font-size:13px"></text>
-        <text class="flow-sub" id="fsb-batt" x="520" y="376" style="font-size:13px"></text>
-        <text class="flow-sub" id="fsc-batt" x="520" y="394" style="font-size:13px"></text>
+        <rect class="flow-box-main" x="370" y="230" width="300" height="130" rx="14"/>
+        <text class="flow-name" x="520" y="256" style="font-size:13px">Batterie</text>
+        <text class="flow-val" id="fv-batt" x="520" y="294" style="font-size:34px">--</text>
+        <text class="flow-sub" id="fsa-batt" x="520" y="314" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-batt" x="520" y="331" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsc-batt" x="520" y="348" style="font-size:11px"></text>
       </g>
       <g id="fg-dcgrid" class="flow-g">
-        <rect class="flow-box" x="740" y="250" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="880" y="280">DC-Lasten</text>
-        <text class="flow-val" id="fv-dcgrid" x="880" y="336" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-dcgrid" x="880" y="364" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-dcgrid" x="880" y="386" style="font-size:15px"></text>
-      </g>
-      <g id="fg-alt" class="flow-g">
-        <rect class="flow-box" x="20" y="480" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="160" y="510">Lichtmaschine</text>
-        <text class="flow-val" id="fv-alt" x="160" y="566" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-alt" x="160" y="594" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-alt" x="160" y="616" style="font-size:15px"></text>
-      </g>
-      <g id="fg-starter" class="flow-g">
-        <rect class="flow-box" x="380" y="480" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="520" y="510">Starterbatterie</text>
-        <text class="flow-val" id="fv-starter" x="520" y="566" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-starter" x="520" y="594" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-starter" x="520" y="616" style="font-size:15px"></text>
+        <rect class="flow-box" x="800" y="230" width="220" height="130" rx="14"/>
+        <text class="flow-name" x="910" y="256" style="font-size:13px">DC-Lasten</text>
+        <text class="flow-val" id="fv-dcgrid" x="910" y="294" style="font-size:32px">--</text>
+        <text class="flow-sub" id="fsa-dcgrid" x="910" y="314" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-dcgrid" x="910" y="331" style="font-size:11px"></text>
       </g>
       <g id="fg-orion" class="flow-g">
-        <rect class="flow-box" x="740" y="480" width="280" height="150" rx="14"/>
-        <text class="flow-name" x="880" y="510">Orion XS</text>
-        <text class="flow-val" id="fv-orion" x="880" y="566" style="font-size:38px">--</text>
-        <text class="flow-sub" id="fsa-orion" x="880" y="594" style="font-size:15px"></text>
-        <text class="flow-sub" id="fsb-orion" x="880" y="616" style="font-size:15px"></text>
+        <rect class="flow-box" x="20" y="410" width="220" height="130" rx="14"/>
+        <text class="flow-name" x="130" y="436" style="font-size:13px">Orion XS</text>
+        <text class="flow-val" id="fv-orion" x="130" y="474" style="font-size:32px">--</text>
+        <text class="flow-sub" id="fsa-orion" x="130" y="494" style="font-size:11px"></text>
+        <text class="flow-sub" id="fsb-orion" x="130" y="511" style="font-size:11px"></text>
+      </g>
+      <g id="fg-solar1" class="flow-g">
+        <rect class="flow-box" x="20" y="230" width="220" height="130" rx="14"/>
+        <text class="flow-name" x="130" y="256" style="font-size:13px">Solar</text>
+        <text class="flow-val" id="fv-solar1" x="130" y="294" style="font-size:30px">--</text>
+        <text class="flow-sub" id="fsl1-solar1" x="40" y="314"
+              style="font-size:11px;text-anchor:start"></text>
+        <text class="flow-sub" id="fsv1-solar1" x="220" y="314"
+              style="font-size:11px;text-anchor:end"></text>
+        <text class="flow-sub" id="fsl2-solar1" x="40" y="331"
+              style="font-size:11px;text-anchor:start"></text>
+        <text class="flow-sub" id="fsv2-solar1" x="220" y="331"
+              style="font-size:11px;text-anchor:end"></text>
+        <text class="flow-sub" id="fsl3-solar1" x="40" y="348"
+              style="font-size:11px;text-anchor:start"></text>
+        <text class="flow-sub" id="fsv3-solar1" x="220" y="348"
+              style="font-size:11px;text-anchor:end"></text>
       </g>
     </svg>
   </div>

@@ -1712,6 +1712,10 @@
     .flow-edge-dot.flow-rev { animation-direction: reverse; }
     /* Strom fließt, Menge unbekannt: farbige Strich-Punkt-Linie, kein Lauf */
     .flow-edge-dot.static { opacity: 1; animation: none; stroke-dasharray: 7 7; stroke-width: 3.5; }
+    /* Ruhende Leitung: durchgezogen und ausgegraut. Sie zeigt die Verkabelung,
+       ohne zu behaupten, dass dort gerade Strom fliesst. */
+    .flow-edge-dot.idle { opacity: .5; animation: none; stroke-dasharray: none;
+      stroke-width: 2; stroke: #35485f; }
     @keyframes flowdots { to { stroke-dashoffset: -26; } }
     .flow-box { fill: #162438; stroke: #283d5a; stroke-width: 1.3; }
     .flow-box-main { fill: #1a3050; stroke: var(--accent); stroke-width: 2;
