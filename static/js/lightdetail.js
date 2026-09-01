@@ -201,13 +201,17 @@ window.addEventListener('popstate', () => {
       // renderDeviceTiles muss mit: ueber diesen Pfad (Zurueck-Taste, direkter
       // Aufruf von #battery) lief es frueher nicht, die drei Karten oben
       // blieben bis zum naechsten WebSocket-Frame leer.
-      battery:  () => { $('battOverlay').classList.remove('hidden');
-                        if (_lastBms) updateBms(_lastBms);
-                        if (_lastData) renderDeviceTiles(_lastData);
-                        setTimeout(renderCharts, 50); },
-      // #verlauf fehlte hier ganz — seit der 7-Tage-Trend auf dieser Seite
-      // sitzt, waere er ueber Vor/Zurueck sonst nicht mehr erreichbar.
-      verlauf:  () => { _verlaufAnzeigen(); },
+      // Genau dieselbe Funktion wie der Knopf und der Kiosk-Tab. Frueher stand
+      // hier ein eigener Pfad mit setTimeout(renderCharts,50) — mit jetzt DREI
+      // Diagrammen auf der Seite war das die wahrscheinlichste Stelle fuer
+      // "Diagramm bleibt leer", weil ein verstecktes Canvas 0 misst.
+      battery:  () => _battDetailAnzeigen(),
+      // #verlauf gibt es als Seite nicht mehr. Der Schluessel bleibt trotzdem
+      // stehen und leitet weiter: alte Lesezeichen und Eintraege in der
+      // Historie wuerden sonst einen ReferenceError werfen — und zwar
+      // NACHDEM oben schon alle Overlays geschlossen wurden, der Nutzer
+      // landete also auf einer leeren Startseite.
+      verlauf:  () => _battDetailAnzeigen(),
       flow:     () => { $('flowOverlay').classList.remove('hidden'); if (_lastData) updateFlow(_lastData); },
       lights:   () => { liveChannels = [...(state.lights?.channels ?? Array(9).fill(0))]; buildLightSliders(); lightDetailOpen = true; $('lightOverlay').classList.remove('hidden'); },
       alarms:   () => { $('alarmOverlay').classList.remove('hidden'); switchTab('aktiv'); },

@@ -54,6 +54,9 @@ function _dspLoad() {
     let saved = raw ? JSON.parse(raw) : {};
     if ((saved.ver ?? 1) < _DSP_VER) saved = { activeProfile: saved.activeProfile };
     _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile, tiles: {} };
+    // Die Kachelreihenfolge ueberlebt das Neuaufbauen: _dsp wird hier aus den
+    // Vorgaben zusammengesetzt, alles Nichtgenannte ginge sonst verloren.
+    if (Array.isArray(saved.reihenfolge)) _dsp.reihenfolge = saved.reihenfolge;
     for (const p of _PROFILES) {
       const savedTiles = saved.tiles?.[p.id] ?? {};
       const defTiles   = _DSP_DEFAULTS.tiles[p.id];
@@ -144,6 +147,126 @@ function _tileEl(id) {
   if (!_tileElCache[id]) _tileElCache[id] = document.querySelector(_TILE_SEL[id]);
   return _tileElCache[id];
 }
+
+// ── Kacheln anordnen ───────────────────────────────────────────────────────
+// Die Reihenfolge wird im DOM geaendert, nicht ueber CSS order. Grund: das
+// Bandlayout (_bandLayout) vergibt order selbst und entscheidet innerhalb
+// eines Bandes nach DOM-Reihenfolge — zwei Ordnungssysteme uebereinander
+// waeren nicht vorhersagbar. <main> enthaelt ausserdem genau die acht
+// Kachel-Sections und sonst nichts, das Umhaengen ist also gefahrlos.
+
+/** Gespeicherte Reihenfolge anwenden. Unbekannte/neue Kacheln bleiben hinten. */
+function _kachelOrdnungAnwenden() {
+  const main = document.querySelector('main');
+  const folge = Array.isArray(_dsp.reihenfolge) ? _dsp.reihenfolge : null;
+  if (!main || !folge || !folge.length) return;
+  folge.forEach(id => {
+    const el = _tileEl(id);
+    if (el && el.parentElement === main) main.appendChild(el);
+  });
+  // Alles, was nicht in der Liste stand, haengt jetzt vorne — ans Ende holen,
+  // damit neue Kacheln nach einem Update nicht die Ordnung durcheinanderwerfen.
+  _TILES.forEach(t => {
+    if (folge.includes(t.id)) return;
+    const el = _tileEl(t.id);
+    if (el && el.parentElement === main) main.appendChild(el);
+  });
+  _tilesDomCache = null;          // der Cache haelt die alte Reihenfolge fest
+}
+
+/** Aktuelle DOM-Reihenfolge sichern. */
+function _kachelOrdnungMerken() {
+  const main = document.querySelector('main');
+  if (!main) return;
+  const nachId = {};
+  Object.entries(_TILE_SEL).forEach(([id, sel]) => { nachId[sel.replace('#', '')] = id; });
+  _dsp.reihenfolge = [...main.children]
+    .map(el => nachId[el.id]).filter(Boolean);
+  _dspSave();
+  _tilesDomCache = null;
+}
+
+let _ordnenAn = false;
+let _zieh = null;               // { el, dx, dy }
+
+function kachelnOrdnenAn(an) {
+  _ordnenAn = an === undefined ? !_ordnenAn : !!an;
+  document.body.classList.toggle('kacheln-ordnen', _ordnenAn);
+  const leiste = $('ordnenLeiste');
+  if (leiste) leiste.classList.toggle('hidden', !_ordnenAn);
+  if (!_ordnenAn) { _kachelOrdnungMerken(); applyDisplayConfig(); }
+}
+
+// Die Reihenfolge, wie sie in index.html steht — EINMAL beim Start gemerkt,
+// bevor irgendetwas umgehaengt wird. Sie ist der Ausgangszustand fuer
+// "Zuruecksetzen". Aus _TILE_SEL laesst sie sich NICHT ableiten: dort stehen
+// die Kacheln in der Reihenfolge der Registrierung, nicht der des Markups.
+const _KACHEL_URORDNUNG = (() => {
+  const main = document.querySelector('main');
+  return main ? [...main.children].map(el => el.id).filter(Boolean) : [];
+})();
+
+function kachelnOrdnungZuruecksetzen() {
+  delete _dsp.reihenfolge;
+  _dspSave();
+  const main = document.querySelector('main');
+  if (main) _KACHEL_URORDNUNG.forEach(domId => {
+    const el = document.getElementById(domId);
+    if (el && el.parentElement === main) main.appendChild(el);
+  });
+  _tilesDomCache = null;
+  applyDisplayConfig();
+}
+
+// Ziehen per Pointer-Events: funktioniert mit Maus UND auf dem Touchscreen
+// am Kartentisch. HTML5-Drag-and-drop kann Touch nicht.
+function _ordnenPointerDown(e) {
+  if (!_ordnenAn) return;
+  const el = e.target.closest('main > .card');
+  if (!el) return;
+  e.preventDefault();
+  const r = el.getBoundingClientRect();
+  _zieh = { el, dx: e.clientX - r.left, dy: e.clientY - r.top };
+  el.classList.add('kachel-zieht');
+  el.setPointerCapture?.(e.pointerId);
+}
+
+function _ordnenPointerMove(e) {
+  if (!_zieh) return;
+  e.preventDefault();
+  const { el } = _zieh;
+  // Die gezogene Kachel kurz durchlaessig machen, sonst findet elementFromPoint
+  // immer nur sie selbst.
+  el.style.pointerEvents = 'none';
+  const unter = document.elementFromPoint(e.clientX, e.clientY);
+  el.style.pointerEvents = '';
+  const ziel = unter && unter.closest('main > .card');
+  if (!ziel || ziel === el) return;
+  const r = ziel.getBoundingClientRect();
+  // Vor oder hinter das Ziel — je nachdem, auf welcher Haelfte der Zeiger steht.
+  const davor = (e.clientY < r.top + r.height / 2) ||
+                (Math.abs(e.clientY - (r.top + r.height / 2)) < 8 && e.clientX < r.left + r.width / 2);
+  ziel.parentElement.insertBefore(el, davor ? ziel : ziel.nextSibling);
+}
+
+function _ordnenPointerUp() {
+  if (!_zieh) return;
+  _zieh.el.classList.remove('kachel-zieht');
+  _zieh = null;
+  _kachelOrdnungMerken();
+  applyDisplayConfig();          // Bandlayout auf die neue Reihenfolge rechnen
+}
+
+document.addEventListener('pointerdown', _ordnenPointerDown);
+document.addEventListener('pointermove', _ordnenPointerMove);
+document.addEventListener('pointerup', _ordnenPointerUp);
+document.addEventListener('pointercancel', _ordnenPointerUp);
+// Im Ordnen-Modus darf ein Tap keine Detailseite oeffnen.
+document.addEventListener('click', e => {
+  if (_ordnenAn && e.target.closest('main > .card')) {
+    e.preventDefault(); e.stopPropagation();
+  }
+}, true);
 
 /** Kachel liegt zwar in der Konfiguration, ist aber mangels Daten versteckt.
  *  tanks.js/battery.js setzen dafür style.display; .tile-nodata ist der
@@ -241,6 +364,8 @@ function _applyGrid() {
     const rowH  = Math.max(70, (colW - gap) / 2);
     main.style.gridAutoRows = rowH + 'px';
   }
+
+  _kachelOrdnungAnwenden();     // gespeicherte Reihenfolge VOR der Verteilung
 
   // Erst einsammeln, wer überhaupt im Raster liegt — danach verteilen.
   // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder

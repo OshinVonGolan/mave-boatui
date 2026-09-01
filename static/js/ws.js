@@ -423,7 +423,13 @@ function updateInverterCard(inv, charger) {
 function handleData(data) {
   if (data.ping) return;
   _lastData = data;
-  if (data.version) $('versionBadge').textContent = 'v' + data.version;
+  if (data.version) {
+    $('versionBadge').textContent = 'v' + data.version;
+    // Der Text aendert die Breite des Logos, aber nicht zwingend seine
+    // Rahmenmasse — der ResizeObserver feuert dann nicht. Also hier direkt
+    // pruefen, ob die Version noch neben den Schriftzug passt.
+    if (typeof _kopfLogoPruefen === 'function') _kopfLogoPruefen();
+  }
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
   if (data.lights) {

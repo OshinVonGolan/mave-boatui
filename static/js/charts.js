@@ -676,21 +676,38 @@ function _closeAllOverlays() {
 
 let _weekData = null;
 
-function openBattDetail() {
-  _closeAllOverlays();
-  history.pushState({ overlay: 'battery' }, '', '#battery');
+/**
+ * Die Batterie-Detailseite anzeigen — der EINE Weg fuer alle Aufrufer.
+ *
+ * Es gibt drei: den Knopf auf der Startseite, den Kiosk-Tab "Energie" und die
+ * Zurueck-/Vorwaerts-Geste (lightdetail.js). Der dritte hatte frueher einen
+ * eigenen, schwaecheren Pfad mit setTimeout(renderCharts, 50). Seit auf der
+ * Seite DREI Canvas liegen, ist das die Stelle, an der Diagramme leer bleiben:
+ * ein verstecktes Canvas misst 0 und alle drei Zeichenfunktionen steigen dann
+ * still aus. Deshalb hier gebuendelt, mit zwei Frames Vorlauf.
+ */
+function _battDetailAnzeigen() {
   $('battOverlay').classList.remove('hidden');
   if (_lastBms) updateBms(_lastBms);
   if (_lastData) renderDeviceTiles(_lastData);
-  // Graph erst nach zwei Frames — Canvas hat dann korrekte clientWidth/clientHeight
-  // Der 7-Tage-Trend ist auf die Stromverlauf-Seite umgezogen und wird dort
-  // geladen; hier bleibt der Feinverlauf.
-  requestAnimationFrame(() => requestAnimationFrame(() => renderCharts(true)));
-  // Beim Oeffnen steht der Verlauf auf 30 Minuten — dafuer ist der grosse
+  _vlBereichKnoepfe();
+  // Erst nach zwei Frames: dann ist das Overlay sichtbar und die Canvas haben
+  // ihre echte Breite.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    renderCharts(true);
+    ladeVerlauf();
+    _loadAndRenderWeekChart();
+  }));
+  // Der Feinverlauf steht beim Oeffnen auf 30 Minuten — dafuer ist der grosse
   // 24-Stunden-Abruf zu grob (dort liegen die Punkte ~36 s auseinander).
-  // Einmal fein nachfassen, sonst bleibt links ein leerer Streifen stehen,
-  // bis jemand den Bereich umschaltet.
+  // Einmal fein nachfassen, sonst bleibt links ein leerer Streifen stehen.
   fetchHistoryFenster(chartRangeSec);
+}
+
+function openBattDetail() {
+  _closeAllOverlays();
+  history.pushState({ overlay: 'battery' }, '', '#battery');
+  _battDetailAnzeigen();
 }
 
 function _loadAndRenderWeekChart() {
@@ -860,13 +877,14 @@ function _chartsBeiGroessenwechsel() {
   if (_chartResizeRaf !== null) cancelAnimationFrame(_chartResizeRaf);
   _chartResizeRaf = requestAnimationFrame(() => {
     _chartResizeRaf = null;
+    // Alle drei Diagramme der Batterieseite haengen an derselben Sichtbarkeit
+    // und werden gemeinsam neu gezeichnet. Der Stromverlauf zeichnet aus
+    // _vlDaten, ohne neuen Abruf — Drehen kostet also keinen Serverzugriff.
     const ov = $('battOverlay');
-    if (ov && !ov.classList.contains('hidden')) renderCharts(true);
-    // Der Wochentrend sitzt jetzt in einem ANDEREN Overlay — er darf nicht
-    // mehr an der Sichtbarkeit des Batterie-Overlays haengen, sonst wird er
-    // beim Drehen des Geraets nie neu gezeichnet.
-    const vl = $('verlaufOverlay');
-    if (vl && !vl.classList.contains('hidden') && _weekData) _renderWeekChart(_weekData);
+    if (!ov || ov.classList.contains('hidden')) return;
+    renderCharts(true);
+    if (typeof zeichneVerlauf === 'function') zeichneVerlauf();
+    if (_weekData) _renderWeekChart(_weekData);
   });
 }
 window.addEventListener('resize', _chartsBeiGroessenwechsel);

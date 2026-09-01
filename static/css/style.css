@@ -31,7 +31,12 @@
       background: var(--surface); position: fixed; top: 0; left: 0; right: 0; z-index: 101;
     }
     .logo { font-size: 20px; font-weight: 700; letter-spacing: .18em;
-      color: var(--accent); text-transform: uppercase; }
+      color: var(--accent); text-transform: uppercase;
+      /* Nie umbrechen: die Versionsnummer rutschte sonst unter den Schriftzug
+         und machte die Kopfzeile eine Zeile hoeher. Passt sie nicht mehr
+         daneben, wird sie ausgeblendet (siehe _kopfLogoPruefen in core.js). */
+      white-space: nowrap; min-width: 0; }
+    .logo.ohne-version .logo-ver { display: none; }
     .logo span { color: var(--text2); font-weight: 400; font-size: 13px;
       letter-spacing: .04em; margin-left: 10px; }
     .header-right { display: flex; align-items: center; gap: 10px; justify-self: end; grid-column: 3; }
@@ -341,7 +346,12 @@
        Absolute 3.335 gegen 3.340 sagt beim Draufschauen nichts. Die
        Abweichung zeigt sofort, welche Zelle ausreisst. */
     .ba-zellen { display: flex; flex-direction: column; gap: 8px; }
-    .ba-zeile-z { display: grid; grid-template-columns: 24px 62px minmax(0, 1fr) 58px;
+    /* Fuenf Spalten: Nummer, Spannung, Abweichungsbahn, Millivolt, Temperatur.
+       Die Temperaturspalte traegt die zweite Farbe der Karte und wird nur
+       gefuellt, wenn ueberhaupt eine Zelle eine Temperatur meldet — das
+       Element bleibt aber erhalten, sonst verrutscht das Raster der Zeile. */
+    .ba-zeile-z { display: grid;
+      grid-template-columns: 24px 62px minmax(0, 1fr) 58px auto;
       gap: 9px; align-items: center; font-size: 12px; }
     .ba-znr   { color: var(--text3); font-weight: 700; }
     /* Absolute Zellspannung — ersetzt die frueher nur mobil gezeigte Kachel. */
@@ -357,10 +367,14 @@
         transparent 50%, rgba(255,255,255,.45) 50%, rgba(255,255,255,.45) 75%, transparent 75%);
       background-size: 6px 6px; }
     .ba-mv    { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ba-zt    { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums;
+      min-width: 30px; font-size: 11px; }
     @media (max-width: 420px) {
       /* Auf sehr schmalen Geraeten hat die Bahn sonst weniger Platz als die
          Zahlen daneben — dann lieber die Bahn schmaler als die Werte kuerzen. */
-      .ba-zeile-z { grid-template-columns: 20px 56px minmax(0, 1fr) 52px; gap: 7px; font-size: 11px; }
+      .ba-zeile-z { grid-template-columns: 20px 54px minmax(0, 1fr) 48px auto;
+        gap: 6px; font-size: 11px; }
+      .ba-zt { min-width: 26px; font-size: 10px; }
     }
 
     /* ── Batterie-Detail: Servicebatterie als EINE Karte ───────────────────
@@ -459,6 +473,46 @@
     .bd-src-sub { font-size: 12px; color: var(--text3); margin-top: auto;
       font-variant-numeric: tabular-nums;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Gemeinsamer Start ────────────────────────────────────────────────
+       Die Kacheln haengen an verschiedenen Quellen (/api/status, waterlevel,
+       weather, wartung, Heizung) mit sehr verschiedenen Antwortzeiten. Ohne
+       diese Sperre baut sich die Seite beim Neuladen stueckweise auf. Mit
+       opacity statt display bleibt das Layout gerechnet — Canvas-Breiten
+       stimmen also von Anfang an, was bei display:none nicht der Fall waere. */
+    html.startet main,
+    html.startet .statusbar { opacity: 0; }
+    main, .statusbar { opacity: 1; transition: opacity .18s ease; }
+
+    /* ── Kacheln anordnen ─────────────────────────────────────────────────
+       Eigener Modus statt dauerhaftem Ziehen: am Kartentisch haengt ein
+       Touchscreen, und ein versehentlich verschobenes Dashboard waere
+       aergerlicher als ein Klick mehr zum Einschalten. */
+    .ordnen-leiste { position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 300;
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--accent);
+      border-radius: 999px; padding: 9px 10px 9px 18px;
+      box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+    .ordnen-leiste.hidden { display: none; }
+    .ordnen-text { font-size: 13px; color: var(--text2); white-space: nowrap; }
+    .ordnen-btn { background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 999px; padding: 7px 14px;
+      font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+    .ordnen-btn:hover { background: var(--border); }
+    .ordnen-fertig { background: var(--accent); border-color: var(--accent); color: #06202b; font-weight: 600; }
+    @media (max-width: 420px) {
+      .ordnen-text { display: none; }
+      .ordnen-leiste { padding: 9px 10px; }
+    }
+    /* Im Ordnen-Modus: Kachel als greifbar markieren, Auswahl unterdruecken. */
+    body.kacheln-ordnen main > .card {
+      cursor: grab; outline: 1px dashed var(--accent); outline-offset: -3px;
+      user-select: none; -webkit-user-select: none; touch-action: none; }
+    body.kacheln-ordnen main > .card:active { cursor: grabbing; }
+    body.kacheln-ordnen main > .card.kachel-zieht {
+      opacity: .65; outline-style: solid; transform: scale(.985);
+      box-shadow: 0 8px 26px rgba(0,0,0,.5); }
 
     /* ── Statusleiste ─────────────────────────────────────────────────────
        Alle Kernwerte in einer dichten Zeile ueber den Kacheln. Jedes Feld
@@ -954,7 +1008,8 @@
       display: grid; gap: var(--gap);
       max-width: 1500px; margin: 0 auto; padding: 16px; box-sizing: border-box;
       grid-template-columns: 1fr;
-      grid-template-areas: "antwort" "bilanz" "zellen" "geraete" "verlauf" "starter";
+      grid-template-areas: "antwort" "bilanz" "zellen" "geraete" "verlauf"
+                           "energie" "woche" "starter";
       /* Die Rasterflaeche ist so hoch wie das Fenster. Ohne align-content
          verteilt der Browser die Restzhoehe auf die Zeilen: die Zeilen werden
          hoeher als ihr Inhalt, und mit align-items:start klebten die Karten
@@ -983,7 +1038,8 @@
           "antwort antwort"
           "bilanz  zellen"
           "verlauf geraete"
-          "verlauf starter";
+          "verlauf starter"
+          "energie woche";
       }
     }
     .bd-a-antwort { grid-area: antwort; }
@@ -992,6 +1048,12 @@
     .bd-a-geraete { grid-area: geraete; }
     .bd-a-verlauf { grid-area: verlauf; }
     .bd-a-starter { grid-area: starter; }
+    /* Stromverlauf und 7-Tage-Trend, von der frueheren Unterseite hierher.
+       Sie behalten ihre .vl-karte-Optik, muessen sich im Raster aber wie die
+       uebrigen Karten verhalten: kein eigener Aussenabstand, volle Zeilenhoehe. */
+    .bd-a-energie { grid-area: energie; }
+    .bd-a-woche   { grid-area: woche; }
+    .bd-grid > .vl-karte { margin: 0; height: 100%; box-sizing: border-box; }
     /* Im Raster erzeugt jede Karte ihren eigenen Abstand ueber gap — die alten
        Einzel-Abstaende wuerden sich addieren. */
     .bd-grid .sb-card,

@@ -35,26 +35,11 @@ let _vlLaeuft   = false;
  * Getrennt, weil der popstate-Handler in lightdetail.js dieselbe Ansicht
  * herstellen muss, ohne einen weiteren Eintrag zu schieben.
  */
-function _verlaufAnzeigen() {
-  $('verlaufOverlay').classList.remove('hidden');
-  _vlBereichKnoepfe();
-  ladeVerlauf();
-  // Der 7-Tage-Trend (charts.js) sitzt seit dem Umzug auf dieser Seite. Erst
-  // nach zwei Frames zeichnen: vorher war das Overlay noch versteckt, das
-  // Canvas misst dann 0 Breite und _renderWeekChart steigt still aus.
-  requestAnimationFrame(() => requestAnimationFrame(() => _loadAndRenderWeekChart()));
-}
-
-function openVerlauf() {
-  _closeAllOverlays();
-  history.pushState({ overlay: 'verlauf' }, '', '#verlauf');
-  _verlaufAnzeigen();
-}
-
-function closeVerlauf() {
-  $('verlaufOverlay').classList.add('hidden');
-  history.replaceState(null, '', location.pathname);
-}
+// _verlaufAnzeigen(), openVerlauf() und closeVerlauf() standen hier: sie haben
+// die eigene Unterseite geoeffnet und geschlossen. Die Seite ist entfallen,
+// beide Diagramme sitzen jetzt im Raster der Batterie-Detailseite. Der
+// Zeichencode darunter ist unveraendert; angestossen wird er von
+// _battDetailAnzeigen() in charts.js.
 
 function _vlBereichKnoepfe() {
   const box = $('vlBereiche');
@@ -67,11 +52,25 @@ function _vlBereichKnoepfe() {
 function setVerlaufBereich(secs) {
   _vlBereich = secs;
   _vlBereichKnoepfe();
-  ladeVerlauf();
+  ladeVerlauf(true);           // Bereichswechsel darf immer nachladen
 }
 
-async function ladeVerlauf() {
+// Der Abruf haengt jetzt am Oeffnen der Batterieseite, nicht mehr an einer
+// eigenen Unterseite, die man bewusst aufruft — im Kiosk ist das ein
+// Haupt-Tab. /api/history hat den Server schon einmal 11,1 s blockiert;
+// deshalb je Zeitfenster hoechstens alle 60 s neu holen. Beim Umschalten des
+// Bereichs wird bewusst durchgelassen (erzwingen = true).
+const _VL_ERNEUT_NACH_S = 60;
+const _vlGeholt = {};
+
+async function ladeVerlauf(erzwingen) {
   if (_vlLaeuft) return;
+  const jetzt = Date.now() / 1000;
+  if (!erzwingen && _vlGeholt[_vlBereich] && (jetzt - _vlGeholt[_vlBereich]) < _VL_ERNEUT_NACH_S) {
+    zeichneVerlauf();          // vorhandene Daten neu zeichnen, kein Abruf
+    return;
+  }
+  _vlGeholt[_vlBereich] = jetzt;
   _vlLaeuft = true;
   const hinweis = $('vlHinweis');
   if (hinweis) hinweis.textContent = 'lädt …';
@@ -251,18 +250,7 @@ function _vlSummen(R) {
     </div>`).join('');
 }
 
-// Neu zeichnen, wenn sich die Groesse aendert — die Canvas-Bitmap haengt an der
-// Pixeldichte und wuerde sonst verzerrt stehenbleiben.
-let _vlResizeRaf = null;
-window.addEventListener('resize', () => {
-  if (!$('verlaufOverlay') || $('verlaufOverlay').classList.contains('hidden')) return;
-  if (_vlResizeRaf) cancelAnimationFrame(_vlResizeRaf);
-  _vlResizeRaf = requestAnimationFrame(() => {
-    _vlResizeRaf = null;
-    zeichneVerlauf();
-    // _chartsBeiGroessenwechsel in charts.js zeichnet den Wochentrend zwar
-    // ebenfalls neu; hier steht es, damit die Seite auch dann vollstaendig
-    // ist, wenn dieser Pfad zuerst laeuft.
-    if (typeof _weekData !== 'undefined' && _weekData) _renderWeekChart(_weekData);
-  });
-});
+// Der eigene resize-Listener stand hier. Er prueft auf #verlaufOverlay, das es
+// nicht mehr gibt — und zwei Listener auf einem Kern sind einer zu viel.
+// _chartsBeiGroessenwechsel() in charts.js zeichnet jetzt alle drei Diagramme
+// der Batterieseite gemeinsam neu.

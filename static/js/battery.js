@@ -804,6 +804,30 @@ const _ZELL_SKALA_MV = 75;   // Balkenende = Rot-Schwelle
 const _ZELL_GELB_MV  = 40;
 const _ZELL_ROT_MV   = 75;
 
+/**
+ * Farbe der Zelltemperatur.
+ *
+ * ABSOLUT, nicht als Abweichung: Temperatur ist eine Sicherheitsgroesse —
+ * Laden bei -2 °C schaedigt die Zelle dauerhaft (Lithium-Plating), egal was
+ * die Nachbarzellen tun. Eine Abweichungsdarstellung wuerde bei den real
+ * gemessenen 19-22 °C denselben Fehler wiederholen, den die Spannungsskala
+ * losgeworden ist: aus 1,5 K Streuung wuerde ein Vollausschlag.
+ *
+ * Die Schwellen sind NICHT neu erfunden, sondern die im Projekt bereits
+ * verwendeten: charts.js faerbt den Zellgesundheits-Punkt ab >40 °C warm und
+ * unter 5 °C kalt, alarms.json warnt ab 45 °C. Fuer LiFePO4 gilt fachlich:
+ * Laden nur zwischen 0 und 45 °C, darunter Plating, darueber beschleunigte
+ * Alterung.
+ */
+const _ZELL_T_KALT = 5, _ZELL_T_FROST = 0, _ZELL_T_WARM = 40, _ZELL_T_HEISS = 45;
+
+function _zellTempFarbe(t) {
+  if (t == null) return 'var(--text3)';
+  if (t < _ZELL_T_FROST || t > _ZELL_T_HEISS) return 'var(--red)';
+  if (t < _ZELL_T_KALT  || t > _ZELL_T_WARM)  return 'var(--yellow)';
+  return 'var(--accent)';
+}
+
 function _zellFarbe(mv) {
   const a = Math.abs(mv);
   return a > _ZELL_ROT_MV ? 'var(--red)' : a > _ZELL_GELB_MV ? 'var(--yellow)' : 'var(--green)';
@@ -819,16 +843,31 @@ function _baZellen(data) {
   const mittel = gueltig.reduce((a, x) => a + x, 0) / gueltig.length;
   const spreizung = Math.max(...gueltig) - Math.min(...gueltig);
 
+  // Meldet ueberhaupt eine Zelle eine Temperatur? Wenn nein, faellt die Spalte
+  // restlos weg statt vier Striche zu zeigen.
+  const hatTemps = c.some(z => z && z.temp != null);
+
   // Zellen OHNE Wert werden als Zeile mit "--" ausgegeben statt stillschweigend
   // uebersprungen: eine fehlende Zelle ist eine Information, kein Nichts.
   const zeilen = c.map((z, i) => {
     const v = mv[i];
+    // Temperatur als eigene, zweite Farbe am Zeilenende. Sie kostet keine
+    // Zeilenhoehe und zeigt den absoluten Wert — bei vier Zellen und wenigen
+    // Kelvin Spanne ist die Zahl aussagekraeftiger als jede Balkenlaenge.
+    // Fehlt sie bei einer Zelle, bleibt die Spalte dort leer (aber vorhanden,
+    // sonst verrutscht das Raster der ganzen Zeile).
+    const t  = (z && z.temp != null) ? z.temp : null;
+    const tc = hatTemps
+      ? `<span class="ba-zt" style="color:${_zellTempFarbe(t)}">${
+          t == null ? '--' : t.toFixed(0) + '°'}</span>`
+      : '';
     if (v == null) {
       return `<div class="ba-zeile-z">
         <span class="ba-znr">#${i + 1}</span>
         <span class="ba-zv" style="color:var(--text3)">-- V</span>
         <div class="ba-bahn-z"><div class="ba-null"></div></div>
         <span class="ba-mv" style="color:var(--text3)">--</span>
+        ${tc}
       </div>`;
     }
     const a = v - mittel;
@@ -843,6 +882,7 @@ function _baZellen(data) {
         <div class="ba-bar-z${ueber ? ' ba-bar-ueber' : ''}"
              style="left:${links}%;width:${breite}%;background:${f}"></div></div>
       <span class="ba-mv" style="color:${f}">${a > 0 ? '+' : ''}${a.toFixed(0)} mV</span>
+      ${tc}
     </div>`;
   }).join('');
 
@@ -852,8 +892,14 @@ function _baZellen(data) {
     bms.comm_error                ? '<span class="chip err">Kommunikationsfehler</span>' : '',
   ].filter(Boolean).join('');
 
-  const temps = c.map((z, i) => (z && z.temp != null)
-    ? `#${i + 1} ${z.temp.toFixed(0)}°` : '').filter(Boolean).join(' · ');
+  // Die Temperaturen stehen jetzt je Zelle in der Zeile; die Fusszeile nennt
+  // nur noch die Spanne, wenn es etwas zu nennen gibt.
+  const tw = c.map(z => (z && z.temp != null) ? z.temp : null).filter(x => x != null);
+  const temps = tw.length
+    ? (Math.min(...tw) === Math.max(...tw)
+        ? `alle ${tw[0].toFixed(0)} °C`
+        : `${Math.min(...tw).toFixed(0)}–${Math.max(...tw).toFixed(0)} °C`)
+    : '';
 
   return `<div class="sb-card">
     <div class="sb-hd">${icon('gauge', {size: 14})} Zellen

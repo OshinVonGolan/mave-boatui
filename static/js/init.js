@@ -5,19 +5,44 @@ _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 loadPresets();
 
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern
-fetch('/api/status').then(r => r.ok ? r.json() : null).then(d => { if (d) handleData(d); }).catch(() => {});
+const _pStatus = fetch('/api/status').then(r => r.ok ? r.json() : null)
+  .then(d => { if (d) handleData(d); }).catch(() => {});
 
 connect();
-fetchConnectivity();
+const _pConn = fetchConnectivity();
 setInterval(fetchConnectivity, 25000);
-_wartungLoad();
+const _pWart = _wartungLoad();
 refreshVersion();
 setInterval(refreshVersion, 60000);   // Update-Status periodisch frisch halten
 refreshChargerStatus();
 setInterval(refreshChargerStatus, 300000);  // Badge alle 5 min aktualisieren
 
-fetchWaterLevel();
+const _pWl = fetchWaterLevel();
 setInterval(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
+
+/**
+ * Gemeinsamer Start.
+ *
+ * Die Kacheln haengen an fuenf verschiedenen Quellen mit sehr verschiedenen
+ * Antwortzeiten — beim Neuladen bauten sie sich deshalb einzeln auf. Hier
+ * wird EINMAL gewartet, bis alle da sind, und dann alles zusammen gezeigt.
+ *
+ * allSettled statt all: eine Quelle, die nicht antwortet (Wetter ohne
+ * Internet, Heizung offline), darf die Seite nicht aufhalten. Zusaetzlich
+ * ein Deckel — nach 2 Sekunden wird gezeigt, was da ist. Die harte Notbremse
+ * in index.html (4 s) bleibt als zweite Ebene bestehen, falls dieses Bundle
+ * gar nicht erst laeuft.
+ */
+const _START_DECKEL_MS = 2000;
+function _startFreigeben() {
+  document.documentElement.classList.remove('startet');
+}
+Promise.race([
+  Promise.allSettled([_pStatus, _pConn, _pWart, _pWl,
+                      typeof fetchWeather === 'function' ? fetchWeather() : null,
+                      typeof ladeHeizung  === 'function' ? ladeHeizung(false) : null]),
+  new Promise(r => setTimeout(r, _START_DECKEL_MS)),
+]).then(() => requestAnimationFrame(_startFreigeben));
 
 // Heizung: eigener Poller, damit die Kachel auch ohne WebSocket-Daten lebt.
 // 6 s reichen — die Heizung aendert sich nicht in Sekundenbruchteilen, und der

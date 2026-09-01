@@ -218,7 +218,8 @@ function _renderWlSpark(measurements) {
 }
 
 function fetchWaterLevel() {
-  fetch('/api/waterlevel')
+  // gibt das Promise zurueck: der gemeinsame Start wartet darauf
+  return fetch('/api/waterlevel')
     .then(r => r.ok ? r.json() : null)
     .then(d => {
       if (!d) return;

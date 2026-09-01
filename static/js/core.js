@@ -221,11 +221,29 @@ document.addEventListener('click', e => {
 // kuenftiger Umbau der Kopfzeile das Layout mehr aus dem Tritt bringen.
 // Im Kiosk ist die Kopfzeile ausgeblendet — dann ist die Hoehe 0, und genau
 // das ist auch richtig.
+/**
+ * Versionsnummer nur zeigen, wenn sie neben den Schriftzug passt.
+ *
+ * .logo enthaelt "MAVE", den Untertitel und die Version. Ohne nowrap rutschte
+ * die Version auf schmalen Displays unter den Schriftzug und machte die
+ * Kopfzeile eine Zeile hoeher. Gemessen statt an einer Breite geraten: erst
+ * einblenden, dann pruefen, ob der Inhalt noch in die Rasterspalte passt.
+ */
+function _kopfLogoPruefen() {
+  const logo = document.querySelector('.logo');
+  if (!logo) return;
+  logo.classList.remove('ohne-version');
+  // scrollWidth > clientWidth heisst: der Inhalt ist breiter als die Spalte.
+  // +1 px Toleranz gegen Rundung bei gebrochenen Zoomstufen.
+  if (logo.scrollWidth > logo.clientWidth + 1) logo.classList.add('ohne-version');
+}
+
 function _kopfhoeheFuehren() {
   const kopf = document.querySelector('header');
   if (!kopf) return;
   let letzte = -1;
   const setzen = () => {
+    _kopfLogoPruefen();                    // erst entscheiden, dann messen
     const h = Math.round(kopf.getBoundingClientRect().height);
     if (h === letzte) return;              // nichts tun, wenn sich nichts aendert
     letzte = h;

@@ -55,7 +55,8 @@ function _renderWeather() {
 }
 
 function fetchWeather() {
-  fetch('/api/weather')
+  // gibt das Promise zurueck: der gemeinsame Start wartet darauf
+  return fetch('/api/weather')
     .then(r => r.ok ? r.json() : null)
     .then(d => { if (d) { _wxData = d; _renderWeather(); } })
     .catch(() => {});
