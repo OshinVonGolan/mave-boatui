@@ -111,11 +111,11 @@ _VORGABE_REGELN: dict = {
     # verbaut oder der Zustand nicht beurteilbar ist, und die Engine
     # ueberspringt None. Deshalb zeigt keine dieser Regeln auf einen Rohwert.
     'hz_offline':    {"name": "Heizung ohne Verbindung", "field": "heizung.verbindung_weg_s", "op": ">", "threshold": 120, "step": 30, "bounds": [30, 1800], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_fehlercode': {"name": "Heizung Stoerung", "field": "heizung.fehler_s", "op": ">", "threshold": 60, "step": 30, "bounds": [0, 900], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_frost_warn': {"name": "Kabine kuehlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "severity": "warning", "enabled": True},
+    'hz_fehlercode': {"name": "Heizung Störung", "field": "heizung.fehler_s", "op": ">", "threshold": 60, "step": 30, "bounds": [0, 900], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_frost_warn': {"name": "Kabine kühlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "severity": "warning", "enabled": True},
     'hz_frost':      {"name": "Frostgefahr", "field": "heizung.frost_temp", "op": "<", "threshold": 4, "step": 0.5, "bounds": [0.0, 15.0], "unit": "\u00b0C", "severity": "critical", "enabled": True},
-    'hz_kein_raum':  {"name": "Kein Raumfuehler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_raeume_weg': {"name": "Raumfuehler stumm", "field": "heizung.raeume_weg_s", "op": ">", "threshold": 1800, "step": 300, "bounds": [300, 21600], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_kein_raum':  {"name": "Kein Raumfühler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_raeume_weg': {"name": "Raumfühler stumm", "field": "heizung.raeume_weg_s", "op": ">", "threshold": 1800, "step": 300, "bounds": [300, 21600], "unit": "s", "severity": "warning", "enabled": True},
 }
 
 
@@ -139,8 +139,15 @@ class AlarmEngine:
         # alarms.json liegt (die Datei wird nie mitdeployt).
         zusammen = {k: dict(v) for k, v in _VORGABE_REGELN.items()}
         for k, v in rules.items():
-            if isinstance(v, dict):
-                zusammen[k] = {**zusammen.get(k, {}), **v}
+            if not isinstance(v, dict):
+                zusammen[k] = v
+            elif k in zusammen:
+                # Aus der Datei nur das uebernehmen, was der Eigner ueberhaupt
+                # aendern kann (_PATCHABLE_FIELDS). Name, Feldpfad, Einheit und
+                # Reglergrenzen kommen aus der Vorgabe — sonst bliebe ein dort
+                # korrigierter Feldpfad auf jedem Geraet, das schon eine
+                # alarms.json hat, fuer immer der alte und die Regel tot.
+                zusammen[k].update({f: v[f] for f in _PATCHABLE_FIELDS if f in v})
             else:
                 zusammen[k] = v
         neu_dazu = [k for k in zusammen if k not in rules]
