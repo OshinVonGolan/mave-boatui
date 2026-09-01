@@ -143,21 +143,34 @@ function renderChargePie(active, isAvg) {
   }).join('');
 }
 
+// Welche Alarmregel faerbt welche Kachel rot. Bewusst eine Zuordnung statt
+// einer Namenskonvention: nicht jeder Alarm gehoert sichtbar auf eine Kachel,
+// und derselbe Alarm kann kuenftig auf mehreren stehen.
 const _ALARM_CARD_MAP = {
   bat_soc_warn: 'battCard', bat_soc_crit: 'battCard',
   bat_voltage: 'battCard', bat_temp_high: 'battCard',
   starter_voltage: 'battCard',
   bms_comm_err: 'battCard', bms_min_v: 'battCard', bms_max_v: 'battCard',
   bms_min_t: 'battCard', bms_max_t: 'battCard',
+  hz_offline: 'heizungCard', hz_fehlercode: 'heizungCard',
+  hz_frost: 'heizungCard', hz_frost_warn: 'heizungCard',
+  hz_kein_raum: 'heizungCard', hz_raeume_weg: 'heizungCard',
 };
+
+// Jede Kachel, die ueberhaupt eine Umrandung bekommen kann — auch die ohne
+// aktuell aktiven Alarm muss zurueckgesetzt werden, sonst bleibt die Umrandung
+// nach dem Aufloesen stehen.
+const _ALARM_CARDS = [...new Set(Object.values(_ALARM_CARD_MAP))];
 
 function _applyAlarmBorders(alarms) {
   const activeKeys = new Set(
     alarms.filter(a => !a.resolved).map(a => a.key)
   );
-  // Batterie-Kachel
-  $('battCard')?.classList.toggle('card--alarm',
-    [...activeKeys].some(k => _ALARM_CARD_MAP[k] === 'battCard'));
+  // Kacheln mit aktivem Alarm einsammeln und ALLE bekannten Kacheln setzen
+  // bzw. zuruecksetzen. Vorher war hier nur die Batterie fest verdrahtet.
+  const betroffen = new Set();
+  activeKeys.forEach(k => { const c = _ALARM_CARD_MAP[k]; if (c) betroffen.add(c); });
+  _ALARM_CARDS.forEach(id => $(id)?.classList.toggle('card--alarm', betroffen.has(id)));
   // Tank-Balken
   [1, 2].forEach(i => {
     const wrap = $(`tank${i}Fill`)?.parentElement;

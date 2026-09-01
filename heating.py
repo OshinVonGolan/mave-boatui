@@ -45,6 +45,99 @@ _VORGABEN: dict = {
 }
 
 
+def _raum_kennzahlen(state: dict | None) -> dict:
+    """Raumliste zu Zahlen verdichten.
+
+    Die Alarm-Engine laeuft mit Punktpfaden durch Dicts und kann NICHT in
+    Listen greifen (alarm_engine._get_field). Alles, was einzelne Raeume
+    betrifft, muss deshalb hier zu einem Skalar werden. Zehn Raeume rund
+    2,4 mal je Sekunde durchzugehen kostet nichts.
+
+    Gezaehlt wird nur, was der Eigner auch eingeschaltet hat: ein bewusst
+    abgeschalteter Raum ist kein Fehler, und ein Fuehler in einem
+    abgeschalteten Raum darf keinen Alarm ausloesen.
+    """
+    raeume = (state or {}).get('rooms') or []
+    aktiv  = [r for r in raeume if isinstance(r, dict) and r.get('enabled') is not False]
+    online = [r for r in aktiv if r.get('conn') == 'online']
+    temps  = [r.get('roomTemp') for r in online
+              if isinstance(r.get('roomTemp'), (int, float))]
+    # Ist ueberhaupt ein Fuehler angelernt? An diesem Boot ist die Raumliste
+    # derzeit leer (am Geraet geprueft) — dann darf NICHTS abgeleitet werden,
+    # sonst stuende sofort ein Dauer-Alarm "kein Raum online" in der Liste.
+    verbaut = len(aktiv) > 0
+    return {
+        'raeume_gesamt':  len(raeume),
+        'raeume_aktiv':   len(aktiv),
+        'raeume_online':  len(online) if verbaut else None,
+        'raeume_offline': (len(aktiv) - len(online)) if verbaut else None,
+        # ACHTUNG: fault ist immer ein String; der stoerungsfreie Normalwert
+        # heisst "none" (Firmware lib/core/include/mave/types.h, RoomFault) und
+        # ist damit truthy. Ein blosses `if r.get('fault')` wuerde jeden Raum
+        # als gestoert zaehlen.
+        'raeume_fehler':  sum(1 for r in aktiv
+                              if r.get('fault') not in (None, '', 'none')) if verbaut else None,
+        # Kaeltester eingeschalteter Raum, der auch meldet. None, wenn keiner
+        # meldet — die Alarmregel wertet dann nicht aus, statt 0 anzunehmen.
+        'raum_temp_min':  round(min(temps), 1) if temps else None,
+    }
+
+
+def _heizgeraet_verbaut(state: dict | None) -> bool:
+    """Haengt ueberhaupt ein Heizgeraet an der Leitung des Hubs?
+
+    Am laufenden Hub steht hier heute availability='not_wired', available=False
+    und flowTemp=None: der ESP laeuft, das Autoterm-Geraet ist noch nicht
+    angeschlossen. Alles, was das Geraet selbst betrifft (Fehlercode,
+    Leitungsalter), darf deshalb erst beurteilt werden, wenn es verbaut ist.
+    """
+    h = ((state or {}).get('heater') or {})
+    if h.get('available') is True:
+        return True
+    # Die Firmware kennt genau "ok", "not_wired", "no_contact", "bus_silent"
+    # und "bus_error" (lib/platform/web/heater_health.h). Nur bei "ok" sind die
+    # Geraetewerte frisch — bei den uebrigen sind sie alt und duerfen keinen
+    # Alarm mehr tragen.
+    return h.get('availability') == 'ok'
+
+
+class _Haltezeit:
+    """Wie lange ist eine Bedingung schon ununterbrochen wahr?
+
+    Die Alarm-Engine kennt keine Entprellung — sie schlaegt beim ersten
+    Messwert an, der die Schwelle reisst (alarm_engine.check). Ein kurzer
+    Funkaussetzer wuerde damit sofort einen Alarm erzeugen. Statt die Engine
+    umzubauen, liefern wir ihr Sekunden: die Regel vergleicht dann "wie lange
+    schon" gegen eine Schwelle, und die Entprellung steckt in der Schwelle.
+
+    Gemerkt wird ein Zeitpunkt, kein Zaehler — mehrfaches Abfragen im selben
+    Moment veraendert das Ergebnis also nicht. Wichtig sind die drei Rueckgaben:
+      None  Bedingung nicht beurteilbar (Anlage nicht verbaut, Daten fehlen).
+            Die Engine ueberspringt None und loescht dabei einen bereits
+            stehenden Alarm NICHT — genau richtig fuer eine Datenluecke.
+      0.0   Bedingung ist falsch. Ausdruecklich eine Zahl und nicht None,
+            damit ein stehender Alarm sich auch wieder aufloest.
+      >0    Sekunden seit dem Wahrwerden.
+    """
+
+    __slots__ = ('_seit',)
+
+    def __init__(self):
+        self._seit: float | None = None
+
+    def __call__(self, wahr: bool | None) -> float | None:
+        if wahr is None:
+            self._seit = None
+            return None
+        if not wahr:
+            self._seit = None
+            return 0.0
+        jetzt = time.monotonic()
+        if self._seit is None:
+            self._seit = jetzt
+        return round(jetzt - self._seit, 1)
+
+
 class StokerClient:
     """Haelt Konfiguration, pollt den Hub und reicht Schaltbefehle durch."""
 
@@ -59,6 +152,11 @@ class StokerClient:
         self._zeit_gesetzt = False
         self._running = False
         self._thread: threading.Thread | None = None
+        # Entprellung fuer die Alarmfelder (siehe _Haltezeit). Die fehlende
+        # Verbindung braucht keinen: dafuer gibt es schon age_s.
+        self._hz_fehler = _Haltezeit()   # Heizgeraet meldet Fehlercode
+        self._hz_raeume = _Haltezeit()   # mindestens ein Fuehler stumm
+        self._hz_leer   = _Haltezeit()   # kein einziger Fuehler mehr online
 
     # ── Konfiguration ───────────────────────────────────────────────────────
 
@@ -212,7 +310,7 @@ class StokerClient:
         alter = (time.monotonic() - last_ok) if last_ok is not None else None
         # Kurze Aussetzer sind normal; erst nach einer Weile gilt es als weg.
         erreichbar = alter is not None and alter < 30
-        return {
+        schnapp = {
             'enabled': cfg_an,
             'configured': bool(host),
             'reachable': erreichbar,
@@ -220,6 +318,88 @@ class StokerClient:
             'error': fehler,
             'info': info,
             'state': state,
+        }
+        schnapp.update(_raum_kennzahlen(state))
+        with self._lock:
+            schnapp.update(self._alarm_felder(schnapp, cfg_an, host, erreichbar,
+                                              last_ok, state))
+        return schnapp
+
+    def _alarm_felder(self, schnapp: dict, cfg_an: bool, host: str,
+                      erreichbar: bool, last_ok: float | None,
+                      state: dict | None) -> dict:
+        """Fertig entprellte Werte, auf die die Alarmregeln zeigen.
+
+        Warum ueberhaupt eigene Felder statt der rohen? Zwei Gruende:
+
+        1. 'reachable' ist auch dann falsch, wenn die Anbindung gar nicht
+           eingeschaltet ist, kein Host eingetragen wurde oder der Pi gerade
+           erst gestartet ist. Eine Regel darauf stuende bei jedem Boot ohne
+           Heizung dauerhaft an — der sicherste Weg, ein Alarmsystem
+           unglaubwuerdig zu machen.
+        2. Die Engine entprellt nicht. Sekundenwerte verlagern die Entprellung
+           in die Schwelle, die der Eigner in den Einstellungen sehen und
+           aendern kann.
+
+        Durchgaengig gilt: was nicht verbaut oder nicht bekannt ist, wird None
+        — dann schweigt die Regel, statt zu raten.
+        """
+        h        = ((state or {}).get('heater') or {})
+        verbaut  = _heizgeraet_verbaut(state)
+        # Erst urteilen, wenn der Hub ueberhaupt schon einmal geantwortet hat.
+        # last_ok is None heisst: eingeschaltet, aber noch nie erreicht (frisch
+        # gestartet oder nie installiert) — kein Fall fuer einen Alarm.
+        beurteilbar = cfg_an and bool(host) and last_ok is not None
+        # Sekunden seit der letzten erfolgreichen Antwort. Das IST schon die
+        # Entprellung — ein eigener Halte-Zaehler waere doppelt gemoppelt und
+        # wuerde die Schwelle verfaelschen (er liefe erst an, wenn 'reachable'
+        # nach 30 s umspringt; aus 120 s Schwelle wuerden real 150 s).
+        # So bedeutet die Schwelle genau das, was in den Einstellungen steht:
+        # so lange kein Lebenszeichen mehr.
+        weg_s = round(schnapp.get('age_s') or 0.0, 1) if beurteilbar else None
+
+        # Fehlercode des Heizgeraets. 0 heisst stoerungsfrei.
+        code = h.get('errorCode')
+        fehler_s = self._hz_fehler(
+            (isinstance(code, (int, float)) and not isinstance(code, bool) and code != 0)
+            if (verbaut and erreichbar) else None)
+
+        # Frostschutz: nur beurteilen, wenn die Heizung ueberhaupt heizen SOLL.
+        # Ein bewusst abgestelltes Boot im Winterlager kuehlt planmaessig aus —
+        # daraus einen Dauer-Alarm zu machen waere schlicht falsch.
+        # Wichtig: _einmal_pollen() leert self._state bei einem Fehlschlag NICHT.
+        # Ohne die Erreichbarkeitssperre wuerde ein Alarm auf Messwerten von
+        # vorgestern anlaufen — im Winterlager (Hub aus, Pi laeuft) monatelang.
+        # Ein bereits stehender Alarm bleibt dabei stehen: die Engine
+        # ueberspringt None, ohne ihn zu loeschen.
+        temp_min  = schnapp.get('raum_temp_min')
+        soll_heizen = h.get('mode') not in (None, 'off')
+        frost_temp = temp_min if (erreichbar and soll_heizen
+                                  and temp_min is not None) else None
+
+        offline   = schnapp.get('raeume_offline')
+        online    = schnapp.get('raeume_online')
+        raeume_s  = self._hz_raeume(None if (offline is None or not erreichbar)
+                                    else offline > 0)
+        leer_s    = self._hz_leer(None if (online is None or not erreichbar)
+                                  else online < 1)
+
+        # Bewusst KEINE Regel auf state.heater.link.lastFrameAgeS: die Leitung
+        # zum Autoterm schweigt im Ruhebetrieb regulaer (Frostwacht, Pausen
+        # zwischen Brennphasen), und 'availability' wird von der Firmware
+        # ohnehin genau aus dieser Stille gebildet — mit 600 s Toleranz
+        # (heater_health.h HEATER_QUIET_GRACE_S). Ein Alarm auf das
+        # Leitungsalter, gegatet auf 'verbaut', waere ein Zirkelschluss: er
+        # koennte nur im schmalen Fenster vor dem Umkippen feuern und wuerde
+        # danach als Datenluecke haengen bleiben.
+
+        return {
+            'verbindung_weg_s': weg_s,
+            'fehler_s':         fehler_s,
+            'frost_temp':       frost_temp,
+            'raeume_weg_s':     raeume_s,
+            'kein_raum_s':      leer_s,
+            'geraet_verbaut':   verbaut,
         }
 
     # ── Bedienen ────────────────────────────────────────────────────────────

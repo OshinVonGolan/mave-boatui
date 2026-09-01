@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.44.0'
+VERSION  = _git_semver() or '1.45.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -291,7 +291,11 @@ def _grob_sammeln(entry: dict) -> None:
 
 async def broadcast(data: dict):
     global _hist_last_ts, _hist_last_mono
-    check_data = {**data, '_network_age': can_if.time_since_last_message()}
+    # Die Heizung haengt an einem eigenen Poller und war deshalb bisher gar
+    # nicht Teil der Alarmpruefung — Regeln auf heizung.* konnten nie greifen.
+    check_data = {**data,
+                  '_network_age': can_if.time_since_last_message(),
+                  'heizung': heizung.snapshot()}
     alarms.check(check_data)
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
     soc = data.get('battery', {}).get('soc')

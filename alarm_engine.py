@@ -85,6 +85,40 @@ def _evaluate(rule: dict, val) -> bool | None:
     return None
 
 
+# ── Mitgelieferte Regeln ────────────────────────────────────────────────────
+# alarms.json ist geraetelokal (gitignored) und wird beim Bearbeiten von Hand
+# komplett neu geschrieben — ueber ein Update kann dort also nichts ankommen.
+# Neue Regeln muessen deshalb hier stehen: beim Laden wird ergaenzt, was in der
+# Datei fehlt. Was drinsteht, gewinnt immer — vom Eigner geaenderte Schwellen
+# oder abgeschaltete Regeln bleiben ueber Updates hinweg erhalten.
+_VORGABE_REGELN: dict = {
+    'bat_soc_warn':    {"name": "SOC niedrig", "field": "battery.soc", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
+    'bat_soc_crit':    {"name": "SOC kritisch", "field": "battery.soc", "op": "<", "threshold": 10, "severity": "critical", "enabled": True},
+    'bat_voltage':     {"name": "Batterie Spannung", "field": "battery.voltage", "op": "range", "min": 11.8, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning", "enabled": True},
+    'starter_voltage': {"name": "Starterbatterie", "field": "battery.starter_voltage", "op": "range", "min": 11.5, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning", "enabled": True},
+    'bat_temp_high':   {"name": "Batterietemperatur", "field": "battery.temperature", "op": ">", "threshold": 45, "severity": "warning", "enabled": True},
+    'bms_comm_err':    {"name": "BMS Kommunikation", "field": "bms.comm_error", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
+    'bms_min_v':       {"name": "BMS Zellspannung min", "field": "bms.alarm_min_volt", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
+    'bms_max_v':       {"name": "BMS Zellspannung max", "field": "bms.alarm_max_volt", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
+    'bms_min_t':       {"name": "BMS Temperatur min", "field": "bms.alarm_min_temp", "op": ">", "threshold": 0, "severity": "warning", "enabled": True},
+    'bms_max_t':       {"name": "BMS Temperatur max", "field": "bms.alarm_max_temp", "op": ">", "threshold": 0, "severity": "warning", "enabled": True},
+    'tank1_low':       {"name": "Tank 1 niedrig", "field": "tanks.tank1", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
+    'tank2_low':       {"name": "Tank 2 niedrig", "field": "tanks.tank2", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
+    'network_error':   {"name": "CAN-Bus Fehler", "field": "_network_age", "op": ">", "threshold": 30, "severity": "critical", "enabled": True},
+
+    # Heizung. Die Felder sind serverseitig entprellt und gegatet
+    # (heating._alarm_felder) — sie sind None, solange die Anlage nicht
+    # verbaut oder der Zustand nicht beurteilbar ist, und die Engine
+    # ueberspringt None. Deshalb zeigt keine dieser Regeln auf einen Rohwert.
+    'hz_offline':    {"name": "Heizung ohne Verbindung", "field": "heizung.verbindung_weg_s", "op": ">", "threshold": 120, "step": 30, "bounds": [30, 1800], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_fehlercode': {"name": "Heizung Stoerung", "field": "heizung.fehler_s", "op": ">", "threshold": 60, "step": 30, "bounds": [0, 900], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_frost_warn': {"name": "Kabine kuehlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "severity": "warning", "enabled": True},
+    'hz_frost':      {"name": "Frostgefahr", "field": "heizung.frost_temp", "op": "<", "threshold": 4, "step": 0.5, "bounds": [0.0, 15.0], "unit": "\u00b0C", "severity": "critical", "enabled": True},
+    'hz_kein_raum':  {"name": "Kein Raumfuehler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_raeume_weg': {"name": "Raumfuehler stumm", "field": "heizung.raeume_weg_s", "op": ">", "threshold": 1800, "step": 300, "bounds": [300, 21600], "unit": "s", "severity": "warning", "enabled": True},
+}
+
+
 class AlarmEngine:
     def __init__(self):
         self._rules:      dict  = {}
@@ -99,7 +133,20 @@ class AlarmEngine:
     def _load(self):
         data  = read_json(ALARMS_FILE, {})
         rules = data.get('rules') if isinstance(data, dict) else None
-        self._rules = rules if isinstance(rules, dict) else {}
+        rules = rules if isinstance(rules, dict) else {}
+        # Datei gewinnt je Regel, fehlende Regeln kommen aus den Vorgaben.
+        # Nur so erreichen neue Regeln ein Geraet, auf dem schon eine
+        # alarms.json liegt (die Datei wird nie mitdeployt).
+        zusammen = {k: dict(v) for k, v in _VORGABE_REGELN.items()}
+        for k, v in rules.items():
+            if isinstance(v, dict):
+                zusammen[k] = {**zusammen.get(k, {}), **v}
+            else:
+                zusammen[k] = v
+        neu_dazu = [k for k in zusammen if k not in rules]
+        self._rules = zusammen
+        if neu_dazu:
+            log.info("Alarmregeln ergaenzt: %s", ', '.join(sorted(neu_dazu)))
 
     def _save(self):
         write_json(ALARMS_FILE, {'rules': self._rules})

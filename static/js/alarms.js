@@ -245,12 +245,13 @@ function _ruleCategory(key, r) {
   const f = r.field || '';
   if (key.startsWith('bms')     || f.startsWith('bms'))     return 'BMS';
   if (key.startsWith('tank')    || f.startsWith('tanks'))   return 'Tank';
+  if (key.startsWith('hz')      || f.startsWith('heizung')) return 'Heizung';
   if (key.startsWith('network') || f.includes('network') || f.includes('can')) return 'System';
   if (key.startsWith('bat') || key.startsWith('starter') || f.startsWith('battery')) return 'Batterie';
   return 'Sonstige';
 }
 
-const _RULE_CAT_ORDER = ['Batterie', 'BMS', 'Tank', 'System', 'Sonstige'];
+const _RULE_CAT_ORDER = ['Batterie', 'BMS', 'Tank', 'Heizung', 'System', 'Sonstige'];
 
 // Sichtbare Regel-Edits ins Cache übernehmen (vor Kategoriewechsel)
 function _commitVisibleRules() {
@@ -343,6 +344,7 @@ function renderRules(rules) {
           <span class="rule-op">${opLabel}</span>
           <input class="rule-input" id="r_${key}_thr" type="number"
                  step="${r.step ?? 1}" value="${r.threshold}">
+          ${r.unit ? `<span class="rule-op">${r.unit}</span>` : ''}
         </div>`;
     }
 
