@@ -174,16 +174,28 @@ function _kachelOrdnungAnwenden() {
   _tilesDomCache = null;          // der Cache haelt die alte Reihenfolge fest
 }
 
-/** Aktuelle DOM-Reihenfolge sichern. */
-function _kachelOrdnungMerken() {
+/**
+ * Aktuelle DOM-Reihenfolge in die Konfiguration uebernehmen.
+ *
+ * OHNE zu speichern — das ist wichtig: _applyGrid() stellt als Erstes die in
+ * _dsp.reihenfolge stehende Ordnung wieder her. Waehrend des Ziehens muss die
+ * Konfiguration deshalb der DOM-Reihenfolge FOLGEN, sonst macht jede
+ * Neuberechnung den gerade gezogenen Schritt wieder rueckgaengig und die
+ * Kachel schnappt zurueck.
+ */
+function _kachelOrdnungUebernehmen() {
   const main = document.querySelector('main');
   if (!main) return;
   const nachId = {};
   Object.entries(_TILE_SEL).forEach(([id, sel]) => { nachId[sel.replace('#', '')] = id; });
-  _dsp.reihenfolge = [...main.children]
-    .map(el => nachId[el.id]).filter(Boolean);
-  _dspSave();
+  _dsp.reihenfolge = [...main.children].map(el => nachId[el.id]).filter(Boolean);
   _tilesDomCache = null;
+}
+
+/** Wie oben, zusaetzlich dauerhaft sichern. Nur am Ende eines Zuges. */
+function _kachelOrdnungMerken() {
+  _kachelOrdnungUebernehmen();
+  _dspSave();
 }
 
 let _ordnenAn = false;
@@ -263,7 +275,9 @@ function _ordnenVorschau() {
   if (_ordnenRaf !== null) return;
   _ordnenRaf = requestAnimationFrame(() => {
     _ordnenRaf = null;
-    _tilesDomCache = null;        // Reihenfolge hat sich gerade geaendert
+    // ERST die neue DOM-Reihenfolge in die Konfiguration ziehen, DANN neu
+    // rechnen. Andersherum stellt _applyGrid die alte Ordnung wieder her.
+    _kachelOrdnungUebernehmen();
     _applyGrid();
   });
 }
