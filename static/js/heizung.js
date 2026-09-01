@@ -10,6 +10,42 @@ let _hzDaten = null;          // letzter Schnappschuss von /api/heizung
 let _hzFehler = null;         // Meldung des letzten Schaltbefehls
 let _hzBusy = new Set();      // laufende Befehle, damit Knoepfe nicht doppeln
 
+/**
+ * Erwarteter Zustand nach einem Schaltbefehl.
+ *
+ * Zwischen Tippen und Rueckmeldung liegen mehrere Sekunden: der Befehl geht an
+ * den Hub, der Hub an das Geraet, und erst der naechste Abruf bringt den neuen
+ * Zustand zurueck. Ohne Vorgriff wirkt die Bedienung tot, und man tippt ein
+ * zweites Mal.
+ *
+ * Deshalb wird der geschaltete Zustand SOFORT angezeigt und nur so lange
+ * gehalten, bis entweder die Heizung ihn bestaetigt oder die Frist ablaeuft.
+ * Danach zaehlt wieder ausschliesslich, was das Geraet meldet — eine
+ * Anzeige, die eine nicht angekommene Schaltung dauerhaft behauptet, waere
+ * schlimmer als gar keine Rueckmeldung.
+ */
+const HZ_ERWARTET_MS = 3000;
+let _hzErwartet = null;       // { art, wert, bis }
+let _hzErwartetTimer = null;
+
+function _hzErwarte(art, wert) {
+  _hzErwartet = { art, wert, bis: Date.now() + HZ_ERWARTET_MS };
+  clearTimeout(_hzErwartetTimer);
+  // Nach Ablauf einmal neu zeichnen, damit der Vorgriff sichtbar zurueckfaellt.
+  _hzErwartetTimer = setTimeout(() => {
+    _hzErwartet = null;
+    updateHeizungKachel();
+    if (!$('heizungOverlay')?.classList.contains('hidden')) renderHeizungDetail();
+  }, HZ_ERWARTET_MS + 50);
+}
+
+/** Gilt der Vorgriff noch? */
+function _hzErwartetWert(art) {
+  if (!_hzErwartet || _hzErwartet.art !== art) return undefined;
+  if (Date.now() > _hzErwartet.bis) { _hzErwartet = null; return undefined; }
+  return _hzErwartet.wert;
+}
+
 const HZ_PRESETS = ['Frostwacht', 'Nacht', 'Tag', 'Boiler'];
 
 const HZ_ZUSTAND = {
@@ -47,6 +83,18 @@ async function ladeHeizung(fuerDetail) {
     const r = await fetch('/api/heizung');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _hzDaten = await r.json();
+    // Bestaetigt die Heizung den erwarteten Zustand, endet der Vorgriff sofort
+    // — dann zeigt die Kachel wieder echte Werte statt einer Annahme.
+    if (_hzErwartet) {
+      const st = _hzDaten?.state;
+      const ist = _hzErwartet.art === 'preset' ? (st?.preset?.index ?? 'none')
+                : _hzErwartet.art === 'mode'   ? st?.heater?.mode
+                : undefined;
+      if (ist !== undefined && ist === _hzErwartet.wert) {
+        _hzErwartet = null;
+        clearTimeout(_hzErwartetTimer);
+      }
+    }
   } catch (e) {
     // Nicht laut werden: der Hub ist derzeit ohnehin nicht im Netz, und die
     // Kachel soll deswegen nicht nach Defekt aussehen.
@@ -69,7 +117,6 @@ function updateHeizungKachel() {
   const st = d?.state;
 
   if (!st) {
-    // Kein Gerät erreichbar: dezent bleiben, nicht als Störung darstellen.
     body.innerHTML = `<div class="hz-leer">
       ${d && !d.configured
         ? 'Keine Heizung eingerichtet — unter Einstellungen › Heizung eintragen.'
@@ -77,9 +124,18 @@ function updateHeizungKachel() {
     return;
   }
 
+  // Nicht erreichbar heisst NICHT, dass keine Daten da sind: der Server haelt
+  // den letzten Zustand vor. Ohne Hinweis sah die Kachel deshalb normal aus,
+  // obwohl das Geraet seit Minuten weg war. Jetzt sagt sie es — und markiert
+  // die Werte als alt, statt sie als aktuell auszugeben.
+  const weg = d && d.enabled && d.configured && d.reachable === false;
+
   const h = st.heater || {};
   const z = HZ_ZUSTAND[h.state] || { text: h.state || '--', farbe: 'var(--text2)' };
-  const presetIdx = st.preset?.index;
+  const erwPreset = _hzErwartetWert('preset');
+  const presetIdx = erwPreset !== undefined
+    ? (erwPreset === 'none' ? null : erwPreset)
+    : st.preset?.index;
 
   const presets = HZ_PRESETS.map((name, i) => `
     <button class="hz-preset${presetIdx === i ? ' an' : ''}"
@@ -89,7 +145,11 @@ function updateHeizungKachel() {
         onclick="event.stopPropagation();hzPreset('none')"
         ${_hzBusy.has('preset') ? 'disabled' : ''} title="Kein Preset">Aus</button>`;
 
-  const raeume = (st.rooms || []).map(r => {
+  // Die Kachel zeigt nur die ersten Raeume: bei zehn Stueck lief die Liste
+  // sonst unten aus der Kachel heraus. Vollstaendig steht sie auf der
+  // Detailseite, die ein Tipp auf die Kachel oeffnet.
+  const alleRaeume = st.rooms || [];
+  const raeume = alleRaeume.map(r => {
     const aus = r.enabled === false;
     const kalt = r.conn !== 'online';
     return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}">
@@ -113,21 +173,133 @@ function updateHeizungKachel() {
     : '';
 
   body.innerHTML = `
-    <div class="hz-kopf">
+    ${weg ? `<div class="hz-hinweis hz-weg" title="Angezeigt wird der zuletzt bekannte Stand.">Keine Verbindung${
+      d.age_s != null ? ` seit ${_hzDauer(d.age_s)}` : ''}</div>` : ''}
+    <div class="hz-kopf${weg ? ' hz-alt' : ''}">
       <span class="hz-zustand" style="color:${z.farbe}">${z.text}</span>
       ${h.powerLevel != null && h.state === 'running'
         ? `<span class="hz-leistung">${h.powerLevel} %</span>` : ''}
       <span class="hz-vorlauf">${h.flowTemp != null
         ? `Vorlauf ${_hzT(h.flowTemp)} °C` : HZ_MODUS[h.mode] || ''}</span>
     </div>
-    ${h.available === false && h.availabilityText
-      ? `<div class="hz-hinweis">${_esc(h.availabilityText)}</div>` : ''}
     ${warten}
     <div class="hz-presets">${presets}</div>
-    <div class="hz-raeume">${raeume}</div>
-    ${d.demo ? '<div class="hz-hinweis hz-demo">Testdaten — kein Gerät verbunden</div>' : ''}
+    <div class="hz-raeume${weg ? ' hz-alt' : ''}">${raeume}</div>
+    <div class="hz-mehr" hidden></div>
+    <div class="hz-sub${weg ? ' hz-alt' : ''}">
+      <div class="hz-sub-item">Starts heute <b>${h.startsToday ?? '--'}</b></div>
+      <div class="hz-sub-item">Vorlauf <b>${_hzT(h.flowTemp)}</b> °C</div>
+      <div class="hz-sub-item">Betriebsart <b>${_esc(_hzGeraetemodus(h))}</b></div>
+    </div>
     ${_hzFehler ? `<div class="hz-hinweis hz-fehler">${_esc(_hzFehler)}</div>` : ''}`;
+
+  _hzKachelKuerzen();
 }
+
+/**
+ * Raumliste auf das kuerzen, was wirklich in die Kachel passt.
+ *
+ * Eine feste Zahl reicht nicht: die Kachelhoehe haengt von der Spaltenbreite
+ * ab (bei drei Spalten ist sie niedriger als bei zweien), und der
+ * Verbindungshinweis kostet zusaetzlich Platz. Bei zehn Raeumen lief die Liste
+ * deshalb je nach Fensterbreite unten heraus. Also nach dem Zeichnen messen
+ * und ausblenden, was nicht mehr hineinpasst — die Zeile darunter sagt, wie
+ * viele fehlen. Vollstaendig steht die Liste auf der Detailseite.
+ */
+function _hzKachelKuerzen() {
+  const karte = $('heizungCard');
+  const mehr  = karte?.querySelector('.hz-mehr');
+  if (!karte || !mehr) return;
+  const zeilen = [...karte.querySelectorAll('.hz-raum')];
+  if (!zeilen.length) { mehr.hidden = true; return; }
+
+  // Einspaltig ist die Kachel inhaltsgross — dort passt alles, es gibt nichts
+  // zu kuerzen. Ohne diese Ausnahme haette die Messung gegen eine Kachelhoehe
+  // gerechnet, die sich erst aus dem Inhalt ergibt.
+  if (!document.body.classList.contains('raster-mehrspaltig')) {
+    zeilen.forEach(z => { z.hidden = false; });
+    mehr.hidden = true;
+    return;
+  }
+
+  zeilen.forEach(z => { z.hidden = false; });
+  mehr.hidden = false;
+  mehr.textContent = '';               // erst messen, dann beschriften
+
+  // Untergrenze vom KACHELRAND aus rechnen, nicht von der Fusszeile:
+  // .hz-sub hat margin-top:auto und wird bei ueberlaufendem Inhalt selbst
+  // unter den Rand geschoben — ihre Position waere dann als Bezug wertlos.
+  // Ihre HOEHE ist dagegen zuverlaessig und wird als Reserve abgezogen.
+  const fuss = karte.querySelector('.hz-sub');
+  const unten = karte.getBoundingClientRect().bottom
+              - parseFloat(getComputedStyle(karte).paddingBottom || 0)
+              - (fuss ? fuss.offsetHeight + 10 : 0);
+  let sichtbar = zeilen.length;
+  for (let i = 0; i < zeilen.length; i++) {
+    // Platz fuer die Hinweiszeile freihalten, sobald ueberhaupt gekuerzt wird.
+    const reserve = (i < zeilen.length - 1) ? mehr.offsetHeight + 22 : 0;
+    if (zeilen[i].getBoundingClientRect().bottom > unten - reserve) { sichtbar = i; break; }
+  }
+  // Passen weniger als drei Zeilen, ist eine Stummelliste ("1 Raum,
+  // + 9 weitere") nutzlos. Dann lieber eine Zusammenfassung: sie sagt in einer
+  // Zeile mehr als zwei abgeschnittene Raumnamen. Die Kachelhoehe haengt an
+  // der Spaltenzahl, dieser Fall tritt also je nach Fensterbreite auf.
+  const MINDEST_ZEILEN = 3;
+  if (sichtbar < MINDEST_ZEILEN && zeilen.length > sichtbar) {
+    zeilen.forEach(z => { z.hidden = true; });
+    mehr.hidden = false;
+    mehr.textContent = _hzZusammenfassung(zeilen.length);
+  } else {
+    sichtbar = Math.max(1, sichtbar);
+    zeilen.forEach((z, i) => { z.hidden = i >= sichtbar; });
+    const fehlend = zeilen.length - sichtbar;
+    mehr.hidden = fehlend <= 0;
+    if (fehlend > 0) mehr.textContent = `+ ${fehlend} weitere${fehlend === 1 ? 'r Raum' : ' Räume'}`;
+  }
+
+  // Letzte Sicherung, die IMMER laeuft: passt die Fusszeile trotzdem nicht
+  // (sehr flache Kachel mit Verbindungshinweis), faellt auch die Zaehlzeile
+  // weg. Vorlauf, Starts und Betriebsart wiegen schwerer als "+ n weitere".
+  if (fuss && fuss.getBoundingClientRect().bottom
+              > karte.getBoundingClientRect().bottom) {
+    zeilen.forEach(z => { z.hidden = true; });
+    mehr.hidden = true;
+  }
+}
+
+/**
+ * Betriebsart, wie sie das HEIZGERAET selbst zurueckmeldet.
+ *
+ * Der Hub liefert sie derzeit noch nicht: heater.mode ist die Vorgabe DES HUBS
+ * ("auto"/"manual"), heater.state sein daraus abgeleiteter Zustand, und
+ * heater.link beschreibt nur die mitgeschnittene Verbindung zum Geraet.
+ * Das Feld ist hier schon angelegt und liest der Reihe nach mehrere plausible
+ * Schluessel — sobald die API einen davon fuellt, erscheint der Wert ohne
+ * weitere Aenderung. Bis dahin steht "--" statt einer erfundenen Angabe.
+ */
+function _hzGeraetemodus(h) {
+  const v = h?.deviceMode ?? h?.heaterMode ?? h?.device?.mode ?? h?.link?.deviceMode;
+  return (v == null || v === '') ? '--' : String(v);
+}
+
+/** Einzeiler statt Liste, wenn die Kachel zu flach ist. */
+function _hzZusammenfassung(anzahl) {
+  const r = _hzDaten?.state?.rooms || [];
+  const waerme = r.filter(x => x.wantsHeat).length;
+  const aus    = r.filter(x => x.enabled === false).length;
+  const teile  = [`${anzahl} Räume`];
+  if (waerme) teile.push(`${waerme} fordern Wärme`);
+  if (aus)    teile.push(`${aus} aus`);
+  return teile.join(' · ');
+}
+
+// Die Kachelhoehe aendert sich mit der Spaltenzahl — nach jedem
+// Groessenwechsel neu abmessen.
+let _hzKuerzTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_hzKuerzTimer);
+  _hzKuerzTimer = setTimeout(_hzKachelKuerzen, 150);
+});
 
 // ── Detailseite ─────────────────────────────────────────────────────────────
 
@@ -246,7 +418,6 @@ function renderHeizungDetail() {
     ${st.time?.uncertain
       ? '<div class="vl-hinweis">Die Uhr des Geräts ist nicht gestellt — Zeitangaben im Verlauf sind wertlos.</div>'
       : ''}
-    ${d.demo ? '<div class="hz-hinweis">Testdaten — es ist kein Gerät verbunden.</div>' : ''}
   </div>`;
 
   box.innerHTML = heizKarte
@@ -279,12 +450,17 @@ async function _hzSenden(schluessel, pfad, rumpf) {
     _hzFehler = 'Die Heizung ist nicht erreichbar.';
   } finally {
     _hzBusy.delete(schluessel);
+    // Bei einem Fehler gilt der Vorgriff nicht weiter — sonst behauptet die
+    // Anzeige drei Sekunden lang etwas, das nachweislich nicht passiert ist.
+    if (_hzFehler) { _hzErwartet = null; clearTimeout(_hzErwartetTimer); }
     await ladeHeizung(false);
   }
 }
 
-function hzPreset(i)          { _hzSenden('preset', `/api/heizung/preset/${i}`); }
-function hzModus(m)           { _hzSenden('heater', '/api/heizung/heater', { mode: m }); }
+function hzPreset(i)          { _hzErwarte('preset', i);
+                               _hzSenden('preset', `/api/heizung/preset/${i}`); }
+function hzModus(m)           { _hzErwarte('mode', m);
+                               _hzSenden('heater', '/api/heizung/heater', { mode: m }); }
 function hzHand(befehl)       { _hzSenden('heater', '/api/heizung/heater', { mode: 'manual', command: befehl }); }
 function hzAbbrechen()        { _hzSenden('heater', '/api/heizung/heater', { cancelPending: true }); }
 function hzLuefter(id, modus) { _hzSenden('room' + id, `/api/heizung/room/${id}`, { fanMode: modus }); }
@@ -307,7 +483,6 @@ async function hzEinstellungenLaden() {
     if ($('sHzHost'))    $('sHzHost').value = c.host || '';
     if ($('sHzEnabled')) $('sHzEnabled').checked = !!c.enabled;
     if ($('sHzTime'))    $('sHzTime').checked = !!c.set_time;
-    if ($('sHzDemo'))    $('sHzDemo').checked = !!c.demo;
     if ($('sHzPass'))    $('sHzPass').placeholder = c.password_set
       ? 'gespeichert — leer lassen behält es' : 'nur bei eingeschaltetem Schreibschutz';
     _hzStatus(c.host ? '' : 'Noch keine Adresse hinterlegt.');
@@ -328,7 +503,6 @@ async function hzEinstellungenSpeichern() {
     host:     $('sHzHost')?.value.trim() ?? '',
     enabled:  !!$('sHzEnabled')?.checked,
     set_time: !!$('sHzTime')?.checked,
-    demo:     !!$('sHzDemo')?.checked,
   };
   // Ein leeres Feld soll ein gespeichertes Passwort NICHT loeschen — sonst
   // waere die Anbindung nach jedem Speichern der uebrigen Werte kaputt.

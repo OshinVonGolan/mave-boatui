@@ -211,6 +211,22 @@
     .hz-preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
     .hz-raeume { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+    /* Bei zehn Raeumen lief die Liste unten aus der Kachel heraus — die Kachel
+       hat im Raster eine feste Hoehe und overflow:hidden. Die Kachel zeigt
+       deshalb nur die ersten Raeume und sagt, wie viele noch folgen; alle
+       stehen auf der Detailseite. Eine scrollende Liste waere hier falsch:
+       ein Tipp auf die Kachel oeffnet die Detailseite, Scrollen und Tippen
+       kaemen sich auf dem Touchscreen ins Gehege. */
+    .hz-mehr { font-size: 12px; color: var(--text3); padding: 6px 2px 0; }
+    /* [hidden] muss gewinnen: die eingebaute Browserregel [hidden]{display:none}
+       hat nur Element-Spezifitaet und wird von .hz-raum{display:grid} geschlagen —
+       ausgeblendete Zeilen belegten dadurch weiter Platz und schoben die
+       Fusszeile aus der Kachel. */
+    [hidden] { display: none !important; }
+    /* Werte, die aus einer alten Meldung stammen: sichtbar, aber zurueckgenommen. */
+    .hz-alt { opacity: .45; }
+    .hz-weg { color: var(--yellow); border: 1px solid var(--yellow);
+      border-radius: 8px; padding: 7px 10px; margin-bottom: 10px; }
     .hz-raum   { display: grid; align-items: baseline; gap: 8px;
       grid-template-columns: minmax(0, 1fr) auto auto auto 14px;
       padding: 4px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -229,7 +245,6 @@
     .hz-hinweis { font-size: 12px; color: var(--text3); margin-top: 10px; }
     .hz-fehler  { color: var(--red); }
     /* Erfundene Werte muessen unuebersehbar als solche erkennbar sein. */
-    .hz-demo    { color: var(--yellow); }
     /* Ein Schaltbefehl steht 60 s an, bevor er wirkt — das muss sichtbar sein,
        sonst wirkt die Anlage traege statt bedacht. */
     .hz-pending { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -598,6 +613,19 @@
        Bei wide wird .tile-content zur Zeile: links normal, rechts Extra. */
     .tile-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
     .tile-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+    /* min-height:0 laesst .tile-main unter seine Inhaltshoehe schrumpfen —
+       noetig, weil es sonst ueber die Kachel hinauswaechst (gemessen 426 px
+       Inhalt in einer 392 px hohen Kachel) und die Fusszeile hinausschiebt.
+       NUR im mehrspaltigen Raster: dort haben die Kacheln eine feste
+       Zeilenhoehe. Einspaltig sind sie inhaltsgross, und dieselbe Regel liesse
+       sie auf null zusammenfallen. */
+    body.raster-mehrspaltig .tile-main { min-height: 0; }
+    /* Bei schmalen Spalten sind die Kacheln flach (die Zeilenhoehe haengt an
+       der Spaltenbreite). Dort kosten 14 px zwischen fuenf Bloecken 56 px —
+       ein Viertel der Kachel. */
+    @media (min-width: 601px) and (max-width: 860px) {
+      body.raster-mehrspaltig .card-heizung .tile-main { gap: 8px; }
+    }
     .tile-wide-side { display: none; }
     .tile--wide .tile-content { flex-direction: row; align-items: stretch; gap: 22px; }
     .tile--wide .tile-main { flex: 1 1 0; }
@@ -834,11 +862,13 @@
     .batt-item .label { font-size: 9px; color: var(--text3); margin-bottom: 2px; letter-spacing: .06em; text-transform: uppercase; }
     .batt-item .value { font-size: 18px; font-weight: 700; line-height: 1; }
     .batt-item .unit  { font-size: 10px; color: var(--text2); margin-left: 2px; }
-    .batt-sub { display: flex; justify-content: space-between; padding-top: 4px;
+    .batt-sub, .hz-sub { display: flex; justify-content: space-between; padding-top: 4px;
       border-top: 1px solid var(--border); flex-wrap: wrap; gap: 4px;
       margin-top: -8px; }
-    .batt-sub-item { font-size: 12px; color: var(--text2); }
-    .batt-sub-item b { color: var(--text); font-weight: 600; }
+    .batt-sub-item, .hz-sub-item { font-size: 12px; color: var(--text2); }
+    .batt-sub-item b, .hz-sub-item b { color: var(--text); font-weight: 600; }
+    /* Die Fusszeile steht immer unten, die Raumliste davor gibt nach. */
+    .hz-sub { margin-top: auto; gap: 10px; flex-wrap: wrap; }
 
     /* ── Source Progress Bars (rechts neben Gauge) ── */
     .src-bar-hd { font-size: 8px; font-weight: 700; letter-spacing: .1em;

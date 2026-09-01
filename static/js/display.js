@@ -522,6 +522,9 @@ function applyDisplayConfig() {
   // strecken koennte, fielen die Balken auf zwei Pixel zusammen. Die Tanks
   // waren dann faktisch unsichtbar.
   const einspaltig = _cols() <= 1;
+  // Marke fuers Stylesheet: nur im mehrspaltigen Raster haben die Kacheln eine
+  // feste Zeilenhoehe, gegen die Inhalte schrumpfen duerfen.
+  document.body.classList.toggle('raster-mehrspaltig', !einspaltig);
   for (const t of _TILES) {
     const el = _tileEl(t.id);
     if (!el) continue;

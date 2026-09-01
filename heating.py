@@ -42,10 +42,6 @@ _VORGABEN: dict = {
     'host': '',             # z. B. "stoker-bf38.local" oder "192.168.1.60"
     'password': '',         # nur noetig, wenn der Schreibschutz an ist
     'set_time': True,       # Uhr des Geraets stellen, es hat keine gepufferte
-    # Vorerst AN, damit die Oberflaeche beurteilbar ist, solange der Hub nicht
-    # im Netz haengt. Ausschalten, sobald das Geraet erreichbar ist — die
-    # Werte sind erfunden und in der Oberflaeche als solche markiert.
-    'demo': True,
 }
 
 
@@ -79,7 +75,7 @@ class StokerClient:
             for k, v in patch.items():
                 if k not in erlaubt:
                     continue
-                if k in ('enabled', 'set_time', 'demo'):
+                if k in ('enabled', 'set_time'):
                     self._cfg[k] = bool(v)
                 elif k in ('host', 'password'):
                     self._cfg[k] = str(v or '').strip()
@@ -208,16 +204,10 @@ class StokerClient:
         with self._lock:
             cfg_an  = bool(self._cfg.get('enabled'))
             host    = self._cfg.get('host', '').strip()
-            demo    = bool(self._cfg.get('demo'))
             state   = self._state
             info    = self._info
             last_ok = self._last_ok
             fehler  = self._last_error
-
-        if demo and state is None:
-            return {'enabled': True, 'configured': True, 'reachable': True,
-                    'demo': True, 'age_s': 0.0, 'error': None,
-                    'info': _DEMO_INFO, 'state': _DEMO_STATE}
 
         alter = (time.monotonic() - last_ok) if last_ok is not None else None
         # Kurze Aussetzer sind normal; erst nach einer Weile gilt es als weg.
@@ -226,7 +216,6 @@ class StokerClient:
             'enabled': cfg_an,
             'configured': bool(host),
             'reachable': erreichbar,
-            'demo': False,
             'age_s': round(alter, 1) if alter is not None else None,
             'error': fehler,
             'info': info,
@@ -340,45 +329,3 @@ class StokerFehler(Exception):
 # beurteilen. Wird nur geliefert, wenn in den Einstellungen ausdruecklich
 # eingeschaltet — und nur, wenn kein echter Zustand vorliegt.
 
-_DEMO_INFO = {
-    'apiVersion': 1, 'firmware': '1.0.0', 'role': 'hub', 'deviceName': 'Stoker',
-    'nodeId': 5, 'uptimeS': 6758,
-    'wifi': {'ssid': 'SY_Mave', 'rssi': -62, 'ip': '192.168.1.60', 'mode': 'station'},
-    'time': {'epoch': 0, 'uncertain': False, 'source': 'ntp'},
-}
-
-_DEMO_STATE = {
-    'apiVersion': 1,
-    'time': {'uncertain': False, 'source': 'ntp', 'uptimeS': 6758},
-    'preset': {'index': 2, 'name': 'Tag', 'kind': 'normal', 'heaterAutoAllowed': True},
-    'heater': {
-        'available': True, 'availability': 'ok', 'availabilityText': 'Verbindung steht',
-        'mode': 'auto', 'state': 'running', 'command': 'on', 'reason': 'demand_confirmed',
-        'confirmed': True, 'powerLevel': 62, 'flowTemp': 74.4, 'errorCode': 0,
-        'stateForS': 1840, 'pendingS': 0, 'demandingRooms': 2,
-        'runtimeTodayS': 9120, 'startsToday': 3,
-        'pendingCommand': {'remainingS': 0},
-    },
-    'rooms': [
-        {'id': 0, 'name': 'Bugkabine', 'nodeId': 1, 'conn': 'online', 'lastSeenS': 4,
-         'roomTemp': 19.8, 'flowTemp': 74.4, 'target': 20.0, 'fanMode': 'auto',
-         'fanPercent': 45, 'manualSpeed': 50, 'enabled': True, 'wantsHeat': True,
-         'flowReleased': True, 'hysteresisActive': True, 'deviates': False,
-         'fault': 'none', 'rssi': -52},
-        {'id': 1, 'name': 'Salon', 'nodeId': 2, 'conn': 'online', 'lastSeenS': 2,
-         'roomTemp': 21.4, 'flowTemp': 73.1, 'target': 21.0, 'fanMode': 'auto',
-         'fanPercent': 0, 'manualSpeed': 50, 'enabled': True, 'wantsHeat': False,
-         'flowReleased': True, 'hysteresisActive': True, 'deviates': False,
-         'fault': 'none', 'rssi': -48},
-        {'id': 2, 'name': 'Achterkabine', 'nodeId': 3, 'conn': 'online', 'lastSeenS': 6,
-         'roomTemp': 18.2, 'flowTemp': 72.8, 'target': 19.5, 'fanMode': 'auto',
-         'fanPercent': 70, 'manualSpeed': 50, 'enabled': True, 'wantsHeat': True,
-         'flowReleased': True, 'hysteresisActive': True, 'deviates': False,
-         'fault': 'none', 'rssi': -61},
-        {'id': 3, 'name': 'Nasszelle', 'nodeId': 4, 'conn': 'offline', 'lastSeenS': 812,
-         'roomTemp': None, 'flowTemp': None, 'target': 22.0, 'fanMode': 'auto',
-         'fanPercent': 0, 'manualSpeed': 50, 'enabled': False, 'wantsHeat': False,
-         'flowReleased': False, 'hysteresisActive': False, 'deviates': False,
-         'fault': 'none', 'rssi': -78},
-    ],
-}
