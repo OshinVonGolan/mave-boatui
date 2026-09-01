@@ -29,7 +29,10 @@ const TOPO_NETZ_FARBE = {
 const TOPO_NETZ_REIHE = ['n2k-bord', 'lan', 'n2k-nav', 'vedirect', 'seatalk', 'analog', 'keins'];
 
 const TOPO = {
-  spalteB:   354,   // Breite einer Netzspalte
+  // 344 statt 354: drei Spalten plus Gassen passen damit in die 1180 px, auf die
+  // die Seite begrenzt ist — sonst wird die dritte Spalte um wenige Pixel
+  // abgeschnitten und man muss schieben, obwohl fast alles hineinpasst.
+  spalteB:   344,   // Breite einer Netzspalte
   spalteLuft: 34,
   rand:       14,
   kopfH:      44,   // Kopfzeile der Spalte
