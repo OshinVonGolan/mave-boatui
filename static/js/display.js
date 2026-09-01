@@ -670,6 +670,18 @@ function openDisplaySettings() {
 
   pane.innerHTML = `
     <div class="set-card">
+      <div class="set-card-hd">Kacheln anordnen</div>
+      <div class="settings-row" style="align-items:center;border-bottom:none">
+        <label class="settings-label" style="min-width:0;flex:1">Reihenfolge der Kacheln
+          auf der Startseite per Ziehen ändern</label>
+        <span style="display:flex;gap:8px">
+          <button class="btn-secondary" onclick="kachelnOrdnungZuruecksetzen()">Zurücksetzen</button>
+          <button class="btn-primary" onclick="closeSettings();kachelnOrdnenAn(true)">Anordnen</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="set-card">
       <div class="set-card-hd">Konfigurationen</div>
       ${cfgList}
       <div class="settings-row" style="align-items:center;gap:10px;border-bottom:none;padding-top:12px">
