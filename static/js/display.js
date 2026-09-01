@@ -150,8 +150,8 @@ function _tileEl(id) {
 
 // ── Kacheln anordnen ───────────────────────────────────────────────────────
 // Die Reihenfolge wird im DOM geaendert, nicht ueber CSS order. Grund: das
-// Bandlayout (_bandLayout) vergibt order selbst und entscheidet innerhalb
-// eines Bandes nach DOM-Reihenfolge — zwei Ordnungssysteme uebereinander
+// Platzierung (_rasterPacken) setzt gridColumn/gridRow explizit und geht dabei
+// von der DOM-Reihenfolge aus — zwei Ordnungssysteme uebereinander
 // waeren nicht vorhersagbar. <main> enthaelt ausserdem genau die acht
 // Kachel-Sections und sonst nichts, das Umhaengen ist also gefahrlos.
 
@@ -304,40 +304,87 @@ function _tilesInDomOrder() {
  * frei, wird nur eine breite Kachel aufgezogen (sie ist ohnehin als Banner
  * gedacht); normale Kacheln bleiben dort quadratisch.
  */
-function _bandLayout(kacheln, cols, rowSpan, order) {
-  const baender = [];
-  let band = [], frei = cols;
-  for (const k of kacheln) {
-    k.span = (k.sz === 'wide') ? Math.min(2, cols) : 1;
-    if (k.span > frei) { baender.push({ items: band, frei }); band = []; frei = cols; }
-    band.push(k);
-    frei -= k.span;
-  }
-  if (band.length) baender.push({ items: band, frei });
+/**
+ * Kacheln in der gewuenschten Reihenfolge ins Raster setzen.
+ *
+ * Vorher trennte _bandLayout in zwei Baender: erst alle vollhohen Kacheln,
+ * dann alle halben. Das vermied Loecher, machte die Reihenfolge aber nur
+ * INNERHALB einer Groesse aenderbar — eine halbe Kachel liess sich nicht
+ * dorthin ziehen, wo eine normale steht, und zwei halbe nicht untereinander
+ * legen.
+ *
+ * Jetzt wird tatsaechlich gepackt: jede Kachel kommt der Reihe nach in den
+ * ERSTEN freien Platz, in den sie passt (zeilenweise von links oben gesucht).
+ * Damit gilt die Reihenfolge ueber alle Groessen hinweg, und es entstehen
+ * trotzdem keine Loecher — was nicht in eine angefangene Zeile passt, rutscht
+ * in die naechste, und kleinere Kacheln fuellen die Luecken davor auf.
+ *
+ * Groessen in Rastereinheiten (eine Zeile = halbe Kachelhoehe):
+ *   normal  1 Spalte x 2 Zeilen      half  1 x 1      wide  2 x 2
+ */
+function _rasterPacken(kacheln, cols) {
+  const belegt = [];                       // belegt[zeile][spalte]
+  const frei = (r, c, w, h) => {
+    if (c + w > cols) return false;
+    for (let y = r; y < r + h; y++)
+      for (let x = c; x < c + w; x++)
+        if (belegt[y]?.[x]) return false;
+    return true;
+  };
+  const setzen = (r, c, w, h) => {
+    for (let y = r; y < r + h; y++) {
+      belegt[y] = belegt[y] || [];
+      for (let x = c; x < c + w; x++) belegt[y][x] = true;
+    }
+  };
 
-  for (let i = 0; i < baender.length; i++) {
-    const b       = baender[i];
-    const letztes = (i === baender.length - 1);
-    if (b.frei > 0 && b.items.length) {
-      const breit = b.items.find(k => k.sz === 'wide');
-      if (breit) {
-        breit.span += b.frei;                       // Banner füllt den Rest
-        b.frei = 0;
-      } else if (!letztes) {
-        // Echte Lücke mitten im Raster: von hinten auffüllen, aber höchstens
-        // bis zur doppelten Breite, damit Quadrate Quadrate bleiben.
-        for (let j = b.items.length - 1; j >= 0 && b.frei > 0; j--) {
-          const plus = Math.min(b.frei, 2 - b.items[j].span);
-          b.items[j].span += plus;
-          b.frei -= plus;
+  const platziert = [];
+  for (const k of kacheln) {
+    const w = (k.sz === 'wide') ? Math.min(2, cols) : 1;
+    const h = (k.sz === 'half') ? 1 : 2;
+    let r = 0, c = 0;
+    sucher: for (r = 0; r < 200; r++) {          // 200 Zeilen sind reichlich
+      for (c = 0; c <= cols - w; c++) if (frei(r, c, w, h)) break sucher;
+    }
+    setzen(r, c, w, h);
+    k.r = r; k.c = c; k.w = w; k.h = h;
+    platziert.push(k);
+  }
+
+  // Luecken schliessen. Bei frei waehlbarer Reihenfolge und gemischten Groessen
+  // bleiben zwangslaeufig Loecher — sie werden gefuellt, indem die Kachel LINKS
+  // daneben breiter oder die Kachel DARUEBER hoeher wird. Der Nachbar waechst,
+  // die Reihenfolge bleibt also unangetastet. Grenzen: hoechstens doppelte
+  // Breite und anderthalbfache Hoehe, sonst verlieren die Kacheln ihre Form.
+  const MAX_W = 2, MAX_H = 3;
+  const letzteZeile = Math.max(0, ...platziert.map(k => k.r + k.h - 1));
+  const kachelAn = (r, c) => platziert.find(k =>
+    r >= k.r && r < k.r + k.h && c >= k.c && c < k.c + k.w);
+
+  for (let runde = 0; runde < 4; runde++) {
+    let gewachsen = false;
+    for (let r = 0; r <= letzteZeile; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (belegt[r]?.[c]) continue;
+        // Kachel links daneben nach rechts verbreitern
+        const links = c > 0 ? kachelAn(r, c - 1) : null;
+        if (links && links.w < MAX_W && links.r === r && frei(links.r, links.c + links.w, 1, links.h)) {
+          setzen(links.r, links.c + links.w, 1, links.h); links.w += 1; gewachsen = true; continue;
+        }
+        // sonst die Kachel darueber nach unten verlaengern
+        const oben = r > 0 ? kachelAn(r - 1, c) : null;
+        if (oben && oben.h < MAX_H && oben.r + oben.h === r && frei(r, oben.c, oben.w, 1)) {
+          setzen(r, oben.c, oben.w, 1); oben.h += 1; gewachsen = true;
         }
       }
     }
-    for (const k of b.items) {
-      k.el.style.gridColumn = `span ${k.span}`;
-      k.el.style.gridRow    = `span ${rowSpan}`;
-      k.el.style.order      = order;
-    }
+    if (!gewachsen) break;
+  }
+
+  for (const k of platziert) {
+    k.el.style.gridColumn = `${k.c + 1} / span ${k.w}`;
+    k.el.style.gridRow    = `${k.r + 1} / span ${k.h}`;
+    k.el.style.order      = '';                 // Platzierung ist jetzt explizit
   }
 }
 
@@ -367,10 +414,11 @@ function _applyGrid() {
 
   _kachelOrdnungAnwenden();     // gespeicherte Reihenfolge VOR der Verteilung
 
-  // Erst einsammeln, wer überhaupt im Raster liegt — danach verteilen.
-  // Volle Höhe (normal/wide) zuerst, halbe Kacheln danach -> saubere Bänder
-  // statt halber Kacheln, die sich oben zwischen die vollen mischen.
-  const voll = [], halb = [];
+  // Erst einsammeln, wer ueberhaupt im Raster liegt — danach platzieren.
+  // NICHT mehr nach Groesse trennen: die Reihenfolge des Eigners gilt ueber
+  // alle Groessen hinweg, _rasterPacken vermeidet die Loecher stattdessen
+  // durch echtes Packen.
+  const kacheln = [];
   for (const t of _tilesInDomOrder()) {
     const el = _tileEl(t.id);
     if (!el) continue;
@@ -390,13 +438,10 @@ function _applyGrid() {
       el.style.gridColumn = el.style.gridRow = el.style.order = '';
       continue;
     }
-    (sz === 'half' ? halb : voll).push({ el, sz });
+    kacheln.push({ el, sz });
   }
 
-  if (cols > 1) {
-    _bandLayout(voll, cols, 2, '0');
-    _bandLayout(halb, cols, 1, '1');
-  }
+  if (cols > 1) _rasterPacken(kacheln, cols);
 
   _gridSig = _gridVisSig();
   if (!_gridWatchOn) _gridWatchInit();
