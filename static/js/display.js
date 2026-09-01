@@ -351,35 +351,18 @@ function _rasterPacken(kacheln, cols) {
     platziert.push(k);
   }
 
-  // Luecken schliessen. Bei frei waehlbarer Reihenfolge und gemischten Groessen
-  // bleiben zwangslaeufig Loecher — sie werden gefuellt, indem die Kachel LINKS
-  // daneben breiter oder die Kachel DARUEBER hoeher wird. Der Nachbar waechst,
-  // die Reihenfolge bleibt also unangetastet. Grenzen: hoechstens doppelte
-  // Breite und anderthalbfache Hoehe, sonst verlieren die Kacheln ihre Form.
-  const MAX_W = 2, MAX_H = 3;
-  const letzteZeile = Math.max(0, ...platziert.map(k => k.r + k.h - 1));
-  const kachelAn = (r, c) => platziert.find(k =>
-    r >= k.r && r < k.r + k.h && c >= k.c && c < k.c + k.w);
-
-  for (let runde = 0; runde < 4; runde++) {
-    let gewachsen = false;
-    for (let r = 0; r <= letzteZeile; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (belegt[r]?.[c]) continue;
-        // Kachel links daneben nach rechts verbreitern
-        const links = c > 0 ? kachelAn(r, c - 1) : null;
-        if (links && links.w < MAX_W && links.r === r && frei(links.r, links.c + links.w, 1, links.h)) {
-          setzen(links.r, links.c + links.w, 1, links.h); links.w += 1; gewachsen = true; continue;
-        }
-        // sonst die Kachel darueber nach unten verlaengern
-        const oben = r > 0 ? kachelAn(r - 1, c) : null;
-        if (oben && oben.h < MAX_H && oben.r + oben.h === r && frei(r, oben.c, oben.w, 1)) {
-          setzen(r, oben.c, oben.w, 1); oben.h += 1; gewachsen = true;
-        }
-      }
-    }
-    if (!gewachsen) break;
-  }
+  // KEIN Wachsen mehr — weder in der Hoehe noch in der Breite.
+  //
+  // Frueher wurden Loecher gestopft, indem der Nachbar groesser gemacht wurde.
+  // Damit stand eine Kachel in den Einstellungen auf "normal" und war im
+  // Raster doppelt so breit oder anderthalbmal so hoch. Fuer beides gibt es
+  // eigene Groessen ("Doppelte Breite", "Halbe Hoehe") — eine Kachel, die
+  // sich selbst umdimensioniert, macht die Einstellung wertlos.
+  //
+  // Was hier steht, ist jetzt genau das, was eingestellt ist:
+  //   half = 1x1, normal = 1x2, wide = 2x2 Rastereinheiten.
+  // Bleibt beim Mischen von Groessen ein Loch, bleibt es sichtbar. Wer es
+  // wegbekommen will, aendert die Reihenfolge oder eine Groesse.
 
   for (const k of platziert) {
     k.el.style.gridColumn = `${k.c + 1} / span ${k.w}`;
