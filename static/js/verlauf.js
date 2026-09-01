@@ -18,14 +18,10 @@ const VL_FARBEN = {
 // retention_s = 16*3600). Der Knopf versprach eine Woche und lieferte 16
 // Stunden — die Wochenansicht ist der 7-Tage-Trend unter diesem Diagramm,
 // der aus den Tagesstatistiken kommt und wirklich sieben Tage abdeckt.
-const VL_BEREICHE = [
-  { label: '2 Std', secs: 2 * 3600 },
-  { label: '6 Std', secs: 6 * 3600 },
-  { label: '12 Std', secs: 12 * 3600 },
-  { label: '16 Std', secs: 16 * 3600 },
-];
+// Die Stufen stehen in charts.js (ZEITBEREICHE) — eine Liste fuer beide
+// Diagramme, damit sie nicht auseinanderlaufen koennen.
 
-let _vlBereich  = 12 * 3600;
+let _vlBereich  = 1800;        // gleicher Startwert wie chartRangeSec
 let _vlDaten    = null;
 let _vlLaeuft   = false;
 
@@ -44,16 +40,14 @@ let _vlLaeuft   = false;
 function _vlBereichKnoepfe() {
   const box = $('vlBereiche');
   if (!box) return;
-  box.innerHTML = VL_BEREICHE.map(b =>
+  box.innerHTML = ZEITBEREICHE.map(b =>
     `<button class="vl-btn${b.secs === _vlBereich ? ' an' : ''}"
-       onclick="setVerlaufBereich(${b.secs})">${b.label}</button>`).join('');
+       onclick="setZeitbereich(${b.secs})">${b.label}</button>`).join('');
 }
 
-function setVerlaufBereich(secs) {
-  _vlBereich = secs;
-  _vlBereichKnoepfe();
-  ladeVerlauf(true);           // Bereichswechsel darf immer nachladen
-}
+// setVerlaufBereich() stand hier. Der Bereich wird jetzt zentral ueber
+// setZeitbereich() in charts.js geschaltet, damit beide Diagramme dasselbe
+// Fenster zeigen.
 
 // Der Abruf haengt jetzt am Oeffnen der Batterieseite, nicht mehr an einer
 // eigenen Unterseite, die man bewusst aufruft — im Kiosk ist das ein

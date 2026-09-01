@@ -155,17 +155,42 @@ function toggleSeries(key) {
   renderCharts(true);
 }
 
-function setChartRange(btn, secs) {
+/**
+ * Zeitbereich der Batterie-Detailseite — EINER fuer alle Diagramme.
+ *
+ * Feinverlauf und Stromverlauf hatten getrennte Knopfreihen mit
+ * unterschiedlichen Stufen (30 min/6/12/24 h gegen 2/6/12/16 h). Beim
+ * Vergleichen musste man beide von Hand nachfuehren und sah trotzdem leicht
+ * verschiedene Fenster. Jetzt schaltet jede Reihe BEIDE Diagramme, und beide
+ * Reihen zeigen denselben Stand.
+ */
+const ZEITBEREICHE = [
+  { label: '30 min',  secs: 1800 },
+  { label: '6 Std',   secs: 6 * 3600 },
+  { label: '24 Std',  secs: 24 * 3600 },
+  { label: '7 Tage',  secs: 7 * 86400 },
+];
+
+function setZeitbereich(secs) {
   chartRangeSec = secs;
   chartHoverPos = null;
-  document.querySelectorAll('.chart-range').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  // Beide Knopfreihen nachfuehren, egal welche geklickt wurde.
+  document.querySelectorAll('.chart-range').forEach(b =>
+    b.classList.toggle('active', Number(b.dataset.secs) === secs));
+  if (typeof _vlBereich !== 'undefined') {
+    _vlBereich = secs;
+    if (typeof _vlBereichKnoepfe === 'function') _vlBereichKnoepfe();
+  }
   renderCharts(true);
+  if (typeof ladeVerlauf === 'function') ladeVerlauf(true);
   // Fuer kurze Fenster den Verlauf feiner nachladen: der grosse Abruf liefert
   // fuer 24 h nur alle ~36 s einen Punkt, was am linken Rand eines
   // 30-Minuten-Fensters einen leeren Streifen stehen laesst.
   fetchHistoryFenster(secs);
 }
+
+// Alter Name bleibt: die Knoepfe in index.html rufen ihn auf.
+function setChartRange(btn, secs) { setZeitbereich(secs); }
 
 /**
  * Legende unter dem Graphen.

@@ -615,10 +615,10 @@
         <div class="bd-card-hd-row">
           <span>Verlauf</span>
           <div class="chart-range-group">
-            <button class="chart-range active" data-secs="1800"   onclick="setChartRange(this,1800)">30 min</button>
-            <button class="chart-range"        data-secs="21600"  onclick="setChartRange(this,21600)">6 Std</button>
-            <button class="chart-range"        data-secs="43200"  onclick="setChartRange(this,43200)">12 Std</button>
-            <button class="chart-range"        data-secs="86400"  onclick="setChartRange(this,86400)">24 Std</button>
+            <button class="chart-range active" data-secs="1800"   onclick="setZeitbereich(1800)">30 min</button>
+            <button class="chart-range"        data-secs="21600"  onclick="setZeitbereich(21600)">6 Std</button>
+            <button class="chart-range"        data-secs="86400"  onclick="setZeitbereich(86400)">24 Std</button>
+            <button class="chart-range"        data-secs="604800" onclick="setZeitbereich(604800)">7 Tage</button>
             <!-- "7 T" stand hier. Der Feinverlauf haelt nur 16 Stunden vor
                  (history_store.py, retention_s) — der Knopf hat sieben Tage
                  versprochen und 16 Stunden geliefert. Die Wochenansicht steht
