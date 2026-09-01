@@ -247,6 +247,25 @@ function _ordnenPointerMove(e) {
   const davor = (e.clientY < r.top + r.height / 2) ||
                 (Math.abs(e.clientY - (r.top + r.height / 2)) < 8 && e.clientX < r.left + r.width / 2);
   ziel.parentElement.insertBefore(el, davor ? ziel : ziel.nextSibling);
+  _ordnenVorschau();
+}
+
+// Live-Vorschau waehrend des Ziehens.
+//
+// Seit die Platzierung explizit ueber gridColumn/gridRow laeuft, hat das
+// Umhaengen im DOM allein KEINE sichtbare Wirkung mehr — die alten Koordinaten
+// bleiben stehen, bis neu gepackt wird. Vorher passierte das erst beim
+// Loslassen; man sah also nichts, waehrend man zog. Jetzt wird nach jeder
+// Umstellung neu gepackt, aber hoechstens einmal je Bild, damit das Packen auf
+// dem Pi Zero nicht bei jedem Pointer-Ereignis laeuft.
+let _ordnenRaf = null;
+function _ordnenVorschau() {
+  if (_ordnenRaf !== null) return;
+  _ordnenRaf = requestAnimationFrame(() => {
+    _ordnenRaf = null;
+    _tilesDomCache = null;        // Reihenfolge hat sich gerade geaendert
+    _applyGrid();
+  });
 }
 
 function _ordnenPointerUp() {
@@ -481,12 +500,20 @@ function applyDisplayConfig() {
   const profile = _dspActiveProfile();
   const tileCfg = _dsp.tiles[profile] ?? {};
 
+  // Die Groessenklassen gelten NUR im mehrspaltigen Raster. In der
+  // einspaltigen Ansicht stehen die Kacheln untereinander und sind
+  // inhaltsgross — "halbe Hoehe" hat dort keine Bedeutung mehr, richtet aber
+  // Schaden an: .tile--half.card-tanks nimmt den Tankbalken ihre Mindesthoehe
+  // (style.css), und ohne eine feste Zeilenhoehe, gegen die flex:1 sich
+  // strecken koennte, fielen die Balken auf zwei Pixel zusammen. Die Tanks
+  // waren dann faktisch unsichtbar.
+  const einspaltig = _cols() <= 1;
   for (const t of _TILES) {
     const el = _tileEl(t.id);
     if (!el) continue;
     const sz = tileCfg[t.id] ?? 'normal';
-    el.classList.toggle('tile--half', sz === 'half');
-    el.classList.toggle('tile--wide', sz === 'wide');
+    el.classList.toggle('tile--half', !einspaltig && sz === 'half');
+    el.classList.toggle('tile--wide', !einspaltig && sz === 'wide');
   }
 
   _applyGrid();
