@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.42.0'
+VERSION  = _git_semver() or '1.43.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -134,6 +134,7 @@ WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 DEVICES_FILE  = BASE_DIR / 'devices.json'
 DEVICES_VORLAGE = BASE_DIR / 'devices.example.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
+HISTORY_GROB_FILE = BASE_DIR / 'history_min.ndjson'
 
 state       = BoatState()
 can_if      = CanInterface(channel='can0', state=state,
@@ -190,6 +191,16 @@ _apply_presets_config()
 
 ws_clients: set['_WsClient'] = set()
 history: deque[dict] = deque(maxlen=10800)   # 10800 × 5 s ≈ 15 h
+
+# Zweiter, GROBER Verlauf: Minutenmittel statt 5-Sekunden-Werte.
+#
+# Der feine Puffer deckt rund 15 Stunden ab. Die Zeitknoepfe bieten aber
+# 24 Stunden und 7 Tage an — bei 7 Tagen waren damit neun Zehntel des
+# Diagramms leer. Sieben Tage in 5-Sekunden-Aufloesung waeren 120.960
+# Eintraege und auf einem Pi Zero nicht vertretbar; als Minutenmittel sind es
+# 10.080 — also genau so viele wie der bestehende Puffer und damit derselbe
+# Speicherbedarf.
+history_grob: deque[dict] = deque(maxlen=10080)   # 10080 × 60 s = 7 Tage
 _hist_last_ts: float = 0.0
 # Die 5-s-Drossel MUSS auf der monotonen Uhr laufen. Der Pi hat keine RTC:
 # steht die Wanduhr nach einem Stromausfall hinter dem letzten gespeicherten
@@ -206,6 +217,13 @@ heizung = StokerClient(HEIZUNG_FILE)
 
 hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
                           max_entries=history.maxlen or 10800)
+
+# Der grobe Verlauf haelt sieben Tage vor. Eine Zeile je Minute sind 1440 am
+# Tag, gut 10.000 in der Woche und rund 1,5 MB — verglichen mit dem feinen
+# Verlauf (17.280 Zeilen am Tag) ist das fuer die SD-Karte nichts.
+grob_store = HistoryStore(HISTORY_GROB_FILE, retention_s=7 * 86400,
+                          max_entries=history_grob.maxlen or 10080,
+                          rotate_age_s=8 * 86400)
 
 
 _REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
@@ -231,6 +249,44 @@ def _apply_charger_setpoints(setpoints: list):
             can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], inst)
             log.info("Lader %s Inst %d: %.2f/%.2f V (on=%s)",
                      dev['label'], inst, dev['absorption_v'], dev['float_v'], on_flag)
+
+
+# ── Minutenmittel fuer den groben Verlauf ─────────────────────────────────
+# Gemittelt wird ueber die 5-Sekunden-Eintraege einer Minute. Ein Mittelwert
+# statt einer Stichprobe, damit kurze Spitzen (Anlaufstrom) die Wochenansicht
+# nicht verfaelschen, aber auch nicht spurlos verschwinden.
+_grob_eimer: dict = {}
+_grob_minute: int = -1
+
+
+def _grob_sammeln(entry: dict) -> None:
+    """Sammelt einen Feinwert; bei Minutenwechsel wandert das Mittel in den
+    groben Verlauf. Rein rechnerisch, kein Datei- oder Netzzugriff."""
+    global _grob_eimer, _grob_minute
+    ts = entry.get('ts')
+    if ts is None:
+        return
+    minute = int(ts // 60)
+    if _grob_minute < 0:
+        _grob_minute = minute
+    if minute != _grob_minute:
+        # Zeitstempel in die Mitte der Minute, wie es _decimate_history auch
+        # fuer seine Buckets macht.
+        mittel = {'ts': _grob_minute * 60 + 30}
+        for k, (summe, anzahl) in _grob_eimer.items():
+            if anzahl:
+                mittel[k] = round(summe / anzahl, 4)
+        if len(mittel) > 1:
+            history_grob.append(mittel)
+            grob_store.append(mittel)
+        _grob_eimer = {}
+        _grob_minute = minute
+    for k, v in entry.items():
+        if k == 'ts' or not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        eintrag = _grob_eimer.setdefault(k, [0.0, 0])
+        eintrag[0] += v
+        eintrag[1] += 1
 
 
 async def broadcast(data: dict):
@@ -274,6 +330,7 @@ async def broadcast(data: dict):
     if len(entry) > 1 and mono - _hist_last_mono >= 5.0:
         history.append(entry)
         hist_store.append(entry)      # gepuffert, eigener Thread — blockiert nicht
+        _grob_sammeln(entry)          # zusaetzlich ins Minutenmittel
         _hist_last_ts  = now
         _hist_last_mono = mono
     payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
@@ -320,7 +377,16 @@ async def lifespan(_app: FastAPI):
         log.info("Verlauf geladen: %d Einträge", len(geladen))
     except Exception as e:
         log.warning("Verlauf konnte nicht geladen werden: %s", e)
+    # Der grobe Verlauf ebenso — ohne ihn braeuchte die Wochenansicht nach
+    # jedem Neustart sieben Tage, bis sie wieder etwas zeigt.
+    try:
+        grob = await loop.run_in_executor(None, grob_store.load)
+        history_grob.extend(grob)
+        log.info("Grober Verlauf geladen: %d Einträge", len(grob))
+    except Exception as e:
+        log.warning("Grober Verlauf konnte nicht geladen werden: %s", e)
     hist_store.start()
+    grob_store.start()
     heizung.start()
     log.info("Heizungs-Anbindung gestartet")
 
@@ -328,6 +394,7 @@ async def lifespan(_app: FastAPI):
     can_if.stop()
     heizung.stop()
     hist_store.close()
+    grob_store.close()
     log.info("CAN-Reader gestoppt")
 
 
@@ -666,7 +733,20 @@ async def get_history(range: int | None = None, max_points: int = 1500):
     Uhr des Telefons.
     """
     jetzt = time.time()
-    eintraege = list(history)
+
+    # Welcher Puffer? Der feine deckt rund 15 Stunden in 5-Sekunden-Schritten
+    # ab, der grobe sieben Tage in Minutenmitteln. Fuer kurze Fenster ist der
+    # feine besser, fuer lange deckt nur der grobe das ganze Fenster ab.
+    # Entschieden wird nicht nach einer festen Grenze, sondern danach, wer
+    # tatsaechlich weiter zurueckreicht — nach einem Neustart mit leerer
+    # Wochendatei bleibt es so beim feinen Verlauf.
+    def _reicht_bis(d):
+        return jetzt - d[0].get('ts', jetzt) if d else 0.0
+
+    if range and range > 6 * 3600 and _reicht_bis(history_grob) > _reicht_bis(history):
+        eintraege = list(history_grob)
+    else:
+        eintraege = list(history)
 
     if range is not None and range > 0:
         grenze = jetzt - range

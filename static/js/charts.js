@@ -1,7 +1,12 @@
 // ── Battery detail + charts ────────────────────────────────────────────────
 
-const HIST_MAX = 10000;
-const HIST_MAX_AGE_S = 25 * 3600;   // Verlauf zeitbasiert kappen, nicht stueckbasiert
+// Der Client-Puffer muss den groessten Zeitknopf abdecken, sonst nuetzt der
+// serverseitige Wochenverlauf nichts: gemergte Wochenpunkte wurden vorher
+// sofort wieder weggeschnitten (25 h Kappung), und "7 Tage" blieb zu 85 % leer.
+// Er enthaelt beides — 5-Sekunden-Werte der letzten Stunden und Minutenmittel
+// der Woche —, deshalb die groessere Stueckzahl.
+const HIST_MAX = 20000;
+const HIST_MAX_AGE_S = 7 * 86400 + 3600;   // Verlauf zeitbasiert kappen, nicht stueckbasiert
 const HIST_MIN_GAP_S = 5;           // gleiche Kadenz wie der Server (main.py)
 const histData = [];  // [{ts, soc, voltage, current}, ...]
 

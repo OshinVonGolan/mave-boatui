@@ -489,15 +489,20 @@ const HIST_REFETCH_AFTER_S = 300;   // nach 5 min darf erneut geholt werden
  * 400-Eintraege-Schwelle bleibt, ab der die Serialisierung in den Executor
  * wandert.
  */
-const HIST_FEIN_BIS_S = 6 * 3600;      // darueber ist der Streifen unsichtbar
 const _histFeinGeholt = {};            // je Fenster: Zeitpunkt des letzten Abrufs
 
 function fetchHistoryFenster(secs) {
-  if (!secs || secs > HIST_FEIN_BIS_S) return;
+  if (!secs) return;
   const jetzt = Date.now() / 1000;
   if (_histFeinGeholt[secs] && (jetzt - _histFeinGeholt[secs]) < 60) return;
   _histFeinGeholt[secs] = jetzt;
-  const punkte = Math.min(900, Math.ceil(secs / HIST_MIN_GAP_S) + 10);
+  // Wie viele Punkte fuer dieses Fenster? Kurze Fenster in der 5-Sekunden-
+  // Kadenz der Aufzeichnung, lange Fenster in der Minutenkadenz des groben
+  // Verlaufs — mehr anzufordern braechte nichts, weil der Server dort ohnehin
+  // nur Minutenmittel hat. 900 bleibt die Obergrenze: darueber wird die
+  // Serialisierung auf dem Pi Zero spuerbar.
+  const kadenz = secs > 6 * 3600 ? 60 : HIST_MIN_GAP_S;
+  const punkte = Math.min(900, Math.ceil(secs / kadenz) + 10);
   fetch(`/api/history?range=${secs}&max_points=${punkte}`)
     .then(r => r.ok ? r.json() : null)
     .then(res => {

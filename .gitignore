@@ -8,6 +8,8 @@ presets.json
 alarms.json
 history.ndjson
 history.ndjson.tmp
+history_min.ndjson
+history_min.ndjson.tmp
 
 # Laufzeitdaten — liegen auf dem Pi und duerfen NIE ins Repo. Werden sie
 # versehentlich committet, scheitert dort jeder `git pull` mit
