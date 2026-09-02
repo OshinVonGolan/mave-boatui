@@ -621,6 +621,12 @@
       color: var(--text3);
       transition: width .5s ease;
     }
+    /* Wasser ist blau — Zahl und Balken. Nur im normalen Zustand: faellt der
+       Stand unter die Schwellen, gewinnen weiter Gelb und Rot, sonst ginge
+       genau die Warnung verloren, fuer die die Farben da sind. */
+    .sb-item.sb-wasser.sb-ok .sb-val b,
+    .sb-item.sb-wasser.sb-ok .sb-balken { color: var(--accent); }
+
     .sb-item.sb-ok   .sb-balken { color: var(--green); }
     .sb-item.sb-low  .sb-balken { color: var(--yellow); }
     .sb-item.sb-warn .sb-balken { color: var(--red); }
