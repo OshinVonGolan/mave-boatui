@@ -837,6 +837,88 @@ function _sbState(itemId, cls) {
 
 const _n = (v, d = 0) => (v == null || !isFinite(v)) ? null : Number(v).toFixed(d);
 
+// ── Hintergrundgraphen der Statusleiste ─────────────────────────────────────
+// Jedes Feld zeigt den Verlauf der letzten 24 Stunden als Flaeche hinter dem
+// Text. Die Daten kommen fertig verdichtet vom Server (60 Stuetzstellen je
+// Reihe, /api/statusleiste/verlauf) — der Browser rechnet nur noch Pfade.
+const SPARK_H = 32;          // Hoehe des Zeichenraums (viewBox, nicht Pixel)
+let _sparkDaten = null;
+
+/** Pfade fuer EINEN zusammenhaengenden Abschnitt ohne Luecken. */
+function _sparkAbschnitt(werte, von, bis, tief, spanne, n) {
+  const x = i => (n > 1 ? (i / (n - 1)) * 100 : 50);
+  const y = v => SPARK_H - 2 - ((v - tief) / spanne) * (SPARK_H - 4);
+  let linie = '', flaeche = `M ${x(von).toFixed(2)} ${SPARK_H}`;
+  for (let i = von; i <= bis; i++) {
+    const px = x(i).toFixed(2), py = y(werte[i]).toFixed(2);
+    linie   += (i === von ? 'M ' : ' L ') + px + ' ' + py;
+    flaeche += ` L ${px} ${py}`;
+  }
+  flaeche += ` L ${x(bis).toFixed(2)} ${SPARK_H} Z`;
+  return { linie, flaeche };
+}
+
+function _sparkSvg(werte, mindestSpanne, id) {
+  const echt = werte.filter(v => typeof v === 'number');
+  if (echt.length < 2) return '';        // ein Punkt ist kein Verlauf
+  const tief = Math.min(...echt), hoch = Math.max(...echt);
+  // Mindestspanne: sonst wird ein fast waagerechter Verlauf zum Gebirge und
+  // taeuscht eine Bewegung vor, die es nicht gibt.
+  const spanne = Math.max(hoch - tief, mindestSpanne);
+  // Bei kleiner Spanne mittig einbetten statt am Boden kleben lassen.
+  const rand = (spanne - (hoch - tief)) / 2;
+  const basis = tief - rand;
+  const n = werte.length;
+  let linien = '', flaechen = '';
+  let i = 0;
+  while (i < n) {
+    if (typeof werte[i] !== 'number') { i++; continue; }
+    let j = i;
+    while (j + 1 < n && typeof werte[j + 1] === 'number') j++;
+    if (j > i) {                          // Luecken bleiben Luecken
+      const a = _sparkAbschnitt(werte, i, j, basis, spanne, n);
+      linien += a.linie; flaechen += ` ${a.flaeche}`;
+    }
+    i = j + 1;
+  }
+  if (!flaechen) return '';
+  return `<svg viewBox="0 0 100 ${SPARK_H}" preserveAspectRatio="none" focusable="false">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="currentColor" stop-opacity=".34"/>
+      <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="${flaechen.trim()}" fill="url(#${id})"/>
+    <path d="${linien}" fill="none" stroke="currentColor" stroke-opacity=".3"
+      stroke-width="1" vector-effect="non-scaling-stroke"
+      stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function _sparkZeichnen() {
+  const serien = _sparkDaten?.serien;
+  if (!serien) return;
+  document.querySelectorAll('.sb-spark').forEach(el => {
+    const reihe = el.dataset.reihe;
+    const werte = serien[reihe];
+    const neu = Array.isArray(werte)
+      ? _sparkSvg(werte, +el.dataset.spanne || 1, 'spk_' + reihe) : '';
+    // Nur schreiben, wenn sich wirklich etwas geaendert hat: der Streifen wird
+    // bei jedem Broadcast angefasst, und innerHTML kostet auf dem Pi Zero.
+    if (el.innerHTML !== neu) el.innerHTML = neu;
+  });
+}
+
+async function ladeSparklines() {
+  try {
+    const r = await fetch('/api/statusleiste/verlauf');
+    if (!r.ok) return;
+    _sparkDaten = await r.json();
+    _sparkZeichnen();
+  } catch (_) {
+    // Ohne Verlauf bleibt der Hintergrund leer — die Werte stehen trotzdem da.
+  }
+}
+
 function updateStatusBar(data) {
   if (!data || !document.getElementById('statusBar')) return;
 

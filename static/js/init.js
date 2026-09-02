@@ -48,3 +48,9 @@ Promise.race([
 // 6 s reichen — die Heizung aendert sich nicht in Sekundenbruchteilen, und der
 // Pi haelt den Zustand ohnehin vor.
 hzPoller.start();
+
+// Hintergrundgraphen der Statusleiste. Alle zwei Minuten genuegt: die Reihen
+// sind Minutenmittel ueber 24 Stunden, und der Server haelt die Berechnung
+// ohnehin eine Minute lang fest.
+const _sparkPoller = createPoller(ladeSparklines, 120000);
+_sparkPoller.start();

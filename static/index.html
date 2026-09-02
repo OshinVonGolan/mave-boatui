@@ -184,26 +184,31 @@
 <div class="statusbar-halter">
 <section class="statusbar" id="statusBar" aria-label="Bordstatus">
   <button type="button" class="sb-item" onclick="openBattDetail()">
+    <span class="sb-spark" data-reihe="soc" data-spanne="10" aria-hidden="true"></span>
     <span class="sb-lbl">Batterie</span>
     <span class="sb-val"><b id="sbSoc">--</b><i>%</i></span>
     <span class="sb-sub" id="sbBattSub">--</span>
   </button>
   <button type="button" class="sb-item" onclick="openBattDetail()">
+    <span class="sb-spark" data-reihe="laden" data-spanne="50" aria-hidden="true"></span>
     <span class="sb-lbl">Laden</span>
     <span class="sb-val"><b id="sbChg">--</b><i>W</i></span>
     <span class="sb-sub" id="sbChgSub">--</span>
   </button>
   <button type="button" class="sb-item" onclick="toggleTanks()">
+    <span class="sb-spark" data-reihe="tank1" data-spanne="10" aria-hidden="true"></span>
     <span class="sb-lbl" id="sbT1Lbl">Wasser</span>
     <span class="sb-val"><b id="sbT1">--</b><i>%</i></span>
     <span class="sb-sub" id="sbT1Sub">--</span>
   </button>
   <button type="button" class="sb-item" onclick="toggleTanks()">
+    <span class="sb-spark" data-reihe="tank2" data-spanne="10" aria-hidden="true"></span>
     <span class="sb-lbl" id="sbT2Lbl">Diesel</span>
     <span class="sb-val"><b id="sbT2">--</b><i>%</i></span>
     <span class="sb-sub" id="sbT2Sub">--</span>
   </button>
   <button type="button" class="sb-item" onclick="openWaterLevel()">
+    <span class="sb-spark" data-reihe="pegel" data-spanne="20" aria-hidden="true"></span>
     <span class="sb-lbl">Pegel</span>
     <span class="sb-val"><b id="sbWl">--</b><i>cm</i></span>
     <span class="sb-sub">Travemünde</span>

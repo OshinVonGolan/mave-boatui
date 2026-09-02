@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.52.0'
+VERSION  = _git_semver() or '1.53.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -317,6 +317,14 @@ async def broadcast(data: dict):
         p = data.get(src_key, {}).get('power')
         if p is not None:
             entry[field] = p
+    # Tankstaende gehoeren in den Verlauf: sie aendern sich langsam, und genau
+    # deshalb ist die 24-Stunden-Kurve aussagekraeftig (Verbrauch je Tag).
+    # Vorher lag im Verlauf ausschliesslich die Batterie.
+    tanks = data.get('tanks') or {}
+    for tk in ('tank1', 'tank2'):
+        v = tanks.get(tk)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            entry[tk] = v
     bms = data.get('bms', {})
     for bms_key in ('current_charge', 'current_discharge'):
         v = bms.get(bms_key)
@@ -1419,6 +1427,109 @@ def _fetch_waterlevel() -> dict:
         'measurements':   chart,
         'forecast_img':   _BSH_URL,
     }
+
+
+# ── Kurzverlaeufe fuer die Statusleiste ──────────────────────────────────────
+# Die Felder der Statusleiste zeigen im Hintergrund den Verlauf der letzten
+# 24 Stunden. Dafuer NICHT /api/history nehmen: das liefert bis zu 1500 Punkte
+# mit allen Feldern und ist fuer einen fingernagelgrossen Graphen masslos.
+# Hier kommen 60 Stuetzstellen je Reihe heraus — das genuegt fuer einen
+# Streifen von rund 200 px Breite und kostet den Pi so gut wie nichts.
+_SPARK_FENSTER_S = 86400
+_SPARK_PUNKTE    = 60
+_spark_cache: dict = {'ts': 0.0, 'data': None}
+
+
+def _spark_bauen() -> dict:
+    """Verlaufsreihen fuer die Statusleiste aus dem groben Puffer verdichten."""
+    jetzt = time.time()
+    von   = jetzt - _SPARK_FENSTER_S
+
+    # Der grobe Puffer (Minutenmittel, 7 Tage) deckt 24 Stunden sicher ab. Nur
+    # wenn er nach einem Neustart noch nicht weit genug zurueckreicht, hilft
+    # der feine weiter.
+    def _reicht(d):
+        return jetzt - d[0].get('ts', jetzt) if d else 0.0
+    quelle = history_grob if _reicht(history_grob) >= _reicht(history) else history
+    punkte = [e for e in list(quelle) if e.get('ts', 0) >= von]
+
+    # Feste Zeit-Eimer statt gleicher Punktzahl je Eimer: eine Luecke im
+    # Verlauf (Pi war aus) soll als Luecke sichtbar bleiben und die Kurve nicht
+    # stauchen.
+    breite = _SPARK_FENSTER_S / _SPARK_PUNKTE
+    eimer: list[dict] = [{} for _ in range(_SPARK_PUNKTE)]
+    for e in punkte:
+        i = int((e.get('ts', von) - von) / breite)
+        if not 0 <= i < _SPARK_PUNKTE:
+            continue
+        for k, v in e.items():
+            if k == 'ts' or not isinstance(v, (int, float)) or isinstance(v, bool):
+                continue
+            summe, anzahl = eimer[i].get(k, (0.0, 0))
+            eimer[i][k] = (summe + v, anzahl + 1)
+
+    def _reihe(feld: str) -> list:
+        aus = []
+        for b in eimer:
+            summe, anzahl = b.get(feld, (0.0, 0))
+            aus.append(round(summe / anzahl, 2) if anzahl else None)
+        return aus
+
+    def _ladeleistung() -> list:
+        """Summe der Ladequellen, wie es die Statusleiste auch anzeigt."""
+        teile = [_reihe(f) for f in ('charger', 'solar1', 'alternator')]
+        aus = []
+        for i in range(_SPARK_PUNKTE):
+            werte = [t[i] for t in teile if t[i] is not None]
+            aus.append(round(sum(werte), 1) if werte else None)
+        return aus
+
+    serien = {'soc': _reihe('soc'), 'laden': _ladeleistung(),
+              'tank1': _reihe('tank1'), 'tank2': _reihe('tank2')}
+
+    # Pegel kommt nicht aus unserem Verlauf, sondern fertig von pegelonline.
+    # Nur aus dem Zwischenspeicher lesen — hier keinen Abruf ausloesen, sonst
+    # haengt die Statusleiste an einem fremden Dienst.
+    wl = _wl_cache.get('data') or {}
+    messungen = wl.get('measurements') or []
+    if messungen:
+        pegel: list = [None] * _SPARK_PUNKTE
+        eimer_p: list = [(0.0, 0)] * _SPARK_PUNKTE
+        for m in messungen:
+            try:
+                dt = datetime.fromisoformat(m['timestamp'])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                i = int((dt.timestamp() - von) / breite)
+            except Exception:
+                continue
+            if not 0 <= i < _SPARK_PUNKTE or not isinstance(m.get('v'), (int, float)):
+                continue
+            su, an = eimer_p[i]
+            eimer_p[i] = (su + m['v'], an + 1)
+        for i, (su, an) in enumerate(eimer_p):
+            pegel[i] = round(su / an, 1) if an else None
+        serien['pegel'] = pegel
+
+    return {'von': round(von), 'bis': round(jetzt),
+            'punkte': _SPARK_PUNKTE, 'serien': serien}
+
+
+@app.get('/api/statusleiste/verlauf')
+async def get_statusleiste_verlauf():
+    """Kurzverlaeufe fuer die Hintergrundgraphen der Statusleiste.
+
+    Eine Minute Zwischenspeicher: die Reihen sind Minutenmittel ueber 24
+    Stunden, oefter neu zu rechnen aendert das Bild nicht und der Pi hat nur
+    einen Kern. Mehrere offene Browser teilen sich damit eine Berechnung.
+    """
+    jetzt = time.time()
+    if _spark_cache['data'] and jetzt - _spark_cache['ts'] < 60:
+        return _spark_cache['data']
+    daten = await asyncio.get_running_loop().run_in_executor(None, _spark_bauen)
+    _spark_cache['data'] = daten
+    _spark_cache['ts']   = jetzt
+    return daten
 
 
 @app.get('/api/waterlevel')

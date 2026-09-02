@@ -596,7 +596,21 @@
       display: flex; flex-direction: column; gap: 2px;
       font-family: inherit; color: inherit; text-align: left;
       cursor: pointer; transition: background .15s;
+      position: relative; overflow: hidden;   /* traegt den Hintergrundgraphen */
     }
+    /* Verlauf der letzten 24 Stunden als Hintergrund. Er liegt hinter dem
+       Text, nimmt keine Klicks an und faerbt sich mit dem Zustand des Feldes
+       (siehe .sb-ok/.sb-low/.sb-warn weiter unten) — die Flaeche wird nach
+       unten hin durchsichtig, damit die Zeile darunter lesbar bleibt. */
+    .sb-spark {
+      position: absolute; inset: auto 0 0 0; height: 54%;
+      pointer-events: none; z-index: 0;
+      color: var(--text3);                    /* Vorgabe, bis ein Zustand greift */
+      opacity: .9;
+    }
+    .sb-spark svg { display: block; width: 100%; height: 100%; }
+    /* Der Inhalt gehoert ueber den Graphen. */
+    .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
     .sb-item:hover, .sb-item:active { background: var(--surface2); }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .sb-lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em;
@@ -613,6 +627,11 @@
     .sb-item.sb-low  .sb-val b { color: var(--yellow); }
     .sb-item.sb-warn .sb-val b { color: var(--red); }
     .sb-item.sb-idle .sb-val b { color: var(--text2); }
+    /* Der Graph traegt dieselbe Zustandsfarbe wie die Zahl darueber. */
+    .sb-item.sb-ok   .sb-spark { color: var(--green); }
+    .sb-item.sb-low  .sb-spark { color: var(--yellow); }
+    .sb-item.sb-warn .sb-spark { color: var(--red); }
+    .sb-item.sb-idle .sb-spark { color: var(--text3); }
     .sb-item.sb-stale .sb-val b,
     .sb-item.sb-stale .sb-sub { opacity: .45; }  /* Wert veraltet, Sensor stumm */
 
