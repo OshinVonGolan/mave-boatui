@@ -86,6 +86,10 @@ def _raum_kennzahlen(state: dict | None) -> dict:
         # Kaeltester eingeschalteter Raum, der auch meldet. None, wenn keiner
         # meldet — die Alarmregel wertet dann nicht aus, statt 0 anzunehmen.
         'raum_temp_min':  round(min(temps), 1) if temps else None,
+        # Mittel ueber die meldenden Raeume — das ist die Zahl, die in der
+        # Statusleiste den Verlauf traegt. Ein einzelner kalter Raum soll die
+        # Kurve nicht bestimmen, dafuer gibt es raum_temp_min.
+        'raum_temp_avg':  round(sum(temps) / len(temps), 1) if temps else None,
     }
 
 

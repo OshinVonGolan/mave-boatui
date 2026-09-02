@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.53.1'
+VERSION  = _git_semver() or '1.54.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -313,7 +313,8 @@ async def broadcast(data: dict):
     # es wird nichts geschrieben. NICHT entfernen — sie gehören zum Ausbauplan.
     for src_key, field in (('solar', 'solar1'), ('alternator', 'alternator'),
                             ('solar2', 'solar2'), ('solar3', 'solar3'),
-                            ('charger', 'charger'), ('wind', 'wind')):
+                            ('charger', 'charger'), ('orion', 'orion'),
+                            ('wind', 'wind')):
         p = data.get(src_key, {}).get('power')
         if p is not None:
             entry[field] = p
@@ -325,6 +326,11 @@ async def broadcast(data: dict):
         v = tanks.get(tk)
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             entry[tk] = v
+    # Mittlere Raumtemperatur der Heizung. Der Schnappschuss liegt oben schon
+    # fuer die Alarmpruefung vor — kein zweiter Abruf.
+    hz_avg = check_data['heizung'].get('raum_temp_avg')
+    if isinstance(hz_avg, (int, float)) and not isinstance(hz_avg, bool):
+        entry['raumtemp'] = hz_avg
     bms = data.get('bms', {})
     for bms_key in ('current_charge', 'current_discharge'):
         v = bms.get(bms_key)
@@ -1485,11 +1491,54 @@ def _spark_bauen() -> dict:
         return aus
 
     serien = {'soc': _reihe('soc'), 'laden': _ladeleistung(),
-              'tank1': _reihe('tank1'), 'tank2': _reihe('tank2')}
+              'tank1': _reihe('tank1'), 'tank2': _reihe('tank2'),
+              'raumtemp': _reihe('raumtemp'),
+              # Je Quelle einzeln, damit das Laden-Feld durchschalten kann.
+              'charger': _reihe('charger'), 'solar1': _reihe('solar1'),
+              'orion': _reihe('orion')}
 
-    # Pegel kommt nicht aus unserem Verlauf, sondern fertig von pegelonline.
-    # Nur aus dem Zwischenspeicher lesen — hier keinen Abruf ausloesen, sonst
-    # haengt die Statusleiste an einem fremden Dienst.
+    # Geladene Amperestunden der letzten 24 Stunden, je Quelle und gesamt.
+    # Aus Leistung und Spannung DESSELBEN Punktes: Ah = Summe(P/U) * dt.
+    # Die Punkte des groben Puffers sind Minutenmittel, dt ist also 1/60 h.
+    # Fehlt die Spannung, wird der Punkt uebersprungen statt mit einer
+    # angenommenen Spannung gerechnet — geraten waere hier schlimmer als eine
+    # etwas zu kleine Summe.
+    def _amperestunden(felder) -> float:
+        ah = 0.0
+        for e in punkte:
+            u = e.get('voltage')
+            if not isinstance(u, (int, float)) or isinstance(u, bool) or u <= 1:
+                continue
+            for f in felder:
+                p_w = e.get(f)
+                if isinstance(p_w, (int, float)) and not isinstance(p_w, bool) and p_w > 0:
+                    ah += (p_w / u) / 60.0
+        return round(ah, 1)
+
+    def _wattstunden(felder) -> float:
+        """Wh braucht keine Spannung — die Leistung steht ja schon da."""
+        wh = 0.0
+        for e in punkte:
+            for f in felder:
+                p_w = e.get(f)
+                if isinstance(p_w, (int, float)) and not isinstance(p_w, bool) and p_w > 0:
+                    wh += p_w / 60.0
+        return round(wh, 1)
+
+    ah24 = {'charger': _amperestunden(('charger',)),
+            'solar':   _amperestunden(('solar1',)),
+            'orion':   _amperestunden(('orion',))}
+    ah24['gesamt'] = round(sum(ah24.values()), 1)
+    wh24 = {'charger': _wattstunden(('charger',)),
+            'solar':   _wattstunden(('solar1',)),
+            'orion':   _wattstunden(('orion',))}
+    wh24['gesamt'] = round(sum(wh24.values()), 1)
+
+    # Pegel steht seit v1.54.0 nicht mehr in der Statusleiste (dort ist jetzt
+    # die Heizung). Die Reihe bleibt trotzdem: die Wasserstandsseite gibt es
+    # weiter, und der Wert kostet nichts — er kommt fertig aus dem
+    # Zwischenspeicher von pegelonline. Von hier wird KEIN Abruf ausgeloest,
+    # sonst haengt die Statusleiste an einem fremden Dienst.
     wl = _wl_cache.get('data') or {}
     messungen = wl.get('measurements') or []
     if messungen:
@@ -1516,7 +1565,8 @@ def _spark_bauen() -> dict:
         serien['pegel'] = pegel
 
     return {'von': round(von), 'bis': round(jetzt),
-            'punkte': _SPARK_PUNKTE, 'serien': serien}
+            'punkte': _SPARK_PUNKTE, 'serien': serien,
+            'ah24': ah24, 'wh24': wh24}
 
 
 @app.get('/api/statusleiste/verlauf')

@@ -582,7 +582,7 @@
       /* Feste Spaltenzahl statt auto-fit: auto-fit hat zwischen 641 und
          ~690 px genau FUENF Spalten gebildet, das sechste Feld stand dann
          allein in einer zweiten Zeile neben vier leeren Zellen. */
-      display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+      display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 1px;                                  /* 1px Spalt = Haarlinie */
       background: var(--border);                 /* scheint durch den Spalt */
       border: 1px solid var(--border);
@@ -611,6 +611,20 @@
       color: var(--text3);                    /* Vorgabe, bis ein Zustand greift */
     }
     .sb-spark svg { display: block; width: 100%; height: 100%; }
+    /* Waagerechter Balken: fuellt das Feld von links nach rechts. Anders als
+       der Verlauf zeigt er keinen Weg, sondern den Stand — deshalb eine
+       gleichmaessige Flaeche mit klarer Kante statt eines Verlaufs. */
+    .sb-balken {
+      position: absolute; inset: 0 auto 0 0; width: 0;
+      background: currentColor; opacity: .18;
+      pointer-events: none; z-index: 0;
+      color: var(--text3);
+      transition: width .5s ease;
+    }
+    .sb-item.sb-ok   .sb-balken { color: var(--green); }
+    .sb-item.sb-low  .sb-balken { color: var(--yellow); }
+    .sb-item.sb-warn .sb-balken { color: var(--red); }
+    .sb-item.sb-idle .sb-balken { color: var(--text3); }
     /* Der Inhalt gehoert ueber den Graphen. */
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
     .sb-item:hover, .sb-item:active { background: var(--surface2); }
@@ -638,9 +652,12 @@
     .sb-item.sb-stale .sb-sub { opacity: .45; }  /* Wert veraltet, Sensor stumm */
 
     /* Bis 700 px zwei Zeilen a drei Feldern — darunter reicht die Breite fuer
-       sechs nebeneinander nicht, ohne dass die Unterzeilen abschneiden. */
+       alle nebeneinander nicht, ohne dass die Unterzeilen abschneiden.
+       Es sind fuenf Felder, die zweite Zeile bliebe also zu einem Drittel
+       leer: das letzte Feld nimmt die Luecke mit. */
     @media (max-width: 700px) {
       .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .statusbar .sb-item:last-child { grid-column: span 2; }
     }
     @media (max-width: 640px) {
       .sb-item { padding: 9px 10px 10px; }

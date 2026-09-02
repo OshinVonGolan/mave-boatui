@@ -116,6 +116,11 @@ function toggleBattUnit(e) {
   _battEnergyUnit = _battEnergyUnit === 'ah' ? 'wh' : 'ah';
   _updateBattToggle();
   _renderBattGrid();
+  // Das Laden-Feld der Statusleiste folgt derselben Einheit — sonst stuenden
+  // auf einem Bildschirm zwei verschiedene Masse nebeneinander.
+  if (typeof _sbRenderLaden === 'function' && typeof _lastData !== 'undefined' && _lastData) {
+    _sbRenderLaden(_lastData);
+  }
 }
 
 function _updateBattToggle() {

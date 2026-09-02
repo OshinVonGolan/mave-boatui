@@ -135,6 +135,10 @@ async function ladeHeizung(fuerDetail) {
     _hzDaten = null;
   }
   updateHeizungKachel();
+  // Die Statusleiste zeigt seit v1.54.0 ebenfalls Heizungswerte. Sie haengt am
+  // WebSocket, die Heizung an diesem Poller — ohne diesen Aufruf zeigte das
+  // Feld je nach Reihenfolge bis zu sechs Sekunden alte Werte.
+  if (typeof _sbRenderHeizung === 'function') _sbRenderHeizung();
   if (fuerDetail || !$('heizungOverlay')?.classList.contains('hidden')) renderHeizungDetail();
 }
 

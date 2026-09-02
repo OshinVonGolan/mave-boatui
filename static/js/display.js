@@ -955,23 +955,15 @@ function updateStatusBar(data) {
   _sbState('sbSoc', b.soc == null ? 'sb-idle'
     : b.soc < 30 ? 'sb-warn' : b.soc < 50 ? 'sb-low' : 'sb-ok');
 
-  // Laden: staerkste aktive Quelle mit Namen, damit klar ist WORAUS geladen wird
-  const quellen = [
-    ['Landstrom',   data.charger    && data.charger.power],
-    ['Solar',       data.solar      && data.solar.power],
-    ['Lichtmasch.', data.alternator && data.alternator.power],
-  ].filter(([, w]) => w != null && w > 1);
-  quellen.sort((x, y) => y[1] - x[1]);
-  const gesamt = quellen.reduce((sum, [, w]) => sum + w, 0);
-  _sbSet('sbChg', quellen.length ? String(Math.round(gesamt)) : '0');
-  _sbSet('sbChgSub', quellen.length
-    ? (quellen.length === 1 ? quellen[0][0] : `${quellen[0][0]} +${quellen.length - 1}`)
-    : (data.inverter && data.inverter.state === 'Aktiv' ? 'Inverter an' : 'keine Quelle'));
-  _sbState('sbChg', quellen.length ? 'sb-ok' : 'sb-idle');
+  _sbRenderLaden(data);
 
   // Tanks: Namen und Kapazitaet kommen aus den Presets, nicht hart verdrahtet
   const t = data.tanks || {};
   const cfg = (typeof tanksConfig === 'object' && tanksConfig) || {};
+  // Diesel steht seit v1.54.0 nicht mehr in der Leiste (Eignerwunsch, der
+  // Platz bleibt vorerst frei). Die Schleife laeuft weiter ueber beide IDs —
+  // _sbSet und _sbState pruefen auf Vorhandensein, tank2 faellt also
+  // geraeuschlos weg und ist wieder da, sobald das Feld zurueckkommt.
   [['tank1', 'sbT1'], ['tank2', 'sbT2']].forEach(([key, id]) => {
     const pct = t[key];
     _sbSet(id, _n(pct) ?? '--');
@@ -982,22 +974,150 @@ function updateStatusBar(data) {
       : (pct == null ? 'keine Daten' : ''));
     _sbState(id, pct == null ? 'sb-idle'
       : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
+    // Waagerechter Balken: die Breite IST der Fuellstand.
+    const bar = document.getElementById(id + 'Bar');
+    if (bar) bar.style.width = pct == null ? '0%'
+      : Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
   });
 
-  // Wasserstand kommt aus einer eigenen Quelle (waterlevel.js, /api/waterlevel).
-  // Frueher wurde die Zahl aus dem Text des Pegel-Chips in der Kopfzeile
-  // GEKRATZT — dieser Chip ist entfernt, und damit haette hier dauerhaft "--"
-  // gestanden. Jetzt direkt aus den Daten.
-  // Gezeigt wird die Hoehe ueber NHN (current_nhn_cm), NICHT der Rohwert ueber
-  // Pegelnull (current_cm) — das sind an der Ostsee rund 500 cm Unterschied.
-  // Frueher wurde die Zahl aus dem Text des Pegel-Chips in der Kopfzeile
-  // GEKRATZT; der Chip ist entfernt, und der Regex hatte genau den NHN-Wert
-  // erwischt. Jetzt direkt aus den Daten, mit demselben Bezug.
-  // Kein typeof-Schutz noetig: zum Aufrufzeitpunkt ist das Bundle durchlaufen.
-  _sbSet('sbWl', _wlData?.current_nhn_cm != null
-    ? String(Math.round(_wlData.current_nhn_cm)) : '--');
-
+  // Der Pegel stand hier bis v1.54.0. An seiner Stelle steht jetzt die Heizung
+  // — der Wasserstand hat eine eigene Seite und ist dort vollstaendiger.
+  _sbRenderHeizung();
   _sbRenderWartung();
+}
+
+// ── Laden-Feld: Quellen durchschalten ───────────────────────────────────────
+// Ein Tipp wechselt die Quelle. Gezeigt werden Leistung jetzt und die in den
+// letzten 24 Stunden geladenen Amperestunden — die Zahl, die am Ende zaehlt.
+// 'reihe' benennt die Serie des Hintergrundgraphen, 'ah' den Schluessel in
+// der Ah-Bilanz vom Server.
+const _SB_LADEN = [
+  { schluessel: 'gesamt', label: 'Laden',     reihe: 'laden',   ah: 'gesamt'  },
+  { schluessel: 'charger', label: 'Landstrom', reihe: 'charger', ah: 'charger' },
+  { schluessel: 'solar',   label: 'Solar',     reihe: 'solar1',  ah: 'solar'   },
+  { schluessel: 'orion',   label: 'Orion',     reihe: 'orion',   ah: 'orion'   },
+];
+let _sbLadenIdx = 0;
+
+function sbLadenWeiter() {
+  _sbLadenIdx = (_sbLadenIdx + 1) % _SB_LADEN.length;
+  // Der Graph zeigt ab jetzt dieselbe Quelle wie die Zahl.
+  const spark = document.querySelector('#sbChgItem .sb-spark');
+  if (spark) {
+    spark.dataset.reihe = _SB_LADEN[_sbLadenIdx].reihe;
+    if (typeof _sparkZeichnen === 'function') _sparkZeichnen();
+  }
+  // Sofort neu zeichnen statt auf den naechsten Broadcast zu warten —
+  // _lastData haelt den letzten Zustand (ws.js).
+  if (typeof _lastData !== 'undefined' && _lastData) _sbRenderLaden(_lastData);
+}
+
+function _sbRenderLaden(data) {
+  const w = q => {
+    const v = data?.[q]?.power;
+    return (typeof v === 'number') ? v : null;
+  };
+  const einzeln = { charger: w('charger'), solar: w('solar'), orion: w('orion') };
+  const aktiv = _SB_LADEN[_sbLadenIdx];
+
+  let leistung;
+  if (aktiv.schluessel === 'gesamt') {
+    // Gesamt heisst wirklich gesamt: auch die Lichtmaschine zaehlt mit, auch
+    // wenn sie kein eigenes Feld im Durchschalten hat.
+    const alle = [einzeln.charger, einzeln.solar, einzeln.orion, w('alternator')]
+      .filter(v => v != null && v > 1);
+    leistung = alle.length ? alle.reduce((a, b) => a + b, 0) : 0;
+  } else {
+    leistung = einzeln[aktiv.schluessel];
+  }
+
+  // Einheit folgt der Batteriekachel: dort steht der Schalter Ah/Wh, und zwei
+  // verschiedene Masse nebeneinander auf einem Bildschirm waeren Unsinn.
+  const inAh = (typeof _battEnergyUnit !== 'undefined') && _battEnergyUnit === 'ah';
+  const spannung = (typeof _lastBattery !== 'undefined' && _lastBattery?.voltage) || null;
+
+  _sbSet('sbChgLbl', aktiv.label);
+  const einheitEl = document.querySelector('#sbChgItem .sb-val i');
+
+  if (inAh) {
+    // Aus Leistung und aktueller Batteriespannung. Ohne Spannung wird nicht
+    // geraten — dann bleibt das Feld bei Watt, statt eine falsche Zahl zu
+    // zeigen.
+    if (leistung != null && spannung > 1) {
+      _sbSet('sbChg', (leistung / spannung).toFixed(1));
+      if (einheitEl) einheitEl.textContent = 'A';
+    } else {
+      _sbSet('sbChg', leistung == null ? '--' : String(Math.round(leistung)));
+      if (einheitEl) einheitEl.textContent = 'W';
+    }
+  } else {
+    _sbSet('sbChg', leistung == null ? '--' : String(Math.round(leistung)));
+    if (einheitEl) einheitEl.textContent = 'W';
+  }
+
+  // Untere Zeile: geladene Menge der letzten 24 Stunden, in derselben Einheit.
+  // Fehlt die Bilanz noch (erster Abruf laeuft), lieber nichts behaupten.
+  let menge = '';
+  if (inAh) {
+    const ah = _sparkDaten?.ah24?.[aktiv.ah];
+    if (ah != null) menge = `${ah.toFixed(1)} Ah / 24 h`;
+  } else {
+    const wh = _sparkDaten?.wh24?.[aktiv.ah];
+    if (wh != null) {
+      menge = (wh >= 1000 ? (wh / 1000).toFixed(2) + ' kWh' : Math.round(wh) + ' Wh') + ' / 24 h';
+    }
+  }
+  if (aktiv.schluessel === 'gesamt' && !(leistung > 1)) {
+    _sbSet('sbChgSub', menge || (data?.inverter?.state === 'Aktiv'
+      ? 'Inverter an' : 'keine Quelle'));
+  } else {
+    _sbSet('sbChgSub', menge || (leistung == null ? 'keine Daten' : ''));
+  }
+  _sbState('sbChg', leistung == null ? 'sb-idle'
+    : leistung > 1 ? 'sb-ok' : 'sb-idle');
+}
+
+/**
+ * Heizungsfeld der Statusleiste: Vorlauftemperatur als Zahl, darunter das
+ * gewaehlte Preset und die Betriebsart.
+ *
+ * Eigene Funktion, weil die Heizung an einem eigenen Poller haengt (alle 6 s,
+ * heizung.js) und nicht am WebSocket. Sie wird deshalb von BEIDEN Seiten
+ * aufgerufen: hier bei jedem Broadcast und in ladeHeizung(), sobald neue
+ * Heizungsdaten da sind. Sonst haette das Feld je nach Reihenfolge bis zu
+ * sechs Sekunden alte Werte gezeigt.
+ */
+function _sbRenderHeizung() {
+  const d = (typeof _hzDaten !== 'undefined') ? _hzDaten : null;
+  const st = d?.state, h = st?.heater;
+  const erreichbar = d && d.enabled && d.configured && d.reachable !== false;
+
+  if (!d || !d.configured) {
+    _sbSet('sbHz', '--');
+    _sbSet('sbHzSub', 'nicht eingerichtet');
+    _sbState('sbHz', 'sb-idle');
+    return;
+  }
+  if (!erreichbar || !h) {
+    _sbSet('sbHz', '--');
+    _sbSet('sbHzSub', 'nicht erreichbar');
+    _sbState('sbHz', 'sb-warn');
+    return;
+  }
+  _sbSet('sbHz', h.flowTemp != null ? String(Math.round(h.flowTemp)) : '--');
+
+  // Preset und Betriebsart in einer Zeile. Ohne Preset steht nur die
+  // Betriebsart da, statt eines fuehrenden Trennzeichens.
+  const preset = st.preset?.name;
+  const modus  = (typeof HZ_MODUS === 'object' && HZ_MODUS[h.mode]) || h.mode || '';
+  _sbSet('sbHzSub', [preset, modus].filter(Boolean).join(' · ') || '--');
+
+  // Farbe nach dem, was das Geraet TUT: laeuft es, ist das Feld gruen; steht
+  // es bereit, bleibt es ruhig; eine Stoerung faerbt rot.
+  _sbState('sbHz',
+    h.errorCode ? 'sb-warn'
+    : h.state && h.state !== 'off' ? 'sb-ok'
+    : 'sb-idle');
 }
 
 /** Schreibt NUR die beiden Wartungsfelder — laesst den Rest der Leiste in Ruhe. */
