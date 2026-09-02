@@ -59,14 +59,11 @@
     <div class="conn-badge" title="Verbindung zum Boot">
       <div class="conn-dot" id="connDot"></div>
     </div>
-    <div class="topbar-batt" id="topbarBatt" title="Ladestand Servicebatterie">
-      <svg width="24" height="13" viewBox="0 0 24 13" fill="none">
-        <rect x="0.75" y="0.75" width="19.5" height="11.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
-        <rect x="20.75" y="4" width="2.5" height="5" rx="1" fill="currentColor"/>
-        <rect x="2.5" y="2.5" width="0" height="8" rx="1" fill="currentColor" id="topbarBattFill"/>
-      </svg>
-      <span class="topbar-batt-pct" id="topbarBattPct">--%</span>
-    </div>
+    <!-- Die Batterieanzeige stand hier. Sie war doppelt: das erste Feld der
+         Statusleiste darunter zeigt denselben Ladestand, mit mehr Zusammenhang
+         (Strom, Restzeit) und einem Tipp auf die Detailseite.
+         Auf Wunsch des Eigners entfernt. Der Kiosk hat eine eigene Anzeige
+         (ktpBatt) — die bleibt. -->
     <!-- Desktop: alle Buttons sichtbar -->
     <button class="icon-btn burger-hide-full" id="connInetBtn" onclick="openConnectivity()" title="Internet-Verbindung">
       <div class="conn-inet-wrap">
@@ -84,7 +81,10 @@
         <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
       </svg>
     </button>
-    <button class="icon-btn alarm-btn burger-hide" onclick="openAlarms()" title="Alarme" id="alarmBtn">
+    <!-- Kein burger-hide: die Alarme gehoeren auch am Telefon sichtbar in die
+         Kopfzeile, nicht nur ins Menue. Der Eintrag im Burger bleibt daneben
+         bestehen, so wie beim Internet auch. -->
+    <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
@@ -181,6 +181,7 @@
 </div>
 
 <!-- ── Statusleiste: alle Kernwerte auf einen Blick, jedes Feld tippbar ── -->
+<div class="statusbar-halter">
 <section class="statusbar" id="statusBar" aria-label="Bordstatus">
   <button type="button" class="sb-item" onclick="openBattDetail()">
     <span class="sb-lbl">Batterie</span>
@@ -213,6 +214,7 @@
     <span class="sb-sub" id="sbWartSub">--</span>
   </button>
 </section>
+</div>
 
 <main>
 

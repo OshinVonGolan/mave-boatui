@@ -19,7 +19,13 @@
       --header-h: 57px;
     }
 
-    html, body { height: 100%; background: var(--bg); color: var(--text);
+    html { height: 100%; }
+    /* body MUSS mitwachsen duerfen. Mit height:100% war die Box exakt
+       bildschirmhoch, waehrend der Inhalt darueber hinauslief — und ein
+       haftendes Element (die Statusleiste) ist an die Box seines Elternteils
+       gebunden. Am Telefon rutschte sie deshalb nach etwa 600 px doch noch
+       aus dem Bild. */
+    body { min-height: 100%; background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased; }
 
@@ -88,11 +94,11 @@
       .burger-hide { display: none !important; }
       .burger-wrap { display: block; }
       .header-right { justify-content: flex-end; margin-left: auto; gap: 6px; }
-      /* Batterie + Internet: nur Anzeige, kein Button-Verhalten */
+      /* Internet: nur Anzeige, kein Button-Verhalten. Die Alarmglocke daneben
+         bleibt ausdruecklich tippbar — ein Alarm will geoeffnet werden. */
       #connInetBtn { pointer-events: none; cursor: default;
         background: none !important; border-color: transparent !important;
         box-shadow: none !important; padding: 4px 2px; }
-      .topbar-batt { cursor: default; }
     }
     /* ── Kiosk-Chrome (fester Display): linke Sidebar + Slide-down Topbar ──
        Im Kiosk-Modus werden Header (oben) und alte Bottom-Nav entfernt. */
@@ -560,8 +566,19 @@
        fuehrt per Tap in die zugehoerige Detailansicht. Steht bewusst
        AUSSERHALB des Kachel-Grids: main setzt grid-auto-rows per JS auf
        Kachelhoehe, das wuerde die Leiste sonst auf Kachelgroesse aufblasen. */
+    /* Die Statusleiste bleibt beim Scrollen stehen. Sie sitzt dafuer in einem
+       eigenen Halter statt selbst sticky zu sein: die Leiste ist abgerundet
+       und seitlich eingerueckt, der durchlaufende Inhalt waere sonst an den
+       Ecken und neben ihr zu sehen. Der Halter traegt den Seitenhintergrund
+       und die Abstaende, die vorher an der Leiste hingen. */
+    .statusbar-halter {
+      position: sticky; top: var(--header-h); z-index: 60;
+      margin-top: var(--header-h);          /* unter die feste Kopfzeile */
+      padding: var(--gap) var(--gap);
+      background: var(--bg);
+    }
     .statusbar {
-      margin: calc(var(--header-h) + var(--gap)) var(--gap) 0;
+      margin: 0;
       /* Feste Spaltenzahl statt auto-fit: auto-fit hat zwischen 641 und
          ~690 px genau FUENF Spalten gebildet, das sechste Feld stand dann
          allein in einer zweiten Zeile neben vier leeren Zellen. */
@@ -571,7 +588,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden;
     }
-    main { padding-top: var(--gap); }            /* Header-Abstand traegt jetzt die Leiste */
+    main { padding-top: 0; }   /* Kopf- und Leistenabstand traegt der Halter */
 
     .sb-item {
       background: var(--surface); border: 0; margin: 0;
@@ -1754,18 +1771,11 @@
       transition: width .7s ease, background .5s;
     }
 
-    /* Phone-style topbar battery */
-    .topbar-batt {
-      display: flex; align-items: center; gap: 5px;
-      font-size: 12px; font-weight: 600; color: var(--green);
-      font-variant-numeric: tabular-nums; transition: color .5s;
-    }
-
     /* Mobile: compact topbar */
     @media (max-width: 500px) {
       :root { --header-h: 51px; }
       .logo-sub, .logo-ver { display: none; }
-      .topbar-batt-pct, #topbarClock { display: none !important; }
+      #topbarClock { display: none !important; }
       header { padding: 10px 12px 9px; }
       .header-right { gap: 6px; }
     }

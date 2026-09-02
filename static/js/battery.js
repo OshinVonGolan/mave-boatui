@@ -501,23 +501,15 @@ function updateBattery(b) {
   if (!$('battOverlay').classList.contains('hidden')) renderCharts();
 }
 
+/** Ladestand an die Kiosk-Kopfzeile weiterreichen.
+ *
+ *  In der normalen Kopfzeile stand hier einmal eine zweite Batterieanzeige.
+ *  Sie ist raus, weil das erste Feld der Statusleiste denselben Wert zeigt —
+ *  mit Strom und Restzeit daneben. Der Kiosk auf dem Pi hat eine eigene
+ *  Slide-down-Leiste mit eigenen Kennungen (ktpBatt), die bleibt versorgt.
+ */
 function updateTopbarBatt(soc) {
-  if (typeof _kioskUpdateBatt === 'function') _kioskUpdateBatt(soc);  // Kiosk Slide-down
-  const fill = $('topbarBattFill');
-  const pct  = $('topbarBattPct');
-  const wrap = $('topbarBatt');
-  if (!fill) return;
-  if (soc == null) {
-    fill.setAttribute('width', '0');
-    if (pct)  pct.textContent = '--%';
-    if (wrap) wrap.style.color = 'var(--text3)';
-    return;
-  }
-  const v = Math.max(0, Math.min(100, soc));
-  fill.setAttribute('width', String((v / 100 * 16).toFixed(1)));
-  const color = v >= 50 ? 'var(--green)' : v >= 20 ? 'var(--yellow)' : 'var(--red)';
-  if (wrap) wrap.style.color = color;
-  if (pct)  pct.textContent = Math.round(v) + '%';
+  if (typeof _kioskUpdateBatt === 'function') _kioskUpdateBatt(soc);
 }
 
 /** Kennzahl der Servicebatterie-Karte. */
