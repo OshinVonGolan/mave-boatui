@@ -210,6 +210,11 @@
     <span class="sb-val"><b id="sbT1">--</b><i>%</i></span>
     <span class="sb-sub" id="sbT1Sub">--</span>
   </button>
+  <!-- Bewusst leeres Feld: hier stand Diesel. Der Platz bleibt frei, aber die
+       Zelle MUSS bestehen bleiben — sonst waeren es fuenf Felder, und die
+       zweizeilige Ansicht (2 x 3) haette unten eine Luecke. Kein <button>,
+       weil es nichts zu tippen gibt. -->
+  <div class="sb-item sb-leer" aria-hidden="true"></div>
   <button type="button" class="sb-item" onclick="openHeizung()">
     <!-- Der Graph zeigt die mittlere Raumtemperatur, die Zahl daneben den
          Vorlauf. Temperatur hat keine feste Skala wie ein Prozentwert:
