@@ -364,18 +364,23 @@ class StokerClient:
             (isinstance(code, (int, float)) and not isinstance(code, bool) and code != 0)
             if (verbaut and erreichbar) else None)
 
-        # Frostschutz: nur beurteilen, wenn die Heizung ueberhaupt heizen SOLL.
-        # Ein bewusst abgestelltes Boot im Winterlager kuehlt planmaessig aus —
-        # daraus einen Dauer-Alarm zu machen waere schlicht falsch.
-        # Wichtig: _einmal_pollen() leert self._state bei einem Fehlschlag NICHT.
-        # Ohne die Erreichbarkeitssperre wuerde ein Alarm auf Messwerten von
-        # vorgestern anlaufen — im Winterlager (Hub aus, Pi laeuft) monatelang.
-        # Ein bereits stehender Alarm bleibt dabei stehen: die Engine
-        # ueberspringt None, ohne ihn zu loeschen.
+        # Frostschutz. Bewusst UNABHAENGIG davon, ob das Heizgeraet laeuft:
+        # ein geplatztes Wasserrohr fragt nicht, warum es kalt geworden ist.
+        # Frueher hing das an heater.mode ('off' -> kein Urteil); das war
+        # falsch herum, denn ausgerechnet der wahrscheinlichste Fehler — die
+        # Heizung steht auf Aus, gewollt oder nicht — legte damit den Alarm
+        # still. Eigner-Entscheidung vom 02.09.2026.
+        #
+        # Zwei Bedingungen bleiben:
+        #  - Der Hub muss erreichbar sein. _einmal_pollen() leert self._state
+        #    bei einem Fehlschlag NICHT, sonst liefe der Alarm auf Messwerten
+        #    von vorgestern an (Hub aus, Pi laeuft: monatelang). Ein bereits
+        #    stehender Alarm bleibt dabei stehen — die Engine ueberspringt
+        #    None, ohne ihn zu loeschen.
+        #  - Gezaehlt werden nur Raeume auf "heizt mit" (siehe
+        #    _raum_kennzahlen). Ein bewusst abgemeldeter Raum darf kalt sein.
         temp_min  = schnapp.get('raum_temp_min')
-        soll_heizen = h.get('mode') not in (None, 'off')
-        frost_temp = temp_min if (erreichbar and soll_heizen
-                                  and temp_min is not None) else None
+        frost_temp = temp_min if (erreichbar and temp_min is not None) else None
 
         offline   = schnapp.get('raeume_offline')
         online    = schnapp.get('raeume_online')
