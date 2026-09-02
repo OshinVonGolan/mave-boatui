@@ -847,7 +847,11 @@ let _sparkDaten = null;
 /** Pfade fuer EINEN zusammenhaengenden Abschnitt ohne Luecken. */
 function _sparkAbschnitt(werte, von, bis, tief, spanne, n) {
   const x = i => (n > 1 ? (i / (n - 1)) * 100 : 50);
-  const y = v => SPARK_H - 2 - ((v - tief) / spanne) * (SPARK_H - 4);
+  // Der Hoechstwert der Skala liegt auf der OBERKANTE des Feldes: bei einem
+  // Prozentwert heisst das, die Hoehe der Flaeche ist der Fuellstand. Nur
+  // eine halbe Einheit Luft oben, damit die Linie nicht halb abgeschnitten
+  // wird — sie ist einen Bildpunkt breit.
+  const y = v => (SPARK_H - 0.5) - ((v - tief) / spanne) * (SPARK_H - 0.5);
   let linie = '', flaeche = `M ${x(von).toFixed(2)} ${SPARK_H}`;
   for (let i = von; i <= bis; i++) {
     const px = x(i).toFixed(2), py = y(werte[i]).toFixed(2);
@@ -858,16 +862,33 @@ function _sparkAbschnitt(werte, von, bis, tief, spanne, n) {
   return { linie, flaeche };
 }
 
-function _sparkSvg(werte, mindestSpanne, id) {
+/**
+ * @param opt.tief    feste Untergrenze der Skala (undefined = aus den Daten)
+ * @param opt.hoch    feste Obergrenze der Skala  (undefined = aus den Daten)
+ * @param opt.spanne  Mindestspanne, wenn eine Grenze aus den Daten kommt
+ */
+function _sparkSvg(werte, opt, id) {
   const echt = werte.filter(v => typeof v === 'number');
   if (echt.length < 2) return '';        // ein Punkt ist kein Verlauf
-  const tief = Math.min(...echt), hoch = Math.max(...echt);
-  // Mindestspanne: sonst wird ein fast waagerechter Verlauf zum Gebirge und
-  // taeuscht eine Bewegung vor, die es nicht gibt.
-  const spanne = Math.max(hoch - tief, mindestSpanne);
-  // Bei kleiner Spanne mittig einbetten statt am Boden kleben lassen.
-  const rand = (spanne - (hoch - tief)) / 2;
-  const basis = tief - rand;
+  const dTief = Math.min(...echt), dHoch = Math.max(...echt);
+  const mind  = opt.spanne || 1;
+  let tief, spanne;
+  if (opt.tief !== undefined && opt.hoch !== undefined) {
+    // Feste Skala, z. B. 0..100 %. Die Hoehe der Flaeche IST dann der Wert —
+    // nicht die zufaellige Streuung der letzten 24 Stunden.
+    tief = opt.tief; spanne = Math.max(opt.hoch - opt.tief, 1e-6);
+  } else if (opt.tief !== undefined) {
+    // Untergrenze fest (z. B. 0 W), Obergrenze aus den Daten. Die
+    // Mindestobergrenze verhindert, dass 5 W Ladung das Feld fuellen.
+    tief = opt.tief; spanne = Math.max(dHoch - opt.tief, mind);
+  } else {
+    // Beides aus den Daten: Hoechstwert an die Oberkante, Mindestspanne
+    // mittig verteilt, damit ein fast waagerechter Verlauf nicht zum
+    // Gebirge aufgeblasen wird.
+    spanne = Math.max(dHoch - dTief, mind);
+    tief = dTief - (spanne - (dHoch - dTief)) / 2;
+  }
+  const basis = tief;
   const n = werte.length;
   let linien = '', flaechen = '';
   let i = 0;
@@ -884,8 +905,8 @@ function _sparkSvg(werte, mindestSpanne, id) {
   if (!flaechen) return '';
   return `<svg viewBox="0 0 100 ${SPARK_H}" preserveAspectRatio="none" focusable="false">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="currentColor" stop-opacity=".34"/>
-      <stop offset="1" stop-color="currentColor" stop-opacity="0"/>
+      <stop offset="0" stop-color="currentColor" stop-opacity=".22"/>
+      <stop offset=".85" stop-color="currentColor" stop-opacity="0"/>
     </linearGradient></defs>
     <path d="${flaechen.trim()}" fill="url(#${id})"/>
     <path d="${linien}" fill="none" stroke="currentColor" stroke-opacity=".3"
@@ -900,8 +921,11 @@ function _sparkZeichnen() {
   document.querySelectorAll('.sb-spark').forEach(el => {
     const reihe = el.dataset.reihe;
     const werte = serien[reihe];
+    const zahl = a => (el.dataset[a] === undefined || el.dataset[a] === ''
+      ? undefined : +el.dataset[a]);
     const neu = Array.isArray(werte)
-      ? _sparkSvg(werte, +el.dataset.spanne || 1, 'spk_' + reihe) : '';
+      ? _sparkSvg(werte, { tief: zahl('tief'), hoch: zahl('hoch'),
+                           spanne: +el.dataset.spanne || 1 }, 'spk_' + reihe) : '';
     // Nur schreiben, wenn sich wirklich etwas geaendert hat: der Streifen wird
     // bei jedem Broadcast angefasst, und innerHTML kostet auf dem Pi Zero.
     if (el.innerHTML !== neu) el.innerHTML = neu;

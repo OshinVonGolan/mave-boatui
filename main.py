@@ -55,7 +55,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.53.0'
+VERSION  = _git_semver() or '1.53.1'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -1497,7 +1497,11 @@ def _spark_bauen() -> dict:
         eimer_p: list = [(0.0, 0)] * _SPARK_PUNKTE
         for m in messungen:
             try:
-                dt = datetime.fromisoformat(m['timestamp'])
+                # _fetch_waterlevel legt die Reihe als {'ts': ..., 'v': ...} ab,
+                # NICHT als {'timestamp': ...} wie die Rohantwort von
+                # pegelonline. Mit dem falschen Schluessel lief jeder Punkt in
+                # den Ausnahmefall und die Reihe blieb still leer.
+                dt = datetime.fromisoformat(m['ts'])
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 i = int((dt.timestamp() - von) / breite)

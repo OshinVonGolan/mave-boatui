@@ -603,10 +603,12 @@
        (siehe .sb-ok/.sb-low/.sb-warn weiter unten) — die Flaeche wird nach
        unten hin durchsichtig, damit die Zeile darunter lesbar bleibt. */
     .sb-spark {
-      position: absolute; inset: auto 0 0 0; height: 54%;
+      /* Volle Feldhoehe, damit der Hoechstwert der Skala (bei Prozentwerten
+         100 %) wirklich an der OBERKANTE des Feldes liegt und die Hoehe der
+         Flaeche sich ablesen laesst. */
+      position: absolute; inset: 0;
       pointer-events: none; z-index: 0;
       color: var(--text3);                    /* Vorgabe, bis ein Zustand greift */
-      opacity: .9;
     }
     .sb-spark svg { display: block; width: 100%; height: 100%; }
     /* Der Inhalt gehoert ueber den Graphen. */
