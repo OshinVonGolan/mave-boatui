@@ -269,6 +269,18 @@
       font-weight: 600; margin-left: 2px; }
     .hz-soll-ist   { display: block; font-size: 12px; color: var(--text3);
       font-variant-numeric: tabular-nums; margin-top: 2px; }
+    /* Geblaesestaerke im Handbetrieb — erscheint nur, wenn der Raum auf Hand steht */
+    .hz-tempo { margin-top: 12px; }
+    .hz-tempo-kopf { display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+    .hz-tempo-kopf span { color: var(--text); font-variant-numeric: tabular-nums; }
+    .hz-tempo-kopf b { font-size: 15px; font-weight: 700; }
+    /* Griffflaeche fuer den Finger am Touchscreen, nicht nur fuer die Maus */
+    .hz-tempo-regler { width: 100%; height: 28px; accent-color: var(--accent2);
+      cursor: pointer; touch-action: none; }
+    .hz-tempo-regler:disabled { opacity: .5; cursor: default; }
+    .hz-tempo-regler:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
     .hz-rund { font-family: inherit; font-size: 20px; font-weight: 700; line-height: 1;
       width: 44px; height: 44px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
       border: 1px solid var(--border); background: var(--surface2); color: var(--text); }

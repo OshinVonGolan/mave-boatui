@@ -320,6 +320,8 @@ function closeHeizung() {
 function renderHeizungDetail() {
   const box = $('heizungDetail');
   if (!box) return;
+  // Finger am Staerkeregler: nicht neu aufbauen, sonst reisst das Ziehen ab.
+  if (_hzReglerRaum !== null) return;
   const d = _hzDaten, st = d?.state;
   if (!st) {
     box.innerHTML = `<div class="sb-card"><div class="hz-leer">${
@@ -399,6 +401,21 @@ function renderHeizungDetail() {
           onclick="hzRaumAn(${r.id}, ${r.enabled ? 'false' : 'true'})" ${gesperrt}>${
           r.enabled ? 'heizt mit' : 'heizt nicht mit'}</button>
       </div>
+      ${r.fanMode === 'manual' ? (() => {
+        // Sollwert der Handstufe. Nicht fanPercent nehmen: das ist der Istwert,
+        // der beim Anlaufimpuls und beim Auslaufen daneben liegt (Firmware
+        // room_control.cpp) — der Regler zeigt, was gestellt IST.
+        const tempo = _hzErwartetWert('tempo' + r.id) ?? (r.manualSpeed ?? 50);
+        return `<div class="hz-tempo">
+          <label class="hz-tempo-kopf" for="hzTempo${r.id}">Gebläsestärke
+            <span><b id="hzTempoWert${r.id}">${tempo}</b> %</span></label>
+          <input type="range" class="hz-tempo-regler" id="hzTempo${r.id}"
+            min="0" max="100" step="5" value="${tempo}" ${gesperrt}
+            oninput="hzTempoZeigen(${r.id}, this.value)"
+            onchange="hzTempo(${r.id}, this.value)"
+            onpointerdown="_hzReglerHalten(${r.id})">
+        </div>`;
+      })() : ''}
       ${r.fault && r.fault !== 'none'
         ? `<div class="hz-hinweis hz-fehler">Störung: ${_esc(r.fault)}</div>` : ''}
     </div>`;
@@ -464,6 +481,45 @@ function hzModus(m)           { _hzErwarte('mode', m);
 function hzHand(befehl)       { _hzSenden('heater', '/api/heizung/heater', { mode: 'manual', command: befehl }); }
 function hzAbbrechen()        { _hzSenden('heater', '/api/heizung/heater', { cancelPending: true }); }
 function hzLuefter(id, modus) { _hzSenden('room' + id, `/api/heizung/room/${id}`, { fanMode: modus }); }
+
+// ── Geblaesestaerke im Handbetrieb ──────────────────────────────────────────
+// Der Regler steckt in einem Block, den die Detailseite alle 3 s per innerHTML
+// neu aufbaut (hzDetailPoller). Waehrend des Ziehens wuerde er dabei aus dem
+// DOM fliegen und der Finger den Faden verlieren. Solange angefasst wird,
+// bleibt das Neuzeichnen deshalb aus.
+let _hzReglerRaum  = null;   // id des Raums, dessen Regler gerade angefasst wird
+let _hzReglerTimer = null;
+
+function _hzReglerHalten(id) {
+  _hzReglerRaum = id;
+  clearTimeout(_hzReglerTimer);
+  // Notbremse: bleibt 'change' aus (Finger verlaesst den Bildschirm, Zeiger
+  // geht verloren), darf die Anzeige nicht dauerhaft einfrieren.
+  _hzReglerTimer = setTimeout(() => { _hzReglerRaum = null; }, 8000);
+}
+
+function _hzReglerLoslassen() {
+  clearTimeout(_hzReglerTimer);
+  _hzReglerRaum = null;
+}
+
+/** Waehrend des Ziehens nur die Zahl daneben mitfuehren — nichts senden. */
+function hzTempoZeigen(id, wert) {
+  _hzReglerHalten(id);
+  const feld = $('hzTempoWert' + id);
+  if (feld) feld.textContent = wert;
+}
+
+/** Losgelassen: einmal senden. 'change' feuert beim Loslassen, nicht waehrend
+ *  des Ziehens — damit geht genau EIN Befehl an den Hub statt hundert. */
+function hzTempo(id, wert) {
+  _hzReglerLoslassen();
+  const v = Math.max(0, Math.min(100, Math.round(+wert)));
+  // Vorgriff: der Hub antwortet traege, und der naechste Abruf brachte sonst
+  // kurz den alten Wert zurueck — der Regler waere zurueckgesprungen.
+  _hzErwarte('tempo' + id, v);
+  _hzSenden('room' + id, `/api/heizung/room/${id}`, { manualSpeed: v });
+}
 function hzRaumAn(id, an)     { _hzSenden('room' + id, `/api/heizung/room/${id}`, { enabled: an }); }
 
 function hzSoll(id, delta) {
