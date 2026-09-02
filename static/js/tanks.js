@@ -8,6 +8,11 @@ function toggleTanks() {
   $('tankUnitLabel').textContent = tankShowLiters ? 'L · Tippen für Prozent' : '% · Tippen für Liter';
   renderTank(1, tankLast[1]);
   renderTank(2, tankLast[2]);
+  // Das Wasserfeld der Statusleiste zeigt dieselbe Einheit — sonst haette ein
+  // Tipp darauf die Kachel umgeschaltet und das Feld selbst nicht.
+  if (typeof updateStatusBar === 'function' && typeof _lastData !== 'undefined' && _lastData) {
+    updateStatusBar(_lastData);
+  }
 }
 
 function renderTank(idx, pct) {

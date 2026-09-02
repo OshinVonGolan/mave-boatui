@@ -634,9 +634,6 @@
     /* Der Inhalt gehoert ueber den Graphen. */
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
     .sb-item:hover, .sb-item:active { background: var(--surface2); }
-    /* Der freie Platz: sieht aus wie ein Feld, verhaelt sich aber nicht so. */
-    .sb-leer, .sb-leer:hover, .sb-leer:active { background: var(--surface);
-      cursor: default; pointer-events: none; }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     .sb-lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em;
       text-transform: uppercase; color: var(--text3);

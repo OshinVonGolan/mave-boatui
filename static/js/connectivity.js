@@ -28,6 +28,9 @@ async function fetchConnectivity() {
   try {
     _connData = await fetch('/api/connectivity').then(r => r.json());
     updateConnectivityIcon(_connData);
+    // Die Statusleiste hat seit v1.55.0 ein Internet-Feld. Es haengt an
+    // diesen Daten und nicht am WebSocket — also von hier aus nachziehen.
+    if (typeof _sbRenderInternet === 'function') _sbRenderInternet();
     if (!$('connInetOverlay').classList.contains('hidden')) renderConnectivity(_connData);
   } catch(_) {}
 }

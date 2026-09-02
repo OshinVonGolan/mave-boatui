@@ -964,14 +964,29 @@ function updateStatusBar(data) {
   // Platz bleibt vorerst frei). Die Schleife laeuft weiter ueber beide IDs —
   // _sbSet und _sbState pruefen auf Vorhandensein, tank2 faellt also
   // geraeuschlos weg und ist wieder da, sobald das Feld zurueckkommt.
+  // Liter oder Prozent — dieselbe Umschaltung wie auf der Tankkachel
+  // (tankShowLiters in tanks.js). Vorher stand hier immer Prozent, obwohl der
+  // Tipp auf das Feld toggleTanks() aufruft: die Kachel schaltete um, die
+  // Leiste nicht.
+  const inLiter = (typeof tankShowLiters !== 'undefined') && tankShowLiters;
   [['tank1', 'sbT1'], ['tank2', 'sbT2']].forEach(([key, id]) => {
     const pct = t[key];
-    _sbSet(id, _n(pct) ?? '--');
     const c = cfg[key] || {};
     if (c.name) _sbSet(id + 'Lbl', c.name);
-    _sbSet(id + 'Sub', (pct != null && c.capacity_l)
-      ? `${Math.round(pct * c.capacity_l / 100)} von ${c.capacity_l} L`
-      : (pct == null ? 'keine Daten' : ''));
+    const einheitEl = document.getElementById(id)?.nextElementSibling;
+
+    if (pct != null && inLiter && c.capacity_l) {
+      _sbSet(id, String(Math.round(pct * c.capacity_l / 100)));
+      if (einheitEl) einheitEl.textContent = 'L';
+      _sbSet(id + 'Sub', `${Math.round(pct)} % von ${c.capacity_l} L`);
+    } else {
+      _sbSet(id, _n(pct) ?? '--');
+      if (einheitEl) einheitEl.textContent = '%';
+      _sbSet(id + 'Sub', (pct != null && c.capacity_l)
+        ? `${Math.round(pct * c.capacity_l / 100)} von ${c.capacity_l} L`
+        : (pct == null ? 'keine Daten' : ''));
+    }
+    // Der Zustand haengt immer am Prozentwert, egal welche Einheit dasteht.
     _sbState(id, pct == null ? 'sb-idle'
       : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
     // Waagerechter Balken: die Breite IST der Fuellstand.
@@ -983,6 +998,7 @@ function updateStatusBar(data) {
   // Der Pegel stand hier bis v1.54.0. An seiner Stelle steht jetzt die Heizung
   // — der Wasserstand hat eine eigene Seite und ist dort vollstaendiger.
   _sbRenderHeizung();
+  _sbRenderInternet();
   _sbRenderWartung();
 }
 
@@ -1075,6 +1091,57 @@ function _sbRenderLaden(data) {
   }
   _sbState('sbChg', leistung == null ? 'sb-idle'
     : leistung > 1 ? 'sb-ok' : 'sb-idle');
+}
+
+/**
+ * Internet-Feld der Statusleiste.
+ *
+ * Gezeigt wird die Antwortzeit, nicht der Durchsatz: der liegt im Leerlauf
+ * bei fast null und saehe dann nach kaputter Leitung aus, obwohl alles geht.
+ * Laeuft die Verbindung ueber Mobilfunk, gibt es keine Antwortzeit — dann
+ * steht dort die Signalstaerke.
+ *
+ * Die Daten kommen aus _connData (connectivity.js, eigener Poller), deshalb
+ * wird diese Funktion von dort ebenfalls aufgerufen.
+ */
+function _sbRenderInternet() {
+  const d = (typeof _connData !== 'undefined') ? _connData : null;
+  const r = d?.router, sl = d?.starlink;
+  const einheit = document.getElementById('sbNetUnit');
+  const setz = (wert, e, sub, zustand) => {
+    _sbSet('sbNet', wert);
+    if (einheit) einheit.textContent = e;
+    _sbSet('sbNetSub', sub);
+    _sbState('sbNet', zustand);
+  };
+
+  if (!r) { setz('--', '', 'keine Daten', 'sb-idle'); return; }
+
+  // Kabel am WAN heisst an diesem Boot: Starlink.
+  if (r.active_type === 'wired') {
+    if (sl?.state === 'CONNECTED') {
+      const ping = (typeof sl.ping_ms === 'number') ? Math.round(sl.ping_ms) : null;
+      setz(ping != null ? String(ping) : '--', 'ms',
+           sl.obstructed ? 'Starlink · Sicht frei?' : 'Starlink',
+           sl.obstructed ? 'sb-low' : 'sb-ok');
+    } else {
+      setz('--', '', sl?.state ? `Starlink ${sl.state.toLowerCase()}` : 'Starlink still',
+           'sb-warn');
+    }
+    return;
+  }
+
+  if (r.active_type === 'mobile') {
+    const m = r.mobile || {};
+    const pct = (typeof m.signal_pct === 'number') ? m.signal_pct : null;
+    setz(pct != null ? String(pct) : '--', pct != null ? '%' : '',
+         [m.operator, m.ntype].filter(Boolean).join(' · ') || 'Mobilfunk',
+         m.state !== 'Connected' ? 'sb-warn' : pct != null && pct < 25 ? 'sb-low' : 'sb-ok');
+    return;
+  }
+
+  // Weder Kabel noch Mobilfunk aktiv — aber es gibt noch das Bordnetz selbst.
+  setz('--', '', r.wired_up || r.mobile_up ? 'kein Uplink' : 'offline', 'sb-warn');
 }
 
 /**
