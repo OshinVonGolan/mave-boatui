@@ -25,25 +25,66 @@ let _hzBusy = new Set();      // laufende Befehle, damit Knoepfe nicht doppeln
  * schlimmer als gar keine Rueckmeldung.
  */
 const HZ_ERWARTET_MS = 3000;
-let _hzErwartet = null;       // { art, wert, bis }
+
+// Vorher war das EIN Feld — mit zwei Folgen, die im Betrieb auffielen:
+//   * Ein zweiter Befehl loeschte den Vorgriff des ersten. Wer zwei Raeume
+//     kurz nacheinander schaltete, sah den ersten zurueckspringen.
+//   * Nur 'preset' und 'mode' wurden ueberhaupt bestaetigt, und 'mode' wurde
+//     beim Zeichnen gar nicht gelesen. Raumluefter und der Mitheizen-Schalter
+//     hatten ueberhaupt keinen Vorgriff und warteten sichtbar auf den Hub.
+// Jetzt haelt eine Karte beliebig viele offene Erwartungen. Jede bringt ihre
+// eigene Vorschrift mit, wie der Istwert aus den Daten zu lesen ist — damit
+// laesst sie sich aufloesen, sobald die Heizung den Wert wirklich meldet,
+// statt blind eine Frist abzusitzen.
+const _hzErwartet = new Map();   // schluessel -> { wert, bis, ist }
 let _hzErwartetTimer = null;
 
-function _hzErwarte(art, wert) {
-  _hzErwartet = { art, wert, bis: Date.now() + HZ_ERWARTET_MS };
-  clearTimeout(_hzErwartetTimer);
-  // Nach Ablauf einmal neu zeichnen, damit der Vorgriff sichtbar zurueckfaellt.
-  _hzErwartetTimer = setTimeout(() => {
-    _hzErwartet = null;
-    updateHeizungKachel();
-    if (!$('heizungOverlay')?.classList.contains('hidden')) renderHeizungDetail();
-  }, HZ_ERWARTET_MS + 50);
+/** Raum aus einem Zustand holen — die Istwert-Vorschriften brauchen das. */
+function _hzRaum(st, id) {
+  return (st?.rooms || []).find(r => r.id === id);
 }
 
-/** Gilt der Vorgriff noch? */
-function _hzErwartetWert(art) {
-  if (!_hzErwartet || _hzErwartet.art !== art) return undefined;
-  if (Date.now() > _hzErwartet.bis) { _hzErwartet = null; return undefined; }
-  return _hzErwartet.wert;
+/**
+ * @param schluessel  eindeutig je Bedienelement, z. B. 'fan3'
+ * @param wert        was der Bediener erwartet
+ * @param ist         (state) => Istwert; wird zum Aufloesen verglichen
+ * @param ms          Haltezeit, Vorgabe HZ_ERWARTET_MS
+ */
+function _hzErwarte(schluessel, wert, ist, ms) {
+  _hzErwartet.set(schluessel, { wert, ist, bis: Date.now() + (ms || HZ_ERWARTET_MS) });
+  // Ein Wecker fuer die zuletzt gesetzte Erwartung genuegt: alle frueheren
+  // laufen vorher ab und werden beim Aufraeumen mit entfernt.
+  clearTimeout(_hzErwartetTimer);
+  _hzErwartetTimer = setTimeout(() => {
+    _hzErwartetTimer = null;
+    _hzVorgriffAufraeumen();
+    _hzNeuZeichnen();
+  }, (ms || HZ_ERWARTET_MS) + 50);
+}
+
+function _hzVorgriffAufraeumen() {
+  const jetzt = Date.now();
+  for (const [k, e] of [..._hzErwartet]) if (jetzt > e.bis) _hzErwartet.delete(k);
+}
+
+/** Gilt der Vorgriff noch? undefined heisst: den gemeldeten Wert nehmen. */
+function _hzErwartetWert(schluessel) {
+  const e = _hzErwartet.get(schluessel);
+  if (!e) return undefined;
+  if (Date.now() > e.bis) { _hzErwartet.delete(schluessel); return undefined; }
+  return e.wert;
+}
+
+/** Nach neuen Daten: alles aufloesen, was die Heizung bestaetigt hat. */
+function _hzVorgriffPruefen(st) {
+  for (const [k, e] of [..._hzErwartet]) {
+    if (Date.now() > e.bis) { _hzErwartet.delete(k); continue; }
+    let ist;
+    // Eine Vorschrift darf nicht die ganze Pruefung mitreissen, wenn sich der
+    // Zustand mal anders aufbaut als erwartet.
+    try { ist = e.ist ? e.ist(st) : undefined; } catch (_) { ist = undefined; }
+    if (ist !== undefined && ist === e.wert) _hzErwartet.delete(k);
+  }
 }
 
 const HZ_PRESETS = ['Frostwacht', 'Nacht', 'Tag', 'Boiler'];
@@ -84,18 +125,9 @@ async function ladeHeizung(fuerDetail) {
     const r = await fetch('/api/heizung');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _hzDaten = await r.json();
-    // Bestaetigt die Heizung den erwarteten Zustand, endet der Vorgriff sofort
-    // — dann zeigt die Kachel wieder echte Werte statt einer Annahme.
-    if (_hzErwartet) {
-      const st = _hzDaten?.state;
-      const ist = _hzErwartet.art === 'preset' ? (st?.preset?.index ?? 'none')
-                : _hzErwartet.art === 'mode'   ? st?.heater?.mode
-                : undefined;
-      if (ist !== undefined && ist === _hzErwartet.wert) {
-        _hzErwartet = null;
-        clearTimeout(_hzErwartetTimer);
-      }
-    }
+    // Bestaetigt die Heizung einen erwarteten Zustand, endet dieser Vorgriff
+    // sofort — dann zeigt die Kachel wieder echte Werte statt einer Annahme.
+    _hzVorgriffPruefen(_hzDaten?.state);
   } catch (e) {
     // Nicht laut werden: der Hub ist derzeit ohnehin nicht im Netz, und die
     // Kachel soll deswegen nicht nach Defekt aussehen.
@@ -151,7 +183,7 @@ function updateHeizungKachel() {
   // Detailseite, die ein Tipp auf die Kachel oeffnet.
   const alleRaeume = st.rooms || [];
   const raeume = alleRaeume.map(r => {
-    const aus = r.enabled === false;
+    const aus = !(_hzErwartetWert('an' + r.id) ?? (r.enabled !== false));
     const kalt = r.conn !== 'online';
     return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}">
       <span class="hz-raum-name">${_esc(r.name)}</span>
@@ -334,11 +366,14 @@ function renderHeizungDetail() {
   const h = st.heater || {};
   const z = HZ_ZUSTAND[h.state] || { text: h.state || '--', farbe: 'var(--text2)' };
 
+  // Vorgriff lesen, nicht nur setzen: genau das fehlte hier bisher, deshalb
+  // stand der gedrueckte Knopf noch sekundenlang auf dem alten Modus.
+  const hMode = _hzErwartetWert('mode') ?? h.mode;
   const modusKnoepfe = ['off', 'auto', 'manual'].map(m => `
-    <button class="hz-preset${h.mode === m ? ' an' : ''}"
+    <button class="hz-preset${hMode === m ? ' an' : ''}"
       onclick="hzModus('${m}')" ${_hzBusy.has('heater') ? 'disabled' : ''}>${HZ_MODUS[m]}</button>`).join('');
 
-  const handSchalter = h.mode === 'manual' ? `
+  const handSchalter = hMode === 'manual' ? `
     <div class="hz-presets" style="margin-top:8px">
       <button class="hz-preset${h.command === 'on' ? ' an' : ''}" onclick="hzHand('on')">Ein</button>
       <button class="hz-preset${h.command === 'off' ? ' an' : ''}" onclick="hzHand('off')">Aus</button>
@@ -376,12 +411,16 @@ function renderHeizungDetail() {
   const raumKarten = (st.rooms || []).map(r => {
     const c = HZ_CONN[r.conn] || HZ_CONN.unknown;
     const gesperrt = _hzBusy.has('room' + r.id) ? 'disabled' : '';
-    return `<div class="sb-card hz-raumkarte${r.enabled === false ? ' hz-raum-aus' : ''}">
+    // Alles, was der Bediener gerade umgelegt hat, gilt sofort — auch fuer die
+    // Daempfung der Karte und dafuer, ob der Staerkeregler erscheint.
+    const rFan = _hzErwartetWert('fan' + r.id) ?? r.fanMode;
+    const rAn  = _hzErwartetWert('an'  + r.id) ?? (r.enabled !== false);
+    return `<div class="sb-card hz-raumkarte${rAn ? '' : ' hz-raum-aus'}">
       <div class="sb-hd">${_esc(r.name)}
         <span class="chip" style="color:${c.farbe}">${c.text}</span>
         <label class="rule-toggle hz-raum-schalter"
-          title="${r.enabled ? 'Raum heizt mit' : 'Raum heizt nicht mit'}">
-          <input type="checkbox" ${r.enabled ? 'checked' : ''} ${gesperrt}
+          title="${rAn ? 'Raum heizt mit' : 'Raum heizt nicht mit'}">
+          <input type="checkbox" ${rAn ? 'checked' : ''} ${gesperrt}
             aria-label="${_esc(r.name)} heizt mit"
             onchange="hzRaumAn(${r.id}, this.checked)">
           <span class="rule-slider"></span>
@@ -403,10 +442,10 @@ function renderHeizungDetail() {
       </div>
       <div class="hz-presets" style="margin-top:12px">
         ${['off', 'auto', 'manual'].map(m => `<button class="hz-preset${
-          r.fanMode === m ? ' an' : ''}" onclick="hzLuefter(${r.id},'${m}')" ${gesperrt}>${
+          rFan === m ? ' an' : ''}" onclick="hzLuefter(${r.id},'${m}')" ${gesperrt}>${
           HZ_MODUS[m]}</button>`).join('')}
       </div>
-      ${r.fanMode === 'manual' ? (() => {
+      ${rFan === 'manual' ? (() => {
         // Sollwert der Handstufe. Nicht fanPercent nehmen: das ist der Istwert,
         // der beim Anlaufimpuls und beim Auslaufen daneben liegt (Firmware
         // room_control.cpp) — der Regler zeigt, was gestellt IST.
@@ -449,11 +488,15 @@ function renderHeizungDetail() {
 
 // ── Bedienen ────────────────────────────────────────────────────────────────
 
-async function _hzSenden(schluessel, pfad, rumpf) {
+async function _hzSenden(schluessel, pfad, rumpf, vorgriff) {
   if (_hzBusy.has(schluessel)) return;
   _hzBusy.add(schluessel);
   _hzFehler = null;
-  updateHeizungKachel();
+  // Auch die Detailseite: der Vorgriff war zwar gesetzt, wurde dort aber erst
+  // gezeichnet, wenn die Antwort da war — und genau das sah nach Verzoegerung
+  // aus. Auf der Kachel fiel es nicht auf, weil sie hier schon neu gezeichnet
+  // wurde.
+  _hzNeuZeichnen();
   try {
     const r = await fetch(pfad, {
       method: 'POST',
@@ -474,18 +517,22 @@ async function _hzSenden(schluessel, pfad, rumpf) {
     _hzBusy.delete(schluessel);
     // Bei einem Fehler gilt der Vorgriff nicht weiter — sonst behauptet die
     // Anzeige drei Sekunden lang etwas, das nachweislich nicht passiert ist.
-    if (_hzFehler) { _hzErwartet = null; clearTimeout(_hzErwartetTimer); }
+    // Nur der eigene faellt: fremde Bedienungen gehen das nichts an.
+    if (_hzFehler && vorgriff) _hzErwartet.delete(vorgriff);
     await ladeHeizung(false);
   }
 }
 
-function hzPreset(i)          { _hzErwarte('preset', i);
-                               _hzSenden('preset', `/api/heizung/preset/${i}`); }
-function hzModus(m)           { _hzErwarte('mode', m);
-                               _hzSenden('heater', '/api/heizung/heater', { mode: m }); }
+function hzPreset(i)          { _hzErwarte('preset', i, st => st?.preset?.index ?? 'none');
+                               _hzSenden('preset', `/api/heizung/preset/${i}`, null, 'preset'); }
+function hzModus(m)           { _hzErwarte('mode', m, st => st?.heater?.mode);
+                               _hzSenden('heater', '/api/heizung/heater', { mode: m }, 'mode'); }
 function hzHand(befehl)       { _hzSenden('heater', '/api/heizung/heater', { mode: 'manual', command: befehl }); }
 function hzAbbrechen()        { _hzSenden('heater', '/api/heizung/heater', { cancelPending: true }); }
-function hzLuefter(id, modus) { _hzSenden('room' + id, `/api/heizung/room/${id}`, { fanMode: modus }); }
+function hzLuefter(id, modus) {
+  _hzErwarte('fan' + id, modus, st => _hzRaum(st, id)?.fanMode);
+  _hzSenden('room' + id, `/api/heizung/room/${id}`, { fanMode: modus }, 'fan' + id);
+}
 
 // ── Geblaesestaerke im Handbetrieb ──────────────────────────────────────────
 // Der Regler steckt in einem Block, den die Detailseite alle 3 s per innerHTML
@@ -522,10 +569,13 @@ function hzTempo(id, wert) {
   const v = Math.max(0, Math.min(100, Math.round(+wert)));
   // Vorgriff: der Hub antwortet traege, und der naechste Abruf brachte sonst
   // kurz den alten Wert zurueck — der Regler waere zurueckgesprungen.
-  _hzErwarte('tempo' + id, v);
-  _hzSenden('room' + id, `/api/heizung/room/${id}`, { manualSpeed: v });
+  _hzErwarte('tempo' + id, v, st => _hzRaum(st, id)?.manualSpeed);
+  _hzSenden('room' + id, `/api/heizung/room/${id}`, { manualSpeed: v }, 'tempo' + id);
 }
-function hzRaumAn(id, an)     { _hzSenden('room' + id, `/api/heizung/room/${id}`, { enabled: an }); }
+function hzRaumAn(id, an) {
+  _hzErwarte('an' + id, !!an, st => _hzRaum(st, id)?.enabled);
+  _hzSenden('room' + id, `/api/heizung/room/${id}`, { enabled: !!an }, 'an' + id);
+}
 
 // ── Solltemperatur: Vorgriff und Sammeln ────────────────────────────────────
 // Der Hub antwortet traege. Vorher hatte das zwei Folgen, die schlimmer waren
@@ -538,22 +588,12 @@ function hzRaumAn(id, an)     { _hzSenden('room' + id, `/api/heizung/room/${id}`
 // Jetzt zaehlt die Oberflaeche selbst mit, zeigt das sofort an und schickt
 // erst, wenn das Tippen aufhoert.
 const HZ_SOLL_SAMMEL_MS = 600;    // so lange wird auf weitere Druecke gewartet
-const HZ_SOLL_HALT_MS   = 8000;   // so lange gilt der Vorgriff hoechstens
-const _hzSollWunsch = new Map();  // raum-id -> { wert, bis }
+const HZ_SOLL_HALT_MS   = 8000;   // laenger als sonst: Tippen darf dauern
 const _hzSollTimer  = new Map();  // raum-id -> Timeout
 
-/** Solltemperatur fuer die Anzeige: der Wunsch des Bedieners schlaegt den
- *  gemeldeten Wert, solange er frisch und unbestaetigt ist. */
+/** Solltemperatur fuer die Anzeige. Nutzt denselben Vorgriff wie alles andere. */
 function _hzSollAnzeige(r) {
-  const w = _hzSollWunsch.get(r.id);
-  if (!w) return r.target;
-  if (Date.now() > w.bis) { _hzSollWunsch.delete(r.id); return r.target; }
-  // Die Heizung meldet den gewuenschten Wert — Vorgriff hat sich erledigt.
-  if (r.target != null && Math.abs(r.target - w.wert) < 0.05) {
-    _hzSollWunsch.delete(r.id);
-    return r.target;
-  }
-  return w.wert;
+  return _hzErwartetWert('soll' + r.id) ?? r.target;
 }
 
 function _hzNeuZeichnen() {
@@ -565,12 +605,11 @@ function hzSoll(id, delta) {
   const raum = (_hzDaten?.state?.rooms || []).find(r => r.id === id);
   if (!raum) return;
   // Basis ist der zuletzt gewuenschte Wert, nicht der gemeldete.
-  const w = _hzSollWunsch.get(id);
-  const basis = (w && Date.now() <= w.bis) ? w.wert : raum.target;
+  const basis = _hzErwartetWert('soll' + id) ?? raum.target;
   if (basis == null) return;
   const ziel = Math.max(0, Math.min(40, Math.round((basis + delta) * 2) / 2));
   if (ziel === basis) return;   // an der Grenze: nichts tut sich, nichts senden
-  _hzSollWunsch.set(id, { wert: ziel, bis: Date.now() + HZ_SOLL_HALT_MS });
+  _hzErwarte('soll' + id, ziel, st => _hzRaum(st, id)?.target, HZ_SOLL_HALT_MS);
   _hzNeuZeichnen();             // sofort sichtbar, ohne auf die Heizung zu warten
   // Fuenf schnelle Druecke werden EIN Befehl an den Hub, nicht fuenf.
   clearTimeout(_hzSollTimer.get(id));
@@ -582,8 +621,10 @@ function hzSoll(id, delta) {
       return;
     }
     _hzSollTimer.delete(id);
-    const akt = _hzSollWunsch.get(id);
-    if (akt) _hzSenden('room' + id, `/api/heizung/room/${id}`, { target: akt.wert });
+    const akt = _hzErwartetWert('soll' + id);
+    if (akt !== undefined) {
+      _hzSenden('room' + id, `/api/heizung/room/${id}`, { target: akt }, 'soll' + id);
+    }
   };
   _hzSollTimer.set(id, setTimeout(senden, HZ_SOLL_SAMMEL_MS));
 }
