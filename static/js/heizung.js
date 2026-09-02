@@ -57,7 +57,8 @@ const HZ_ZUSTAND = {
   fault:    { text: 'Störung',    farbe: 'var(--red)' },
 };
 
-const HZ_MODUS = { off: 'Aus', auto: 'Automatik', manual: 'Hand' };
+// Ueberall dieselben drei Woerter — am Heizgeraet wie am Raumgeblaese.
+const HZ_MODUS = { off: 'Aus', auto: 'Automatik', manual: 'Manuell' };
 
 const HZ_CONN = {
   online:     { text: 'verbunden', farbe: 'var(--green)' },
@@ -378,6 +379,13 @@ function renderHeizungDetail() {
     return `<div class="sb-card hz-raumkarte${r.enabled === false ? ' hz-raum-aus' : ''}">
       <div class="sb-hd">${_esc(r.name)}
         <span class="chip" style="color:${c.farbe}">${c.text}</span>
+        <label class="rule-toggle hz-raum-schalter"
+          title="${r.enabled ? 'Raum heizt mit' : 'Raum heizt nicht mit'}">
+          <input type="checkbox" ${r.enabled ? 'checked' : ''} ${gesperrt}
+            aria-label="${_esc(r.name)} heizt mit"
+            onchange="hzRaumAn(${r.id}, this.checked)">
+          <span class="rule-slider"></span>
+        </label>
       </div>
       <div class="hz-soll">
         <button class="hz-rund" onclick="hzSoll(${r.id}, -0.5)">−</button>
@@ -396,10 +404,7 @@ function renderHeizungDetail() {
       <div class="hz-presets" style="margin-top:12px">
         ${['off', 'auto', 'manual'].map(m => `<button class="hz-preset${
           r.fanMode === m ? ' an' : ''}" onclick="hzLuefter(${r.id},'${m}')" ${gesperrt}>${
-          { off: 'Gebläse aus', auto: 'Automatik', manual: 'Hand' }[m]}</button>`).join('')}
-        <button class="hz-preset${r.enabled ? ' an' : ''}"
-          onclick="hzRaumAn(${r.id}, ${r.enabled ? 'false' : 'true'})" ${gesperrt}>${
-          r.enabled ? 'heizt mit' : 'heizt nicht mit'}</button>
+          HZ_MODUS[m]}</button>`).join('')}
       </div>
       ${r.fanMode === 'manual' ? (() => {
         // Sollwert der Handstufe. Nicht fanPercent nehmen: das ist der Istwert,

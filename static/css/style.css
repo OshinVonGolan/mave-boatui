@@ -232,6 +232,16 @@
       padding: 4px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
     .hz-raum + .hz-raum { border-top: 1px solid var(--border); }
     .hz-raum-aus { opacity: .5; }
+    /* In der Raumkarte darf NICHT die ganze Karte gedaempft werden: der
+       Schalter oben rechts muss ablesbar bleiben, sonst findet man den Weg
+       zurueck nicht. opacity auf der Karte liesse sich im Kind nicht wieder
+       zuruecknehmen (eigener Stapelkontext), deshalb wird gezielt der Inhalt
+       gedaempft und die Kopfzeile bleibt klar. */
+    .hz-raumkarte.hz-raum-aus { opacity: 1; }
+    .hz-raumkarte.hz-raum-aus .hz-soll,
+    .hz-raumkarte.hz-raum-aus .sb-stats,
+    .hz-raumkarte.hz-raum-aus .hz-presets,
+    .hz-raumkarte.hz-raum-aus .hz-tempo { opacity: .5; }
     .hz-raum-name  { color: var(--text2); overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap; }
     .hz-raum-ist   { font-weight: 700; }
