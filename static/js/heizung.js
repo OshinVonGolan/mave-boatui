@@ -156,7 +156,7 @@ function updateHeizungKachel() {
       <span class="hz-raum-name">${_esc(r.name)}</span>
       <span class="hz-raum-ist">${_hzT(r.roomTemp)}<i>°</i></span>
       <span class="hz-raum-pfeil">→</span>
-      <span class="hz-raum-soll">${_hzT(r.target)}<i>°</i></span>
+      <span class="hz-raum-soll">${_hzT(_hzSollAnzeige(r))}<i>°</i></span>
       <span class="hz-raum-flag">${
         kalt ? '<span class="hz-punkt" style="background:var(--text3)" title="nicht verbunden"></span>'
         : aus ? '<span class="hz-aus-txt">aus</span>'
@@ -380,12 +380,12 @@ function renderHeizungDetail() {
         <span class="chip" style="color:${c.farbe}">${c.text}</span>
       </div>
       <div class="hz-soll">
-        <button class="hz-rund" onclick="hzSoll(${r.id}, -0.5)" ${gesperrt}>−</button>
+        <button class="hz-rund" onclick="hzSoll(${r.id}, -0.5)">−</button>
         <div class="hz-soll-mitte">
-          <span class="hz-soll-wert">${_hzT(r.target)}<i>°C</i></span>
+          <span class="hz-soll-wert">${_hzT(_hzSollAnzeige(r))}<i>°C</i></span>
           <span class="hz-soll-ist">ist ${_hzT(r.roomTemp)} °C</span>
         </div>
-        <button class="hz-rund" onclick="hzSoll(${r.id}, 0.5)" ${gesperrt}>+</button>
+        <button class="hz-rund" onclick="hzSoll(${r.id}, 0.5)">+</button>
       </div>
       <div class="sb-stats" style="margin-top:12px">
         ${kennzahl('Gebläse', r.fanPercent != null ? r.fanPercent + '<small>%</small>' : '--')}
@@ -522,11 +522,65 @@ function hzTempo(id, wert) {
 }
 function hzRaumAn(id, an)     { _hzSenden('room' + id, `/api/heizung/room/${id}`, { enabled: an }); }
 
+// ── Solltemperatur: Vorgriff und Sammeln ────────────────────────────────────
+// Der Hub antwortet traege. Vorher hatte das zwei Folgen, die schlimmer waren
+// als die reine Verzoegerung:
+//   1. hzSoll rechnete jedes Mal vom zuletzt GEMELDETEN Wert. Der zweite
+//      schnelle Druck rechnete also wieder vom alten Stand — der Schritt ging
+//      verloren.
+//   2. _hzSenden bricht ab, solange schon ein Befehl laeuft. Jeder Druck
+//      waehrend eines laufenden Befehls verschwand ersatzlos.
+// Jetzt zaehlt die Oberflaeche selbst mit, zeigt das sofort an und schickt
+// erst, wenn das Tippen aufhoert.
+const HZ_SOLL_SAMMEL_MS = 600;    // so lange wird auf weitere Druecke gewartet
+const HZ_SOLL_HALT_MS   = 8000;   // so lange gilt der Vorgriff hoechstens
+const _hzSollWunsch = new Map();  // raum-id -> { wert, bis }
+const _hzSollTimer  = new Map();  // raum-id -> Timeout
+
+/** Solltemperatur fuer die Anzeige: der Wunsch des Bedieners schlaegt den
+ *  gemeldeten Wert, solange er frisch und unbestaetigt ist. */
+function _hzSollAnzeige(r) {
+  const w = _hzSollWunsch.get(r.id);
+  if (!w) return r.target;
+  if (Date.now() > w.bis) { _hzSollWunsch.delete(r.id); return r.target; }
+  // Die Heizung meldet den gewuenschten Wert — Vorgriff hat sich erledigt.
+  if (r.target != null && Math.abs(r.target - w.wert) < 0.05) {
+    _hzSollWunsch.delete(r.id);
+    return r.target;
+  }
+  return w.wert;
+}
+
+function _hzNeuZeichnen() {
+  updateHeizungKachel();
+  if (!$('heizungOverlay')?.classList.contains('hidden')) renderHeizungDetail();
+}
+
 function hzSoll(id, delta) {
   const raum = (_hzDaten?.state?.rooms || []).find(r => r.id === id);
-  if (!raum || raum.target == null) return;
-  const ziel = Math.max(0, Math.min(40, Math.round((raum.target + delta) * 2) / 2));
-  _hzSenden('room' + id, `/api/heizung/room/${id}`, { target: ziel });
+  if (!raum) return;
+  // Basis ist der zuletzt gewuenschte Wert, nicht der gemeldete.
+  const w = _hzSollWunsch.get(id);
+  const basis = (w && Date.now() <= w.bis) ? w.wert : raum.target;
+  if (basis == null) return;
+  const ziel = Math.max(0, Math.min(40, Math.round((basis + delta) * 2) / 2));
+  if (ziel === basis) return;   // an der Grenze: nichts tut sich, nichts senden
+  _hzSollWunsch.set(id, { wert: ziel, bis: Date.now() + HZ_SOLL_HALT_MS });
+  _hzNeuZeichnen();             // sofort sichtbar, ohne auf die Heizung zu warten
+  // Fuenf schnelle Druecke werden EIN Befehl an den Hub, nicht fuenf.
+  clearTimeout(_hzSollTimer.get(id));
+  const senden = () => {
+    // Laeuft noch ein Befehl fuer diesen Raum, wuerde _hzSenden stillschweigend
+    // abbrechen und der Wunsch waere weg. Also lieber gleich nochmal schauen.
+    if (_hzBusy.has('room' + id)) {
+      _hzSollTimer.set(id, setTimeout(senden, 200));
+      return;
+    }
+    _hzSollTimer.delete(id);
+    const akt = _hzSollWunsch.get(id);
+    if (akt) _hzSenden('room' + id, `/api/heizung/room/${id}`, { target: akt.wert });
+  };
+  _hzSollTimer.set(id, setTimeout(senden, HZ_SOLL_SAMMEL_MS));
 }
 
 // ── Einstellungen ───────────────────────────────────────────────────────────
