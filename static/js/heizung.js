@@ -585,11 +585,72 @@ function hzSoll(id, delta) {
 
 // ── Einstellungen ───────────────────────────────────────────────────────────
 
+// ── Frostwacht je Raum ──────────────────────────────────────────────────────
+// Eigener Schalter im Bord-Monitor, ausdruecklich unabhaengig von allem, was
+// an der Heizung eingestellt ist. Ein Raum, der nicht in der Konfiguration
+// steht, gilt als bewacht (Vorgabe im Backend) — deshalb wird die Karte beim
+// Zeichnen mit ausdruecklichen Werten fuer alle sichtbaren Raeume gefuellt.
+let _hzFrostEinst = {};
+
+function hzFrostwachtRendern() {
+  const box = $('sHzFrostListe');
+  if (!box) return;
+  const raeume = _hzDaten?.state?.rooms || [];
+  if (!raeume.length) {
+    box.innerHTML = `<div style="font-size:13px;color:var(--text3)">Räume erscheinen hier,
+      sobald die Heizung erreichbar ist und Fühler angelernt sind.</div>`;
+    return;
+  }
+  box.innerHTML = raeume.map(r => {
+    const an = _hzFrostEinst[String(r.id)] !== false;
+    const stumm = r.conn !== 'online';
+    return `<div class="settings-row" style="align-items:center;gap:12px">
+      <label class="settings-label" for="sHzFrost${r.id}" style="flex:1;min-width:0">${_esc(r.name)}</label>
+      <input type="checkbox" id="sHzFrost${r.id}" ${an ? 'checked' : ''}
+        style="width:18px;height:18px;accent-color:var(--accent)"
+        onchange="hzFrostwacht(${r.id}, this.checked)" />
+      <span style="font-size:13px;color:var(--text2);min-width:120px">${
+        stumm ? 'meldet gerade nicht' : (an ? 'wird bewacht' : 'darf kalt werden')}</span>
+    </div>`;
+  }).join('');
+}
+
+async function hzFrostwacht(id, an) {
+  // Immer die VOLLSTAENDIGE Karte schicken: das Backend ersetzt sie, ein
+  // Teilstueck wuerde die uebrigen Raeume auf die Vorgabe zuruecksetzen.
+  const vorher = { ..._hzFrostEinst };
+  (_hzDaten?.state?.rooms || []).forEach(r => {
+    if (_hzFrostEinst[String(r.id)] === undefined) _hzFrostEinst[String(r.id)] = true;
+  });
+  _hzFrostEinst[String(id)] = !!an;
+  hzFrostwachtRendern();
+  const melde = (t, farbe) => { const e = $('sHzFrostStatus'); if (e) { e.textContent = t; e.style.color = farbe || 'var(--text3)'; } };
+  melde('Speichern …');
+  try {
+    const r = await fetch('/api/heizung/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frostwacht: _hzFrostEinst }),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    melde('Gespeichert.', 'var(--green)');
+  } catch (e) {
+    _hzFrostEinst = vorher;          // nicht behaupten, was nicht gespeichert ist
+    hzFrostwachtRendern();
+    melde('Speichern fehlgeschlagen.', 'var(--red)');
+  }
+}
+
 async function hzEinstellungenLaden() {
   try {
     const r = await fetch('/api/heizung/settings');
     if (!r.ok) return;
     const c = await r.json();
+    _hzFrostEinst = { ...(c.frostwacht || {}) };
+    // Frische Raumliste holen, sonst steht die Karte leer da, wenn die
+    // Einstellungen vor dem ersten Abruf geoeffnet werden.
+    await ladeHeizung(false);
+    hzFrostwachtRendern();
     if ($('sHzHost'))    $('sHzHost').value = c.host || '';
     if ($('sHzEnabled')) $('sHzEnabled').checked = !!c.enabled;
     if ($('sHzTime'))    $('sHzTime').checked = !!c.set_time;

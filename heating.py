@@ -42,6 +42,12 @@ _VORGABEN: dict = {
     'host': '',             # z. B. "stoker-bf38.local" oder "192.168.1.60"
     'password': '',         # nur noetig, wenn der Schreibschutz an ist
     'set_time': True,       # Uhr des Geraets stellen, es hat keine gepufferte
+    # Frostwacht je Raum: {"1": true, "2": false}. Schluessel sind Raum-IDs als
+    # Text (JSON kennt keine Zahlschluessel). Ein Raum, der hier NICHT steht,
+    # wird bewacht — bei einem Schutz gegen Sachschaden ist "an" die richtige
+    # Vorgabe, sonst haette ein frisch angelernter Fuehler stillschweigend
+    # keine Wache.
+    'frostwacht': {},
 }
 
 
@@ -170,6 +176,7 @@ class StokerClient:
     def update_settings(self, patch: dict) -> dict:
         erlaubt = set(_VORGABEN) | {'password'}
         with self._lock:
+            host_vorher = self._cfg.get('host', '')
             for k, v in patch.items():
                 if k not in erlaubt:
                     continue
@@ -177,11 +184,26 @@ class StokerClient:
                     self._cfg[k] = bool(v)
                 elif k in ('host', 'password'):
                     self._cfg[k] = str(v or '').strip()
+                elif k == 'frostwacht':
+                    if isinstance(v, dict):
+                        # Nur, was sich als Raum-ID lesen laesst. Der Rest waere
+                        # Muell, der spaeter still nie greift.
+                        sauber = {}
+                        for rid, an in v.items():
+                            try:
+                                sauber[str(int(rid))] = bool(an)
+                            except (TypeError, ValueError):
+                                continue
+                        self._cfg['frostwacht'] = sauber
             cfg = dict(self._cfg)
-            # Host gewechselt: alles Zwischengespeicherte ist wertlos.
-            self._state = self._info = None
-            self._last_ok = None
-            self._zeit_gesetzt = False
+            # Nur bei einem Hostwechsel ist das Zwischengespeicherte wertlos.
+            # Vorher flog es bei JEDEM Speichern weg — wer nur einen Schalter
+            # umlegte, sah danach eine leere Kachel, bis der naechste Abruf
+            # durch war.
+            if self._cfg.get('host', '') != host_vorher:
+                self._state = self._info = None
+                self._last_ok = None
+                self._zeit_gesetzt = False
         write_json(self._path, cfg)
         return self.settings()
 
@@ -325,6 +347,28 @@ class StokerClient:
                                               last_ok, state))
         return schnapp
 
+    def _frost_temp(self, state: dict | None) -> float | None:
+        """Kaeltester Raum, der bewacht werden soll — oder None.
+
+        Bewacht wird ein Raum, wenn sein Schalter in den Einstellungen an ist.
+        Fehlt er in der Konfiguration, gilt er als an (siehe _VORGABEN): ein
+        neu angelernter Fuehler soll nicht stillschweigend ohne Wache laufen.
+
+        Nur Raeume, die auch melden. Ein stummer Fuehler liefert keine
+        Temperatur, und ein alter Wert waere hier gefaehrlicher als gar keiner.
+        """
+        wacht = self._cfg.get('frostwacht') or {}
+        temps = []
+        for r in ((state or {}).get('rooms') or []):
+            if not isinstance(r, dict) or r.get('conn') != 'online':
+                continue
+            if not wacht.get(str(r.get('id')), True):
+                continue
+            t = r.get('roomTemp')
+            if isinstance(t, (int, float)) and not isinstance(t, bool):
+                temps.append(t)
+        return round(min(temps), 1) if temps else None
+
     def _alarm_felder(self, schnapp: dict, cfg_an: bool, host: str,
                       erreichbar: bool, last_ok: float | None,
                       state: dict | None) -> dict:
@@ -377,10 +421,11 @@ class StokerClient:
         #    von vorgestern an (Hub aus, Pi laeuft: monatelang). Ein bereits
         #    stehender Alarm bleibt dabei stehen — die Engine ueberspringt
         #    None, ohne ihn zu loeschen.
-        #  - Gezaehlt werden nur Raeume auf "heizt mit" (siehe
-        #    _raum_kennzahlen). Ein bewusst abgemeldeter Raum darf kalt sein.
-        temp_min  = schnapp.get('raum_temp_min')
-        frost_temp = temp_min if (erreichbar and temp_min is not None) else None
+        #  - Gezaehlt werden nur Raeume, fuer die die Frostwacht in den
+        #    Einstellungen eingeschaltet ist. Das ist ein EIGENER Schalter je
+        #    Raum und haengt ausdruecklich nicht daran, ob der Raum mitheizt
+        #    oder was am Heizgeraet eingestellt ist.
+        frost_temp = self._frost_temp(state) if erreichbar else None
 
         offline   = schnapp.get('raeume_offline')
         online    = schnapp.get('raeume_online')
