@@ -251,12 +251,85 @@ function _kopfLogoPruefen() {
  * wenn die Leiste schrumpft — sonst wuerde das Umschalten den Fuehler wieder
  * ins Bild schieben und die Leiste faenge an zu flackern.
  */
+const LEISTE_GLEIT_MS = 220;
+let _leisteGleitTimer = null;
+
+/**
+ * Zwischen normaler und kompakter Leiste umschalten — mit gleitenden Feldern.
+ *
+ * Alles andere an der Leiste haengt stufenlos am Scrollstand (--leiste-eng).
+ * Die SPALTENZAHL nicht: am Telefon werden aus zwei Zeilen zu je drei Feldern
+ * plotzlich eine Zeile mit sechs, und eine Zeile weniger ist genau die
+ * Sprunghoehe. Rechnen laesst sich das nicht.
+ *
+ * Also wird gemessen statt gerechnet: erst die Plaetze vor dem Umschalten
+ * merken, dann umschalten, dann die neuen Plaetze lesen und jedes Feld per
+ * transform an seinen ALTEN Platz zuruecksetzen. Im naechsten Bild laeuft es
+ * von dort an den neuen — die drei Felder der zweiten Zeile gleiten also nach
+ * oben, statt zu springen. Die Hoehe der Leiste laeuft im selben Zug mit,
+ * damit auch der Inhalt darunter nicht ruckt.
+ *
+ * transform und height sind beide billig zu animieren: sie loesen keinen
+ * Neuumbruch der Kacheln darunter aus.
+ */
+function _leisteUmschalten(kompakt) {
+  const leiste = document.querySelector('.statusbar');
+  const ruhig  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const felder = leiste ? Array.from(leiste.querySelectorAll('.sb-item')) : [];
+  if (!leiste || !felder.length || ruhig) {
+    document.body.classList.toggle('leiste-kompakt', kompakt);
+    return;
+  }
+
+  const vorher  = felder.map(e => e.getBoundingClientRect());
+  const hVorher = leiste.getBoundingClientRect().height;
+
+  document.body.classList.toggle('leiste-kompakt', kompakt);
+
+  // Das Lesen erzwingt den Umbruch — ab hier stehen die neuen Plaetze fest.
+  const nachher  = felder.map(e => e.getBoundingClientRect());
+  const hNachher = leiste.getBoundingClientRect().height;
+  if (Math.abs(hVorher - hNachher) < 1 &&
+      nachher.every((r, i) => Math.abs(r.top - vorher[i].top) < 1)) {
+    return;                       // nichts verrutscht (breite Ansicht)
+  }
+
+  felder.forEach((e, i) => {
+    const dx = vorher[i].left - nachher[i].left;
+    const dy = vorher[i].top  - nachher[i].top;
+    e.style.transition = 'none';
+    e.style.transform  = (dx || dy) ? `translate(${dx}px, ${dy}px)` : '';
+  });
+  leiste.style.transition = 'none';
+  leiste.style.height     = hVorher + 'px';
+  void leiste.offsetHeight;       // Stand festschreiben, sonst faellt der
+                                  // Browser beides in einem Schritt zusammen
+
+  requestAnimationFrame(() => {
+    felder.forEach(e => {
+      e.style.transition = `transform ${LEISTE_GLEIT_MS}ms ease`;
+      e.style.transform  = '';
+    });
+    leiste.style.transition = `height ${LEISTE_GLEIT_MS}ms ease`;
+    leiste.style.height     = hNachher + 'px';
+  });
+
+  // Aufraeumen, damit danach wieder die normale Rechnung greift. Eigener
+  // Zeitgeber statt transitionend: das Ereignis bleibt aus, wenn waehrend der
+  // Bewegung erneut umgeschaltet wird.
+  clearTimeout(_leisteGleitTimer);
+  _leisteGleitTimer = setTimeout(() => {
+    felder.forEach(e => { e.style.transition = ''; e.style.transform = ''; });
+    leiste.style.transition = ''; leiste.style.height = '';
+  }, LEISTE_GLEIT_MS + 40);
+}
+
 function _leisteKompaktFuehren() {
   const fuehler = document.querySelector('.statusbar-fuehler');
   if (!fuehler) return;
   if (typeof IntersectionObserver !== 'function') return;   // dann bleibt sie gross
   new IntersectionObserver(([eintrag]) => {
-    document.body.classList.toggle('leiste-kompakt', !eintrag.isIntersecting);
+    _leisteUmschalten(!eintrag.isIntersecting);
   }, { threshold: 0 }).observe(fuehler);
 }
 
