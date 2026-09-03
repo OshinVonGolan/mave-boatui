@@ -394,3 +394,40 @@ class Startmarke(unittest.TestCase):
         self.pfad.write_text('kein JSON {{{')
         b = self._marke().start()
         self.assertEqual(b['letztes_ende'], 'unbekannt')
+
+
+class Verlaufsumsetzung(unittest.TestCase):
+    """Die Umsetzung, die zwischen Bord und Server fehlte.
+
+    An Bord ist ein Verlaufseintrag eine flache Zeile Messwerte; der Server
+    erwartet Folge, Zeit und die Messwerte als eigenes Feld. Ohne die
+    Umsetzung schickte der Pi seine Rohzeilen, und der Server las darin
+    `folge` und `wand` — beides gab es nicht. Es entstand nirgends ein Fehler,
+    es kam nur nie etwas an.
+    """
+
+    def _um(self, e):
+        from sync_client import _verlaufspaket
+        return _verlaufspaket(e)
+
+    def test_felder_werden_richtig_umgesetzt(self):
+        p = self._um({'ts': 1788470000.0, 'n': 42, 'soc': 96.6, 'voltage': 13.2})
+        self.assertEqual(p['folge'], 42)
+        self.assertEqual(p['wand'], 1788470000.0)
+        self.assertEqual(p['daten'], {'soc': 96.6, 'voltage': 13.2})
+        self.assertNotIn('n', p['daten'], 'die Nummer gehört nicht zu den Messwerten')
+        self.assertNotIn('ts', p['daten'])
+
+    def test_uhr_ohne_bezug_wird_als_unsicher_gemeldet(self):
+        """Ein Pi ohne gepufferte Uhr startet in 1970. Der Server kann solche
+        Einträge parken und später einordnen — aber nur, wenn er sie erkennt."""
+        p = self._um({'ts': 1200.0, 'n': 5, 'soc': 50})
+        self.assertFalse(p['gestellt'])
+        p2 = self._um({'ts': 1788470000.0, 'n': 6, 'soc': 50})
+        self.assertTrue(p2['gestellt'])
+
+    def test_unbrauchbare_eintraege_fallen_weg(self):
+        for murks in ({'ts': 1788470000.0}, {'n': 5}, {'n': 1476.5, 'ts': 1788470000.0},
+                      {'n': True, 'ts': 1788470000.0}, 'kein dict', None):
+            with self.subTest(murks=murks):
+                self.assertIsNone(self._um(murks))

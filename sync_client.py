@@ -260,7 +260,11 @@ class SyncClient:
         ist die ganze Logik. Kein Zustandsabgleich, keine Zustandsmaschine.
         """
         while True:
-            eintraege = await asyncio.to_thread(self._verlauf_holen, ab, _BUENDEL)
+            roh = await asyncio.to_thread(self._verlauf_holen, ab, _BUENDEL)
+            if not roh:
+                return
+            eintraege = [_verlaufspaket(e) for e in roh]
+            eintraege = [e for e in eintraege if e is not None]
             if not eintraege:
                 return
             hoechste = max(int(e['folge']) for e in eintraege)
@@ -299,6 +303,39 @@ class SyncClient:
         wand = time.time()
         return {'wand': wand, 'mono': time.monotonic(),
                 'gestellt': wand >= 1704067200.0}
+
+
+def _verlaufspaket(e: dict):
+    """Einen Verlaufseintrag in die Form bringen, die der Server erwartet.
+
+    Der Verlauf an Bord ist eine flache Zeile Messwerte mit Zeitstempel und
+    Folgenummer — was die Anzeige braucht. Der Server braucht etwas anderes:
+    Folge, Zeit und die Messwerte als eigenes Feld, damit er jeden Eintrag
+    einzeln zeitlich einordnen kann.
+
+    Diese Umsetzung fehlte. Der Pi schickte seine Rohzeilen, der Server las
+    darin `folge` und `wand` — beides gab es nicht, also legte er Eintraege
+    ohne Nummer und ohne Zeit ab. Bemerkt hat es niemand, weil auf keiner
+    Seite ein Fehler entstand: es kam nur nie etwas an.
+
+    `gestellt` wird an der Plausibilitaet des Zeitstempels entschieden. Der Pi
+    hat keine gepufferte Uhr; lief er ohne Netz hoch, stehen dort Zeiten aus
+    1970. Der Server kann solche Eintraege parken und spaeter einordnen — aber
+    nur, wenn er sie als unsicher erkennt.
+    """
+    if not isinstance(e, dict):
+        return None
+    folge, ts = e.get('n'), e.get('ts')
+    if not isinstance(folge, int) or isinstance(folge, bool) or ts is None:
+        return None
+    daten = {k: v for k, v in e.items() if k not in ('n', 'ts')}
+    return {
+        'folge': int(folge),
+        'wand': float(ts),
+        # 2020 als Grenze: alles davor kann keine echte Bordzeit sein.
+        'gestellt': float(ts) > 1577836800.0,
+        'daten': daten,
+    }
 
 
 def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080,
