@@ -44,6 +44,12 @@ Zwei Voraussetzungen: eine DNS-Zone, die per API bedienbar ist (IONOS kann das),
 und eine feste Adresse für den Pi (DHCP-Reservierung im RUTX50).
 
 Verworfen:
+- **Tailscale.** Auf dem Pi läuft es heute, und es könnte dem Pi sogar ein
+  gültiges Zertifikat für seinen `ts.net`-Namen ausstellen. Es soll aber weg
+  (Eigner-Entscheidung): Die Bordanlage soll nicht von einem fremden
+  Koordinationsdienst abhängen, und Gäste an Bord sind nicht im Tailnet.
+  Abgeschaltet wird es **erst, wenn dieser Ersatz trägt** — vorher fiele der
+  Fernzugriff ersatzlos weg.
 - **PWA vom Pi installieren.** `http://` im LAN ist kein sicherer Kontext, also
   kein Service Worker und keine Installation. Fällt aus.
 - **Zwei Installationen** (eine vom Pi, eine vom Server). Zwei Symbole, zwei

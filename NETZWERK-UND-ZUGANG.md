@@ -114,7 +114,7 @@ löst es im Browser unzuverlässig auf.
 
 ---
 
-## Tailscale — schon vorhanden
+## Tailscale — Übergangslösung, soll weg
 
 Im Tailnet (`gollerjoshua@`) hängen derzeit:
 
@@ -123,20 +123,26 @@ Im Tailnet (`gollerjoshua@`) hängen derzeit:
 100.70.142.119  s24-von-joshua   android
 ```
 
-Das heißt: **Das Handy des Eigners erreicht den Pi heute schon von überall**,
-ohne Portfreigabe und ohne Server. Zwei Folgen für die Planung:
+Das ist der **heutige** Fernzugriff des Eigners und ausdrücklich eine
+Zwischenlösung: **Tailscale soll verschwinden**, sobald das eigene System den
+Fernzugriff trägt. Es ist keine Architekturoption — die Anlage soll nicht von
+einem fremden Koordinationsdienst abhängen.
 
-1. Für Diagnose und Handarbeit ist der Weg da — man braucht keinen Umweg über
-   den Server, um an die Bordanlage zu kommen.
-2. Für die PWA-Umschaltung ist es eine **Option, kein Ersatz**: Tailscale kann
-   dem Pi ein gültiges Zertifikat für seinen `ts.net`-Namen ausstellen, was den
-   IONOS-Schlüssel überflüssig machen würde. Es setzt aber voraus, dass das
-   Endgerät im Tailnet ist — für Gäste an Bord gilt das nicht, und ohne
-   Internet ist der erstmalige Aufbau ungewiss.
+Für die Zwischenzeit gilt: Wer heute von außen an den Pi muss, nimmt diesen
+Weg. Wer plant, plant **ohne** ihn.
 
-Diese Abwägung ist noch nicht entschieden (`KONZEPT-SERVER.md`, Abschnitt 1).
+**Reihenfolge beim Abschalten** — erst der Ersatz, dann die Abschaltung:
 
----
+1. Etappe 1 läuft (Server erreichbar, Pi verbunden, Anmeldung steht).
+2. Der Fernzugriff über die eigene Adresse ist einmal im Alltag erprobt, nicht
+   nur im Test.
+3. Erst dann `tailscale down` und das Paket entfernen. Vorher fiele der
+   Fernzugriff ersatzlos weg — und zwar genau dann, wenn das Boot allein liegt.
+
+Zu bedenken: Über Tailscale läuft heute auch die **Handarbeit** (SSH von
+unterwegs). Nach der Abschaltung bleibt dafür nur das Bordnetz — es sei denn,
+die Fernwartung im Diagnosewerkzeug kann genug (Protokolle lesen, Dienst neu
+starten, Update auslösen). Das gehört bei der Ausgestaltung bedacht.
 
 ## Wo die Geheimnisse liegen
 
