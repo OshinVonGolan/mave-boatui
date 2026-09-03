@@ -251,81 +251,29 @@ function _kopfLogoPruefen() {
  * wenn die Leiste schrumpft — sonst wuerde das Umschalten den Fuehler wieder
  * ins Bild schieben und die Leiste faenge an zu flackern.
  */
-const LEISTE_GLEIT_MS = 220;
-let _leisteGleitTimer = null;
-
 /**
- * Zwischen normaler und kompakter Leiste umschalten — mit gleitenden Feldern.
+ * Zwischen normaler und kompakter Leiste umschalten.
  *
- * Alles an der Leiste, das sich rechnen laesst, haengt stufenlos am
- * Scrollstand (--leiste-eng). Der Rest — Spaltenzahl, Randlinien, Breite —
- * schaltet an dieser Stelle um und wuerde dabei springen.
+ * Hier wird nur noch eine Klasse gesetzt. Alles Sichtbare an der Leiste —
+ * Groessen, Abstaende, Schriften, Randlinien, Breite — haengt stufenlos am
+ * Scrollstand (--leiste-eng, siehe style.css) und laeuft dem Finger direkt
+ * hinterher.
  *
- * Deshalb wird hier gemessen statt gerechnet: erst die Plaetze vor dem
- * Umschalten merken, dann umschalten, dann die neuen Plaetze lesen und jedes
- * Feld per transform an seinen ALTEN Platz zuruecksetzen. Im naechsten Bild
- * laeuft es von dort an den neuen. Die Hoehe der Leiste laeuft im selben Zug
- * mit, damit auch der Inhalt darunter nicht ruckt.
+ * Vorher schaltete diese Stelle Schriften, Randlinien und Breite auf einen
+ * Schlag um; die Leiste sprang dabei am Ende der Bewegung 9 px flacher und
+ * 72 px breiter. Der Sprung wurde mit einer gemessenen Gleitbewegung
+ * (FLIP: alte Plaetze merken, umschalten, per transform zuruecksetzen,
+ * hinlaufen lassen) ueberdeckt. Zwei Nachteile hatte das: die Bewegung lief
+ * dem Scrollen um ihre eigene Dauer hinterher, und weil die Klasse an einem
+ * IntersectionObserver haengt, kam sie beim schnellen Scrollen zusaetzlich
+ * verspaetet. Beides faellt weg, wenn nichts mehr springt.
  *
- * Gebaut wurde das fuer den Zeilenumbruch am Telefon (zwei Reihen zu je drei
- * wurden eine Zeile mit sechs). Den gibt es seit v1.56.3 nicht mehr — dort
- * bleiben es zwei Reihen. Die Bewegung bleibt trotzdem: sie greift bei jeder
- * Verschiebung, die beim Umschalten entsteht, und kostet nichts, wenn sich
- * nichts bewegt (dann steigt sie gleich wieder aus).
- *
- * transform und height sind beide billig zu animieren: sie loesen keinen
- * Neuumbruch der Kacheln darunter aus.
+ * Die Klasse bleibt trotzdem: in Browsern ohne scroll-gesteuerte Animation
+ * setzt sie --leiste-eng auf 1, und der Uebergang laeuft dort ueber eine
+ * Transition.
  */
 function _leisteUmschalten(kompakt) {
-  const leiste = document.querySelector('.statusbar');
-  const ruhig  = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const felder = leiste ? Array.from(leiste.querySelectorAll('.sb-item')) : [];
-  if (!leiste || !felder.length || ruhig) {
-    document.body.classList.toggle('leiste-kompakt', kompakt);
-    return;
-  }
-
-  const vorher  = felder.map(e => e.getBoundingClientRect());
-  const hVorher = leiste.getBoundingClientRect().height;
-
   document.body.classList.toggle('leiste-kompakt', kompakt);
-
-  // Das Lesen erzwingt den Umbruch — ab hier stehen die neuen Plaetze fest.
-  const nachher  = felder.map(e => e.getBoundingClientRect());
-  const hNachher = leiste.getBoundingClientRect().height;
-  if (Math.abs(hVorher - hNachher) < 1 &&
-      nachher.every((r, i) => Math.abs(r.top - vorher[i].top) < 1)) {
-    return;                       // nichts verrutscht (breite Ansicht)
-  }
-
-  felder.forEach((e, i) => {
-    const dx = vorher[i].left - nachher[i].left;
-    const dy = vorher[i].top  - nachher[i].top;
-    e.style.transition = 'none';
-    e.style.transform  = (dx || dy) ? `translate(${dx}px, ${dy}px)` : '';
-  });
-  leiste.style.transition = 'none';
-  leiste.style.height     = hVorher + 'px';
-  void leiste.offsetHeight;       // Stand festschreiben, sonst faellt der
-                                  // Browser beides in einem Schritt zusammen
-
-  requestAnimationFrame(() => {
-    felder.forEach(e => {
-      e.style.transition = `transform ${LEISTE_GLEIT_MS}ms ease`;
-      e.style.transform  = '';
-    });
-    leiste.style.transition = `height ${LEISTE_GLEIT_MS}ms ease`;
-    leiste.style.height     = hNachher + 'px';
-  });
-
-  // Aufraeumen, damit danach wieder die normale Rechnung greift. Eigener
-  // Zeitgeber statt transitionend: das Ereignis bleibt aus, wenn waehrend der
-  // Bewegung erneut umgeschaltet wird.
-  clearTimeout(_leisteGleitTimer);
-  _leisteGleitTimer = setTimeout(() => {
-    felder.forEach(e => { e.style.transition = ''; e.style.transform = ''; });
-    leiste.style.transition = ''; leiste.style.height = '';
-  }, LEISTE_GLEIT_MS + 40);
 }
 
 function _leisteKompaktFuehren() {

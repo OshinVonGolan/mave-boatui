@@ -593,6 +593,12 @@
       background: var(--border);                 /* scheint durch den Spalt */
       border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden;
+      /* Seiten und Oberkante gehen MIT der Bewegung weg, nicht auf einen
+         Schlag am Ende. Auf ganze Pixel gerundet, weil eine halbe Randlinie
+         als hellerer Streifen erscheint. */
+      border-top-width:   round(calc(1px * (1 - var(--leiste-eng))), 1px);
+      border-left-width:  round(calc(1px * (1 - var(--leiste-eng))), 1px);
+      border-right-width: round(calc(1px * (1 - var(--leiste-eng))), 1px);
     }
     main { padding-top: 0;     /* Kopf- und Leistenabstand traegt der Halter */
       /* Beim Umschalten auf die kompakte Leiste wird der Streifen um rund
@@ -640,8 +646,7 @@
     }
 
     /* Alle Groessen aus dem Fortschritt gerechnet. */
-    .statusbar-halter { padding: calc(var(--gap) * (1 - var(--leiste-eng)));
-      padding: round(calc(var(--gap) * (1 - var(--leiste-eng))), 1px); }
+    .statusbar-halter { padding: calc(var(--gap) * (1 - var(--leiste-eng))); }
     .statusbar        { border-radius: calc(var(--radius) * (1 - var(--leiste-eng))); }
     /* Groessen und Abstaende sind unten bei den Grunddefinitionen aus dem
        Fortschritt gerechnet — dort, wo sie je Bildbreite ohnehin stehen.
@@ -650,20 +655,12 @@
     /* Spaltenzahl und Randlinien lassen sich nicht stufenlos rechnen — die
        schaltet weiterhin der Beobachter, und zwar erst am Ende der Bewegung,
        wenn die Felder ohnehin schon flach sind. */
-    body.leiste-kompakt .sb-lbl   { font-size: 9px; line-height: 11px; letter-spacing: .05em; }
-    body.leiste-kompakt .sb-val   { line-height: 16px; }
-    body.leiste-kompakt .sb-val b { font-size: 15px; }
-    body.leiste-kompakt .sb-val i { font-size: 9px; }
-    body.leiste-kompakt .statusbar {
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      border-left: 0; border-right: 0; border-top: 0;
-      /* Ueber die volle Breite wie die Kopfzeile. Im normalen Zustand ist die
-         Leiste auf die Inhaltsbreite begrenzt und mittig — das ist dort
-         richtig, weil sie ueber den Kacheln steht. Angeschmiegt an die
-         Kopfzeile wuerden die Luecken links und rechts sie aber als eigenen
-         Streifen zeigen statt als Teil des Kopfes. */
-      max-width: none; margin-left: 0; margin-right: 0;
-    }
+    /* Frueher schaltete hier die Klasse .leiste-kompakt Schriftgroessen,
+       Randlinien und Breite auf einen Schlag um. Am Ende der Bewegung sprang
+       die Leiste dadurch um 9 px flacher und 72 px breiter, und weil die
+       Klasse an einem Beobachter haengt, kam der Sprung beim schnellen
+       Scrollen auch noch verspaetet. Alles, was sich rechnen laesst, haengt
+       jetzt am Fortschritt --leiste-eng und laeuft mit dem Finger mit. */
 
 
     .sb-item {
@@ -678,14 +675,17 @@
          Reihenhoehe zwischen zwei Pixel, und der 1-px-Spalt zwischen den
          Reihen rastert mal als ein, mal als zwei Pixel — die mittlere
          Trennlinie wurde dabei sichtbar dicker und wieder duenner. Die Zeile
-         darueber bleibt als Rueckfall fuer Browser ohne round() stehen. */
-      padding: round(calc(10px - 5px * var(--leiste-eng)), 1px)
-               round(calc(12px - 4px * var(--leiste-eng)), 1px)
-               round(calc(11px - 5px * var(--leiste-eng)), 1px);
+         darueber bleibt als Rueckfall fuer Browser ohne round() stehen.
+
+         Nur noch am Telefon (weiter unten): dort stehen zwei Reihen
+         uebereinander, und der Spalt dazwischen ist die Trennlinie, um die es
+         geht. In der breiten Ansicht gibt es nur EINE Reihe und damit keine
+         mittlere Linie — dort wird ungerundet gerechnet, sonst kippen fuenf
+         gerundete Groessen gleichzeitig und die Leiste ruckt in 5-px-Stufen
+         durch die Bewegung, statt zu gleiten. */
       min-width: 0;
       display: flex; flex-direction: column;
       gap: calc(2px * (1 - var(--leiste-eng)));
-      gap: round(calc(2px * (1 - var(--leiste-eng))), 1px);
       font-family: inherit; color: inherit; text-align: left;
       cursor: pointer; transition: background .15s;
       position: relative; overflow: hidden;   /* traegt den Hintergrundgraphen */
@@ -731,19 +731,22 @@
        gebrochen hoch, damit auch die Reihe — und der 1-px-Spalt zwischen den
        beiden Reihen liegt dann zwischen zwei Bildpunkten und wirkt mal
        dicker, mal duenner. */
-    .sb-lbl { font-size: 10px; line-height: 12px; font-weight: 700; letter-spacing: .08em;
+    .sb-lbl { font-size: calc(10px - 1px * var(--leiste-eng));
+      line-height: calc(12px - 1px * var(--leiste-eng));
+      font-weight: 700; letter-spacing: calc(.08em - .03em * var(--leiste-eng));
       text-transform: uppercase; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sb-val { display: flex; align-items: baseline; gap: 3px; line-height: 20px;
+    .sb-val { display: flex; align-items: baseline; gap: 3px;
+      line-height: calc(20px - 4px * var(--leiste-eng));
       color: var(--text); font-variant-numeric: tabular-nums; }
-    .sb-val b { font-size: 21px; font-weight: 700; }
-    .sb-val i { font-size: 11px; font-style: normal; font-weight: 600; color: var(--text2); }
+    .sb-val b { font-size: calc(21px - 6px * var(--leiste-eng)); font-weight: 700; }
+    .sb-val i { font-size: calc(11px - 2px * var(--leiste-eng)); font-style: normal;
+      font-weight: 600; color: var(--text2); }
     /* Die Unterzeile geht als Erste: bei 40 % des Weges ist sie schon
        unsichtbar, damit sie nicht bis zuletzt gequetscht mitlaeuft. */
     .sb-sub { font-size: 11px; line-height: 13px; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-height: calc(15px * (1 - var(--leiste-eng)));
-      max-height: round(calc(15px * (1 - var(--leiste-eng))), 1px);
       opacity: calc(1 - 2.5 * var(--leiste-eng)); }
     /* Zustandsfarben: nur der Zahlenwert faerbt sich, nie die ganze Flaeche */
     .sb-item.sb-ok   .sb-val b { color: var(--green); }
@@ -782,15 +785,14 @@
          Eigners wieder raus: ohne sie wirkte die Seite fremd, und Menue und
          Alarmglocke waren nicht mehr erreichbar.
 
-         Angedockt dafuer so flach wie moeglich. Die Schrift springt beim
-         Andocken in EINEM Schritt kleiner, statt mitzulaufen — den Schritt
-         deckt die Gleitbewegung in core.js ab, und die Zeilenhoehe bleibt
-         dabei ganzzahlig. */
-      body.leiste-kompakt .sb-item  { padding-top: 3px; padding-bottom: 3px; }
-      body.leiste-kompakt .sb-lbl   { font-size: 9px; line-height: 11px; letter-spacing: .04em; }
-      body.leiste-kompakt .sb-val   { line-height: 16px; }
-      body.leiste-kompakt .sb-val b { font-size: 15px; }
-      body.leiste-kompakt .sb-val i { font-size: 9px; }
+         Angedockt dafuer so flach wie moeglich — und der Weg dorthin ist auch
+         hier gerechnet statt geschaltet, damit die Schrift mitlaeuft, statt in
+         einem Schritt zu springen. Zeilenhoehen bleiben ganzzahlig. */
+      .sb-lbl   { letter-spacing: calc(.08em - .04em * var(--leiste-eng));
+                  line-height: round(calc(12px - 1px * var(--leiste-eng)), 1px); }
+      .sb-val   { line-height: round(calc(20px - 4px * var(--leiste-eng)), 1px); }
+      .sb-sub   { max-height: round(calc(15px * (1 - var(--leiste-eng))), 1px); }
+      .sb-item  { gap: round(calc(2px * (1 - var(--leiste-eng))), 1px); }
     }
     @media (max-width: 640px) {
       .sb-item { padding: calc(9px - 4px * var(--leiste-eng))
@@ -817,10 +819,16 @@
     }
     /* Breite Schirme: Leiste exakt so breit wie das Kachelraster darunter */
     @media (min-width: 1024px) {
-      .statusbar { max-width: calc(1240px - 2 * var(--gap)); margin-left: auto; margin-right: auto; }
+      /* Angedockt geht die Leiste ueber die volle Breite wie die Kopfzeile,
+         sonst zeigten die Luecken links und rechts sie als eigenen Streifen.
+         Der Weg dorthin ist gerechnet, nicht geschaltet; max(0px, …) haelt die
+         Leiste in schmalen Fenstern davon ab, schmaler zu werden statt breiter. */
+      .statusbar { --sb-breit: calc(1240px - 2 * var(--gap));
+        max-width: calc(var(--sb-breit) + max(0px, 100vw - var(--sb-breit)) * var(--leiste-eng));
+        margin-left: auto; margin-right: auto; }
     }
     @media (min-width: 1600px) {
-      .statusbar { max-width: calc(1660px - 2 * var(--gap)); }
+      .statusbar { --sb-breit: calc(1660px - 2 * var(--gap)); }
     }
     /* Kiosk: kein Header, dafuer Sidebar links — Leiste zieht mit */
     .kiosk-mode .statusbar {
