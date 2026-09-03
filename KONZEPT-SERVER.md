@@ -184,8 +184,8 @@ Jede Etappe kann für sich etwas, das vorher nicht ging.
 
 | # | Etappe | Danach kannst du | Aufwand |
 |---|---|---|---|
-| 1 | **Fernblick** — Server-Container, Domain, TLS für den Pi, ausgehende Verbindung, Zustand und Verlauf hinauf, Quellenerkennung in der PWA, ein Konto mit Passwort | von überall sehen, wie es dem Boot geht, und den Verlauf lesen | 3–5 Abende, dazu ein Tag Zertifikatsfummelei |
-| 2 | **Konten** — Konten am Server, Kontenkopie zum Pi, lokale Anmeldung, vier Rollen, Gerätesitzung für den Kiosk | Crew und Gäste getrennt zugreifen lassen, an Bord auch ohne Internet | 4–6 Abende |
+| 1 | **Fernblick mit Anmeldung** — Server-Container, Domain, TLS für den Pi, ausgehende Verbindung, Zustand und Verlauf hinauf, Quellenerkennung in der PWA. Dazu Anmeldung an beiden Enden, Kontenkopie und Gerätesitzung für den Kiosk (siehe Entscheidung) | von überall sehen, wie es dem Boot geht, den Verlauf lesen — und niemand sonst kann es | 6–9 Abende, dazu ein Tag Zertifikatsfummelei |
+| 2 | **Rollen und Verwaltung** — vier Rollen wirksam, Konten anlegen und sperren, befristete Technikerzugänge, Alarm-Push | Crew und Gäste getrennt zugreifen lassen, Zugänge selbst verwalten | 3–5 Abende |
 | 3 | **Befehle** — Warteschlange, Quittung, Vorgriff; Heizung-Fernschalten als freizugebende Ausnahme | aus der Ferne schalten, mit ehrlicher Rückmeldung | 3–4 Abende |
 | 4 | **Diagnose und Fernwartung** — eigene Oberfläche: Protokolle, JS-Fehler, Bus-Statistik, Update auslösen, Alarmhistorie | dem Boot beim Problem zusehen, ohne an Bord zu sein | offen, Umfang noch zu besprechen |
 
@@ -194,13 +194,59 @@ Rechte-Matrix, Cloud-Abhängigkeit für den Bordbetrieb.
 
 ---
 
-## Was vor Etappe 1 entschieden sein muss
+## Entschieden am 03.09.2026
 
-1. **Welche Domain** — eine der freien oder eine Subdomain von
-   `circuit-sailor.com`?
-2. **TLS für den Pi** — ist die DNS-Zone per API bedienbar (IONOS)? Ohne echtes
-   Zertifikat am Pi ist „eine PWA für beide Seiten" nicht möglich.
-3. **Bordnetz** — bleibt Lesen im Bord-WLAN ohne Anmeldung offen, oder wird
-   auch dort angemeldet?
-4. **Datenvolumen** — welches monatliche Budget darf der Sync kosten? Danach
-   richtet sich der Takt.
+| Frage | Entscheidung |
+|---|---|
+| Adresse | **mave.circuit-sailor.com**, der Pi unter **pi.mave.circuit-sailor.com** auf seine LAN-Adresse. Die Zone liegt bei IONOS (`ui-dns.*`), von dort kommt auch das Zertifikat |
+| TLS am Pi | **Ja**, echtes Let's-Encrypt-Zertifikat per DNS-01 über die IONOS-API. Der Eigner legt einen API-Schlüssel an, der Pi erneuert selbst. Kein eingehender Port |
+| Anmeldung | **Überall Pflicht, auch im Bord-WLAN** (abweichend vom ersten Vorschlag) |
+| Datenvolumen | **Zwei Betriebsarten**, siehe unten |
+| Server | eigener Container, eigene Daten, eigene Domain — bestätigt |
+
+### Anmeldung überall — was das bedeutet
+
+Die Entscheidung ist strenger als der ursprüngliche Vorschlag und zieht drei
+Dinge nach sich:
+
+1. **Der Kiosk braucht eine Gerätesitzung.** Der Touchscreen am Kartentisch darf
+   nicht vor einem Anmeldefenster stehen. Er wird einmal als Gerät angemeldet
+   und bleibt es — mit einer Rolle, die weniger darf als der Eigner (er hängt
+   öffentlich zugänglich an Bord).
+2. **Die Anmeldung muss ohne Internet funktionieren**, sonst ist die Anlage im
+   Funkloch unbedienbar. Dafür ist die Kontenkopie auf dem Pi da (Abschnitt 3).
+   Sie muss vorhanden sein, BEVOR die Anmeldepflicht greift.
+3. **Sie kommt früher als geplant.** Heute ist alles offen; die Pflicht betrifft
+   alle 48 Endpunkte. Deshalb wandert die Anmeldung von Etappe 2 in Etappe 1 —
+   ein Zwischenzustand, in dem der Server öffentlich erreichbar und der Pi offen
+   ist, darf nicht entstehen.
+
+### Zwei Betriebsarten für die Übertragung
+
+Im Hafen hängt das Boot über Starlink am Netz, dort ist Volumen kein Thema.
+Unterwegs läuft es über Mobilfunk, dort schon. Also:
+
+| Betriebsart | Zustand | Verlauf | wann |
+|---|---|---|---|
+| **voll** | alle 10 s, bei Änderung sofort | feine Auflösung | Starlink oder Kabel |
+| **gedrosselt** | alle 60 s, Alarme trotzdem sofort | nur Minutenmittel | Mobilfunk |
+
+Umgeschaltet wird **automatisch anhand des Uplinks** — und dafür ist nichts
+Neues nötig: `connectivity.py` kennt den aktiven Weg schon
+(`router.active_type` liefert `wired`, `mobile` oder `wifi`, dazu den
+Starlink-Zustand). Der Sync liest das und wählt seinen Takt.
+
+Dazu ein **Handschalter** in den Einstellungen mit drei Stellungen: automatisch,
+immer voll, immer gedrosselt. Wer im Hafen an einer teuren Marina-SIM hängt,
+will das selbst bestimmen können.
+
+Alarme gehen in **beiden** Betriebsarten sofort hinaus. Sie sind der Grund,
+warum das System überhaupt nach draußen spricht.
+
+---
+
+## Was der Eigner beisteuern muss
+
+1. **IONOS-API-Schlüssel** (Public Prefix und Secret) für die DNS-Prüfung des
+   Pi-Zertifikats. Blockiert die Umschaltung der PWA, sonst nichts.
+2. **DHCP-Reservierung im RUTX50** für den Pi, damit seine Adresse fest ist.
