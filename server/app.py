@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from server.befehle import (DURCHLEITEN, KeinBoot, Vermittlung,
@@ -442,6 +442,14 @@ for _methode, _pfad, _recht in DURCHLEITEN:
 # alles Uebrige mit.
 from js_bundle_liste import JS_FILES as _JS_FILES
 _bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+
+
+@app.get('/sw.js', include_in_schema=False)
+async def service_worker():
+    """Muss von der Wurzel kommen, sonst deckt sein Geltungsbereich die Seite
+    nicht ab und die Anwendung bleibt fuer Chrome nicht installierbar."""
+    return FileResponse(STATISCH / 'sw.js', media_type='application/javascript',
+                        headers={'Cache-Control': 'no-cache'})
 
 
 @app.get('/js-bundle.js', include_in_schema=False)

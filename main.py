@@ -20,7 +20,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
@@ -486,6 +486,18 @@ app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
 # die Antworten werden dabei nur wenige Prozent groesser.
 app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
+
+
+@app.get('/sw.js', include_in_schema=False)
+async def service_worker():
+    """Der Service Worker muss von der Wurzel kommen.
+
+    Unter /static/sw.js waere sein Geltungsbereich nur /static/ — die Seite
+    selbst laege ausserhalb, und Chrome haette weiter keinen Grund, die
+    Anwendung als installierbar zu betrachten.
+    """
+    return FileResponse(STATIC_DIR / 'sw.js', media_type='application/javascript',
+                        headers={'Cache-Control': 'no-cache'})
 
 # JS files in dependency order — concatenated into one request on /js-bundle.js
 from js_bundle_liste import JS_FILES as _JS_FILES

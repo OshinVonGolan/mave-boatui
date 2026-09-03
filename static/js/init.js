@@ -5,6 +5,18 @@ _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 _leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
 loadPresets();
 
+// Service Worker anmelden. Erst dadurch bietet Chrome die Anwendung als
+// installierbar an (eigenes Fenster statt blosser Verknuepfung im Browser).
+// Voraussetzung ist ein sicherer Kontext: ueber den Server (https) ist das
+// gegeben, direkt am Pi per http nur ueber localhost — dort passiert schlicht
+// nichts, was richtig ist und keine Fehlermeldung wert.
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .catch(e => console.warn('Service Worker nicht angemeldet:', e && e.message));
+  });
+}
+
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern
 const _pStatus = fetch('/api/status').then(r => r.ok ? r.json() : null)
   .then(d => { if (d) handleData(d); }).catch(() => {});
