@@ -43,4 +43,12 @@ EXPOSE 8000
 # Ein Arbeiter reicht: es geht um ein Boot und eine Handvoll Browser. Mehrere
 # Arbeiter haetten getrennte Zustaende (die offene Verbindung zum Boot liegt in
 # EINEM Prozess) — das waere ein Fehler, keine Leistungssteigerung.
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]
+# --proxy-headers, damit der Dienst sieht, dass die Verbindung draussen HTTPS
+# war. Ohne das haelt er jede Anfrage fuer unverschluesselt und setzt das
+# Sitzungscookie ohne `Secure` — es duerfte dann auch ueber HTTP mitgehen.
+# --forwarded-allow-ips ist hier vertretbar, weil der Container NICHT
+# veroeffentlicht ist: an ihn kommt ausschliesslich Caddy heran, und was Caddy
+# in diese Koepfe schreibt, ist die Wahrheit.
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "1", "--no-server-header", \
+     "--proxy-headers", "--forwarded-allow-ips", "*"]

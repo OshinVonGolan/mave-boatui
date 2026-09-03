@@ -6,6 +6,7 @@ import logging
 import math
 import os
 import re
+import secrets
 import signal
 import socket
 import subprocess
@@ -256,6 +257,18 @@ def _sync_konfig() -> dict:
 
 
 _sync_cfg = _sync_konfig()
+# Ein Geheimnis, das nur in diesem Prozess existiert. Der Sync-Client fuehrt
+# Befehle vom Server ueber HTTP gegen die eigene API aus (damit sie dieselbe
+# Pruefung durchlaufen wie ein Griff an Bord) — dabei hat er aber kein
+# Sitzungscookie. Mit diesem Kopf weist er sich als der eigene Prozess aus und
+# nennt, WER auf dem Server gefragt hat.
+#
+# Er ist keine Vollmacht: der Pi schlaegt das genannte Konto in SEINER Kopie
+# nach und wendet dessen Rechte an. Sagt der Server "crew", gilt Crew, nicht
+# mehr. Neu bei jedem Start, steht nirgends auf der Platte.
+_INTERN = secrets.token_urlsafe(32)
+
+
 def _konten_stand() -> str:
     return konten.zum_verteilen()['stand']
 
@@ -276,6 +289,7 @@ sync = sync_client.SyncClient(
     schalter=lambda: _sync_konfig().get('schalter', 'auto'),
     konten_stand=_konten_stand,
     konten_uebernehmen=_konten_uebernehmen,
+    intern_token=_INTERN,
     # Der Port, unter dem die App selbst laeuft — dorthin schickt der Client
     # die Befehle, die vom Server kommen. Nicht fest verdrahtet, weil er im
     # Test ein anderer ist als im Betrieb.
@@ -521,6 +535,8 @@ async def _zugang_pruefen(request: Request, call_next):
         token = zg.token_aus(request)
         if token:
             k = konten.konto_zu_token(token)
+        if k is None:
+            k = _durchgereicht(request)
 
     erlaubt, code, meldung = zg.pruefen(k, request.method, pfad, schonfrist=schonfrist)
     if not erlaubt:
@@ -529,6 +545,30 @@ async def _zugang_pruefen(request: Request, call_next):
     # Nachgelagerte Endpunkte duerfen wissen, wer da ist, ohne erneut zu suchen.
     request.state.konto = k
     return await call_next(request)
+
+
+def _durchgereicht(request: Request):
+    """Ein Aufruf, den der Server ueber die Sync-Verbindung hereingereicht hat.
+
+    Zwei Bedingungen, beide notwendig: das prozessinterne Geheimnis (von aussen
+    nicht zu erraten, es steht nirgends) und die Herkunft 127.0.0.1 — der
+    Sync-Client ruft sich selbst auf. Erst dann wird der genannte Name in der
+    eigenen Kontenkopie nachgeschlagen.
+
+    Ein uebernommener Server koennte hier einen fremden Namen behaupten. Das
+    ist hingenommen und keine neue Luecke: wer den Server hat, hat auch das
+    Geraetetoken und damit die Verbindung selbst.
+    """
+    if not secrets.compare_digest(request.headers.get('x-mave-intern', ''), _INTERN):
+        return None
+    herkunft = request.client.host if request.client else ''
+    if herkunft not in ('127.0.0.1', '::1'):
+        log.warning('Interner Kopf von %s — abgewiesen', herkunft)
+        return None
+    name = (request.headers.get('x-mave-konto') or '').strip()
+    if not name:
+        return None
+    return konten.konto_nach_name(name)
 
 
 @app.post('/api/login')

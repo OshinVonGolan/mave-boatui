@@ -189,6 +189,21 @@ class Konten:
                 self._sichern_sitzungen()
         return dict(konto, _sitzung_kiosk=bool(s.get('kiosk')))
 
+    def konto_nach_name(self, name: str):
+        """Ein Konto ohne Sitzung nachschlagen — fuer Aufrufe, die der Server
+        ueber die Sync-Verbindung hereinreicht.
+
+        Prueft dieselben Ausschluesse wie die Anmeldung: gesperrt oder
+        abgelaufen heisst kein Konto. Sonst waere dies der Weg, auf dem ein
+        entzogener Zugang doch noch wirkt.
+        """
+        konto = self._konten.get((name or '').strip())
+        if not konto or konto.get('gesperrt'):
+            return None
+        if k.abgelaufen(konto, _jetzt_falls_verlaesslich()):
+            return None
+        return dict(konto)
+
     def aendern(self, name: str, *, rolle=None, gesperrt=None,
                 passwort=None, laeuft_ab=None) -> dict:
         """Rolle, Sperre, Passwort oder Ablauf eines Kontos aendern.

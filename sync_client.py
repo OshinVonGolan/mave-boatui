@@ -57,6 +57,7 @@ class SyncClient:
                  zustand_holen, verlauf_holen, verlauf_stand, conn_status,
                  schalter=lambda: 'auto', lokal_ausfuehren=None,
                  konten_stand=lambda: '', konten_uebernehmen=None,
+                 intern_token: str = '',
                  eigener_port: int = 8080, markenpfad='sync_start.json'):
         self._adresse = (adresse or '').strip()
         # Die Kontenkopie kommt vom Server; der Client kennt die Kontenhaltung
@@ -74,7 +75,8 @@ class SyncClient:
         self._conn_status = conn_status
         self._schalter = schalter
         self._lokal = lokal_ausfuehren or (
-            lambda m, pf, r: lokal_ueber_http(m, pf, r, port=eigener_port))
+            lambda m, pf, r, konto='': lokal_ueber_http(
+                m, pf, r, port=eigener_port, konto=konto, intern=intern_token))
         self._marke = Startmarke(markenpfad)
         self._befund: dict = {}
         self._ws = None
@@ -212,7 +214,8 @@ class SyncClient:
         try:
             status, antwort = await asyncio.wait_for(
                 asyncio.to_thread(self._lokal, b.get('methode', 'POST'),
-                                  b.get('pfad', ''), b.get('rumpf')),
+                                  b.get('pfad', ''), b.get('rumpf'),
+                                  b.get('konto') or ''),
                 timeout=_BEFEHL_FRIST_S)
             self.befehle_ausgefuehrt += 1
             await self._senden(p.umschlag(p.QUITTUNG, {
@@ -298,7 +301,8 @@ class SyncClient:
                 'gestellt': wand >= 1704067200.0}
 
 
-def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080) -> tuple:
+def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080,
+                     konto: str = '', intern: str = '') -> tuple:
     """Einen Befehl gegen die eigene API ausfuehren.
 
     Ueber HTTP an 127.0.0.1 und nicht durch einen direkten Funktionsaufruf:
@@ -317,6 +321,15 @@ def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080) -> tuple:
     # Kennzeichnet den Aufruf als aus der Ferne kommend. Die App kann damit
     # spaeter unterscheiden, was aus dem Bordnetz und was von aussen kam.
     req.add_header('X-Herkunft', 'server')
+    # Wer auf dem Server gefragt hat. Ohne diese Angabe kaeme der Aufruf ohne
+    # Anmeldung an der eigenen Tuer an und wuerde abgewiesen — der Server
+    # reicht durch, aber die Sitzung des Nutzers liegt bei ihm, nicht hier.
+    # Das Geheimnis weist den Aufruf als den eigenen Prozess aus; ueber die
+    # RECHTE entscheidet danach der Pi anhand seiner eigenen Kontenkopie.
+    if intern:
+        req.add_header('X-Mave-Intern', intern)
+    if konto:
+        req.add_header('X-Mave-Konto', konto)
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             roh = r.read()

@@ -199,11 +199,31 @@ class Rechte(unittest.TestCase):
 
     def test_unbekannte_rolle_wird_gast_nicht_eigner(self):
         from sync import rechte as r
-        for unsinn in ({'rolle': 'kapitaen'}, {'rolle': ''}, {'rolle': None}, {}, None):
+        # Ein Konto MIT unbrauchbarer Rollenangabe faellt auf Gast zurueck:
+        # sehen ja, alles andere nein. Im Zweifel das geringste Recht.
+        for unsinn in ({'name': 'x', 'rolle': 'kapitaen'},
+                       {'name': 'x', 'rolle': ''},
+                       {'name': 'x', 'rolle': None}):
             with self.subTest(unsinn=unsinn):
                 self.assertTrue(r.darf(unsinn, r.LESEN))
                 self.assertFalse(r.darf(unsinn, r.SCHALTEN))
                 self.assertFalse(r.darf_oberflaeche(unsinn, r.DIAGNOSE))
+
+    def test_gar_kein_konto_faellt_nicht_auf_gast(self):
+        """Frueher bekam auch `None` Gastrechte — also Lesezugriff.
+
+        Das war der Unterschied zwischen "unbekannte Rolle" und "niemand", und
+        er ging verloren, weil beides denselben Weg nahm. Ein Unangemeldeter
+        durfte damit lesen, sobald irgendwo eine Pruefung fehlte. Seit
+        03.09.2026 heisst kein Konto ausdruecklich kein Recht.
+        """
+        from sync import rechte as r
+        for nichts in (None, {}):
+            with self.subTest(nichts=nichts):
+                for handlung in r.HANDLUNGEN:
+                    self.assertFalse(r.darf(nichts, handlung), handlung)
+                for flaeche in r.OBERFLAECHEN:
+                    self.assertFalse(r.darf_oberflaeche(nichts, flaeche), flaeche)
 
     def test_konto_kann_die_rolle_uebersteuern(self):
         from sync import rechte as r

@@ -108,7 +108,8 @@ class Vermittlung:
 
     # ── Senden und warten ───────────────────────────────────────────────────
 
-    async def senden(self, methode: str, pfad: str, rumpf, frist: float = FRIST_S) -> dict:
+    async def senden(self, methode: str, pfad: str, rumpf, frist: float = FRIST_S,
+                     konto: str = '') -> dict:
         if self._ws is None:
             raise KeinBoot('Das Boot ist nicht verbunden.')
         kennung = secrets.token_hex(8)
@@ -117,6 +118,10 @@ class Vermittlung:
         try:
             await self._ws.send_json(p.umschlag(p.BEFEHL, {
                 'kennung': kennung, 'methode': methode, 'pfad': pfad, 'rumpf': rumpf,
+                # Wer gefragt hat. Der Pi schlaegt den Namen in seiner eigenen
+                # Kontenkopie nach und wendet DESSEN Rechte an — ohne diese
+                # Angabe kaeme der Aufruf dort unangemeldet an.
+                'konto': konto,
             }))
             return await asyncio.wait_for(zukunft, timeout=frist)
         except asyncio.TimeoutError:

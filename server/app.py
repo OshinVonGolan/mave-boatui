@@ -599,7 +599,8 @@ def _durchleiter(methode: str, pfad: str, recht: str):
             ziel = ziel.replace('{' + name + '}', str(wert))
 
         try:
-            ergebnis = await _vermittlung.senden(methode, ziel, rumpf)
+            ergebnis = await _vermittlung.senden(methode, ziel, rumpf,
+                                                 konto=k.get("name", ""))
         except KeinBoot as e:
             # 409 und nicht 503: der Server ist in Ordnung, das Boot ist weg.
             raise HTTPException(409, detail=str(e)) from None
@@ -695,7 +696,8 @@ async def lesend_durchreichen(rest: str, request: Request,
     if request.url.query:
         pfad += '?' + request.url.query
     try:
-        ergebnis = await _vermittlung.senden('GET', pfad, None, frist=_DURCHREICHEN_FRIST_S)
+        ergebnis = await _vermittlung.senden('GET', pfad, None, frist=_DURCHREICHEN_FRIST_S,
+                                                  konto=k.get('name', ''))
     except KeinBoot:
         # 409 und nicht 503: der Server ist in Ordnung, das Boot ist weg. Die
         # Oberflaeche kann daraus einen ehrlichen Hinweis machen, statt einen
