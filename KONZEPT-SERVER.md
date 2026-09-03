@@ -113,6 +113,40 @@ Nutzen:
 | Gast | nur lesen |
 | Techniker | lesen, Diagnose, Fernwartung — zeitlich befristet |
 
+### Zugang zur Oberfläche ist ein eigenes Recht
+
+Eigner-Wunsch vom 03.09.2026: Die Crew soll die PWA nutzen, aber **nicht** das
+Diagnose- und Fernwartungswerkzeug auf dem Server — Langzeitauswertung braucht
+sie nicht.
+
+Deshalb trägt jede Rolle zwei getrennte Angaben:
+
+| | |
+|---|---|
+| **Oberflächen** | welches Werkzeug jemand öffnen darf — `pwa`, `diagnose` |
+| **Handlungen** | was jemand mit den Daten darf — lesen, schalten, einstellen, verwalten, fernwarten |
+
+Das eine folgt nicht aus dem anderen: Ein Crewmitglied darf an Bord Licht
+schalten, soll das Diagnosewerkzeug aber nicht sehen. Der Kiosk am Kartentisch
+darf sogar einstellen, aber keine Konten verwalten und keine Diagnose öffnen.
+
+| Rolle | Oberflächen | Handlungen |
+|---|---|---|
+| Eigner | pwa, diagnose | lesen, schalten, einstellen, verwalten, fernwarten |
+| Crew | pwa | lesen, schalten |
+| Gast | pwa | lesen |
+| Techniker (befristet) | pwa, diagnose | lesen, schalten, einstellen, fernwarten |
+| Kiosk (Gerätesitzung) | pwa | lesen, schalten, einstellen |
+
+**Verstecken ist keine Sicherheit.** Die Oberfläche blendet aus, was jemand
+nicht darf — die Entscheidung fällt aber am Endpunkt. Wer die Adresse des
+Diagnosewerkzeugs kennt, bekommt ohne das Recht eine Abweisung, keine Seite.
+
+Rollen sind die **Vorgabe, kein Korsett**: jedes Konto kann einzelne Rechte
+übersteuern. Das kostet hier fast nichts und vermeidet die Sackgasse, in die
+das Werft-Werkzeug gelaufen ist — dort mussten Rollen als
+Berechtigungsgrundlage nachträglich durch Rechte pro Person ersetzt werden.
+
 Zwei Dinge, die entschieden werden müssen (siehe unten): ob im Bord-WLAN das
 **Lesen** ohne Anmeldung offen bleibt (heute ist alles offen), und dass der
 Touchscheirm am Kartentisch eine dauerhafte Gerätesitzung braucht — dort will

@@ -159,3 +159,68 @@ class Betriebsarten(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Rechte(unittest.TestCase):
+    """Zwei Arten von Rechten, getrennt: welche Oberflaeche, welche Handlung."""
+
+    def test_crew_nutzt_die_pwa_aber_nicht_die_diagnose(self):
+        # Der Wunsch des Eigners in einem Test.
+        from sync import rechte as r
+        crew = {'rolle': 'crew'}
+        self.assertTrue(r.darf_oberflaeche(crew, r.PWA))
+        self.assertFalse(r.darf_oberflaeche(crew, r.DIAGNOSE))
+        self.assertTrue(r.darf(crew, r.SCHALTEN))       # bedienen darf sie
+        self.assertFalse(r.darf(crew, r.FERNWARTEN))
+
+    def test_oberflaeche_und_handlung_haengen_nicht_zusammen(self):
+        from sync import rechte as r
+        # Der Kiosk darf einstellen, aber keine Diagnose oeffnen.
+        kiosk = {'rolle': 'kiosk'}
+        self.assertTrue(r.darf(kiosk, r.EINSTELLEN))
+        self.assertFalse(r.darf_oberflaeche(kiosk, r.DIAGNOSE))
+        # Und er darf keine Konten verwalten, obwohl er an Bord haengt.
+        self.assertFalse(r.darf(kiosk, r.VERWALTEN))
+
+    def test_gesperrt_nimmt_alles(self):
+        from sync import rechte as r
+        eigner = {'rolle': 'eigner', 'gesperrt': True}
+        self.assertFalse(r.darf(eigner, r.LESEN))
+        self.assertFalse(r.darf_oberflaeche(eigner, r.PWA))
+
+    def test_abgelaufen_nimmt_alles(self):
+        from sync import rechte as r
+        # Die Frist prueft der Aufrufer, nicht dieses Paket: es hat keine Uhr,
+        # und auf dem Pi ist "welche Zeit ist es" nach einem Stromausfall eine
+        # echte Frage.
+        techniker = {'rolle': 'techniker', 'abgelaufen': True}
+        self.assertFalse(r.darf(techniker, r.LESEN))
+        self.assertTrue(r.ROLLEN['techniker']['befristet'])
+
+    def test_unbekannte_rolle_wird_gast_nicht_eigner(self):
+        from sync import rechte as r
+        for unsinn in ({'rolle': 'kapitaen'}, {'rolle': ''}, {'rolle': None}, {}, None):
+            with self.subTest(unsinn=unsinn):
+                self.assertTrue(r.darf(unsinn, r.LESEN))
+                self.assertFalse(r.darf(unsinn, r.SCHALTEN))
+                self.assertFalse(r.darf_oberflaeche(unsinn, r.DIAGNOSE))
+
+    def test_konto_kann_die_rolle_uebersteuern(self):
+        from sync import rechte as r
+        # Ein Crewmitglied, das auch in die Diagnose darf — ohne dafuer eine
+        # neue Rolle erfinden zu muessen.
+        besonders = {'rolle': 'crew', 'oberflaechen': ['pwa', 'diagnose']}
+        self.assertTrue(r.darf_oberflaeche(besonders, r.DIAGNOSE))
+        self.assertFalse(r.darf(besonders, r.FERNWARTEN))   # Handlungen bleiben Crew
+
+        knapp = {'rolle': 'eigner', 'handlungen': ['lesen']}
+        self.assertFalse(r.darf(knapp, r.SCHALTEN))
+        self.assertTrue(r.darf_oberflaeche(knapp, r.DIAGNOSE))
+
+    def test_uebersicht_taugt_fuer_die_oberflaeche(self):
+        from sync import rechte as r
+        u = r.uebersicht({'rolle': 'crew'})
+        self.assertEqual(u['rolle_name'], 'Crew')
+        self.assertEqual(u['oberflaechen'], ['pwa'])
+        self.assertIn('schalten', u['handlungen'])
+        self.assertNotIn('verwalten', u['handlungen'])
