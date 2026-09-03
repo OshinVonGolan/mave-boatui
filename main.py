@@ -752,6 +752,20 @@ class _WsClient:
 
 @app.websocket('/ws')
 async def ws_endpoint(ws: WebSocket):
+    # Der Live-Kanal traegt den ganzen Bordzustand und muss hier geprueft
+    # werden: die Zugangs-Middleware sieht nur HTTP-Anfragen, keinen
+    # WebSocket-Handschlag. Das Sitzungscookie geht beim Handschlag mit —
+    # anders als ein Authorization-Kopf, den ein Browser dabei nicht setzen
+    # kann. Genau deshalb liegt die Sitzung im Cookie.
+    #
+    # Solange keine Kontenkopie da ist, gilt dieselbe Schonfrist wie fuer die
+    # uebrigen Aufrufe: eine Anlage, die sich nach einem Update selbst
+    # aussperrt, waere schlimmer als eine offene im eigenen Bordnetz.
+    if not konten.leer:
+        k = konten.konto_zu_token(ws.cookies.get(zg.SITZUNG_COOKIE) or '')
+        if not rechte_modul.darf(k, rechte_modul.LESEN):
+            await ws.close(code=4401)
+            return
     await ws.accept()
     client = _WsClient(ws)
     client.start()

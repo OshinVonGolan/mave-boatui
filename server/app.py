@@ -759,11 +759,25 @@ async def _an_zuschauer(zustand: dict) -> None:
 
 @app.websocket('/ws')
 async def oberflaeche_ws(ws: WebSocket) -> None:
-    # Der WebSocket kommt nicht durch die HTTP-Anmeldung — Browser koennen bei
-    # einer WebSocket-Verbindung keine eigenen Koepfe setzen. Geschuetzt ist er
-    # dadurch, dass Caddy die Anmeldung schon beim Laden der Seite verlangt hat
-    # und der Browser das Cookie mitschickt. Mit der eigenen Anmeldung wird das
-    # hier durch eine Sitzungspruefung ersetzt.
+    # Der Live-Kanal traegt den vollstaendigen Zustand des Bootes. Er MUSS
+    # geprueft werden, und zwar hier: eine HTTP-Middleware sieht einen
+    # WebSocket-Handschlag nicht.
+    #
+    # Das Sitzungscookie geht beim Handschlag von selbst mit — anders als ein
+    # Authorization-Kopf, den ein Browser bei WebSockets nicht setzen kann.
+    # Genau deshalb liegt die Sitzung im Cookie und nicht im Kopf.
+    #
+    # Diese Pruefung fehlte, solange eine Basic-Anmeldung davor stand: die war
+    # der eigentliche Waechter, ohne dass es hier jemandem auffiel. Mit ihrem
+    # Wegfall stand der Kanal offen im Internet und lieferte Ladestand,
+    # Tankfuellungen und Standortdaten an jeden, der die Adresse kannte.
+    token = ws.cookies.get(zg.SITZUNG_COOKIE) or ''
+    k = konten.konto_zu_token(token) if (konten and token) else None
+    if not r.darf(k, r.LESEN):
+        # 4401 statt eines HTTP-Codes: nach dem Handschlag gibt es nur noch
+        # WebSocket-Schliesscodes. Die Oberflaeche deutet ihn als "anmelden".
+        await ws.close(code=4401)
+        return
     await ws.accept()
     _zuschauer.add(ws)
     try:

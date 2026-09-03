@@ -204,7 +204,25 @@ async def main():
     status, _ = await browser.http('/api/status')
     pruefe(status in (200, 409), 'der Eigner ist danach noch angemeldet')
 
-    print('\n8. Abmelden')
+    print('\n8. Der Live-Kanal ist kein Hintertürchen')
+    # Der WebSocket traegt den ganzen Bootszustand. Er kam nie durch die
+    # HTTP-Middleware und war deshalb offen, solange eine Basic-Anmeldung davor
+    # stand — mit deren Wegfall lief der Zustand des Bootes ins Internet.
+    import websockets
+    try:
+        async with websockets.connect(f'ws://127.0.0.1:{PORT}/ws', open_timeout=8):
+            pruefe(False, 'ohne Anmeldung wird der Live-Kanal abgewiesen')
+    except Exception:
+        pruefe(True, 'ohne Anmeldung wird der Live-Kanal abgewiesen')
+    try:
+        async with websockets.connect(f'ws://127.0.0.1:{PORT}/ws',
+                                      additional_headers={'Cookie': browser.keks},
+                                      open_timeout=8):
+            pruefe(True, 'mit Sitzung steht der Live-Kanal offen')
+    except Exception as e:
+        pruefe(False, f'mit Sitzung steht der Live-Kanal offen ({e})')
+
+    print('\n9. Abmelden')
     status, _ = await browser.http('/api/logout', 'POST')
     pruefe(status == 200, 'Abmelden geht')
     status, _ = await browser.http('/api/status')
