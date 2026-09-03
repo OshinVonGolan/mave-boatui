@@ -23,7 +23,8 @@ import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from server.befehle import (DURCHLEITEN, KeinBoot, Vermittlung,
                             Zeitueberschreitung, gesperrt)
@@ -35,6 +36,10 @@ from sync import zeit as sz
 log = logging.getLogger('mave-server')
 
 DATEN = Path(os.environ.get('MAVE_DATEN', '/daten'))
+# Die Oberflaeche kommt aus DEMSELBEN Verzeichnis wie auf dem Pi. Nicht
+# kopiert, nicht nachgebaut: dieselben Dateien, damit es nicht zwei Staende
+# gibt, die auseinanderlaufen.
+STATISCH = Path(os.environ.get('MAVE_STATISCH', '/app/static'))
 # Das Token des Bootes. Ohne gesetztes Token nimmt der Server KEINE Verbindung
 # an — ein offener Sammelpunkt im Internet waere schlimmer als keiner.
 GERAET_TOKEN = os.environ.get('MAVE_GERAET_TOKEN', '')
@@ -396,3 +401,52 @@ def _durchleiter(methode: str, pfad: str, recht: str):
 for _methode, _pfad, _recht in DURCHLEITEN:
     app.add_api_route(_pfad, _durchleiter(_methode, _pfad, _recht),
                       methods=[_methode], include_in_schema=False)
+
+
+# ── Die Oberflaeche ─────────────────────────────────────────────────────────
+# Der Server liefert DIESELBE PWA aus wie der Pi. Sie spricht ohnehin nur
+# /api/* und /ws, und beides gibt es hier — deshalb laeuft sie unveraendert.
+
+# Reihenfolge wie in main.py auf dem Pi. Sie steht hier ein zweites Mal, und
+# das ist die einzige Doppelung im ganzen Aufbau: eine gemeinsame Liste haette
+# bedeutet, dass der Server den Pi-Code importiert, und der bringt CAN-Bus und
+# alles Uebrige mit.
+_JS_FILES = [
+    'icons.js', 'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
+    'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
+    'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
+    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
+    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
+]
+_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+
+
+@app.get('/js-bundle.js', include_in_schema=False)
+def js_bundle(req: Request) -> Response:
+    js = STATISCH / 'js'
+    vorhanden = [js / f for f in _JS_FILES if (js / f).exists()]
+    if not vorhanden:
+        raise HTTPException(500, detail='Oberfläche fehlt im Abbild')
+    neueste = max(p.stat().st_mtime for p in vorhanden)
+    if _bundle['mtime'] < neueste:
+        _bundle['data'] = ('\n;// ---\n'.join(
+            p.read_text(encoding='utf-8') for p in vorhanden)).encode()
+        _bundle['mtime'] = neueste
+        _bundle['etag'] = f'"{int(neueste)}"'
+    if req.headers.get('if-none-match') == _bundle['etag']:
+        return Response(status_code=304)
+    return Response(_bundle['data'], media_type='application/javascript',
+                    headers={'Cache-Control': 'no-cache', 'ETag': _bundle['etag']})
+
+
+@app.get('/', include_in_schema=False)
+def startseite() -> HTMLResponse:
+    seite = STATISCH / 'index.html'
+    if not seite.exists():
+        raise HTTPException(500, detail='Oberfläche fehlt im Abbild')
+    return HTMLResponse(seite.read_text(encoding='utf-8'),
+                        headers={'Cache-Control': 'no-cache'})
+
+
+if STATISCH.exists():
+    app.mount('/static', StaticFiles(directory=str(STATISCH)), name='static')

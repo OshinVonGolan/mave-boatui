@@ -14,6 +14,17 @@ RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*"
 # gehoert NICHT ins Serverabbild — er wuerde nur Angriffsflaeche mitbringen.
 COPY sync/    /app/sync/
 COPY server/  /app/server/
+# Die Oberflaeche: dieselben Dateien wie auf dem Pi, damit es nicht zwei
+# Staende gibt. Der Pi-Code (main.py, can_reader.py und der Rest) bleibt
+# draussen — er waere hier nur Angriffsflaeche.
+COPY static/  /app/static/
+
+# Das Datenverzeichnis muss dem Benutzer gehoeren, BEVOR das Volume gemountet
+# wird: Docker uebernimmt beim ersten Mount die Rechte aus dem Abbild. Fehlt
+# das, gehoert /daten root — und der Dienst, der als mave laeuft, kann seine
+# Datenbank nicht anlegen.
+RUN mkdir -p /daten && chown mave:mave /daten
+VOLUME /daten
 
 USER mave
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 MAVE_DATEN=/daten

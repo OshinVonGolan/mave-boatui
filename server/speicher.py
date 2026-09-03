@@ -263,7 +263,13 @@ class Speicher:
             ab, bis = vorige['bis'], naechste['ab']
             if bis - ab < 1.0:
                 continue                      # nahtlos, keine Luecke
-            if naechste['nur_dienst'] and not naechste['rechner_neu']:
+            if naechste['letztes_ende'] == 'erststart':
+                # Der allererste Start nach dem Einbau dieser Fassung: es gibt
+                # keine Startmarke, mit der sich vergleichen liesse. "Rechner
+                # neu gestartet" waere geraten — richtig ist: wir wissen es
+                # nicht, weil vorher niemand Buch gefuehrt hat.
+                art, grund = 'erststart', 'Erster Start mit Ausfallerkennung — vorher wurde nicht Buch geführt'
+            elif naechste['nur_dienst'] and not naechste['rechner_neu']:
                 art, grund = 'dienst', 'Dienst neu gestartet, Rechner lief durch'
             elif naechste['rechner_neu'] and naechste['letztes_ende'] == 'abbruch':
                 art, grund = 'stromlos', 'Rechner war aus, unsauberes Ende — Stromausfall oder Absturz'

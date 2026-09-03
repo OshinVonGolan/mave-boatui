@@ -159,6 +159,20 @@ class LueckenDeutung(Basis):
         self.s.lebenszeichen(sid)
         self.assertGreater(self.s.sitzungen()[0]['bis'], vorher)
 
+    def test_erster_start_wird_nicht_als_neustart_geraten(self):
+        # Im Feld aufgefallen: der allererste Start nach dem Einbau meldete
+        # "Rechner wurde neu gestartet". Das war geraten — es gab schlicht
+        # keine Startmarke, mit der sich vergleichen liess.
+        self._sitzung(JETZT, JETZT + 100, letztes_ende='sauber')
+        self._sitzung(JETZT + 200, JETZT + 300, letztes_ende='erststart', rechner_neu=True)
+        (l,) = self.s.luecken()
+        self.assertEqual(l['art'], 'erststart')
+        self.assertIn('nicht Buch', l['grund'])
+
+
+if __name__ == '__main__':
+    unittest.main()
+
 
 if __name__ == '__main__':
     unittest.main()

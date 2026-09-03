@@ -30,6 +30,8 @@ from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
 import geraete
 import sync_client
+import zugang
+from konten_speicher import Konten
 from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
@@ -135,6 +137,8 @@ WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 DEVICES_FILE  = BASE_DIR / 'devices.json'
 DEVICES_VORLAGE = BASE_DIR / 'devices.example.json'
 SYNC_FILE     = BASE_DIR / 'sync.json'
+KONTEN_FILE   = BASE_DIR / 'konten.json'
+SITZUNGEN_FILE = BASE_DIR / 'sitzungen.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 HISTORY_GROB_FILE = BASE_DIR / 'history_min.ndjson'
 
@@ -216,6 +220,7 @@ _hist_last_mono: float = 0.0
 # Die Geraetedoku begrenzt auf 1 Hz und vier WebSockets im GANZEN Netz —
 # jedes Handy einzeln pollen zu lassen waere schnell darueber.
 heizung = StokerClient(HEIZUNG_FILE)
+konten = Konten(KONTEN_FILE, SITZUNGEN_FILE)
 
 hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
                           max_entries=history.maxlen or 10800)
