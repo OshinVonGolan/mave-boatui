@@ -14,23 +14,32 @@ Passwörter. Wo ein Geheimnis nötig ist, steht, wo es liegt und wer es hat.
 |---|---|---|
 | **mave-control** | `192.168.1.103` (WLAN, DHCP)<br>`100.116.85.65` (Tailscale)<br>`mave-control.local` (mDNS) | Raspberry Pi Zero W, ARMv6, 427 MB RAM. Der Bordmonitor. Raspbian 13 |
 | **Stoker-Hub** | `192.168.1.118` | Heizungssteuerung (ESP32), eigenes Projekt `mave-heater-control` |
-| **Router** | `192.168.1.1` | **Achtung, siehe unten** — an Bord ein Teltonika RUTX50, zu Hause der Heimrouter |
+| **Router** | `192.168.1.1` | Teltonika RUTX50 — der Router des Bootes und zugleich der einzige. Uplink über Starlink, Kabel oder Mobilfunk |
 | **Starlink** | `192.168.100.1:9200` | Dish-Status über gRPC, nur an Bord erreichbar |
 | **Server** | `46.224.25.31` | Der Mietserver, auf dem auch Gantrya läuft |
 
-### Die Falle mit `192.168.1.x`
+### Es gibt nur EIN Netz
 
-**Bordnetz und Heimnetz benutzen dasselbe Subnetz.** Der Pi hat hier wie dort
-`192.168.1.103`, und unter `192.168.1.1` steht zu Hause der Heimrouter, an Bord
-der RUTX50. Das heißt:
+Wichtig für alle, die später hier arbeiten: **Der Eigner wohnt auf dem Boot.**
+Der RUTX50 ist sein Router, immer — es gibt kein getrenntes „Heimnetz" neben
+einem „Bordnetz". Wenn im Gespräch „zu Hause" fällt, ist das Boot gemeint.
 
-- Der Verbindungsmonitor (`connectivity.py`) meldet sich zu Hause beim
-  **falschen** Router an und bekommt keine Daten. Das ist kein Fehler, sondern
-  die Folge gleicher Adressen — an Bord funktioniert es.
-- Wer eine Anleitung schreibt, muss dazusagen, **wo** er war. „Router antwortet
-  nicht" heißt zu Hause etwas anderes als am Liegeplatz.
+Daraus folgt:
 
----
+- `192.168.1.1` ist **immer** der RUTX50. Der Verbindungsmonitor
+  (`connectivity.py`) spricht also stets mit dem richtigen Gerät.
+- Die Adressen der Bordgeräte sind stabil, unabhängig vom Standort. Wandert das
+  Boot, wandert das ganze Netz mit.
+- Was sich ändert, ist nur der **Uplink**: Starlink oder Kabel am Liegeplatz,
+  Mobilfunk unterwegs. Genau daran hängt später die Betriebsart des Syncs.
+
+Am laufenden System abgelesen (03.09.2026, am Liegeplatz):
+
+```
+Uplink        wired          (Starlink hängt am Router, Zustand CONNECTED)
+Mobilfunk     o2 - de, 5G (NSA), VoLTE — vorhanden, aber nicht der aktive Weg
+WLAN-Clients  8
+```
 
 ## Zugänge
 
