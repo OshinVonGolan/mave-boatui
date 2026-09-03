@@ -242,9 +242,10 @@ function _kopfLogoPruefen() {
  * Schaltet die Statusleiste beim Scrollen auf die kompakte Fassung.
  *
  * Beobachtet wird ein 1-Element-Fuehler ueber der Leiste, NICHT das Scrollen
- * selbst: ein scroll-Handler feuert auf dem Pi Zero bis zu 60-mal je Sekunde
- * auf dem einzigen Kern, waehrend der IntersectionObserver nur bei der
- * eigentlichen Zustandsaenderung aufwacht.
+ * selbst: ein scroll-Handler laeuft bei jedem Bild, der IntersectionObserver
+ * nur bei der eigentlichen Zustandsaenderung. Das faellt auf dem anzeigenden
+ * Geraet an — Tablet, Telefon, Laptop —, nicht auf dem Pi: der liefert die
+ * Seite nur aus und stellt sie nicht dar.
  *
  * Der Fuehler steht VOR dem Halter im Fluss und wandert deshalb nicht mit,
  * wenn die Leiste schrumpft — sonst wuerde das Umschalten den Fuehler wieder

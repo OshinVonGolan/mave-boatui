@@ -927,7 +927,8 @@ function _sparkZeichnen() {
       ? _sparkSvg(werte, { tief: zahl('tief'), hoch: zahl('hoch'),
                            spanne: +el.dataset.spanne || 1 }, 'spk_' + reihe) : '';
     // Nur schreiben, wenn sich wirklich etwas geaendert hat: der Streifen wird
-    // bei jedem Broadcast angefasst, und innerHTML kostet auf dem Pi Zero.
+    // bei jedem Broadcast angefasst, und innerHTML kostet jedes Mal Umbruch —
+    // auf dem anzeigenden Geraet, nicht auf dem Pi.
     if (el.innerHTML !== neu) el.innerHTML = neu;
   });
 }
