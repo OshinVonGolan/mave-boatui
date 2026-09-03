@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 from pathlib import Path
 
@@ -69,6 +70,11 @@ class Startmarke:
         """
         self._vorher = self._lesen()
         self._jetzt = {
+            # Neu gewuerfelt bei jedem Start des Dienstes. Der Server erkennt
+            # daran, ob eine Luecke von einem Neustart kam oder nur davon, dass
+            # die Verbindung abriss: bleibt die Kennung gleich, lief der Pi
+            # durch. Ohne sie sah jede Neuverbindung wie ein Neustart aus.
+            'lauf_id':   secrets.token_hex(8),
             'boot_id':   _boot_id(),
             'laufzeit_s': _laufzeit_s(),
             'start_wand': float(wand) if (gestellt and wand) else None,
@@ -81,12 +87,22 @@ class Startmarke:
     def geordnet_beenden(self) -> None:
         """Beim geordneten Stoppen aufrufen (SIGTERM-Handler).
 
-        Danach ist die Marke weg, und der naechste Start weiss: das Ende war
-        gewollt. Bleibt sie liegen, war es ein Abbruch — genau diese
-        Unterscheidung ist der Zweck der Datei.
+        Die Marke wird als geordnet beendet GEKENNZEICHNET, nicht geloescht.
+        Frueher wurde sie geloescht — dann war "sauber beendet" von "noch nie
+        gelaufen" nicht mehr zu unterscheiden, weil beides dieselbe Spur
+        hinterliess: keine Datei. Jedes Update meldete sich anschliessend als
+        Erstinbetriebnahme, und die Konstante SAUBER war unerreichbar.
+
+        Drei Faelle, drei Spuren:
+          Datei fehlt              erste Inbetriebnahme
+          Datei mit ende=sauber    geordnet beendet (Update, Neustart)
+          Datei ohne ende          Abbruch — Stromausfall oder Absturz
         """
         try:
-            self._pfad.unlink()
+            daten = dict(self._jetzt or self._lesen() or {})
+            daten['ende'] = SAUBER
+            daten['beendet'] = time.time()
+            self._schreiben(daten)
         except OSError:
             pass
 
@@ -96,17 +112,22 @@ class Startmarke:
             ende = ERSTSTART
         elif self._vorher.get('_unlesbar'):
             ende = UNBEKANNT
+        elif self._vorher.get('ende') == SAUBER:
+            # Der Dienst hat sich beim letzten Mal selbst verabschiedet.
+            ende = SAUBER
         else:
-            # Die Marke lag noch da: der Dienst wurde nicht geordnet beendet.
+            # Die Marke lag unvermerkt da: der Dienst wurde nicht geordnet
+            # beendet. Das ist der Fall, auf den es ankommt — Stromausfall.
             ende = ABBRUCH
         neuer_rechner = bool(self._jetzt.get('boot_id')) and \
             self._vorher.get('boot_id') != self._jetzt.get('boot_id')
         return {
             'letztes_ende': ende,
             'rechner_neu':  neuer_rechner,
-            'nur_dienst':   (ende != ERSTSTART) and not neuer_rechner,
+            'nur_dienst':   ende in (SAUBER, ABBRUCH) and not neuer_rechner,
             'laufzeit_s':   self._jetzt.get('laufzeit_s'),
             'boot_id':      self._jetzt.get('boot_id'),
+            'lauf_id':      self._jetzt.get('lauf_id'),
             'vorher_boot_id': self._vorher.get('boot_id') or None,
             # Wann der Rechner hochgelaufen ist, sofern die Uhr steht. Erst das
             # macht die Luecke im Verlauf erklaerbar.

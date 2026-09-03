@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mave — Logbuch</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/css/diagnose.css">
+</head>
+<body>
+
+<!--
+  Das Diagnosewerkzeug. Bewusst NICHT wie die PWA gebaut: die zeigt, wie es dem
+  Boot JETZT geht, dieses hier zeigt, wie es ihm ERGANGEN IST. Deshalb steht
+  oben kein Messwert, sondern ein Zeitstrahl — die Frage, die der Eigner
+  gestellt hat, lautet "war das Boot offline oder ist der Pi abgestuerzt?", und
+  die beantwortet man nicht mit einer Momentaufnahme.
+-->
+
+<header class="kopf">
+  <div class="marke">
+    MAVE <span>Logbuch</span>
+  </div>
+  <div class="kopf-mitte" id="bootZustand">
+    <span class="zust-punkt" id="zustPunkt"></span>
+    <span id="zustText">wird geladen…</span>
+  </div>
+  <div class="kopf-rechts">
+    <span class="wer" id="wer"></span>
+    <button class="knopf-schlicht" onclick="abmelden()">Abmelden</button>
+    <a class="knopf-schlicht" href="/">Zur Bordansicht</a>
+  </div>
+</header>
+
+<main id="inhalt" hidden>
+
+  <!-- Verfügbarkeit: das Herzstück -->
+  <section class="tafel breit">
+    <div class="tafel-kopf">
+      <h2>Verfügbarkeit</h2>
+      <div class="zeitwahl" id="zeitwahl">
+        <button class="zw-knopf an" data-tage="7">7 Tage</button>
+        <button class="zw-knopf" data-tage="30">30 Tage</button>
+        <button class="zw-knopf" data-tage="90">90 Tage</button>
+      </div>
+    </div>
+    <div class="streifen" id="streifen"></div>
+    <div class="streifen-achse" id="streifenAchse"></div>
+    <div class="legende">
+      <span class="lg"><i class="lg-farbe an"></i>verbunden</span>
+      <span class="lg"><i class="lg-farbe funkloch"></i>kein Netz</span>
+      <span class="lg"><i class="lg-farbe stromlos"></i>stromlos</span>
+      <span class="lg"><i class="lg-farbe neustart"></i>Neustart</span>
+      <span class="lg"><i class="lg-farbe dienst"></i>nur der Dienst</span>
+      <span class="lg"><i class="lg-farbe unbekannt"></i>unklar</span>
+    </div>
+  </section>
+
+  <!-- Kennzahlen -->
+  <section class="zahlen" id="zahlen"></section>
+
+  <!-- Ausfälle im Klartext -->
+  <section class="tafel">
+    <div class="tafel-kopf"><h2>Ausfälle</h2><span class="hinweis" id="ausfaelleZahl"></span></div>
+    <div class="liste" id="ausfaelle"></div>
+  </section>
+
+  <!-- Ereignisse -->
+  <section class="tafel">
+    <div class="tafel-kopf"><h2>Ereignisse</h2><span class="hinweis">was das Boot gemeldet hat</span></div>
+    <div class="liste" id="ereignisse"></div>
+  </section>
+
+  <!-- Konten -->
+  <section class="tafel breit" id="kontenTafel" hidden>
+    <div class="tafel-kopf">
+      <h2>Konten</h2>
+      <button class="knopf" onclick="kontoNeuOeffnen()">Konto anlegen</button>
+    </div>
+    <div class="konten" id="konten"></div>
+  </section>
+
+  <!-- Fernwartung -->
+  <section class="tafel" id="wartungTafel" hidden>
+    <div class="tafel-kopf"><h2>Fernwartung</h2></div>
+    <div class="wartung" id="wartung"></div>
+  </section>
+
+</main>
+
+<div class="sperre" id="sperre" hidden>
+  <div class="sperre-karte">
+    <div class="sperre-titel">Kein Zugang zum Logbuch</div>
+    <p id="sperreText">Für diese Ansicht fehlt die Berechtigung.</p>
+    <a class="knopf" href="/">Zur Bordansicht</a>
+  </div>
+</div>
+
+<div class="pop hidden" id="pop">
+  <div class="pop-karte" id="popKarte"></div>
+</div>
+
+<script src="/js-diagnose.js"></script>
+</body>
+</html>

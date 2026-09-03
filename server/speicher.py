@@ -17,10 +17,13 @@ bekannt und die geparkten Eintraege wandern mit richtiger Zeit in den Verlauf.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
 from pathlib import Path
+
+log = logging.getLogger('mave-server.speicher')
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS zustand (
@@ -53,7 +56,12 @@ CREATE TABLE IF NOT EXISTS sitzung (
     letztes_ende TEXT,           -- sauber | abbruch | erststart | unbekannt
     rechner_neu  INTEGER,        -- 0/1: hat der ganze Rechner neu gestartet
     nur_dienst   INTEGER,        -- 0/1: nur der Dienst, Rechner lief durch
-    rechner_start REAL           -- Wanduhrzeit des Systemstarts, wenn bekannt
+    rechner_start REAL,          -- Wanduhrzeit des Systemstarts, wenn bekannt
+    -- Kennung DIESES Dienstlaufs, vom Pi bei jedem Start neu gewuerfelt.
+    -- Bleibt sie ueber eine Luecke hinweg gleich, lief der Pi durch und nur
+    -- die Verbindung fehlte. Ohne sie sah jede Neuverbindung wie ein Neustart
+    -- aus — auch die nach einem Neustart des SERVERS.
+    lauf_id   TEXT
 );
 CREATE TABLE IF NOT EXISTS ereignis (
     folge     INTEGER PRIMARY KEY,
@@ -83,7 +91,27 @@ class Speicher:
         self._db.execute('PRAGMA journal_mode=WAL')
         self._db.execute('PRAGMA synchronous=NORMAL')
         self._db.executescript(_SCHEMA)
+        self._nachruesten()
         self._db.commit()
+
+    # Spalten, die spaeter dazugekommen sind. `CREATE TABLE IF NOT EXISTS`
+    # fasst eine bestehende Tabelle nicht mehr an — ohne diesen Schritt haette
+    # eine Datenbank aus der Zeit davor die neuen Spalten nie bekommen, und der
+    # Dienst waere bei der ersten Abfrage gestorben. Die Daten wegzuwerfen und
+    # neu anzufangen ist keine Alternative: darin steht der Verlauf des Bootes.
+    _NACHRUESTEN = (
+        ('sitzung', 'lauf_id', 'TEXT'),
+    )
+
+    def _nachruesten(self) -> None:
+        for tabelle, spalte, art in self._NACHRUESTEN:
+            vorhanden = {z['name'] for z in self._db.execute(
+                f'PRAGMA table_info({tabelle})').fetchall()}
+            if not vorhanden:
+                continue                     # Tabelle gibt es (noch) nicht
+            if spalte not in vorhanden:
+                self._db.execute(f'ALTER TABLE {tabelle} ADD COLUMN {spalte} {art}')
+                log.info('Spalte %s.%s nachgerüstet', tabelle, spalte)
 
     def schliessen(self) -> None:
         with self._lock:
@@ -217,11 +245,11 @@ class Speicher:
         with self._lock:
             cur = self._db.execute(
                 'INSERT INTO sitzung (ab, bis, geraet, letztes_ende, rechner_neu, '
-                'nur_dienst, rechner_start) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                'nur_dienst, rechner_start, lauf_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 (jetzt, jetzt, geraet, b.get('letztes_ende'),
                  1 if b.get('rechner_neu') else 0,
                  1 if b.get('nur_dienst') else 0,
-                 b.get('rechner_start_wand')))
+                 b.get('rechner_start_wand'), b.get('lauf_id')))
             self._db.commit()
             return int(cur.lastrowid)
 
@@ -263,7 +291,15 @@ class Speicher:
             ab, bis = vorige['bis'], naechste['ab']
             if bis - ab < 1.0:
                 continue                      # nahtlos, keine Luecke
-            if naechste['letztes_ende'] == 'erststart':
+            if (naechste.get('lauf_id') and vorige.get('lauf_id')
+                    and naechste['lauf_id'] == vorige['lauf_id']):
+                # Derselbe Dienstlauf auf beiden Seiten der Luecke: der Pi hat
+                # gar nicht neu gestartet, es fehlte nur die Verbindung. Das
+                # steht VOR allen anderen Faellen, weil der Startbefund aus dem
+                # hallo-Paket in diesem Fall alt ist — er stammt vom letzten
+                # echten Start und wuerde die Luecke falsch erklaeren.
+                art, grund = 'funkloch', 'Der Pi lief durch, nur die Verbindung fehlte'
+            elif naechste['letztes_ende'] == 'erststart':
                 # Der allererste Start nach dem Einbau dieser Fassung: es gibt
                 # keine Startmarke, mit der sich vergleichen liesse. "Rechner
                 # neu gestartet" waere geraten — richtig ist: wir wissen es

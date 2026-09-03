@@ -633,6 +633,29 @@ from js_bundle_liste import JS_FILES as _JS_FILES
 _bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
 
+@app.get('/diagnose', include_in_schema=False)
+async def diagnose_seite():
+    """Das Logbuch — Diagnose und Fernwartung.
+
+    Die Seite selbst wird ohne Pruefung ausgeliefert, ihre Daten nicht. Das ist
+    Absicht: sie enthaelt nur Aufbau und Beschriftung, kein Wort ueber das
+    Boot. Wer sie ohne das Recht `diagnose` oeffnet, sieht eine Abweisung und
+    bekommt von den Endpunkten nichts — die pruefen einzeln.
+
+    Andersherum waere es unbequem ohne Gewinn: eine geschuetzte HTML-Seite
+    koennte die Anmeldemaske nicht zeigen, die sie selbst mitbringt.
+    """
+    return FileResponse(STATISCH / 'diagnose.html', media_type='text/html',
+                        headers={'Cache-Control': 'no-cache'})
+
+
+@app.get('/js-diagnose.js', include_in_schema=False)
+async def diagnose_js():
+    return FileResponse(STATISCH / 'js' / 'diagnose.js',
+                        media_type='application/javascript',
+                        headers={'Cache-Control': 'no-cache'})
+
+
 @app.get('/sw.js', include_in_schema=False)
 async def service_worker():
     """Muss von der Wurzel kommen, sonst deckt sein Geltungsbereich die Seite

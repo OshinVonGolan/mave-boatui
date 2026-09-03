@@ -73,14 +73,76 @@ class HistoryStore:
         # Weiterzaehlen, wo die Datei aufhoert. Ohne das begaenne die Zaehlung
         # nach jedem Neustart wieder bei eins, und der Server haette
         # Folgenummern, die es zweimal gibt.
+        def ganzzahlig(x) -> bool:
+            return isinstance(x, int) and not isinstance(x, bool)
+
         for e in reversed(entries):
-            if isinstance(e.get('n'), int):
+            if ganzzahlig(e.get('n')):
                 self._folge = max(self._folge, e['n'])
                 break
+
+        # Eintraege mit krummer oder fehlender Nummer bekommen eine gueltige.
+        # Solche entstanden, weil die Minutenmittelung `n` wie einen Messwert
+        # behandelte und Kommazahlen daraus machte (1476.5). Jede Abfrage
+        # uebersprang sie stillschweigend — der Server bekam deshalb ueber Tage
+        # ueberhaupt keinen Verlauf, ohne dass irgendwo ein Fehler auftauchte.
+        if any(not ganzzahlig(e.get('n')) for e in entries):
+            self._folge = self._nummern_reparieren()
+            entries = self._read_tail(self._retention_s, self._max_entries)
+
         if entries:
             log.info('Verlauf geladen: %d Einträge über %.1f h',
                      len(entries), (entries[-1]['ts'] - entries[0]['ts']) / 3600.0)
         return entries
+
+    def _nummern_reparieren(self) -> int:
+        """Die Folgenummern der ganzen Datei einmalig geradeziehen.
+
+        Noetig geworden, weil die Minutenmittelung `n` wie einen Messwert
+        behandelte und Kommazahlen daraus machte (1476.5). Solche Eintraege
+        uebersprang jede Abfrage stillschweigend — der Server bekam ueber Tage
+        keinen Verlauf, ohne dass irgendwo ein Fehler auftauchte.
+
+        Es waere billiger, beim Lesen einfach zu runden. Das wuerde aber
+        Nummern doppelt vergeben (1476.5 und 1477 werden beide zu 1477), und
+        der Server erkennt Luecken genau an diesen Nummern. Deshalb wird die
+        Datei wirklich umgeschrieben — einmalig, beim Start, atomar.
+
+        Gibt die hoechste vergebene Nummer zurueck.
+        """
+        neu = self._path.with_suffix(self._path.suffix + '.neu')
+        folge, geaendert, gesamt = 0, 0, 0
+        try:
+            with open(self._path, 'r', encoding='utf-8') as alt, \
+                 open(neu, 'w', encoding='utf-8') as ziel:
+                for zeile in alt:
+                    zeile = zeile.strip()
+                    if not zeile:
+                        continue
+                    try:
+                        e = json.loads(zeile)
+                    except Exception:
+                        continue          # kaputte Zeile faellt weg
+                    gesamt += 1
+                    folge += 1
+                    if e.get('n') != folge:
+                        geaendert += 1
+                    e['n'] = folge
+                    ziel.write(json.dumps(e, ensure_ascii=False) + '\n')
+                ziel.flush()
+                os.fsync(ziel.fileno())
+            os.replace(neu, self._path)
+            log.warning('Folgenummern im Verlauf neu vergeben: %d von %d Einträgen '
+                        'berichtigt (krumme Nummern aus der Minutenmittelung)',
+                        geaendert, gesamt)
+            return folge
+        except OSError as e:
+            log.error('Folgenummern konnten nicht berichtigt werden: %s', e)
+            try:
+                neu.unlink()
+            except OSError:
+                pass
+            return self._folge
 
     def _read_first_ts(self) -> float | None:
         """Zeitstempel der ersten Zeile — nur dafür da, das Alter der Datei zu kennen."""

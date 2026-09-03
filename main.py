@@ -354,7 +354,11 @@ def _grob_sammeln(entry: dict) -> None:
         _grob_eimer = {}
         _grob_minute = minute
     for k, v in entry.items():
-        if k == 'ts' or not isinstance(v, (int, float)) or isinstance(v, bool):
+        # `n` ist die Folgenummer, keine Messgroesse. Sie wurde bisher
+        # mitgemittelt und kam als Kommazahl heraus (1476.5) — der Server
+        # verlangt aber ganze Zahlen und bekam deshalb NIE einen Verlauf
+        # geliefert. Die Nummer vergibt allein history_store beim Anhaengen.
+        if k in ('ts', 'n') or not isinstance(v, (int, float)) or isinstance(v, bool):
             continue
         eintrag = _grob_eimer.setdefault(k, [0.0, 0])
         eintrag[0] += v

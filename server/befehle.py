@@ -62,6 +62,12 @@ DURCHLEITEN: tuple[tuple[str, str, str], ...] = (
     ('POST', '/api/alarms/rules',              r.EINSTELLEN),
     # Fernwartung
     ('POST', '/api/system/time-sync',          r.FERNWARTEN),
+    # Aktualisieren aus der Ferne. Es startet die Anwendung an Bord neu — das
+    # ist der Eingriff, fuer den es das Recht FERNWARTEN ueberhaupt gibt.
+    # Bewusst NICHT in HEIKEL: anders als die Heizung verbraucht es nichts und
+    # laesst sich, falls etwas schiefgeht, an Bord wieder geradeziehen
+    # (systemd startet den Dienst ohnehin neu).
+    ('POST', '/api/system/update',             r.FERNWARTEN),
 )
 
 # Befehle, die aus der Ferne standardmaessig GESPERRT sind, auch mit Recht.

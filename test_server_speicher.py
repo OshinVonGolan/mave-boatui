@@ -119,6 +119,29 @@ class LueckenDeutung(Basis):
         self.assertEqual(l['dauer_s'], 5400.0)
         self.assertNotIn('aus_bis', l)
 
+    def test_gleicher_lauf_ist_immer_nur_ein_verbindungsabriss(self):
+        """Der Fall, der die Anzeige tagelang verfaelscht hat.
+
+        Bricht die Verbindung ab, ohne dass der Pi neu startet — etwa weil der
+        SERVER neu startet —, meldet der Pi beim Wiederverbinden denselben
+        Startbefund wie beim letzten echten Start. Der ist dann alt und erklaert
+        die Luecke falsch. Die Kennung des Dienstlaufs entscheidet das: bleibt
+        sie gleich, lief der Pi durch.
+        """
+        self._sitzung(JETZT, JETZT + 3600, letztes_ende='erststart', lauf_id='abc123')
+        self._sitzung(JETZT + 3700, JETZT + 7000, letztes_ende='erststart',
+                      rechner_neu=True, lauf_id='abc123')
+        (l,) = self.s.luecken()
+        self.assertEqual(l['art'], 'funkloch',
+                         'Derselbe Dienstlauf kann nicht neu gestartet sein')
+
+    def test_neue_lauf_kennung_gilt_als_neustart(self):
+        self._sitzung(JETZT, JETZT + 3600, letztes_ende='sauber', lauf_id='abc123')
+        self._sitzung(JETZT + 3700, JETZT + 7000, letztes_ende='sauber',
+                      nur_dienst=True, rechner_neu=False, lauf_id='xyz789')
+        (l,) = self.s.luecken()
+        self.assertEqual(l['art'], 'dienst')
+
     def test_stromausfall_wird_als_solcher_benannt(self):
         self._sitzung(JETZT, JETZT + 3600, letztes_ende='erststart')
         # Der Rechner ist neu und das letzte Ende war unsauber: Strom weg.

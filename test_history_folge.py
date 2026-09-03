@@ -5,6 +5,7 @@ Pi schickt ab dort weiter. Aufruf:
 
     python3 -m unittest test_history_folge -v
 """
+import json
 import tempfile
 import time
 import unittest
@@ -102,3 +103,57 @@ class Folgenummern(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class KrummeFolgenummern(unittest.TestCase):
+    """Der Fehler, der den Server tagelang ohne Verlauf ließ.
+
+    Die Minutenmittelung behandelte `n` wie einen Messwert und mittelte es mit.
+    Heraus kamen Kommazahlen (1476.5). Jede Abfrage filtert auf ganze Zahlen —
+    also lieferte sie nichts, ohne dass irgendwo ein Fehler auftauchte. Der
+    Server meldete brav "Verlauf ab 1" und bekam nie etwas.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.pfad = Path(self._tmp.name) / 'v.ndjson'
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _schreiben(self, eintraege):
+        with open(self.pfad, 'w') as f:
+            for e in eintraege:
+                f.write(json.dumps(e) + '\n')
+
+    def test_kommazahlen_werden_beim_laden_geradegezogen(self):
+        jetzt = time.time()
+        self._schreiben([
+            {'ts': jetzt - 300, 'soc': 90, 'n': 1476.5},
+            {'ts': jetzt - 240, 'soc': 91, 'n': 1477.5},
+            {'ts': jetzt - 180, 'soc': 92, 'n': 1478.5},
+        ])
+        s = HistoryStore(self.pfad, retention_s=3600, max_entries=100)
+        eintraege = s.load()
+        self.assertEqual(len(eintraege), 3)
+        for e in eintraege:
+            self.assertIsInstance(e['n'], int, f"n={e['n']!r} muss ganzzahlig sein")
+        # Und sie sind jetzt abrufbar — das war der eigentliche Schaden
+        self.assertEqual(len(s.ab_folge(1, 100)), 3,
+                         'Nach der Reparatur muss der Verlauf abrufbar sein')
+
+    def test_fehlende_nummern_bekommen_eine(self):
+        jetzt = time.time()
+        self._schreiben([{'ts': jetzt - 120, 'soc': 80}, {'ts': jetzt - 60, 'soc': 81}])
+        s = HistoryStore(self.pfad, retention_s=3600, max_entries=100)
+        s.load()
+        self.assertEqual(len(s.ab_folge(1, 100)), 2)
+
+    def test_gute_nummern_bleiben_unangetastet(self):
+        jetzt = time.time()
+        self._schreiben([{'ts': jetzt - 120, 'soc': 80, 'n': 7},
+                         {'ts': jetzt - 60, 'soc': 81, 'n': 8}])
+        s = HistoryStore(self.pfad, retention_s=3600, max_entries=100)
+        eintraege = s.load()
+        self.assertEqual([e['n'] for e in eintraege], [7, 8])
+        self.assertEqual(s.hoechste_folge(), 8, 'die Zählung muss weiterlaufen')

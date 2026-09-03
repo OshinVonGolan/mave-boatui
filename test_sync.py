@@ -340,3 +340,57 @@ class Befristung(unittest.TestCase):
         # Frage. Eine falsche Uhr darf niemanden aussperren, der berechtigt ist.
         from sync import konten as k
         self.assertFalse(k.abgelaufen({'gueltig_bis': 1787000000.0}, None))
+
+
+class Startmarke(unittest.TestCase):
+    """Woran der Pi erkennt, was beim letzten Mal geschah.
+
+    Die Unterscheidung, um die es geht: ein geordneter Neustart (Update) sieht
+    von aussen genauso aus wie ein Stromausfall — der Dienst ist weg und kommt
+    wieder. Nur die Marke auf der Platte kennt den Unterschied.
+    """
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.pfad = __import__('pathlib').Path(self._tmp.name) / 'marke.json'
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _marke(self):
+        from sync.startmarke import Startmarke as M
+        return M(self.pfad)
+
+    def test_ohne_datei_ist_es_der_erste_start(self):
+        b = self._marke().start()
+        self.assertEqual(b['letztes_ende'], 'erststart')
+
+    def test_geordnetes_ende_wird_als_sauber_erkannt(self):
+        """Frueher loeschte das geordnete Ende die Marke — dann war es von
+        "noch nie gelaufen" nicht zu unterscheiden, und jedes Update meldete
+        sich als Erstinbetriebnahme."""
+        m = self._marke()
+        m.start()
+        m.geordnet_beenden()
+        b = self._marke().start()
+        self.assertEqual(b['letztes_ende'], 'sauber')
+        self.assertTrue(b['nur_dienst'], 'derselbe Rechner, nur der Dienst war weg')
+
+    def test_liegengebliebene_marke_heisst_abbruch(self):
+        m = self._marke()
+        m.start()
+        # kein geordnet_beenden(): so sieht ein Stromausfall aus
+        b = self._marke().start()
+        self.assertEqual(b['letztes_ende'], 'abbruch')
+
+    def test_jeder_lauf_bekommt_eine_eigene_kennung(self):
+        a = self._marke().start()
+        b = self._marke().start()
+        self.assertTrue(a['lauf_id'])
+        self.assertNotEqual(a['lauf_id'], b['lauf_id'])
+
+    def test_unlesbare_marke_stuerzt_nicht_ab(self):
+        self.pfad.write_text('kein JSON {{{')
+        b = self._marke().start()
+        self.assertEqual(b['letztes_ende'], 'unbekannt')
