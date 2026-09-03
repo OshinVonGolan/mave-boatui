@@ -573,10 +573,16 @@
        und die Abstaende, die vorher an der Leiste hingen. */
     .statusbar-halter {
       position: sticky; top: var(--header-h); z-index: 60;
-      margin-top: var(--header-h);          /* unter die feste Kopfzeile */
       padding: var(--gap) var(--gap);
       background: var(--bg);
+      transition: padding .18s ease;
     }
+    /* Traegt den Abstand zur festen Kopfzeile und dient zugleich als Fuehler:
+       sobald er unter die Kopfzeile rutscht, schaltet die Leiste auf kompakt
+       (siehe _leisteKompaktFuehren in core.js). Ein eigenes Element statt
+       margin am Halter, weil ein Beobachter etwas braucht, das NICHT
+       mitwandert. */
+    .statusbar-fuehler { height: var(--header-h); }
     .statusbar {
       margin: 0;
       /* Feste Spaltenzahl statt auto-fit: auto-fit hat zwischen 641 und
@@ -588,7 +594,58 @@
       border: 1px solid var(--border);
       border-radius: var(--radius); overflow: hidden;
     }
-    main { padding-top: 0; }   /* Kopf- und Leistenabstand traegt der Halter */
+    main { padding-top: 0;     /* Kopf- und Leistenabstand traegt der Halter */
+      /* Beim Umschalten auf die kompakte Leiste wird der Streifen um rund
+         35 px flacher. Ohne diese Zeile verankert der Browser die Ansicht an
+         einer Kachel und korrigiert dafuer den Scrollstand — dadurch rutscht
+         der Fuehler wieder ins Bild, die Leiste klappt auf, der Scrollstand
+         wird erneut korrigiert, und das Ganze flackert genau an der Schwelle.
+         Nur hier abgeschaltet, nicht global: an anderer Stelle ist die
+         Verankerung nuetzlich. */
+      overflow-anchor: none; }
+
+    /* ── Kompakte Leiste beim Scrollen ────────────────────────────────────
+       Beim Herunterscrollen schrumpft die Leiste und legt sich buendig unter
+       die Kopfzeile, sodass beide wie ein Streifen wirken. Die Unterzeile
+       faellt weg, die Zahl wird kleiner — dadurch passen alle sechs Felder
+       auch am Telefon nebeneinander, wo sonst zwei Zeilen stehen.
+       Die Regeln stehen bewusst NICHT in einer Media Query: als
+       body-Kombination (0,2,0) schlagen sie die Spaltenregel der Media Query
+       (0,1,0) ueber die Spezifitaet, ohne !important. */
+    body.leiste-kompakt .statusbar-halter { padding: 0; }
+    body.leiste-kompakt .statusbar {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      border-radius: 0; border-left: 0; border-right: 0; border-top: 0;
+      /* Ueber die volle Breite wie die Kopfzeile. Im normalen Zustand ist die
+         Leiste auf die Inhaltsbreite begrenzt und mittig — das ist dort
+         richtig, weil sie ueber den Kacheln steht. Angeschmiegt an die
+         Kopfzeile wuerden die Luecken links und rechts sie aber als eigenen
+         Streifen zeigen statt als Teil des Kopfes. */
+      max-width: none; margin-left: 0; margin-right: 0;
+    }
+    body.leiste-kompakt .sb-item { padding: 5px 8px 6px; gap: 0; }
+    body.leiste-kompakt .sb-sub  { display: none; }
+    body.leiste-kompakt .sb-lbl  { font-size: 9px; letter-spacing: .06em; }
+    body.leiste-kompakt .sb-val b { font-size: 15px; }
+    body.leiste-kompakt .sb-val i { font-size: 9px; }
+    /* Ruhiger im Hintergrund: auf 30 px Hoehe wuerde die volle Deckkraft
+       gegen die kleine Schrift arbeiten. */
+    body.leiste-kompakt .sb-spark  { opacity: .7; }
+    body.leiste-kompakt .sb-balken { opacity: .14; }
+    /* Weich, aber nur wo es nichts kostet: Groessen animieren wuerde auf dem
+       Pi Zero bei jedem Bild neu umbrechen. */
+    .sb-item, .sb-lbl, .sb-val b { transition: padding .18s ease, font-size .18s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .statusbar-halter, .sb-item, .sb-lbl, .sb-val b { transition: none; }
+    }
+    /* Am Telefon sind die sechs Felder nur rund 65 px breit. "WARTUNG" ist
+       das laengste Wort und lief bei 9 px mit Sperrung gerade eben ueber.
+       Muss NACH dem Block oben stehen: gleiche Spezifitaet, es entscheidet
+       die Reihenfolge. */
+    @media (max-width: 700px) {
+      body.leiste-kompakt .sb-item { padding: 5px 5px 6px; }
+      body.leiste-kompakt .sb-lbl  { font-size: 8px; letter-spacing: .01em; }
+    }
 
     .sb-item {
       background: var(--surface); border: 0; margin: 0;

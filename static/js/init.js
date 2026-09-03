@@ -2,6 +2,7 @@
 
 applyDisplayConfig();
 _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
+_leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
 loadPresets();
 
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern

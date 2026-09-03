@@ -238,6 +238,27 @@ function _kopfLogoPruefen() {
   if (logo.scrollWidth > logo.clientWidth + 1) logo.classList.add('ohne-version');
 }
 
+/**
+ * Schaltet die Statusleiste beim Scrollen auf die kompakte Fassung.
+ *
+ * Beobachtet wird ein 1-Element-Fuehler ueber der Leiste, NICHT das Scrollen
+ * selbst: ein scroll-Handler feuert auf dem Pi Zero bis zu 60-mal je Sekunde
+ * auf dem einzigen Kern, waehrend der IntersectionObserver nur bei der
+ * eigentlichen Zustandsaenderung aufwacht.
+ *
+ * Der Fuehler steht VOR dem Halter im Fluss und wandert deshalb nicht mit,
+ * wenn die Leiste schrumpft — sonst wuerde das Umschalten den Fuehler wieder
+ * ins Bild schieben und die Leiste faenge an zu flackern.
+ */
+function _leisteKompaktFuehren() {
+  const fuehler = document.querySelector('.statusbar-fuehler');
+  if (!fuehler) return;
+  if (typeof IntersectionObserver !== 'function') return;   // dann bleibt sie gross
+  new IntersectionObserver(([eintrag]) => {
+    document.body.classList.toggle('leiste-kompakt', !eintrag.isIntersecting);
+  }, { threshold: 0 }).observe(fuehler);
+}
+
 function _kopfhoeheFuehren() {
   const kopf = document.querySelector('header');
   if (!kopf) return;
