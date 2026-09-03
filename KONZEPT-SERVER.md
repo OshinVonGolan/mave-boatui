@@ -11,6 +11,9 @@ Bosun One und Gantrya.
 
 ---
 
+Der tatsächliche Netzwerkaufbau, die Zugangswege und ihre Fallen stehen in
+`NETZWERK-UND-ZUGANG.md` — dort am laufenden System erhoben.
+
 ## Das Konstruktionsprinzip
 
 **Der Server ist Zusatz, nie Voraussetzung.** Fällt er aus, bleibt das Boot

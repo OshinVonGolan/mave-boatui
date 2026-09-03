@@ -160,6 +160,8 @@ Raspberry Pi
 | `connectivity.json` | Konfiguration für Connectivity-Monitor |
 | `monday.json` | Monday.com Token, Board-IDs |
 | `PROTOCOL.md` | Vollständige NMEA 2000 PGN-Spezifikation dieses Systems |
+| `NETZWERK-UND-ZUGANG.md` | Wie man an Pi, Server und GitHub kommt, wie das Netz aufgebaut ist und welche Fallen es hat. Am laufenden System erhoben |
+| `KONZEPT-SERVER.md` | Der geplante Betrieb mit Server: eine PWA für beide Seiten, Sync, Konten, Sicherheit, Etappen |
 | `devices.json` | Geräteliste an Bord: Stammdaten, Einbauort, Netz, Zuordnung zur Live-Quelle |
 
 ### Frontend (static/)
