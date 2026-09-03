@@ -56,7 +56,7 @@ class SyncClient:
     def __init__(self, *, adresse: str, token: str, geraet: str, version: str,
                  zustand_holen, verlauf_holen, verlauf_stand, conn_status,
                  schalter=lambda: 'auto', lokal_ausfuehren=None,
-                 markenpfad='sync_start.json'):
+                 eigener_port: int = 8080, markenpfad='sync_start.json'):
         self._adresse = (adresse or '').strip()
         self._token = (token or '').strip()
         self._geraet = geraet
@@ -68,12 +68,14 @@ class SyncClient:
         self._verlauf_stand = verlauf_stand
         self._conn_status = conn_status
         self._schalter = schalter
-        self._lokal = lokal_ausfuehren or _lokal_ueber_http
+        self._lokal = lokal_ausfuehren or (
+            lambda m, pf, r: lokal_ueber_http(m, pf, r, port=eigener_port))
         self._marke = Startmarke(markenpfad)
         self._befund: dict = {}
         self._ws = None
         self._laeuft = False
         self._letzter_zustand = 0.0
+        self._gemeldete_art: str | None = None
         self._start_mono = time.monotonic()
         self.zustand_gesendet = 0
         self.verlauf_gesendet = 0
@@ -137,6 +139,7 @@ class SyncClient:
                 open_timeout=20, ping_interval=30, ping_timeout=20,
                 max_size=p.MAX_BYTES) as ws:
             self._ws = ws
+            self._gemeldete_art = self._art()   # steht im hallo, nicht doppelt melden
             await self._senden(p.hallo(
                 self._geraet, p.FASSUNG, self._version,
                 await asyncio.to_thread(self._verlauf_stand),
@@ -201,7 +204,18 @@ class SyncClient:
 
     async def _zustand_schleife(self) -> None:
         while True:
-            takt = p.takt(self._art())['zustand_s']
+            art = self._art()
+            # Wechselt der Uplink, aendert sich der Takt — und der Server soll
+            # wissen, warum seltener Daten kommen. Im hallo steht die Art nur
+            # EINMAL; ohne diese Meldung bliebe sie dort fuer immer stehen.
+            if art != self._gemeldete_art:
+                self._gemeldete_art = art
+                await self._senden(p.umschlag(p.EREIGNIS, {
+                    'art': 'betriebsart', 'betriebsart': art,
+                    'takt_s': p.takt(art)['zustand_s'],
+                }, folge=0, **self._jetzt()))
+                log.info('Betriebsart jetzt %s (Takt %d s)', art, p.takt(art)['zustand_s'])
+            takt = p.takt(art)['zustand_s']
             jetzt = time.monotonic()
             if jetzt - self._letzter_zustand >= takt:
                 zustand = await asyncio.to_thread(self._zustand_holen)
@@ -259,7 +273,7 @@ class SyncClient:
                 'gestellt': wand >= 1704067200.0}
 
 
-def _lokal_ueber_http(methode: str, pfad: str, rumpf) -> tuple:
+def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080) -> tuple:
     """Einen Befehl gegen die eigene API ausfuehren.
 
     Ueber HTTP an 127.0.0.1 und nicht durch einen direkten Funktionsaufruf:
@@ -267,7 +281,7 @@ def _lokal_ueber_http(methode: str, pfad: str, rumpf) -> tuple:
     gibt keine zweite Stelle, an der Regeln gepflegt werden muessten. Der
     Umweg kostet auf dem Pi einen lokalen Aufruf ohne TLS.
     """
-    ziel = f'http://127.0.0.1:8080{pfad}'
+    ziel = f'http://127.0.0.1:{port}{pfad}'
     daten = json.dumps(rumpf).encode() if rumpf is not None else b'{}'
     req = urllib.request.Request(ziel, data=daten, method=methode)
     req.add_header('Content-Type', 'application/json')

@@ -36,6 +36,11 @@ class HistoryStore:
                  rotate_age_s: float = 24 * 3600,
                  max_bytes: int = 4 * 1024 * 1024):
         self._path             = Path(path)
+        # Fortlaufende Nummer je Eintrag. Sie ist das, was der Server zum
+        # Nachliefern braucht ("ich habe bis N, schick ab N+1") — Zeitstempel
+        # taugen dafuer nicht, weil der Pi ohne gestellte Uhr hochlaeuft.
+        # Vergeben wird sie beim Anhaengen, ermittelt beim Laden aus der Datei.
+        self._folge            = 0
         self._retention_s      = retention_s
         self._max_entries      = max_entries
         self._flush_interval_s = flush_interval_s
@@ -65,6 +70,13 @@ class HistoryStore:
             log.warning('Verlauf laden fehlgeschlagen: %s', e)
             return []
         self._oldest_ts = self._read_first_ts()
+        # Weiterzaehlen, wo die Datei aufhoert. Ohne das begaenne die Zaehlung
+        # nach jedem Neustart wieder bei eins, und der Server haette
+        # Folgenummern, die es zweimal gibt.
+        for e in reversed(entries):
+            if isinstance(e.get('n'), int):
+                self._folge = max(self._folge, e['n'])
+                break
         if entries:
             log.info('Verlauf geladen: %d Einträge über %.1f h',
                      len(entries), (entries[-1]['ts'] - entries[0]['ts']) / 3600.0)
@@ -136,7 +148,54 @@ class HistoryStore:
     def append(self, entry: dict) -> None:
         """Nimmt einen Eintrag entgegen — reine RAM-Operation, blockiert nie."""
         with self._lock:
+            self._folge += 1
+            # setdefault, nicht zuweisen: ein Eintrag, der schon eine Nummer
+            # traegt (etwa beim Wiedereinspielen), behaelt seine.
+            entry.setdefault('n', self._folge)
             self._buf.append(entry)
+
+    def hoechste_folge(self) -> int:
+        """Die zuletzt vergebene Nummer."""
+        with self._lock:
+            return self._folge
+
+    def ab_folge(self, ab: int, grenze: int = 200) -> list[dict]:
+        """Eintraege mit Nummer >= ab, aelteste zuerst, hoechstens `grenze`.
+
+        Blockierend (liest die Datei) — vom Aufrufer in einen Thread legen.
+
+        Liegt `ab` vor dem aeltesten vorhandenen Eintrag, kommt zurueck, was da
+        ist. Das ist kein Fehler, sondern die Wahrheit: der Verlauf haelt nur
+        eine begrenzte Zeit vor, und nach einem langen Ausfall FEHLT der
+        Anfang. Der Server sieht die Luecke an den Nummern und kann sie als
+        solche anzeigen, statt sie zu verschweigen.
+        """
+        gefunden = []
+        # Erst der Puffer im RAM: er enthaelt das Neueste und ist billig.
+        with self._lock:
+            puffer = [e for e in self._buf if isinstance(e.get('n'), int) and e['n'] >= ab]
+        if not self._path.exists():
+            return sorted(puffer, key=lambda e: e['n'])[:grenze]
+        try:
+            with open(self._path, 'r', encoding='utf-8') as f:
+                for zeile in f:
+                    zeile = zeile.strip()
+                    if not zeile:
+                        continue
+                    try:
+                        e = json.loads(zeile)
+                    except Exception:
+                        continue
+                    if isinstance(e.get('n'), int) and e['n'] >= ab:
+                        gefunden.append(e)
+                        if len(gefunden) >= grenze:
+                            break
+        except OSError as e:
+            log.warning('Verlauf ab Folge %d lesen fehlgeschlagen: %s', ab, e)
+        if len(gefunden) < grenze:
+            bekannt = {e['n'] for e in gefunden}
+            gefunden += [e for e in puffer if e['n'] not in bekannt]
+        return sorted(gefunden, key=lambda e: e['n'])[:grenze]
 
     def close(self, timeout: float = 5.0) -> None:
         """Beendet den Schreib-Thread und schreibt den Rest weg (blockierend)."""

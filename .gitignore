@@ -20,3 +20,5 @@ stauplan.json
 wartung.json
 heizung.json
 devices.json
+sync.json
+sync_start.json

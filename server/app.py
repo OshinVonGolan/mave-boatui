@@ -196,9 +196,18 @@ async def sync(ws: WebSocket) -> None:
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
             elif typ == p.EREIGNIS:
+                d = n['daten'] or {}
                 speicher.ereignis_anhaengen(
-                    n['folge'], (n['daten'] or {}).get('art', 'unbekannt'), n['daten'],
+                    n['folge'], d.get('art', 'unbekannt'), d,
                     _uhrbuch.aufloesen(wand, mono, gestellt))
+                # Ein Wechsel der Betriebsart ist nicht nur ein Ereignis fuers
+                # Protokoll, sondern aendert den ANGEZEIGTEN Zustand: der
+                # Bediener soll sehen, warum seltener Daten kommen. Ohne diese
+                # Zeile stuende hier fuer immer die Art aus dem hallo.
+                if d.get('art') == 'betriebsart' and d.get('betriebsart'):
+                    _verbindung['betriebsart'] = d['betriebsart']
+                    log.info('Boot meldet Betriebsart %s (Takt %ss)',
+                             d['betriebsart'], d.get('takt_s'))
             elif typ == p.QUITTUNG:
                 _vermittlung.quittung(n['daten'] or {})
             elif typ == p.PING:

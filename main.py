@@ -29,6 +29,7 @@ from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
 import geraete
+import sync_client
 from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
@@ -55,7 +56,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.57.0'
+VERSION  = _git_semver() or '1.58.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -133,6 +134,7 @@ HEIZUNG_FILE  = BASE_DIR / 'heizung.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 DEVICES_FILE  = BASE_DIR / 'devices.json'
 DEVICES_VORLAGE = BASE_DIR / 'devices.example.json'
+SYNC_FILE     = BASE_DIR / 'sync.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 HISTORY_GROB_FILE = BASE_DIR / 'history_min.ndjson'
 
@@ -224,6 +226,40 @@ hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
 grob_store = HistoryStore(HISTORY_GROB_FILE, retention_s=7 * 86400,
                           max_entries=history_grob.maxlen or 10080,
                           rotate_age_s=8 * 86400)
+
+
+# ── Verbindung zum Server ───────────────────────────────────────────────────
+# Ohne sync.json passiert hier gar nichts: kein Verbindungsversuch, keine
+# Meldung, kein Verbrauch. Das ist der Auslieferungszustand — der Server ist
+# Zusatz, nie Voraussetzung (KONZEPT-SERVER.md).
+#
+# Zum Server geht der GROBE Verlauf (Minutenmittel). Zwei Gruende: er haelt
+# sieben Tage vor statt sechzehn Stunden, das Nachliefern ueberlebt also auch
+# einen laengeren Ausfall — und er ist ein Zwoelftel der Datenmenge, was ueber
+# Mobilfunk zaehlt. Der feine Verlauf bleibt an Bord.
+
+def _sync_konfig() -> dict:
+    k = read_json(SYNC_FILE, {}) or {}
+    return k if isinstance(k, dict) else {}
+
+
+_sync_cfg = _sync_konfig()
+sync = sync_client.SyncClient(
+    adresse=_sync_cfg.get('adresse', ''),
+    token=_sync_cfg.get('token', ''),
+    geraet=_sync_cfg.get('geraet', 'mave-pi'),
+    version=VERSION,
+    zustand_holen=state.to_dict,
+    verlauf_holen=lambda ab, grenze: grob_store.ab_folge(ab, grenze),
+    verlauf_stand=grob_store.hoechste_folge,
+    conn_status=(conn_mon.get_status if conn_mon else (lambda: None)),
+    schalter=lambda: _sync_konfig().get('schalter', 'auto'),
+    # Der Port, unter dem die App selbst laeuft — dorthin schickt der Client
+    # die Befehle, die vom Server kommen. Nicht fest verdrahtet, weil er im
+    # Test ein anderer ist als im Betrieb.
+    eigener_port=int(_sync_cfg.get('eigener_port', 8080)),
+    markenpfad=BASE_DIR / 'sync_start.json',
+)
 
 
 _REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
@@ -383,6 +419,16 @@ async def lifespan(_app: FastAPI):
     threading.Thread(target=_remote_version_loop, daemon=True, name='version-check').start()
     asyncio.create_task(_charger_poll_loop())
 
+    # Die Startmarke wird IMMER gefuehrt, auch ohne Server: sonst waere nach
+    # einem Stromausfall ohne Netz nicht mehr feststellbar, dass es einer war.
+    befund = await loop.run_in_executor(
+        None, lambda: sync.start_vermerken(wand=time.time(), gestellt=time.time() > 1704067200))
+    if befund.get('letztes_ende') == 'abbruch':
+        log.warning('Voriger Lauf endete unsauber — Stromausfall oder Absturz')
+    if sync.eingerichtet:
+        asyncio.create_task(sync.laufen())
+        log.info('Serververbindung wird aufgebaut')
+
     # Verlauf von der Platte in die Deque zurückholen, damit die Graphen nach
     # einem Neustart nicht bei null anfangen. Das Lesen läuft im Executor —
     # sonst steht der Server beim Hochfahren mehrere Sekunden.
@@ -413,6 +459,11 @@ async def lifespan(_app: FastAPI):
     heizung.stop()
     hist_store.close()
     grob_store.close()
+    # Die Startmarke entfernen — sie ist das Zeichen fuer "unsauber beendet".
+    # Bleibt sie liegen, meldet der Server beim naechsten Start einen
+    # Stromausfall, den es nie gab. Das gehoert ans ENDE: erst wenn alles
+    # weggeschrieben ist, war das Ende wirklich geordnet.
+    sync.geordnet_beenden()
     log.info("CAN-Reader gestoppt")
 
 
@@ -1914,3 +1965,37 @@ async def save_devices_registry(request: Request):
     await _run_blocking(write_json, DEVICES_FILE, sauber)
     _devices_cache['reg_mtime'] = 0.0        # Zwischenspeicher verwerfen
     return sauber
+
+
+# ── Verbindung zum Server ───────────────────────────────────────────────────
+
+@app.get('/api/sync')
+async def sync_stand():
+    """Ob und wie das Boot mit dem Server spricht. Auch fuer die Oberflaeche."""
+    cfg = _sync_konfig()
+    return {
+        'eingerichtet': sync.eingerichtet,
+        'verbunden':    sync.verbunden,
+        'betriebsart':  sync._art() if sync.eingerichtet else None,
+        'schalter':     cfg.get('schalter', 'auto'),
+        'verlauf_stand': grob_store.hoechste_folge(),
+        'gesendet': {'zustand': sync.zustand_gesendet,
+                     'verlauf': sync.verlauf_gesendet,
+                     'befehle': sync.befehle_ausgefuehrt},
+    }
+
+
+@app.post('/api/sync/schalter')
+async def sync_schalter(body: dict):
+    """Handschalter fuer die Betriebsart: auto, voll oder gedrosselt.
+
+    Wer im Hafen an einer teuren Marina-SIM haengt, soll drosseln koennen,
+    obwohl der Router 'wifi' meldet — und umgekehrt.
+    """
+    wert = (body or {}).get('schalter')
+    if wert not in sync_client.p.SCHALTER:
+        raise HTTPException(400, detail=f'Unbekannte Stellung: {wert!r}')
+    cfg = _sync_konfig()
+    cfg['schalter'] = wert
+    await _run_blocking(write_json, SYNC_FILE, cfg)
+    return {'schalter': wert, 'betriebsart': sync._art() if sync.eingerichtet else None}
