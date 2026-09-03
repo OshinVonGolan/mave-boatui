@@ -436,6 +436,8 @@ function updateInverterCard(inv, charger) {
 function handleData(data) {
   if (data.ping) return;
   _lastData = data;
+  // Jeder Frame verraet, ob er vom Pi kam oder aus der Server-Kopie.
+  if (typeof quelleAusDaten === 'function') quelleAusDaten(data);
   if (data.version) {
     $('versionBadge').textContent = 'v' + data.version;
     // Der Text aendert die Breite des Logos, aber nicht zwingend seine

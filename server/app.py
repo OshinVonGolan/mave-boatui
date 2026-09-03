@@ -203,6 +203,7 @@ async def sync(ws: WebSocket) -> None:
                 weiter = dict(n['daten'] or {})
                 weiter['quelle'] = 'server'
                 weiter['alter_s'] = 0
+                weiter['boot_verbunden'] = True
                 await _an_zuschauer(weiter)
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
@@ -240,6 +241,10 @@ async def sync(ws: WebSocket) -> None:
     finally:
         _vermittlung.getrennt()
         _verbindung.update(sitzung=None, seit=None)
+        # Den offenen Oberflaechen sagen, dass ab jetzt nur noch die Kopie
+        # gilt. Ohne das zeigen sie weiter Live-Werte und bieten Schalter an,
+        # die niemand mehr entgegennimmt.
+        await _an_zuschauer(_stand_fuer_zuschauer())
 
 
 async def _hallo(ws: WebSocket, n: dict) -> int:
@@ -257,7 +262,25 @@ async def _hallo(ws: WebSocket, n: dict) -> int:
     await ws.send_json(p.stand(speicher.verlauf_stand()))
     log.info('Boot %s angemeldet, Verlauf ab %d, Betriebsart %s',
              d.get('geraet'), speicher.verlauf_stand() + 1, d.get('betriebsart'))
+    # Und den Oberflaechen, dass wieder Leben da ist — sie sperren sonst
+    # weiter, bis zufaellig der naechste Zustand eintrifft.
+    await _an_zuschauer(_stand_fuer_zuschauer())
     return sitzung
+
+
+def _stand_fuer_zuschauer() -> dict:
+    """Der zuletzt bekannte Zustand, ausdruecklich als Server-Kopie markiert.
+
+    `boot_verbunden` ist das Feld, an dem die Oberflaeche entscheidet, ob sie
+    noch schalten laesst — es muss deshalb bei JEDER Aenderung mitgehen, nicht
+    nur wenn gerade zufaellig neue Messwerte kommen.
+    """
+    z = speicher.zustand()
+    daten = dict(z['daten']) if z else {}
+    daten['quelle'] = 'server'
+    daten['alter_s'] = z['alter_s'] if z else None
+    daten['boot_verbunden'] = _verbindung['sitzung'] is not None
+    return daten
 
 
 def _verlauf(n: dict, wand, mono, gestellt) -> None:
@@ -417,13 +440,7 @@ for _methode, _pfad, _recht in DURCHLEITEN:
 # das ist die einzige Doppelung im ganzen Aufbau: eine gemeinsame Liste haette
 # bedeutet, dass der Server den Pi-Code importiert, und der bringt CAN-Bus und
 # alles Uebrige mit.
-_JS_FILES = [
-    'icons.js', 'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
-    'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
-    'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
-    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
-]
+from js_bundle_liste import JS_FILES as _JS_FILES
 _bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
 

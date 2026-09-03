@@ -488,14 +488,7 @@ app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
 
 # JS files in dependency order — concatenated into one request on /js-bundle.js
-_JS_FILES = [
-    'icons.js',
-    'core.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
-    'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
-    'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
-    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
-]
+from js_bundle_liste import JS_FILES as _JS_FILES
 _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
 

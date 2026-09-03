@@ -56,6 +56,13 @@
          Statusleiste ("PEGEL"), das per Tap dieselbe Seite oeffnet — in der
          Kopfzeile war er doppelt. Auf Wunsch des Eigners entfernt.
          Der "Verbunden"-Schriftzug ebenso: der Punkt daneben sagt dasselbe. -->
+    <!-- Woher die Daten kommen: direkt vom Pi an Bord oder ueber den Server.
+         Steht bewusst VOR dem Verbindungspunkt — der sagt nur ob, dieser
+         wohin. -->
+    <button class="quelle-chip neutral" id="quelleChip" onclick="toggleQuelle(event)"
+            title="Datenquelle"></button>
+    <div class="quelle-pop hidden" id="quellePop"></div>
+
     <div class="conn-badge" title="Verbindung zum Boot">
       <div class="conn-dot" id="connDot"></div>
     </div>
@@ -157,6 +164,9 @@
     </div>
   </div>
 </header>
+
+<!-- Nur sichtbar, wenn ausschliesslich die gespeicherte Kopie vorliegt. -->
+<div class="kopie-banner hidden" id="kopieBanner"></div>
 
 <!-- ── Kiosk-Chrome (nur im Kiosk-Profil sichtbar) ───────────────────────── -->
 <aside id="kioskSidebar" class="kiosk-sidebar"></aside>

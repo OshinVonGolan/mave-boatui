@@ -294,7 +294,12 @@ function _kopfhoeheFuehren() {
     const h = Math.round(kopf.getBoundingClientRect().height);
     if (h === letzte) return;              // nichts tun, wenn sich nichts aendert
     letzte = h;
-    document.documentElement.style.setProperty('--header-h', h + 'px');
+    // --header-basis, NICHT --header-h: die Kopfzeile ist nur der eine
+    // Summand. Liegt darunter noch das Kopie-Banner, rechnet CSS es
+    // dazu (--header-h = basis + kopie). Wuerde hier --header-h gesetzt,
+    // waere das Banner in jeder Layout-Rechnung verschwunden und
+    // ueberdeckte den Seitenanfang.
+    document.documentElement.style.setProperty('--header-basis', h + 'px');
   };
   setzen();
   if (typeof ResizeObserver === 'function') {

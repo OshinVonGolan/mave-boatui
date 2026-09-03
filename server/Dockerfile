@@ -12,6 +12,9 @@ RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*"
 
 # Nur was gebraucht wird. Der Pi-Teil (main.py, can_reader.py und der Rest)
 # gehoert NICHT ins Serverabbild — er wuerde nur Angriffsflaeche mitbringen.
+# Die Bundle-Reihenfolge teilen sich Pi und Server — sonst laufen die
+# beiden Oberflaechen auseinander.
+COPY js_bundle_liste.py /app/
 COPY sync/    /app/sync/
 COPY server/  /app/server/
 # Die Oberflaeche: dieselben Dateien wie auf dem Pi, damit es nicht zwei
