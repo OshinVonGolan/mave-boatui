@@ -206,13 +206,15 @@ class CanInterface:
     def send_time(self, ts: float):
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
-            return
+            return False
         can_id, data = build_time_frame(ts)
         try:
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
             log.info("Systemzeit gesendet (PGN 126992)")
+            return True
         except can.CanError as e:
             log.error("CAN-Sendefehler Systemzeit: %s", e)
+            return False
 
     def _find_vedirect_gateway_src(self) -> int:
         """Gibt die CAN-Quelladresse des VE.Direct-Gateways zurück.
@@ -235,23 +237,25 @@ class CanInterface:
         """
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
-            return
+            return False
         dst = self._find_vedirect_gateway_src()
         can_id, data = build_inverter_mode_frame(mode, instance, dst)
         try:
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
             log.info("Inverter-Modus %d → Instanz %d → Gateway Adr.%d (PGN 61184)",
                      mode, instance, dst)
+            return True
         except can.CanError as e:
             log.error("CAN-Sendefehler Inverter: %s", e)
 
+            return False
     def send_charger_setpoints(self, absorption_v: float, float_v: float, instance: int = 1):
         """Setzt Absorptions- und Float-Spannung des IP43 via PGN 61184 (commandType=1).
         Benötigt aktualisierte VE.Direct-Gateway-Firmware um wirksam zu sein.
         """
         if self._bus is None:
             log.warning("CAN nicht verbunden – Charger-Setpoints nicht gesendet")
-            return
+            return False
         dst    = self._find_vedirect_gateway_src()
         abs_mv = round(absorption_v * 1000)
         flt_mv = round(float_v * 1000)
@@ -260,9 +264,11 @@ class CanInterface:
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
             log.info("Charger Setpoints → Abs %.2fV / Float %.2fV → Inst %d → Gw Adr.%d",
                      absorption_v, float_v, instance, dst)
+            return True
         except can.CanError as e:
             log.error("CAN-Sendefehler Charger Setpoints: %s", e)
 
+            return False
     def send_charger_register(self, reg: int, val: int, instance: int = 1, size: int = 2):
         """Schreibt ein Register via PGN 61184 (cmdType=2).
         size=1 für 8-Bit-Register (z.B. DeviceMode 0x0200).
@@ -277,20 +283,24 @@ class CanInterface:
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
             log.info("Charger Register 0x%04X = %d (size=%d) → Inst %d → Gw Adr.%d",
                      reg, val, size, instance, dst)
+            return True
         except can.CanError as e:
             log.error("CAN-Sendefehler Register Write: %s", e)
 
+            return False
     def send_charger_config_request(self):
         """Sendet ISO Request für PGN 130914 → Teensy liest IP43-Setpoints und antwortet."""
         if self._bus is None:
-            return
+            return False
         dst = self._find_vedirect_gateway_src()
         try:
             can_id, data = build_charger_config_request(dst)
             self._bus.send(can.Message(arbitration_id=can_id, data=data, is_extended_id=True))
             log.debug("Charger Config Request → Gateway Adr.%d", dst)
+            return True
         except can.CanError as e:
             log.warning("Charger Config Request Fehler: %s", e)
+            return False
 
     def request_product_info(self):
         """Sendet PGN 59904 ISO Request für PGN 126996 (Produktinfo) an alle Geräte."""
@@ -306,7 +316,7 @@ class CanInterface:
     def send_brightness(self, values: list[int]):
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
-            return
+            return False
         frames = build_brightness_frames(values, self._next_seq())
         for can_id, data in frames:
             try:
@@ -314,13 +324,17 @@ class CanInterface:
                     arbitration_id=can_id, data=data, is_extended_id=True))
             except can.CanError as e:
                 log.error("CAN-Sendefehler: %s", e)
+                # Ein halb gesendetes Fast-Packet ist kein Teilerfolg, sondern
+                # ein kaputter Rahmen — der Aufrufer soll das erfahren.
+                return False
+        return True
 
     def send_alert(self, alert_id: int, active: bool, priority: int = 0):
         """Sendet PGN 126983 (Alert) als Fast-Packet — löst einen NMEA-2000-Buzzer
         aus (active=True) bzw. nimmt den Alarm zurück (active=False)."""
         if self._bus is None:
             log.warning("CAN nicht verbunden – Alert nicht gesendet")
-            return
+            return False
         frames = build_alert_frame(alert_id, active, priority=priority, seq=self._next_seq())
         for can_id, data in frames:
             try:
@@ -328,7 +342,9 @@ class CanInterface:
                     arbitration_id=can_id, data=data, is_extended_id=True))
             except can.CanError as e:
                 log.error("CAN-Sendefehler Alert: %s", e)
+                return False
         log.info("Alert 126983 id=%d active=%s (%d Frames) gesendet", alert_id, active, len(frames))
+        return True
 
     # ── Empfangen ───────────────────────────────────────────────────────────
 

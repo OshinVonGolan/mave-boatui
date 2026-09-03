@@ -56,7 +56,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.58.0'
+VERSION  = _git_semver() or '1.59.0'
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -704,7 +704,8 @@ async def apply_preset(preset_id: int):
         werte = _kanalwerte(preset['values'], f'Preset {preset_id}')
     except HTTPException:
         raise HTTPException(400, detail=f'Preset {preset_id} enthaelt unbrauchbare Werte')
-    can_if.send_brightness(werte)
+    if not can_if.send_brightness(werte):
+        raise HTTPException(503, detail='Der CAN-Bus ist nicht verbunden — nichts geschaltet.')
     log.info("Preset %d '%s' aktiviert", preset_id, preset.get('name', ''))
     return {'ok': True, 'preset': preset.get('name', '')}
 
@@ -712,9 +713,13 @@ async def apply_preset(preset_id: int):
 @app.post('/api/lights/channels')
 async def set_channels(body: dict):
     values = _kanalwerte(body.get('values'))
-    can_if.send_brightness(values)
-    state.lights['channels'] = values
-    return {'ok': True}
+    # Melden, ob es wirklich auf den Bus ging. Vorher kam immer {'ok': True} —
+    # an Bord faellt das kaum auf, aus der Ferne bekaeme man eine Bestaetigung
+    # fuer etwas, das nie passiert ist.
+    if not can_if.send_brightness(values):
+        raise HTTPException(503, detail='Der CAN-Bus ist nicht verbunden — nichts geschaltet.')
+    state.lights['channels'] = values      # erst NACH dem Senden: sonst zeigt
+    return {'ok': True}                    # die Anzeige einen Zustand, den es nicht gibt
 
 
 @app.patch('/api/lights/preset/{preset_id}')
@@ -992,8 +997,12 @@ async def update_alarm_rules(body: dict):
 
 @app.post('/api/system/time-sync')
 async def system_time_sync():
-    can_if.send_time(time.time())
-    return {'ok': True}
+    gesendet = can_if.send_time(time.time())
+    # Kein Fehler, wenn es nicht ging: die Bordzeit zu setzen ist eine
+    # Bequemlichkeit, kein Schaltbefehl. Aber der Aufrufer soll es wissen,
+    # statt zu glauben, die Uhr am Bus sei jetzt gestellt.
+    return {'ok': bool(gesendet),
+            'hinweis': None if gesendet else 'CAN-Bus nicht verbunden — Zeit nicht gesendet.'}
 
 
 @app.get('/api/system/version')
@@ -1074,7 +1083,8 @@ async def set_inverter_mode(body: dict):
     mode = body.get('mode')
     if mode not in (2, 4, 5):
         raise HTTPException(400, detail='mode muss 2 (An), 4 (Aus) oder 5 (Eco) sein')
-    can_if.send_inverter_mode(int(mode))
+    if not can_if.send_inverter_mode(int(mode)):
+        raise HTTPException(503, detail='Der CAN-Bus ist nicht verbunden — nichts geschaltet.')
     return {'ok': True, 'mode': mode}
 
 
