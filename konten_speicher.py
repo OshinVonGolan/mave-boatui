@@ -18,6 +18,8 @@ Touchscreen am Kartentisch.
 from __future__ import annotations
 
 import logging
+import hashlib
+import json
 import threading
 import time
 
@@ -186,6 +188,79 @@ class Konten:
                 s['zuletzt'] = time.time()
                 self._sichern_sitzungen()
         return dict(konto, _sitzung_kiosk=bool(s.get('kiosk')))
+
+    def aendern(self, name: str, *, rolle=None, gesperrt=None,
+                passwort=None, laeuft_ab=None) -> dict:
+        """Rolle, Sperre, Passwort oder Ablauf eines Kontos aendern.
+
+        Wird ein Konto gesperrt oder sein Passwort gewechselt, verfallen SEINE
+        Sitzungen sofort. Das ist der eigentliche Zweck des Sperrens: solange
+        eine alte Sitzung weiterlaeuft, ist niemand ausgesperrt.
+        """
+        with self._lock:
+            konto = self._konten.get((name or '').strip())
+            if not konto:
+                raise k.KontoFehler(f'Kein Konto namens {name!r}.')
+            if rolle is not None:
+                if rolle not in r.ROLLEN:
+                    raise k.KontoFehler(f'Unbekannte Rolle: {rolle!r}')
+                konto['rolle'] = rolle
+            if gesperrt is not None:
+                konto['gesperrt'] = bool(gesperrt)
+            if laeuft_ab is not None:
+                konto['laeuft_ab'] = float(laeuft_ab) if laeuft_ab else None
+            if passwort:
+                konto['hash'] = k.hash_erzeugen(passwort)
+            if gesperrt or passwort:
+                weg = [kn for kn, si in self._sitzungen.items()
+                       if si.get('konto') == konto['name']]
+                for kn in weg:
+                    self._sitzungen.pop(kn, None)
+                if weg:
+                    self._sichern_sitzungen()
+                    log.info('%d Sitzungen von %r beendet', len(weg), konto['name'])
+            self._sichern_konten()
+        log.info('Konto %r geändert', konto['name'])
+        return {'name': konto['name'], 'rolle': konto.get('rolle'),
+                'gesperrt': bool(konto.get('gesperrt')),
+                'laeuft_ab': konto.get('laeuft_ab')}
+
+    def loeschen(self, name: str) -> None:
+        with self._lock:
+            konto = self._konten.pop((name or '').strip(), None)
+            if not konto:
+                raise k.KontoFehler(f'Kein Konto namens {name!r}.')
+            for kn in [kn for kn, si in self._sitzungen.items()
+                       if si.get('konto') == konto['name']]:
+                self._sitzungen.pop(kn, None)
+            self._sichern_konten()
+            self._sichern_sitzungen()
+        log.info('Konto %r gelöscht', konto['name'])
+
+    def zum_verteilen(self) -> dict:
+        """Die Kopie fuer den Pi, mitsamt einer Kennung ihres Standes.
+
+        Der Passwort-Hash MUSS mit: sonst koennte an Bord ohne Internet
+        niemand anmelden, und genau dafuer ist die Kopie da. Er ist ein
+        scrypt-Hash — wer die Datei auf dem Pi liest, hat damit noch kein
+        Passwort, sondern nur sehr viel Rechenarbeit vor sich.
+
+        Die Kennung ist ein Hash ueber den Inhalt, kein Zaehler: sie stimmt
+        auch dann noch, wenn eine Seite zwischendurch neu gestartet ist.
+        """
+        with self._lock:
+            liste = [
+                {'name': kt['name'], 'hash': kt.get('hash'), 'rolle': kt.get('rolle'),
+                 'gesperrt': bool(kt.get('gesperrt')), 'laeuft_ab': kt.get('laeuft_ab'),
+                 # Die Uebersteuerungen MUESSEN mit: sonst gilt an Bord wieder
+                 # die blosse Rolle, und ein einzeln entzogenes Recht waere
+                 # ueber das Bord-WLAN wieder da.
+                 'handlungen': kt.get('handlungen'),
+                 'oberflaechen': kt.get('oberflaechen')}
+                for kt in sorted(self._konten.values(), key=lambda x: x['name'])
+            ]
+        roh = json.dumps(liste, sort_keys=True, ensure_ascii=False).encode()
+        return {'konten': liste, 'stand': hashlib.sha256(roh).hexdigest()[:16]}
 
     def _aufraeumen(self) -> None:
         jetzt = time.time()

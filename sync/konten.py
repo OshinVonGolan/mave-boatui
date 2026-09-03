@@ -77,6 +77,15 @@ def hash_erzeugen(passwort: str, *, n_exp: int = SCRYPT_N_EXP) -> str:
     if len(passwort) > 1024:
         # Ohne Grenze koennte ein langes Passwort selbst zur Last werden.
         raise KontoFehler('Das Passwort ist zu lang.')
+    # Dieselbe Obergrenze wie beim Pruefen. Sie stand bisher nur dort, und das
+    # war eine Unwucht: was nicht geprueft werden kann, darf gar nicht erst
+    # entstehen. Sonst legt eine spaetere Erhoehung der Kosten Konten an, an
+    # denen sich anschliessend niemand mehr anmelden kann — der Hash waere
+    # gueltig, aber jede Pruefung wiese ihn als zu teuer ab.
+    if not 1 <= n_exp <= _MAX_N_EXP or _speicher(n_exp, SCRYPT_R, SCRYPT_P) > _MAX_SPEICHER:
+        raise KontoFehler(
+            f'Diese Kosten sprengen den Rahmen ({_MAX_SPEICHER // 1024 // 1024} MB). '
+            f'Ein Pi Zero hat 427 MB — mehr zu verlangen heisst, den Dienst zu töten.')
     salz = secrets.token_bytes(16)
     roh = hashlib.scrypt(passwort.encode('utf-8'), salt=salz, n=2 ** n_exp,
                          r=SCRYPT_R, p=SCRYPT_P, dklen=_DKLEN,

@@ -29,6 +29,27 @@ import re
 
 from sync import rechte as r
 
+# Name des Sitzungscookies. Steht hier und nicht zweimal: liefen die beiden
+# Seiten hier auseinander, waere man auf einer von beiden staendig abgemeldet,
+# ohne dass ein Fehler sichtbar wuerde.
+SITZUNG_COOKIE = 'mave_sitzung'
+
+
+def token_aus(request) -> str:
+    """Die Sitzung aus einer Anfrage holen — Cookie zuerst, dann Kopfzeile.
+
+    Das Cookie ist der Hauptweg: es geht bei jedem Aufruf von selbst mit, auch
+    beim Laden des Bundles und beim WebSocket-Handschlag, wo ein Browser keine
+    eigenen Koepfe setzen kann. Der Bearer-Kopf bleibt fuer Werkzeuge und
+    Skripte.
+    """
+    keks = request.cookies.get(SITZUNG_COOKIE)
+    if keks:
+        return keks
+    kopf = request.headers.get('authorization', '')
+    return kopf[7:].strip() if kopf.lower().startswith('bearer ') else ''
+
+
 log = logging.getLogger(__name__)
 
 # Immer offen. Kurz halten und jede Zeile begruenden.

@@ -92,8 +92,16 @@ def darf(konto, handlung: str) -> bool:
     """Ob ein Konto eine Handlung ausfuehren darf.
 
     `konto` ist ein Objekt mit `rolle` und optional `handlungen`/`oberflaechen`
-    als Uebersteuerung, dazu `gesperrt` und `gueltig_bis`.
+    als Uebersteuerung, dazu `gesperrt` und `abgelaufen`.
+
+    KEIN Konto heisst KEIN Recht. Das steht hier ausdruecklich, obwohl der
+    Aufrufer ohnehin vorher abweisen sollte: `rolle(None)` faellt auf die
+    Vorgaberolle zurueck, und die darf lesen — ohne diese Zeile bekaeme ein
+    Unangemeldeter also Gastrechte, sobald irgendwo eine Pruefung vergessen
+    wird. Genau das ist der Fehler, den man nie bemerkt.
     """
+    if not konto:
+        return False
     if _gesperrt(konto):
         return False
     eigen = (konto or {}).get('handlungen')
@@ -108,6 +116,8 @@ def darf_oberflaeche(konto, welche: str) -> bool:
     Das ist die Frage, die der Eigner gestellt hat: die Crew nutzt die PWA, das
     Diagnosewerkzeug bleibt ihr verschlossen.
     """
+    if not konto:
+        return False
     if _gesperrt(konto):
         return False
     eigen = (konto or {}).get('oberflaechen')

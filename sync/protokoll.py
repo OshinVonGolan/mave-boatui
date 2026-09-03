@@ -83,10 +83,26 @@ def hallo(geraet: str, fassung: int, version: str, verlauf_folge: int,
     }, wand=wand, mono=mono, gestellt=gestellt)
 
 
-def stand(verlauf_bis: int, konten_rev: int = 0) -> dict:
-    """Die Antwort des Servers: bis wohin er den Verlauf hat."""
+def stand(verlauf_bis: int, konten_stand: str = '') -> dict:
+    """Die Antwort des Servers: bis wohin er den Verlauf hat.
+
+    `konten_stand` ist eine Kennung des Kontenbestands, kein Zaehler — ein
+    Hash ueber den Inhalt. Ein Zaehler muesste dauerhaft mitgefuehrt werden und
+    liefe nach einem Neustart der falschen Seite aus dem Tritt; die Kennung
+    stimmt immer, weil sie aus den Daten selbst folgt. Der Pi vergleicht sie
+    mit seiner eigenen und fordert nur bei Abweichung eine neue Kopie an.
+    """
     return umschlag(STAND, {'verlauf_bis': int(verlauf_bis),
-                            'konten_rev': int(konten_rev)})
+                            'konten_stand': str(konten_stand or '')})
+
+
+def konten(daten: dict) -> dict:
+    """Die Kontenkopie fuer den Pi.
+
+    Enthaelt die Passwort-Hashes: ohne sie koennte an Bord ohne Internet
+    niemand anmelden, und genau dafuer ist die Kopie da.
+    """
+    return umschlag(KONTEN, daten)
 
 
 # ── Aufschnueren ────────────────────────────────────────────────────────────

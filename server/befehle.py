@@ -125,6 +125,18 @@ class Vermittlung:
         finally:
             self._offen.pop(kennung, None)
 
+    async def senden_ohne_antwort(self, nachricht: dict) -> None:
+        """Etwas zum Boot schicken, auf das es nicht antworten muss.
+
+        Fuer die Kontenkopie: sie ist eine Mitteilung, keine Frage. Auf eine
+        Quittung zu warten wuerde die Kontenverwaltung an der Erreichbarkeit
+        des Bootes aufhaengen — und die Aenderung ist auf dem Server ohnehin
+        schon gueltig.
+        """
+        if self._ws is None:
+            raise KeinBoot('Das Boot ist nicht verbunden.')
+        await self._ws.send_json(nachricht)
+
     def quittung(self, daten: dict) -> None:
         """Eine Quittung vom Boot einsortieren.
 

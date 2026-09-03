@@ -20,7 +20,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from alarm_engine import AlarmEngine
@@ -29,9 +29,11 @@ from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
 import geraete
-import sync_client
-import zugang
+import konten_speicher
 from konten_speicher import Konten
+import sync_client
+from sync import zugang as zg
+from sync import rechte as rechte_modul
 from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
@@ -220,6 +222,11 @@ _hist_last_mono: float = 0.0
 # Die Geraetedoku begrenzt auf 1 Hz und vier WebSockets im GANZEN Netz —
 # jedes Handy einzeln pollen zu lassen waere schnell darueber.
 heizung = StokerClient(HEIZUNG_FILE)
+# Konten an Bord: die Wahrheit liegt beim Server, hier steht eine Kopie. Damit
+# funktioniert die Anmeldung auch ohne Internet — an Bord der Normalfall, nicht
+# die Ausnahme. Solange die Kopie leer ist, gilt die Schonfrist aus
+# sync/zugang.py und alles bleibt offen; das ist vertretbar, weil der Pi nur im
+# Bordnetz haengt. Sobald das erste Konto ankommt, greift die Pflicht.
 konten = Konten(KONTEN_FILE, SITZUNGEN_FILE)
 
 hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
@@ -249,6 +256,14 @@ def _sync_konfig() -> dict:
 
 
 _sync_cfg = _sync_konfig()
+def _konten_stand() -> str:
+    return konten.zum_verteilen()['stand']
+
+
+def _konten_uebernehmen(daten: dict) -> int:
+    return konten.ersetzen({k['name']: k for k in (daten.get('konten') or [])})
+
+
 sync = sync_client.SyncClient(
     adresse=_sync_cfg.get('adresse', ''),
     token=_sync_cfg.get('token', ''),
@@ -259,6 +274,8 @@ sync = sync_client.SyncClient(
     verlauf_stand=grob_store.hoechste_folge,
     conn_status=(conn_mon.get_status if conn_mon else (lambda: None)),
     schalter=lambda: _sync_konfig().get('schalter', 'auto'),
+    konten_stand=_konten_stand,
+    konten_uebernehmen=_konten_uebernehmen,
     # Der Port, unter dem die App selbst laeuft — dorthin schickt der Client
     # die Befehle, die vom Server kommen. Nicht fest verdrahtet, weil er im
     # Test ein anderer ist als im Betrieb.
@@ -485,6 +502,82 @@ app = FastAPI(title='Mave Boat Monitor', lifespan=lifespan)
 # compresslevel=6 statt der Vorgabe 9: auf ARMv6 deutlich billiger,
 # die Antworten werden dabei nur wenige Prozent groesser.
 app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
+
+# ── Zugang ──────────────────────────────────────────────────────────────────
+# Eine Middleware statt 48 einzelner Pruefungen. Die Regeln stehen in
+# sync/zugang.py und gelten auf beiden Seiten — der Pi kann sich nicht darauf
+# verlassen, dass der Server vorher gefragt wurde: im Bordnetz spricht die PWA
+# direkt mit ihm.
+
+@app.middleware('http')
+async def _zugang_pruefen(request: Request, call_next):
+    pfad = request.url.path
+    if not pfad.startswith('/api/'):
+        return await call_next(request)          # Oberflaeche und Dateien sind offen
+
+    schonfrist = konten.leer
+    k = None
+    if not schonfrist:
+        token = zg.token_aus(request)
+        if token:
+            k = konten.konto_zu_token(token)
+
+    erlaubt, code, meldung = zg.pruefen(k, request.method, pfad, schonfrist=schonfrist)
+    if not erlaubt:
+        return JSONResponse({'detail': meldung}, status_code=code)
+
+    # Nachgelagerte Endpunkte duerfen wissen, wer da ist, ohne erneut zu suchen.
+    request.state.konto = k
+    return await call_next(request)
+
+
+@app.post('/api/login')
+async def login(request: Request):
+    """Anmelden — gegen die Kontenkopie, die vom Server kam.
+
+    Der Pi prueft selbst und fragt nicht beim Server nach: an Bord ist kein
+    Internet der Normalfall, und eine Anmeldung, die dann nicht geht, waere
+    genau am falschen Ort kaputt.
+    """
+    daten = await request.json()
+    try:
+        token, k = konten.anmelden(str(daten.get('name', '')), str(daten.get('passwort', '')),
+                                   kiosk=bool(daten.get('kiosk')))
+    except Exception as e:
+        log.warning('Anmeldung an Bord gescheitert für %r', daten.get('name'))
+        return JSONResponse({'detail': str(e)}, status_code=401)
+    antwort = JSONResponse(rechte_modul.uebersicht(k))
+    antwort.set_cookie(zg.SITZUNG_COOKIE, token, max_age=int(konten_speicher.SITZUNG_DAUER_S),
+                       httponly=True, secure=(request.url.scheme == 'https'),
+                       samesite='lax', path='/')
+    return antwort
+
+
+@app.post('/api/logout')
+async def logout(request: Request):
+    konten.abmelden(zg.token_aus(request))
+    antwort = JSONResponse({'ok': True})
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
+    return antwort
+
+
+@app.get('/api/zugang')
+async def zugang_stand(request: Request):
+    """Was die Oberflaeche wissen muss, bevor sie irgendetwas anderes fragt.
+
+    `offen` sagt, dass noch keine Kontenkopie da ist und deshalb alles
+    zugaenglich bleibt. Die Oberflaeche zeigt das deutlich an — ein stiller
+    offener Zustand waere schlimmer als ein sichtbarer.
+    """
+    token = zg.token_aus(request)
+    k = konten.konto_zu_token(token) if token else None
+    return {
+        'angemeldet': bool(k),
+        'offen': konten.leer,
+        'quelle': 'boot',
+        'konto': rechte_modul.uebersicht(k) if k else None,
+    }
+
 app.mount('/static', _NoCacheStatic(directory=STATIC_DIR), name='static')
 
 

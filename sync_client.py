@@ -56,8 +56,13 @@ class SyncClient:
     def __init__(self, *, adresse: str, token: str, geraet: str, version: str,
                  zustand_holen, verlauf_holen, verlauf_stand, conn_status,
                  schalter=lambda: 'auto', lokal_ausfuehren=None,
+                 konten_stand=lambda: '', konten_uebernehmen=None,
                  eigener_port: int = 8080, markenpfad='sync_start.json'):
         self._adresse = (adresse or '').strip()
+        # Die Kontenkopie kommt vom Server; der Client kennt die Kontenhaltung
+        # nicht, sondern nur diese beiden Griffe.
+        self._konten_stand = konten_stand
+        self._konten_uebernehmen = konten_uebernehmen
         self._token = (token or '').strip()
         self._geraet = geraet
         self._version = version
@@ -146,7 +151,8 @@ class SyncClient:
                 self._art(), **self._jetzt()) | {'daten': {
                     'geraet': self._geraet, 'fassung': p.FASSUNG, 'version': self._version,
                     'verlauf_folge': await asyncio.to_thread(self._verlauf_stand),
-                    'betriebsart': self._art(), 'start': self._befund}})
+                    'betriebsart': self._art(), 'start': self._befund,
+                    'konten_stand': self._konten_stand()}})
 
             antwort = p.pruefe(json.loads(await ws.recv()), vom_pi=False)
             if antwort['typ'] != p.STAND:
@@ -174,8 +180,27 @@ class SyncClient:
                 # Nebenlaeufig ausfuehren: ein langsamer Befehl darf den
                 # Empfang nicht anhalten.
                 asyncio.create_task(self._befehl(n['daten'] or {}))
+            elif n['typ'] == p.KONTEN:
+                await self._konten(n['daten'] or {})
             elif n['typ'] == p.PING:
                 await self._senden(p.umschlag(p.PONG))
+
+    async def _konten(self, daten: dict) -> None:
+        """Die Kontenkopie vom Server uebernehmen.
+
+        Sie ersetzt den lokalen Bestand vollstaendig — der Server ist die
+        Wahrheit. Anders liesse sich ein dort gesperrtes Konto an Bord nicht
+        aussperren, und das waere die gefaehrlichere Haelfte: wer von Bord
+        verwiesen wurde, soll nicht ueber das Bord-WLAN weiterschalten.
+        """
+        if not self._konten_uebernehmen:
+            return
+        try:
+            anzahl = await asyncio.to_thread(self._konten_uebernehmen, daten)
+            log.info('Kontenkopie übernommen: %s Konten, Stand %s',
+                     anzahl, daten.get('stand') or '—')
+        except Exception as e:
+            log.warning('Kontenkopie nicht übernommen: %s', e)
 
     async def _befehl(self, b: dict) -> None:
         """Einen Befehl lokal ausfuehren und quittieren.

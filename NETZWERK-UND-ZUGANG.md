@@ -47,22 +47,24 @@ WLAN-Clients  8
 
 | Weg | Wie | Wann |
 |---|---|---|
-| **SSH** | Benutzer `joshy`, Passwort-Anmeldung (Passwort beim Eigner) | im selben Netz oder über Tailscale |
+| **SSH** | `ssh joshy@192.168.1.103` — Schlüssel `~/.ssh/id_ed25519` liegt, kein Passwort nötig | im selben Netz oder über Tailscale |
 | **Weboberfläche** | `http://192.168.1.103:8080` | dito |
 | **Tailscale** | `100.116.85.65`, dasselbe über das Tailnet | von überall, solange beide Geräte im Tailnet sind |
 
-Aus Python heraus geht SSH über **paramiko** (installiert), nicht über das
-`ssh`-Kommando — es gibt keinen hinterlegten Schlüssel, nur Passwort-Anmeldung:
+SSH läuft mit hinterlegtem Schlüssel, ganz gewöhnlich über das `ssh`-Kommando —
+paramiko wird nicht gebraucht. (Eine frühere Fassung dieses Dokuments behauptete
+das Gegenteil; das war falsch und hat schon einmal Zeit gekostet.)
 
-```python
-import paramiko
-c = paramiko.SSHClient()
-c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-c.connect('192.168.1.103', username='joshy', password='...', look_for_keys=False)
-```
+**Wo der Zugang endet: `sudo` verlangt ein Passwort**, und das liegt nur beim
+Eigner. Alles, was root braucht, geht deshalb nicht selbständig:
 
-`sudo` verlangt das Passwort. Für den Alltag wird es nicht gebraucht: Der Dienst
-läuft als `joshy`, und das Update startet ihn selbst neu (siehe unten).
+- Ports unter 1024 belegen (also auch 443)
+- systemd-Einheiten anlegen oder ändern
+- die nginx-Konfiguration anfassen
+- Pakete installieren
+
+Für den Alltag reicht das trotzdem: Der Dienst läuft als `joshy`, und das Update
+startet ihn selbst neu (siehe unten).
 
 ### Zum Server
 
@@ -87,6 +89,37 @@ git push git@github.com:OshinVonGolan/mave-boatui.git master
 Der Pi zieht weiterhin per HTTPS und kann das auch — sein Zugang ist intakt.
 
 ---
+
+## Was auf dem Pi sonst noch läuft
+
+```
+nginx           als root auf Port 80, Auslieferung der Standardseite
+                (nicht von uns eingerichtet, Konfiguration ohne sudo unantastbar)
+boatui.service  die App, als joshy auf Port 8080, ohne TLS
+can0.service    der CAN-Bus
+```
+
+**Zertifikat.** Über `acme.sh` liegt eines für `pi.mave.circuit-sailor.com`
+(ECC-256, Let's Encrypt, geholt per DNS-01 über die IONOS-API):
+
+```
+~/.acme.sh/pi.mave.circuit-sailor.com_ecc/fullchain.cer
+~/.acme.sh/pi.mave.circuit-sailor.com_ecc/pi.mave.circuit-sailor.com.key
+```
+
+Die Erneuerung läuft bereits per Cron (viermal täglich `acme.sh --cron`).
+DNS-01 wurde gewählt, weil der Name auf eine **private** Adresse zeigen soll —
+eine HTTP-Prüfung von außen ist dafür unmöglich.
+
+Der zugehörige A-Eintrag fehlt zum Stand 03.09.2026 noch, und der Pi liefert
+noch kein HTTPS aus: dafür müsste etwas auf Port 443 hören, und das braucht
+root.
+
+**Warum das überhaupt zählt:** ohne TLS kein sicherer Kontext, ohne sicheren
+Kontext kein Service Worker — und ohne den lässt sich die PWA nicht als
+Anwendung installieren, sondern nur als Verknüpfung ablegen. Die Verschlüsselung
+auf dem Pi ist also keine Kür, sondern die Voraussetzung dafür, dass an Bord
+dieselbe App läuft wie unterwegs.
 
 ## Der Dienst auf dem Pi
 

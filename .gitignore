@@ -22,3 +22,8 @@ heizung.json
 devices.json
 sync.json
 sync_start.json
+
+# Konten und Sitzungen: enthalten Passwort-Hashes und gueltige Sitzungen.
+# Gehoeren niemals ins Repo — auf jedem Geraet entstehen sie neu.
+konten.json
+sitzungen.json

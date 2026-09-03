@@ -28,9 +28,15 @@ from fastapi.staticfiles import StaticFiles
 
 from server.befehle import (DURCHLEITEN, KeinBoot, Vermittlung,
                             Zeitueberschreitung, gesperrt)
+from pydantic import BaseModel
+
+from konten_speicher import Konten
+from sync.konten import KontoFehler
+from konten_speicher import SITZUNG_DAUER_S
 from server.speicher import Speicher
 from sync import protokoll as p
 from sync import rechte as r
+from sync import zugang as zg
 from sync import zeit as sz
 
 log = logging.getLogger('mave-server')
@@ -55,6 +61,7 @@ FERN_HEIZUNG = os.environ.get('MAVE_FERN_HEIZUNG', '').strip().lower() in ('ja',
 app = FastAPI(title='Mave Server', docs_url=None, redoc_url=None, openapi_url=None)
 
 speicher: Speicher | None = None
+konten: Konten | None = None
 _uhrbuch = sz.Uhrbuch()
 _vermittlung = Vermittlung()
 _verbindung: dict = {'sitzung': None, 'seit': None, 'geraet': None, 'betriebsart': None}
@@ -65,10 +72,18 @@ def _start() -> None:
     global speicher
     DATEN.mkdir(parents=True, exist_ok=True)
     speicher = Speicher(DATEN / 'mave.db')
+    global konten
+    konten = Konten(DATEN / 'konten.json', DATEN / 'sitzungen.json')
     if not GERAET_TOKEN:
         log.error('MAVE_GERAET_TOKEN ist nicht gesetzt — das Boot kann sich nicht anmelden.')
-    if not UEBERGANG_PASSWORT:
-        log.error('MAVE_PASSWORT ist nicht gesetzt — die Leseseite bleibt zu.')
+    if konten.leer:
+        if UEBERGANG_PASSWORT:
+            log.warning('Noch kein Konto angelegt. Bis dahin gilt MAVE_PASSWORT als '
+                        'Notzugang — damit das erste Konto angelegt werden kann.')
+        else:
+            log.error('Weder ein Konto noch MAVE_PASSWORT — niemand kommt herein.')
+    else:
+        log.info('%d Konten geladen', len(konten.liste()))
     log.info('Server bereit, Daten in %s', DATEN)
 
 
@@ -104,24 +119,29 @@ def _herkunft(request: Request) -> str:
 
 
 def konto(request: Request) -> dict:
-    quelle = _herkunft(request)
-    jetzt = time.time()
-    versuche = [t for t in _FEHLVERSUCHE.get(quelle, []) if jetzt - t < _SPERRE_S]
-    if len(versuche) >= _MAX_VERSUCHE:
-        _FEHLVERSUCHE[quelle] = versuche
-        raise HTTPException(429, detail='Zu viele Fehlversuche. Bitte später erneut.')
+    """Wer da ist — oder 401.
 
-    kopf = request.headers.get('authorization', '')
-    gegeben = kopf[7:].strip() if kopf.lower().startswith('bearer ') else ''
-    if not UEBERGANG_PASSWORT or not gegeben or \
-            not secrets.compare_digest(gegeben, UEBERGANG_PASSWORT):
-        versuche.append(jetzt)
-        _FEHLVERSUCHE[quelle] = versuche
-        # Kein WWW-Authenticate: der Browser soll keinen eigenen Dialog
-        # aufmachen, die Anmeldung gehoert in die Oberflaeche.
-        raise HTTPException(401, detail='Anmeldung nötig')
-    _FEHLVERSUCHE.pop(quelle, None)
-    return {'rolle': 'eigner', 'name': 'übergang'}
+    Solange KEIN Konto angelegt ist, gilt das Uebergangspasswort als Notzugang.
+    Das ist kein offener Server: ohne dieses Passwort kommt auch dann niemand
+    herein. Es ist nur der Weg, auf dem das erste Konto entsteht — sonst gaebe
+    es die Henne-Ei-Lage, dass man ein Konto braucht, um ein Konto anzulegen.
+    """
+    token = zg.token_aus(request)
+    k = konten.konto_zu_token(token) if (konten and token) else None
+    if k:
+        return k
+
+    if konten and konten.leer and UEBERGANG_PASSWORT and token and \
+            secrets.compare_digest(token, UEBERGANG_PASSWORT):
+        # Notzugang bei der Erstinbetriebnahme. Traegt absichtlich einen
+        # sprechenden Namen: taucht er spaeter irgendwo in einem Protokoll auf,
+        # ist sofort klar, dass noch kein richtiges Konto besteht.
+        return {'name': 'ersteinrichtung', 'rolle': 'eigner'}
+
+    # Kein WWW-Authenticate: der Browser soll keinen eigenen Dialog aufmachen,
+    # die Anmeldung gehoert in die Oberflaeche. (Genau dieser Dialog war es,
+    # der Chrome die PWA-Installation verweigern liess.)
+    raise HTTPException(401, detail='Anmeldung nötig')
 
 
 def braucht_oberflaeche(welche: str):
@@ -259,7 +279,16 @@ async def _hallo(ws: WebSocket, n: dict) -> int:
                        geraet=d.get('geraet'), betriebsart=d.get('betriebsart'))
     # Der Server nennt seinen Stand, der Pi schickt ab dort weiter. Das ist die
     # ganze Nachliefer-Logik.
-    await ws.send_json(p.stand(speicher.verlauf_stand()))
+    verteilung = konten.zum_verteilen() if konten else {'konten': [], 'stand': ''}
+    await ws.send_json(p.stand(speicher.verlauf_stand(), verteilung['stand']))
+    # Die Kontenkopie geht gleich mit. Sie ist klein (ein paar Zeilen je Konto)
+    # und der Pi braucht sie, BEVOR sich jemand an Bord anmelden will — sie
+    # erst auf Nachfrage zu schicken hiesse, die erste Anmeldung im Bordnetz
+    # scheitern zu lassen.
+    if d.get('konten_stand') != verteilung['stand']:
+        await ws.send_json(p.konten(verteilung))
+        log.info('Kontenkopie ans Boot (%d Konten, Stand %s)',
+                 len(verteilung['konten']), verteilung['stand'] or '—')
     log.info('Boot %s angemeldet, Verlauf ab %d, Betriebsart %s',
              d.get('geraet'), speicher.verlauf_stand() + 1, d.get('betriebsart'))
     # Und den Oberflaechen, dass wieder Leben da ist — sie sperren sonst
@@ -336,6 +365,165 @@ def history(stunden: float = Query(24, gt=0, le=24 * 90),
         'eintraege': speicher.verlauf(seit=seit),
         'geparkt': speicher.geparkt_anzahl(),
     })
+
+
+# ── Anmeldung und Konten ────────────────────────────────────────────────────
+# Der Server ist die Wahrheit ueber Konten (KONZEPT-SERVER.md, Kapitel 3). Der
+# Pi bekommt eine Kopie, damit an Bord auch ohne Internet angemeldet werden
+# kann — geschickt wird sie ueber dieselbe Verbindung, die schon steht.
+
+class Anmeldung(BaseModel):
+    name: str
+    passwort: str
+    kiosk: bool = False
+
+
+class NeuesKonto(BaseModel):
+    name: str
+    passwort: str
+    rolle: str
+
+
+class KontoAenderung(BaseModel):
+    rolle: str | None = None
+    gesperrt: bool | None = None
+    passwort: str | None = None
+    laeuft_ab: float | None = None
+
+
+def _sitzung_setzen(antwort: JSONResponse, request: Request, token: str) -> None:
+    """Das Sitzungscookie so streng setzen, wie die Verbindung es zulaesst.
+
+    `secure` haengt am Schema und ist keine Nachlaessigkeit: ueber HTTPS wird
+    das Cookie als sicher markiert, im Bordnetz ueber HTTP koennte der Browser
+    es dann gar nicht erst speichern — die Anmeldung wuerde dort still
+    scheitern. Sobald der Pi TLS spricht, gilt auch dort die strenge Fassung.
+    """
+    antwort.set_cookie(
+        zg.SITZUNG_COOKIE, token,
+        max_age=int(SITZUNG_DAUER_S), httponly=True,
+        secure=(request.url.scheme == 'https'), samesite='lax', path='/',
+    )
+
+
+@app.post('/api/login')
+def login(daten: Anmeldung, request: Request) -> JSONResponse:
+    """Anmelden. Die einzige Stelle, an der ein Passwort geprueft wird.
+
+    Sie ist deshalb auch die einzige, die einen Ratenbegrenzer braucht: eine
+    Sitzung ist ein lang gewuerfeltes Zufallswort und laesst sich nicht raten,
+    ein selbstgewaehltes Passwort schon.
+    """
+    quelle = _herkunft(request)
+    jetzt = time.time()
+    versuche = [t for t in _FEHLVERSUCHE.get(quelle, []) if jetzt - t < _SPERRE_S]
+    if len(versuche) >= _MAX_VERSUCHE:
+        _FEHLVERSUCHE[quelle] = versuche
+        raise HTTPException(429, detail='Zu viele Fehlversuche. Bitte später erneut.')
+
+    try:
+        token, k = konten.anmelden(daten.name, daten.passwort, kiosk=daten.kiosk)
+    except KontoFehler as e:
+        versuche.append(jetzt)
+        _FEHLVERSUCHE[quelle] = versuche
+        log.warning('Anmeldung gescheitert für %r von %s', daten.name, quelle)
+        # Die Meldung des Speichers ist absichtlich unspezifisch (sie
+        # unterscheidet nicht zwischen falschem Namen und falschem Passwort).
+        raise HTTPException(401, detail=str(e)) from None
+
+    _FEHLVERSUCHE.pop(quelle, None)
+    log.info('%r angemeldet (%s)', k['name'], k.get('rolle'))
+    antwort = JSONResponse(r.uebersicht(k))
+    _sitzung_setzen(antwort, request, token)
+    return antwort
+
+
+@app.post('/api/logout')
+def logout(request: Request) -> JSONResponse:
+    konten.abmelden(zg.token_aus(request))
+    antwort = JSONResponse({'ok': True})
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
+    return antwort
+
+
+@app.get('/api/zugang')
+def zugang(request: Request) -> JSONResponse:
+    """Was die Oberflaeche wissen muss, BEVOR sie irgendetwas anderes fragt.
+
+    Offen zugaenglich, und das mit Absicht: die Anmeldeseite muss sich zeigen
+    koennen. Verraten wird dabei nichts ueber das Boot — nur, ob ueberhaupt
+    schon ein Konto besteht und wer gerade angemeldet ist.
+    """
+    token = zg.token_aus(request)
+    k = konten.konto_zu_token(token) if (konten and token) else None
+    return JSONResponse({
+        'angemeldet': bool(k),
+        'ersteinrichtung': bool(konten and konten.leer),
+        'konto': r.uebersicht(k) if k else None,
+    })
+
+
+@app.get('/api/konten')
+def konten_liste(k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    return JSONResponse({'konten': konten.liste(), 'rollen': [
+        {'schluessel': s, 'name': v['name'],
+         'oberflaechen': list(v['oberflaechen']), 'handlungen': list(v['handlungen']),
+         'befristet': bool(v.get('befristet'))}
+        for s, v in r.ROLLEN.items()]})
+
+
+@app.post('/api/konten')
+async def konto_anlegen(neu: NeuesKonto, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    try:
+        angelegt = konten.anlegen(neu.name, neu.passwort, neu.rolle)
+    except KontoFehler as e:
+        raise HTTPException(400, detail=str(e)) from None
+    await _konten_zum_boot()
+    return JSONResponse(angelegt, status_code=201)
+
+
+@app.patch('/api/konten/{name}')
+async def konto_aendern(name: str, aenderung: KontoAenderung,
+                        k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    # Sich selbst zu sperren oder herabzustufen ist der klassische Weg, sich
+    # auszusperren. Der Server laesst es nicht zu — es gibt hier niemanden, der
+    # es wieder geradeziehen koennte.
+    if name == k.get('name') and (aenderung.gesperrt or aenderung.rolle):
+        raise HTTPException(400, detail='Das eigene Konto lässt sich so nicht ändern.')
+    try:
+        stand = konten.aendern(name, rolle=aenderung.rolle, gesperrt=aenderung.gesperrt,
+                               passwort=aenderung.passwort, laeuft_ab=aenderung.laeuft_ab)
+    except KontoFehler as e:
+        raise HTTPException(400, detail=str(e)) from None
+    await _konten_zum_boot()
+    return JSONResponse(stand)
+
+
+@app.delete('/api/konten/{name}')
+async def konto_loeschen(name: str, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    if name == k.get('name'):
+        raise HTTPException(400, detail='Das eigene Konto lässt sich nicht löschen.')
+    try:
+        konten.loeschen(name)
+    except KontoFehler as e:
+        raise HTTPException(404, detail=str(e)) from None
+    await _konten_zum_boot()
+    return JSONResponse({'ok': True})
+
+
+async def _konten_zum_boot() -> None:
+    """Die Kontenkopie ans Boot schicken, wenn es gerade verbunden ist.
+
+    Scheitert das, ist es kein Fehler der Aenderung: der Pi holt die Liste beim
+    naechsten Verbindungsaufbau ohnehin. Nur waere er bis dahin auf altem
+    Stand — deshalb wird es protokolliert.
+    """
+    if _verbindung['sitzung'] is None:
+        return
+    try:
+        await _vermittlung.senden_ohne_antwort(p.konten(konten.zum_verteilen()))
+    except Exception:
+        log.warning('Kontenkopie konnte nicht ans Boot gehen — folgt beim nächsten Verbinden')
 
 
 @app.get('/api/verbindung')
