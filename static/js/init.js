@@ -17,6 +17,11 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
   });
 }
 
+// Zuerst klaeren, ob wir ueberhaupt hereinduerfen. Laeuft parallel zum Rest:
+// wer angemeldet ist, soll nicht auf diese Antwort warten muessen, und wer es
+// nicht ist, bekommt die Maske ueber die schon geladene Oberflaeche gelegt.
+const _pZugang = (typeof zugangPruefen === 'function') ? zugangPruefen() : Promise.resolve();
+
 // Sofort aktuellen Zustand laden bevor WebSocket-Push eintrifft → kein Flackern
 const _pStatus = fetch('/api/status').then(r => r.ok ? r.json() : null)
   .then(d => { if (d) handleData(d); }).catch(() => {});

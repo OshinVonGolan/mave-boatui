@@ -200,5 +200,18 @@ window.fetch = function (eingabe, optionen) {
       }
     }
   } catch (e) { console.warn('[quelle] Wächter:', e); }
-  return _fetchEcht(eingabe, optionen);
+
+  // 401 heisst: die Sitzung traegt nicht mehr. Das hier ist die einzige
+  // Stelle, an der das auffallen MUSS — sonst zeigt die Oberflaeche leere
+  // Kacheln und sagt nicht, warum.
+  return _fetchEcht(eingabe, optionen).then(antwort => {
+    if (antwort && antwort.status === 401 && typeof _sitzungVerloren === 'function') {
+      try {
+        const url = String(typeof eingabe === 'string' ? eingabe : (eingabe?.url || ''));
+        // Die Anmeldung selbst darf 401 sagen, ohne dass die Maske neu aufgebaut wird.
+        if (!url.includes('/api/login')) _sitzungVerloren();
+      } catch (_) {}
+    }
+    return antwort;
+  });
 };

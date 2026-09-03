@@ -13,7 +13,7 @@ Waechter um fetch() legt — alles danach soll bereits durch ihn laufen.
 
 JS_FILES = [
     'icons.js',
-    'core.js', 'quelle.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
+    'core.js', 'quelle.js', 'anmeldung.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
     'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
