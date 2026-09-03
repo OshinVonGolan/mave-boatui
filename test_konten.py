@@ -317,3 +317,42 @@ class Passwoerter(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+class Herkunft(unittest.TestCase):
+    """Der Schutz des Live-Kanals gegen fremde Seiten.
+
+    Ein Browser schickt beim WebSocket-Handschlag die Cookies mit, und die
+    übliche Bremse (SameSite) greift dort nicht verlässlich. Ohne diese Prüfung
+    kann jede Webseite, die jemand an Bord aufruft, im Hintergrund eine
+    Verbindung zum Boot öffnen — die Anmeldung des Nutzers erledigt das für sie.
+    """
+
+    def test_gleiche_herkunft_ist_erlaubt(self):
+        self.assertTrue(zg.herkunft_erlaubt(
+            'https://mave.circuit-sailor.com', 'mave.circuit-sailor.com'))
+        self.assertTrue(zg.herkunft_erlaubt(
+            'http://192.168.1.103:8080', '192.168.1.103:8080'))
+
+    def test_port_spielt_keine_rolle(self):
+        """Hinter nginx kommt der Kanal auf 443 an, die Seite kam von 8080."""
+        self.assertTrue(zg.herkunft_erlaubt(
+            'https://pi.mave.circuit-sailor.com', 'pi.mave.circuit-sailor.com:443'))
+
+    def test_fremde_seite_wird_abgewiesen(self):
+        for boese in ('https://beispiel.de', 'http://boese.example',
+                      'https://mave.circuit-sailor.com.boese.de',
+                      'https://xmave.circuit-sailor.com'):
+            with self.subTest(boese=boese):
+                self.assertFalse(zg.herkunft_erlaubt(boese, 'mave.circuit-sailor.com'))
+
+    def test_ohne_herkunft_erlaubt(self):
+        """Kein Origin heißt: kein Browser. Skripte und die Werkstatt-App
+        haben keine fremde Seite, die jemanden hereinlegen könnte — und das
+        Token muss ohnehin stimmen."""
+        self.assertTrue(zg.herkunft_erlaubt('', 'mave.circuit-sailor.com'))
+
+    def test_unsinn_wird_abgewiesen(self):
+        for murks in ('kein-url', 'null', 'file://', '://'):
+            with self.subTest(murks=murks):
+                self.assertFalse(zg.herkunft_erlaubt(murks, 'mave.circuit-sailor.com'))

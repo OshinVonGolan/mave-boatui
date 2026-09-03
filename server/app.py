@@ -771,6 +771,12 @@ async def oberflaeche_ws(ws: WebSocket) -> None:
     # der eigentliche Waechter, ohne dass es hier jemandem auffiel. Mit ihrem
     # Wegfall stand der Kanal offen im Internet und lieferte Ladestand,
     # Tankfuellungen und Standortdaten an jeden, der die Adresse kannte.
+    if not zg.herkunft_erlaubt(ws.headers.get('origin', ''),
+                               ws.headers.get('host', '')):
+        log.warning('Live-Kanal von fremder Herkunft abgewiesen: %r',
+                    ws.headers.get('origin'))
+        await ws.close(code=4403)
+        return
     token = ws.cookies.get(zg.SITZUNG_COOKIE) or ''
     k = konten.konto_zu_token(token) if (konten and token) else None
     if not r.darf(k, r.LESEN):

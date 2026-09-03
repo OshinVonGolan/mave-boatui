@@ -35,6 +35,36 @@ from sync import rechte as r
 SITZUNG_COOKIE = 'mave_sitzung'
 
 
+def herkunft_erlaubt(origin: str, gastgeber: str) -> bool:
+    """Ob ein WebSocket-Handschlag von einer zulaessigen Seite kommt.
+
+    Ein Browser schickt beim Handschlag die Cookies mit, aber die uebliche
+    Bremse gegen fremde Seiten (SameSite) greift hier nicht verlaesslich. Ohne
+    diese Pruefung kann JEDE Webseite, die jemand an Bord aufruft, im
+    Hintergrund eine Verbindung zum Boot oeffnen und mitlesen — die Anmeldung
+    des Nutzers erledigt das fuer sie.
+
+    Solange die Seite von derselben Stelle kommt wie der Kanal, ist alles gut.
+    Fehlt der Kopf ganz, stammt die Anfrage nicht aus einem Browser (Skript,
+    Werkzeug, die Werkstatt-App) — das ist erlaubt, denn dort gibt es keine
+    fremde Seite, die jemanden hereinlegen koennte, und das Token muss ohnehin
+    stimmen.
+    """
+    if not origin:
+        return True
+    try:
+        from urllib.parse import urlparse
+        o = urlparse(origin)
+    except Exception:
+        return False
+    if not o.hostname:
+        return False
+    # Gastgeber kann "192.168.1.103:8080" sein — der Port spielt keine Rolle,
+    # entscheidend ist der Name.
+    eigener = (gastgeber or '').split(':')[0].strip().lower()
+    return o.hostname.lower() == eigener
+
+
 def token_aus(request) -> str:
     """Die Sitzung aus einer Anfrage holen — Cookie zuerst, dann Kopfzeile.
 

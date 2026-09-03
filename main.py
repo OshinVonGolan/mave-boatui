@@ -761,6 +761,15 @@ async def ws_endpoint(ws: WebSocket):
     # Solange keine Kontenkopie da ist, gilt dieselbe Schonfrist wie fuer die
     # uebrigen Aufrufe: eine Anlage, die sich nach einem Update selbst
     # aussperrt, waere schlimmer als eine offene im eigenen Bordnetz.
+    # Die Herkunft gilt IMMER, auch in der Schonfrist: sie schuetzt nicht vor
+    # Unbefugten, sondern davor, dass eine fremde Seite den Browser eines
+    # Befugten benutzt. Das ist ohne Konten genauso moeglich wie mit.
+    if not zg.herkunft_erlaubt(ws.headers.get('origin', ''),
+                               ws.headers.get('host', '')):
+        log.warning('Live-Kanal von fremder Herkunft abgewiesen: %r',
+                    ws.headers.get('origin'))
+        await ws.close(code=4403)
+        return
     if not konten.leer:
         k = konten.konto_zu_token(ws.cookies.get(zg.SITZUNG_COOKIE) or '')
         if not rechte_modul.darf(k, rechte_modul.LESEN):
