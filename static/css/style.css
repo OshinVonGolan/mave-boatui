@@ -640,7 +640,8 @@
     }
 
     /* Alle Groessen aus dem Fortschritt gerechnet. */
-    .statusbar-halter { padding: calc(var(--gap) * (1 - var(--leiste-eng))); }
+    .statusbar-halter { padding: calc(var(--gap) * (1 - var(--leiste-eng)));
+      padding: round(calc(var(--gap) * (1 - var(--leiste-eng))), 1px); }
     .statusbar        { border-radius: calc(var(--radius) * (1 - var(--leiste-eng))); }
     /* Groessen und Abstaende sind unten bei den Grunddefinitionen aus dem
        Fortschritt gerechnet — dort, wo sie je Bildbreite ohnehin stehen.
@@ -649,6 +650,10 @@
     /* Spaltenzahl und Randlinien lassen sich nicht stufenlos rechnen — die
        schaltet weiterhin der Beobachter, und zwar erst am Ende der Bewegung,
        wenn die Felder ohnehin schon flach sind. */
+    body.leiste-kompakt .sb-lbl   { font-size: 9px; line-height: 11px; letter-spacing: .05em; }
+    body.leiste-kompakt .sb-val   { line-height: 16px; }
+    body.leiste-kompakt .sb-val b { font-size: 15px; }
+    body.leiste-kompakt .sb-val i { font-size: 9px; }
     body.leiste-kompakt .statusbar {
       grid-template-columns: repeat(6, minmax(0, 1fr));
       border-left: 0; border-right: 0; border-top: 0;
@@ -669,9 +674,18 @@
       padding: calc(10px - 5px * var(--leiste-eng))
                calc(12px - 4px * var(--leiste-eng))
                calc(11px - 5px * var(--leiste-eng));
+      /* Auf GANZE Pixel gerundet: bei gebrochenen Werten faellt die
+         Reihenhoehe zwischen zwei Pixel, und der 1-px-Spalt zwischen den
+         Reihen rastert mal als ein, mal als zwei Pixel — die mittlere
+         Trennlinie wurde dabei sichtbar dicker und wieder duenner. Die Zeile
+         darueber bleibt als Rueckfall fuer Browser ohne round() stehen. */
+      padding: round(calc(10px - 5px * var(--leiste-eng)), 1px)
+               round(calc(12px - 4px * var(--leiste-eng)), 1px)
+               round(calc(11px - 5px * var(--leiste-eng)), 1px);
       min-width: 0;
       display: flex; flex-direction: column;
       gap: calc(2px * (1 - var(--leiste-eng)));
+      gap: round(calc(2px * (1 - var(--leiste-eng))), 1px);
       font-family: inherit; color: inherit; text-align: left;
       cursor: pointer; transition: background .15s;
       position: relative; overflow: hidden;   /* traegt den Hintergrundgraphen */
@@ -713,21 +727,23 @@
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
     .sb-item:hover, .sb-item:active { background: var(--surface2); }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .sb-lbl { font-size: calc(10px - 1.5px * var(--leiste-eng));
-      font-weight: 700;
-      letter-spacing: calc(.08em - .05em * var(--leiste-eng));
+    /* Zeilenhoehen bewusst in ganzen Pixeln: mit "normal" ist die Zeile
+       gebrochen hoch, damit auch die Reihe — und der 1-px-Spalt zwischen den
+       beiden Reihen liegt dann zwischen zwei Bildpunkten und wirkt mal
+       dicker, mal duenner. */
+    .sb-lbl { font-size: 10px; line-height: 12px; font-weight: 700; letter-spacing: .08em;
       text-transform: uppercase; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sb-val { display: flex; align-items: baseline; gap: 3px; line-height: 1.1;
+    .sb-val { display: flex; align-items: baseline; gap: 3px; line-height: 20px;
       color: var(--text); font-variant-numeric: tabular-nums; }
-    .sb-val b { font-size: calc(21px - 6px * var(--leiste-eng)); font-weight: 700; }
-    .sb-val i { font-size: calc(11px - 2px * var(--leiste-eng));
-      font-style: normal; font-weight: 600; color: var(--text2); }
+    .sb-val b { font-size: 21px; font-weight: 700; }
+    .sb-val i { font-size: 11px; font-style: normal; font-weight: 600; color: var(--text2); }
     /* Die Unterzeile geht als Erste: bei 40 % des Weges ist sie schon
        unsichtbar, damit sie nicht bis zuletzt gequetscht mitlaeuft. */
-    .sb-sub { font-size: 11px; color: var(--text3);
+    .sb-sub { font-size: 11px; line-height: 13px; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-height: calc(15px * (1 - var(--leiste-eng)));
+      max-height: round(calc(15px * (1 - var(--leiste-eng))), 1px);
       opacity: calc(1 - 2.5 * var(--leiste-eng)); }
     /* Zustandsfarben: nur der Zahlenwert faerbt sich, nie die ganze Flaeche */
     .sb-item.sb-ok   .sb-val b { color: var(--green); }
@@ -761,35 +777,42 @@
          Spezifitaet, es entscheidet die Reihenfolge. */
       body.leiste-kompakt .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-      /* Den Platz holt sich die Leiste stattdessen von der Kopfzeile: die
-         schiebt sich im selben Zug nach oben aus dem Bild, und die Leiste
-         rueckt an ihre Stelle. Unterm Strich steht dann WENIGER fest als
-         vorher (Kopfzeile 50 px + Leiste 37 px), und es wackelt nichts.
-         Nur am Telefon: am Rechner ist Platz genug, dort bleibt die
-         Kopfzeile mit ihren Knoepfen stehen. */
-      header { transform: translateY(calc(-1 * var(--header-h) * var(--leiste-eng))); }
-      .statusbar-halter { top: calc(var(--header-h) * (1 - var(--leiste-eng))); }
+      /* Die Kopfzeile hat sich hier zeitweise nach oben aus dem Bild
+         geschoben, um Platz fuer die zweite Reihe zu machen. Auf Wunsch des
+         Eigners wieder raus: ohne sie wirkte die Seite fremd, und Menue und
+         Alarmglocke waren nicht mehr erreichbar.
 
-      /* Angedockt so flach wie moeglich, damit zwei Zeilen nicht mehr Platz
-         brauchen als vorher eine. */
-      body.leiste-kompakt .sb-item { padding-top: 3px; padding-bottom: 3px; }
+         Angedockt dafuer so flach wie moeglich. Die Schrift springt beim
+         Andocken in EINEM Schritt kleiner, statt mitzulaufen — den Schritt
+         deckt die Gleitbewegung in core.js ab, und die Zeilenhoehe bleibt
+         dabei ganzzahlig. */
+      body.leiste-kompakt .sb-item  { padding-top: 3px; padding-bottom: 3px; }
+      body.leiste-kompakt .sb-lbl   { font-size: 9px; line-height: 11px; letter-spacing: .04em; }
+      body.leiste-kompakt .sb-val   { line-height: 16px; }
+      body.leiste-kompakt .sb-val b { font-size: 15px; }
+      body.leiste-kompakt .sb-val i { font-size: 9px; }
     }
     @media (max-width: 640px) {
       .sb-item { padding: calc(9px - 4px * var(--leiste-eng))
                           calc(10px - 5px * var(--leiste-eng))
-                          calc(10px - 4px * var(--leiste-eng)); }
-      .sb-val b { font-size: calc(18px - 4px * var(--leiste-eng)); }
+                          calc(10px - 4px * var(--leiste-eng));
+                 padding: round(calc(9px - 4px * var(--leiste-eng)), 1px)
+                          round(calc(10px - 5px * var(--leiste-eng)), 1px)
+                          round(calc(10px - 4px * var(--leiste-eng)), 1px); }
+      .sb-val b { font-size: 18px; }
     }
     /* Sehr schmal (bis 380 px): dichter setzen. Sonst schnitt die Unterzeile
        der Batterie ("13.38 V . -12.7 A") in der 320-px-Spalte ab. */
     @media (max-width: 380px) {
       .sb-item { padding: calc(8px - 3px * var(--leiste-eng))
                           calc(8px - 4px * var(--leiste-eng))
-                          calc(9px - 3px * var(--leiste-eng)); }
-      .sb-lbl  { font-size: calc(9px - 1px * var(--leiste-eng));
-                 letter-spacing: calc(.05em - .04em * var(--leiste-eng)); }
-      .sb-val b { font-size: calc(17px - 3px * var(--leiste-eng)); }
-      .sb-val i { font-size: calc(10px - 1px * var(--leiste-eng)); }
+                          calc(9px - 3px * var(--leiste-eng));
+                 padding: round(calc(8px - 3px * var(--leiste-eng)), 1px)
+                          round(calc(8px - 4px * var(--leiste-eng)), 1px)
+                          round(calc(9px - 3px * var(--leiste-eng)), 1px); }
+      .sb-lbl  { font-size: 9px; letter-spacing: .05em; }
+      .sb-val b { font-size: 17px; }
+      .sb-val i { font-size: 10px; }
       .sb-sub  { font-size: 10px; }
     }
     /* Breite Schirme: Leiste exakt so breit wie das Kachelraster darunter */
