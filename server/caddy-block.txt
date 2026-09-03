@@ -1,0 +1,29 @@
+# Fuer /opt/bosun/caddy/Caddyfile.
+#
+# ACHTUNG, Falle aus diesem Projekt: das Caddyfile haengt als Datei-Bind-Mount
+# im Container. Nach einer Aenderung muss caddy mit --force-recreate neu
+# erzeugt werden, ein Neustart allein nimmt die neue Datei nicht auf.
+
+mave.circuit-sailor.com {
+	reverse_proxy mave-server:8000
+
+	# HSTS: ab dem ersten Besuch nur noch verschluesselt. Bewusst ohne
+	# preload — das laesst sich nicht mehr zurueckdrehen.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		# Die Oberflaeche laedt nichts von fremden Adressen. Wird das einmal
+		# gebraucht, gehoert die Ausnahme HIER hin und nicht ins HTML.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"
+		-Server
+	}
+
+	encode zstd gzip
+}
+
+# Der Pi bekommt seinen Namen NICHT hier, sondern per DNS-Eintrag auf seine
+# private Adresse (siehe KONZEPT-SERVER.md, Abschnitt 1). Der Server ist an
+# dieser Verbindung nicht beteiligt — sonst waere er wieder Voraussetzung
+# fuer den Bordbetrieb.

@@ -1,0 +1,25 @@
+# Der Server neben dem Boot. Absichtlich klein: FastAPI, uvicorn, sonst nichts.
+# Keine Datenbank im Abbild — SQLite liegt im Datenverzeichnis, das als Volume
+# hereinkommt.
+FROM python:3.12-slim
+
+# Nicht als root. Ein Ausbruch aus der Anwendung landet dann bei einem Konto,
+# das nichts besitzt ausser dem Datenverzeichnis.
+RUN useradd --create-home --uid 10001 mave
+
+WORKDIR /app
+RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*"
+
+# Nur was gebraucht wird. Der Pi-Teil (main.py, can_reader.py und der Rest)
+# gehoert NICHT ins Serverabbild — er wuerde nur Angriffsflaeche mitbringen.
+COPY sync/    /app/sync/
+COPY server/  /app/server/
+
+USER mave
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 MAVE_DATEN=/daten
+EXPOSE 8000
+
+# Ein Arbeiter reicht: es geht um ein Boot und eine Handvoll Browser. Mehrere
+# Arbeiter haetten getrennte Zustaende (die offene Verbindung zum Boot liegt in
+# EINEM Prozess) — das waere ein Fehler, keine Leistungssteigerung.
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]

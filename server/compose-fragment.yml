@@ -1,0 +1,42 @@
+# Fuer /opt/bosun/docker-compose.yml auf dem Server.
+#
+# Neben Gantrya, ohne Beruehrung: eigener Dienst, eigenes Volume, eigenes Netz.
+# Kein gemeinsames Postgres, kein gemeinsames Verzeichnis, kein Docker-Socket.
+#
+# Der Dienst wird NICHT veroeffentlicht (kein "ports:"). Erreichbar ist er nur
+# ueber Caddy — damit gibt es genau eine Tuer ins Internet, und die spricht TLS.
+
+services:
+  mave-server:
+    build: ./mave-server            # Inhalt von server/ plus sync/
+    container_name: mave-server
+    restart: unless-stopped
+    environment:
+      # Beide Werte sind Pflicht. Ohne sie laesst der Server nichts herein —
+      # weder das Boot noch einen Browser. Ein offener Sammelpunkt im Internet
+      # waere schlimmer als keiner.
+      MAVE_GERAET_TOKEN: "${MAVE_GERAET_TOKEN:?bitte in .env setzen}"
+      MAVE_PASSWORT:     "${MAVE_PASSWORT:?bitte in .env setzen}"
+      MAVE_DATEN: /daten
+    volumes:
+      - mave-daten:/daten
+    networks: [mave]
+    # Haertung: das Wurzeldateisystem bleibt unveraenderlich, geschrieben wird
+    # nur ins Datenvolumen. Keine neuen Rechte, kein Zugriff auf fremde Netze.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 512m
+    pids_limit: 200
+
+volumes:
+  mave-daten:
+
+networks:
+  mave:
+    # Eigenes Netz, damit der Container die Gantrya-Dienste nicht einmal
+    # erreichen kann. Caddy wird ihm gesondert beigesellt.
+    driver: bridge

@@ -262,6 +262,75 @@ Rechte-Matrix, Cloud-Abhängigkeit für den Bordbetrieb.
 
 ---
 
+## Sicherheit
+
+Das System hängt im Internet und schaltet Hardware auf einem Boot, in dem
+niemand steht. „Ist sicher" ist keine Aussage — hier stehen die Maßnahmen
+einzeln, damit man sie prüfen kann.
+
+### Der Pi hat keinen offenen Port
+
+Das ist die wichtigste Eigenschaft des Entwurfs. Der Pi **baut die Verbindung
+selbst auf**, nach außen. Von außen ist er nicht erreichbar — auch nicht über
+den Server. Sein TLS-Name zeigt auf eine **private** Adresse, die im Internet
+nicht geroutet wird. Wer den Server übernimmt, hat damit keinen Zugriff auf das
+Boot, sondern nur auf den Kanal.
+
+Befehle laufen **rückwärts durch dieselbe Verbindung** (ein WebSocket ist
+bidirektional). Drei Folgen, alle gewollt:
+
+- **Ohne Verbindung wird nicht geschaltet.** Es gibt keine Warteschlange für
+  Schaltbefehle — niemand will, dass sich das Boot beim nächsten Funkkontakt an
+  ein „Licht an" von vorgestern erinnert. Der Server antwortet dann mit „Boot
+  nicht verbunden", nicht mit „angenommen".
+- **Der Pi entscheidet selbst.** Er führt den Befehl gegen seine eigene API aus
+  und prüft ihn nach seinen eigenen Regeln. Ein übernommener Server kann ihm
+  nichts befehlen, was er nicht auch von der Bordoberfläche annehmen würde.
+- **Nur eine Weißliste.** Es gibt keinen allgemeinen Durchleiter: 17 Pfade sind
+  eingetragen, alles andere existiert auf dem Server nicht. `/api/system/update`
+  und die Fehlermeldungen der Oberfläche stehen ausdrücklich **nicht** darin.
+
+### Die Heizung ist ein Sonderfall
+
+Sie verbrennt Diesel. Fernschalten ist deshalb **standardmäßig gesperrt**, auch
+für den Eigner, und lässt sich nur in der Serverkonfiguration freigeben
+(`MAVE_FERN_HEIZUNG=ja`) — bewusst dort und nicht als Häkchen in der
+Oberfläche: wer es einschaltet, soll es einmal bewusst tun und wiederfinden.
+
+### Am Server
+
+| Maßnahme | Warum |
+|---|---|
+| Ohne gesetztes Gerätetoken **und** Passwort nimmt der Server nichts an | Ein offener Sammelpunkt im Internet wäre schlimmer als keiner |
+| Vergleich mit `secrets.compare_digest` | kein Rückschluss über die Antwortzeit |
+| Nach zehn Fehlversuchen zehn Minuten Ruhe, je Herkunft | macht Durchprobieren teuer |
+| Paketgröße wird **vor** dem Parsen geprüft | `json.loads` eines 500-MB-Textes belegt sonst den Speicher, bevor eine Prüfung greift |
+| Richtungsprüfung im Protokoll | der Server nimmt keinen Befehl von einem Boot an, der Pi keinen Zustand vom Server |
+| `/api/system/version` verrät nur die eigene Art | ob das Boot verbunden ist, ist eine Aussage über Anwesenheit und gehört hinter die Anmeldung |
+| Container: nicht als root, `read_only`, `cap_drop: ALL`, `no-new-privileges`, Speicher- und Prozessgrenze | ein Ausbruch aus der Anwendung landet bei einem Konto, das nichts besitzt |
+| Kein `ports:` am Container, eigenes Docker-Netz | genau eine Tür ins Internet, und die spricht TLS. Der Container erreicht die Gantrya-Dienste nicht |
+| HSTS, `nosniff`, `X-Frame-Options: DENY`, strenge CSP, kein `Server`-Kopf | Standardhärtung am Rand, nicht in der Anwendung |
+| Der Pi-Teil liegt **nicht** im Serverabbild | `can_reader.py` und die Bordlogik wären nur Angriffsfläche |
+
+### Was noch fehlt
+
+Ehrlich benannt, für die kommenden Etappen:
+
+- **Passwörter werden noch nicht gehasht.** Der Übergangszugang ist ein Token
+  aus der Serverkonfiguration. Mit der Kontenverwaltung kommt Argon2 oder
+  bcrypt — auf dem Pi mit maßvollen Kosten, denn ARMv6 rechnet langsam, und die
+  Anmeldung darf dort keine Sekunden dauern.
+- **Sitzungen** (Cookie mit `HttpOnly`, `Secure`, `SameSite`, Rotation) gibt es
+  noch nicht; heute wird bei jeder Anfrage das Token geprüft.
+- **Keine Geheimnisse in Protokollen.** Das Projekt hat diese Falle schon
+  einmal getreten: `git pull` schreibt die Remote-Adresse samt Token in seine
+  Fehlermeldung, weshalb `main.py` sie ausdrücklich nicht weitergibt. Dieselbe
+  Sorgfalt gilt für Gerätetoken und Passwörter.
+- **Ein zweiter Faktor** für den Eigner ist noch offen. Bei einem System, das
+  Heizungen schaltet, ist das keine Übertreibung.
+
+---
+
 ## Entschieden am 03.09.2026
 
 | Frage | Entscheidung |
