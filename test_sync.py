@@ -224,3 +224,99 @@ class Rechte(unittest.TestCase):
         self.assertEqual(u['oberflaechen'], ['pwa'])
         self.assertIn('schalten', u['handlungen'])
         self.assertNotIn('verwalten', u['handlungen'])
+
+
+class Passwoerter(unittest.TestCase):
+    """Hashing mit Parametern, die zum Pi passen — gemessen, nicht geraten."""
+
+    def test_erzeugen_und_pruefen(self):
+        from sync import konten as k
+        h = k.hash_erzeugen('einpasswort123')
+        self.assertTrue(k.hash_pruefen('einpasswort123', h))
+        self.assertFalse(k.hash_pruefen('einpasswort124', h))
+
+    def test_zweimal_dasselbe_passwort_ergibt_zwei_hashes(self):
+        from sync import konten as k
+        a, b = k.hash_erzeugen('einpasswort123'), k.hash_erzeugen('einpasswort123')
+        self.assertNotEqual(a, b)                  # eigenes Salz je Hash
+        self.assertTrue(k.hash_pruefen('einpasswort123', a))
+        self.assertTrue(k.hash_pruefen('einpasswort123', b))
+
+    def test_parameter_stehen_im_hash(self):
+        # Damit sich die Kosten spaeter erhoehen lassen, ohne alte Passwoerter
+        # zu entwerten.
+        from sync import konten as k
+        felder = k.hash_erzeugen('einpasswort123').split('$')
+        self.assertEqual(felder[0], 'scrypt')
+        self.assertEqual(int(felder[1]), k.SCRYPT_N_EXP)
+
+    def test_alter_hash_bleibt_gueltig_wird_aber_als_schwach_erkannt(self):
+        from sync import konten as k
+        schwach = k.hash_erzeugen('einpasswort123', n_exp=k.SCRYPT_N_EXP - 2)
+        self.assertTrue(k.hash_pruefen('einpasswort123', schwach))
+        self.assertTrue(k.sollte_erneuert_werden(schwach))
+        self.assertFalse(k.sollte_erneuert_werden(k.hash_erzeugen('einpasswort123')))
+
+    def test_praeparierter_hash_wird_abgelehnt_statt_gerechnet(self):
+        # Der eigentliche Schutz: 128*n*r*p waeren hier 268 MB. Auf einem Pi
+        # mit 427 MB waere das ein Abschuss, kein Rechenvorgang.
+        from sync import konten as k
+        import time
+        t = time.perf_counter()
+        self.assertFalse(k.hash_pruefen('x', 'scrypt$16$16$4$AAAA$AAAA'))
+        self.assertLess(time.perf_counter() - t, 0.05)
+
+    def test_kaputter_hash_stoert_den_dienst_nicht(self):
+        from sync import konten as k
+        for muell in ('', 'quatsch', 'scrypt$1$2$3', 'scrypt$a$b$c$d$e',
+                      'bcrypt$13$8$1$AA$BB', None, 42):
+            with self.subTest(muell=muell):
+                self.assertFalse(k.hash_pruefen('x', muell))
+
+    def test_zu_kurzes_passwort_wird_abgelehnt(self):
+        from sync import konten as k
+        with self.assertRaises(k.KontoFehler):
+            k.hash_erzeugen('kurz')
+
+    def test_sehr_langes_passwort_wird_abgelehnt(self):
+        # Ohne Grenze koennte die Laenge selbst zur Last werden.
+        from sync import konten as k
+        with self.assertRaises(k.KontoFehler):
+            k.hash_erzeugen('a' * 2000)
+
+
+class Sitzungen(unittest.TestCase):
+
+    def test_gespeichert_wird_nur_die_kennung(self):
+        # Wer die Kontendatei liest, soll damit keine Sitzung uebernehmen
+        # koennen.
+        from sync import konten as k
+        klartext, kennung = k.sitzung_erzeugen()
+        self.assertNotIn(klartext, kennung)
+        self.assertTrue(k.sitzung_gleich(klartext, kennung))
+        self.assertFalse(k.sitzung_gleich('anderes', kennung))
+
+    def test_jede_sitzung_ist_neu(self):
+        from sync import konten as k
+        a, _ = k.sitzung_erzeugen()
+        b, _ = k.sitzung_erzeugen()
+        self.assertNotEqual(a, b)
+        self.assertGreater(len(a), 30)
+
+
+class Befristung(unittest.TestCase):
+
+    def test_ohne_frist_laeuft_nichts_ab(self):
+        from sync import konten as k
+        self.assertFalse(k.abgelaufen({'gueltig_bis': None}, 1788000000.0))
+
+    def test_abgelaufen_wird_erkannt(self):
+        from sync import konten as k
+        self.assertTrue(k.abgelaufen({'gueltig_bis': 1787000000.0}, 1788000000.0))
+        self.assertFalse(k.abgelaufen({'gueltig_bis': 1789000000.0}, 1788000000.0))
+
+    def test_ohne_verlaessliche_uhr_sperrt_niemand_aus(self):
+        # Auf dem Pi ist "welche Zeit ist es" nach einem Stromausfall eine echte
+        # Frage. Eine falsche Uhr darf niemanden aussperren, der berechtigt ist.
+        from sync import konten as k
+        self.assertFalse(k.abgelaufen({'gueltig_bis': 1787000000.0}, None))

@@ -122,6 +122,44 @@ Nutzen:
 | Gast | nur lesen |
 | Techniker | lesen, Diagnose, Fernwartung — zeitlich befristet |
 
+### Passwörter: die Kosten bestimmt der Pi, nicht der Server
+
+Gemessen auf dem Pi Zero W (ARMv6, ein Kern), 03.09.2026:
+
+| Verfahren | Pi Zero | | Verfahren | Pi Zero |
+|---|---|---|---|---|
+| scrypt n=2¹² | 247 ms | | pbkdf2 50 000 | 602 ms |
+| scrypt n=2¹³ | **488 ms** | | pbkdf2 100 000 | 1 516 ms |
+| scrypt n=2¹⁴ | 886 ms | | pbkdf2 200 000 | 2 590 ms |
+| scrypt n=2¹⁵ | 1 808 ms | | pbkdf2 600 000 | **7 439 ms** |
+
+Die gängige Empfehlung (pbkdf2, 600 000 Runden) bräuchte auf diesem Gerät
+**siebeneinhalb Sekunden**. Das ist nicht nur unbedienbar, sondern eine
+Angriffsfläche: Bei einem Kern legen zehn Anmeldeversuche die Anlage lahm.
+
+Gewählt ist **scrypt mit n=2¹³** — eine halbe Sekunde auf dem Pi, ein paar
+Millisekunden auf dem Server, und speicherhart, also gegen Angriffe mit
+Grafikkarten deutlich stärker als pbkdf2 gleicher Laufzeit.
+
+**Der schwächste Prüfer bestimmt die Kosten.** Der Server könnte härter hashen,
+aber der Pi muss denselben Hash prüfen — und Prüfen kostet genauso viel wie
+Erzeugen. Deshalb gilt die Zahl des Pi.
+
+Zwei Vorkehrungen gehören dazu:
+
+- **Die Parameter stehen in jedem Hash.** So lassen sich die Kosten später
+  erhöhen, ohne alte Passwörter zu entwerten; bei der nächsten Anmeldung wird
+  der Hash still neu gebildet.
+- **Beim Prüfen wird der Speicher begrenzt**, nicht der Exponent. scrypt
+  braucht rund 128·n·r·p Bytes — ein präparierter Hash mit n=2¹⁶, r=16, p=4
+  wären 268 MB und damit der Abschuss eines Geräts mit 427 MB. Über 32 MB wird
+  abgelehnt statt gerechnet.
+
+Sitzungen sorgen dafür, dass diese halbe Sekunde nur bei der **Anmeldung**
+anfällt und nicht bei jeder Anfrage. Gespeichert wird nie das Sitzungstoken
+selbst, nur sein SHA-256 — wer die Kontendatei liest, kann damit keine Sitzung
+übernehmen.
+
 ### Zugang zur Oberfläche ist ein eigenes Recht
 
 Eigner-Wunsch vom 03.09.2026: Die Crew soll die PWA nutzen, aber **nicht** das
