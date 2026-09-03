@@ -604,18 +604,54 @@
          Verankerung nuetzlich. */
       overflow-anchor: none; }
 
-    /* ── Kompakte Leiste beim Scrollen ────────────────────────────────────
-       Beim Herunterscrollen schrumpft die Leiste und legt sich buendig unter
-       die Kopfzeile, sodass beide wie ein Streifen wirken. Die Unterzeile
-       faellt weg, die Zahl wird kleiner — dadurch passen alle sechs Felder
-       auch am Telefon nebeneinander, wo sonst zwei Zeilen stehen.
-       Die Regeln stehen bewusst NICHT in einer Media Query: als
-       body-Kombination (0,2,0) schlagen sie die Spaltenregel der Media Query
-       (0,1,0) ueber die Spezifitaet, ohne !important. */
-    body.leiste-kompakt .statusbar-halter { padding: 0; }
+    /* ── Die Leiste dockt beim Scrollen an die Kopfzeile ──────────────────
+       Sie schrumpft dabei nicht auf einen Schlag, sondern haengt am
+       Scrollstand: --leiste-eng laeuft von 0 (oben, volle Leiste) bis 1
+       (angedockt, flacher Streifen), und alle Groessen werden daraus
+       gerechnet. Dadurch wird die Leiste von der obersten Kachel nach oben
+       geschoben, statt an einer Schwelle umzuklappen.
+
+       --leiste-eng ist ueber @property als Zahl angemeldet; nur dann laesst
+       sich eine eigene Eigenschaft ueberhaupt animieren und weitervererben. */
+    @property --leiste-eng {
+      syntax: '<number>'; inherits: true; initial-value: 0;
+    }
+    @keyframes leiste-andocken { to { --leiste-eng: 1; } }
+
+    /* Der bevorzugte Weg: die Animation laeuft am Scrollstand des Dokuments
+       entlang, nicht an einem scroll-Handler. Sie ist genau ueber die Strecke
+       gespannt, die die Leiste bis zum Andocken zuruecklegt. */
+    @supports (animation-timeline: scroll()) {
+      body {
+        animation: leiste-andocken linear both;
+        animation-timeline: scroll(root block);
+        animation-range: 0 var(--header-h);
+      }
+    }
+    /* Rueckfall fuer Browser ohne scroll-gesteuerte Animation (aeltere
+       Chromium-Fassungen, Safari): dort schaltet der Beobachter aus core.js
+       die Klasse, und der Uebergang laeuft ueber eine Transition. */
+    @supports not (animation-timeline: scroll()) {
+      body { transition: --leiste-eng .2s linear; }
+      body.leiste-kompakt { --leiste-eng: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body { transition: none; }
+    }
+
+    /* Alle Groessen aus dem Fortschritt gerechnet. */
+    .statusbar-halter { padding: calc(var(--gap) * (1 - var(--leiste-eng))); }
+    .statusbar        { border-radius: calc(var(--radius) * (1 - var(--leiste-eng))); }
+    /* Groessen und Abstaende sind unten bei den Grunddefinitionen aus dem
+       Fortschritt gerechnet — dort, wo sie je Bildbreite ohnehin stehen.
+       Hier oben stuenden sie VOR ihnen und waeren wirkungslos. */
+
+    /* Spaltenzahl und Randlinien lassen sich nicht stufenlos rechnen — die
+       schaltet weiterhin der Beobachter, und zwar erst am Ende der Bewegung,
+       wenn die Felder ohnehin schon flach sind. */
     body.leiste-kompakt .statusbar {
       grid-template-columns: repeat(6, minmax(0, 1fr));
-      border-radius: 0; border-left: 0; border-right: 0; border-top: 0;
+      border-left: 0; border-right: 0; border-top: 0;
       /* Ueber die volle Breite wie die Kopfzeile. Im normalen Zustand ist die
          Leiste auf die Inhaltsbreite begrenzt und mittig — das ist dort
          richtig, weil sie ueber den Kacheln steht. Angeschmiegt an die
@@ -623,34 +659,19 @@
          Streifen zeigen statt als Teil des Kopfes. */
       max-width: none; margin-left: 0; margin-right: 0;
     }
-    body.leiste-kompakt .sb-item { padding: 5px 8px 6px; gap: 0; }
-    body.leiste-kompakt .sb-sub  { display: none; }
-    body.leiste-kompakt .sb-lbl  { font-size: 9px; letter-spacing: .06em; }
-    body.leiste-kompakt .sb-val b { font-size: 15px; }
-    body.leiste-kompakt .sb-val i { font-size: 9px; }
-    /* Ruhiger im Hintergrund: auf 30 px Hoehe wuerde die volle Deckkraft
-       gegen die kleine Schrift arbeiten. */
-    body.leiste-kompakt .sb-spark  { opacity: .7; }
-    body.leiste-kompakt .sb-balken { opacity: .14; }
-    /* Weich, aber nur wo es nichts kostet: Groessen animieren wuerde auf dem
-       Pi Zero bei jedem Bild neu umbrechen. */
-    .sb-item, .sb-lbl, .sb-val b { transition: padding .18s ease, font-size .18s ease; }
-    @media (prefers-reduced-motion: reduce) {
-      .statusbar-halter, .sb-item, .sb-lbl, .sb-val b { transition: none; }
-    }
-    /* Am Telefon sind die sechs Felder nur rund 65 px breit. "WARTUNG" ist
-       das laengste Wort und lief bei 9 px mit Sperrung gerade eben ueber.
-       Muss NACH dem Block oben stehen: gleiche Spezifitaet, es entscheidet
-       die Reihenfolge. */
-    @media (max-width: 700px) {
-      body.leiste-kompakt .sb-item { padding: 5px 5px 6px; }
-      body.leiste-kompakt .sb-lbl  { font-size: 8px; letter-spacing: .01em; }
-    }
+
 
     .sb-item {
       background: var(--surface); border: 0; margin: 0;
-      padding: 10px 12px 11px; min-width: 0;
-      display: flex; flex-direction: column; gap: 2px;
+      /* Aus dem Andock-Fortschritt gerechnet (--leiste-eng, siehe oben):
+         beim Scrollen wird das Feld flacher, statt an einer Schwelle
+         umzuklappen. */
+      padding: calc(10px - 5px * var(--leiste-eng))
+               calc(12px - 4px * var(--leiste-eng))
+               calc(11px - 5px * var(--leiste-eng));
+      min-width: 0;
+      display: flex; flex-direction: column;
+      gap: calc(2px * (1 - var(--leiste-eng)));
       font-family: inherit; color: inherit; text-align: left;
       cursor: pointer; transition: background .15s;
       position: relative; overflow: hidden;   /* traegt den Hintergrundgraphen */
@@ -692,15 +713,22 @@
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
     .sb-item:hover, .sb-item:active { background: var(--surface2); }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .sb-lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    .sb-lbl { font-size: calc(10px - 1.5px * var(--leiste-eng));
+      font-weight: 700;
+      letter-spacing: calc(.08em - .05em * var(--leiste-eng));
       text-transform: uppercase; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sb-val { display: flex; align-items: baseline; gap: 3px; line-height: 1.1;
       color: var(--text); font-variant-numeric: tabular-nums; }
-    .sb-val b { font-size: 21px; font-weight: 700; }
-    .sb-val i { font-size: 11px; font-style: normal; font-weight: 600; color: var(--text2); }
+    .sb-val b { font-size: calc(21px - 6px * var(--leiste-eng)); font-weight: 700; }
+    .sb-val i { font-size: calc(11px - 2px * var(--leiste-eng));
+      font-style: normal; font-weight: 600; color: var(--text2); }
+    /* Die Unterzeile geht als Erste: bei 40 % des Weges ist sie schon
+       unsichtbar, damit sie nicht bis zuletzt gequetscht mitlaeuft. */
     .sb-sub { font-size: 11px; color: var(--text3);
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-height: calc(15px * (1 - var(--leiste-eng)));
+      opacity: calc(1 - 2.5 * var(--leiste-eng)); }
     /* Zustandsfarben: nur der Zahlenwert faerbt sich, nie die ganze Flaeche */
     .sb-item.sb-ok   .sb-val b { color: var(--green); }
     .sb-item.sb-low  .sb-val b { color: var(--yellow); }
@@ -713,6 +741,10 @@
     .sb-item.sb-idle .sb-spark { color: var(--text3); }
     .sb-item.sb-stale .sb-val b,
     .sb-item.sb-stale .sb-sub { opacity: .45; }  /* Wert veraltet, Sensor stumm */
+    /* Ruhiger im Hintergrund, je flacher die Leiste wird: auf 40 px Hoehe
+       arbeitet die volle Deckkraft gegen die kleine Schrift. */
+    .sb-spark  { opacity: calc(.9 - .25 * var(--leiste-eng)); }
+    .sb-balken { opacity: calc(.18 - .05 * var(--leiste-eng)); }
 
     /* Bis 700 px zwei Zeilen a drei Feldern — darunter reicht die Breite fuer
        sechs nebeneinander nicht, ohne dass die Unterzeilen abschneiden.
@@ -722,16 +754,21 @@
       .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 640px) {
-      .sb-item { padding: 9px 10px 10px; }
-      .sb-val b { font-size: 18px; }
+      .sb-item { padding: calc(9px - 4px * var(--leiste-eng))
+                          calc(10px - 5px * var(--leiste-eng))
+                          calc(10px - 4px * var(--leiste-eng)); }
+      .sb-val b { font-size: calc(18px - 4px * var(--leiste-eng)); }
     }
     /* Sehr schmal (bis 380 px): dichter setzen. Sonst schnitt die Unterzeile
        der Batterie ("13.38 V . -12.7 A") in der 320-px-Spalte ab. */
     @media (max-width: 380px) {
-      .sb-item { padding: 8px 8px 9px; }
-      .sb-lbl  { font-size: 9px; letter-spacing: .05em; }
-      .sb-val b { font-size: 17px; }
-      .sb-val i { font-size: 10px; }
+      .sb-item { padding: calc(8px - 3px * var(--leiste-eng))
+                          calc(8px - 4px * var(--leiste-eng))
+                          calc(9px - 3px * var(--leiste-eng)); }
+      .sb-lbl  { font-size: calc(9px - 1px * var(--leiste-eng));
+                 letter-spacing: calc(.05em - .04em * var(--leiste-eng)); }
+      .sb-val b { font-size: calc(17px - 3px * var(--leiste-eng)); }
+      .sb-val i { font-size: calc(10px - 1px * var(--leiste-eng)); }
       .sb-sub  { font-size: 10px; }
     }
     /* Breite Schirme: Leiste exakt so breit wie das Kachelraster darunter */
