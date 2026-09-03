@@ -154,7 +154,7 @@ const _ALARM_CARD_MAP = {
   bms_min_t: 'battCard', bms_max_t: 'battCard',
   hz_offline: 'heizungCard', hz_fehlercode: 'heizungCard',
   hz_frost: 'heizungCard', hz_frost_warn: 'heizungCard',
-  hz_kein_raum: 'heizungCard', hz_raeume_weg: 'heizungCard',
+  hz_kein_raum: 'heizungCard',
 };
 
 // Jede Kachel, die ueberhaupt eine Umrandung bekommen kann — auch die ohne

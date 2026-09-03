@@ -165,7 +165,6 @@ class StokerClient:
         # Entprellung fuer die Alarmfelder (siehe _Haltezeit). Die fehlende
         # Verbindung braucht keinen: dafuer gibt es schon age_s.
         self._hz_fehler = _Haltezeit()   # Heizgeraet meldet Fehlercode
-        self._hz_raeume = _Haltezeit()   # mindestens ein Fuehler stumm
         self._hz_leer   = _Haltezeit()   # kein einziger Fuehler mehr online
 
     # ── Konfiguration ───────────────────────────────────────────────────────
@@ -431,10 +430,12 @@ class StokerClient:
         #    oder was am Heizgeraet eingestellt ist.
         frost_temp = self._frost_temp(state) if erreichbar else None
 
-        offline   = schnapp.get('raeume_offline')
+        # Nur noch der Fall "kein einziger Raum mehr online" wird gemeldet: dann
+        # hat die Anlage keinen Bedarfsgeber mehr. Dass EIN Raum stumm ist, war
+        # bis v1.56.5 ein eigener Alarm (hz_raeume_weg) und ist es bewusst nicht
+        # mehr — auf der Mave sind von fuenf Knoten zwei geflasht, der Alarm
+        # stand dauerhaft. Der Zustand je Raum steht in der Heizungsseite.
         online    = schnapp.get('raeume_online')
-        raeume_s  = self._hz_raeume(None if (offline is None or not erreichbar)
-                                    else offline > 0)
         leer_s    = self._hz_leer(None if (online is None or not erreichbar)
                                   else online < 1)
 
@@ -451,7 +452,6 @@ class StokerClient:
             'verbindung_weg_s': weg_s,
             'fehler_s':         fehler_s,
             'frost_temp':       frost_temp,
-            'raeume_weg_s':     raeume_s,
             'kein_raum_s':      leer_s,
             'geraet_verbaut':   verbaut,
         }

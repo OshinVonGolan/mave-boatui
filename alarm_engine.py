@@ -23,6 +23,23 @@ _PRUNE_INTERVAL_S = 60           # nicht bei jedem Broadcast aufräumen
 # beschreiben die Regel selbst und kommen ausschließlich aus alarms.json — sonst
 # könnte ein Patch die Regel strukturell zerlegen.
 _PATCHABLE_FIELDS = ('enabled', 'threshold', 'min', 'max', 'severity')
+
+# Regeln, die es einmal gab und die bewusst abgeschafft wurden.
+#
+# Sie muessen beim Laden aussortiert werden, denn _save schreibt ALLE Regeln in
+# alarms.json, und _load uebernimmt eine Regel, die nur noch dort steht (das ist
+# gewollt: so ueberlebt eine selbst angelegte Regel ein Update). Ohne diese
+# Liste lebte eine abgeschaffte Regel auf jedem Geraet weiter, das die Datei
+# schon einmal geschrieben hat.
+#
+#   hz_raeume_weg  Alarm, sobald EIN Raumfuehler stumm war. Auf der Mave sind
+#                  von fuenf Knoten zwei geflasht — der Alarm stand damit
+#                  dauerhaft und hat die Glocke wertlos gemacht. Dass ein
+#                  einzelner Raum weg ist, steht ohnehin in der Heizungsseite
+#                  bei genau diesem Raum. Eigner-Entscheidung.
+#                  Der Fall "KEIN Raum mehr online" bleibt als hz_kein_raum:
+#                  dann kann die Anlage nicht mehr regeln.
+_ABGESCHAFFT = frozenset({'hz_raeume_weg'})
 _SEVERITIES       = ('info', 'warning', 'critical')
 _FALLBACK_BOUNDS  = (-100000.0, 100000.0)   # wenn die Regel keine 'bounds' mitbringt
 
@@ -115,7 +132,6 @@ _VORGABE_REGELN: dict = {
     'hz_frost_warn': {"name": "Kabine kühlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "severity": "warning", "enabled": True},
     'hz_frost':      {"name": "Frostgefahr", "field": "heizung.frost_temp", "op": "<", "threshold": 4, "step": 0.5, "bounds": [0.0, 15.0], "unit": "\u00b0C", "severity": "critical", "enabled": True},
     'hz_kein_raum':  {"name": "Kein Raumfühler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_raeume_weg': {"name": "Raumfühler stumm", "field": "heizung.raeume_weg_s", "op": ">", "threshold": 1800, "step": 300, "bounds": [300, 21600], "unit": "s", "severity": "warning", "enabled": True},
 }
 
 
@@ -150,6 +166,8 @@ class AlarmEngine:
                 zusammen[k].update({f: v[f] for f in _PATCHABLE_FIELDS if f in v})
             else:
                 zusammen[k] = v
+        for k in _ABGESCHAFFT:
+            zusammen.pop(k, None)
         neu_dazu = [k for k in zusammen if k not in rules]
         self._rules = zusammen
         if neu_dazu:

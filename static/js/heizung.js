@@ -529,8 +529,22 @@ async function _hzSenden(schluessel, pfad, rumpf, vorgriff) {
 
 function hzPreset(i)          { _hzErwarte('preset', i, st => st?.preset?.index ?? 'none');
                                _hzSenden('preset', `/api/heizung/preset/${i}`, null, 'preset'); }
-function hzModus(m)           { _hzErwarte('mode', m, st => st?.heater?.mode);
-                               _hzSenden('heater', '/api/heizung/heater', { mode: m }, 'mode'); }
+function hzModus(m) {
+  // Der Hub weist {mode:'manual'} ALLEIN mit 400 ab: im Handbetrieb gehoert
+  // ein Kommando dazu ("on" oder "off", siehe API-ANBINDUNG.md des Stoker,
+  // Abschnitt POST /api/heater). Genau daran scheiterte der Knopf "Manuell" —
+  // der Befehl lief auf einen Fehler, der Vorgriff verfiel, und der Knopf
+  // sprang auf den alten Modus zurueck.
+  //
+  // Mitgeschickt wird der LAUFENDE Zustand, nicht "aus": ein Moduswechsel soll
+  // die Heizung weder anwerfen noch abstellen. Erst der Handschalter darunter
+  // tut das.
+  const h = _hzDaten?.state?.heater || {};
+  const laeuft = h.command === 'on' || h.state === 'running' || h.state === 'starting';
+  const rumpf = m === 'manual' ? { mode: m, command: laeuft ? 'on' : 'off' } : { mode: m };
+  _hzErwarte('mode', m, st => st?.heater?.mode);
+  _hzSenden('heater', '/api/heizung/heater', rumpf, 'mode');
+}
 function hzHand(befehl)       { _hzSenden('heater', '/api/heizung/heater', { mode: 'manual', command: befehl }); }
 function hzAbbrechen()        { _hzSenden('heater', '/api/heizung/heater', { cancelPending: true }); }
 function hzLuefter(id, modus) {
