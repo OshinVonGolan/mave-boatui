@@ -2136,30 +2136,64 @@
       .kb-mark { font-size: 9px; padding: 2px 6px; }
     }
 
-    /* Alles, was ans Boot schreibt, wird sichtbar stillgelegt. Das ist die
-       sichtbare Haelfte der Sperre — die harte sitzt im fetch-Waechter
-       (quelle.js), damit auch ein spaeter gebauter Schalter nicht durchrutscht. */
+    /* Alles, was ans Boot schreibt, wird sichtbar stillgelegt.
+
+       Die Liste ist aus dem laufenden DOM erhoben, nicht geraten: jeder
+       Klick-Handler der Oberflaeche wurde einmal aufgelistet und danach
+       einzeln einsortiert. Bewusst NICHT gesperrt ist alles, was nur die
+       Ansicht aendert (Overlays oeffnen, Reiter, Zeitbereiche, Einheiten,
+       Filter) — im Kopie-Modus darf man weiter alles ansehen, nur nichts
+       bewirken.
+
+       Ein Muster wie [onclick^="save"] waere kuerzer, wuerde aber irgendwann
+       einen Ansichts-Handler mitnehmen, der zufaellig so heisst. Deshalb
+       ausgeschriebene Namen.
+
+       Kommt spaeter ein Schalter dazu und wird hier vergessen, bleibt er
+       sichtbar bedienbar — greifen tut er trotzdem nicht: der Waechter an
+       fetch() (quelle.js) laesst keine schreibende Anfrage durch. Diese
+       Liste ist die Hoeflichkeit, der Waechter die Sicherung. */
+
+    /* Schalter mit Ereignis-Empfaenger statt onclick */
+    html.nur-kopie .lights-vslider,
     html.nur-kopie .lights-relay-btn,
     html.nur-kopie .preset-btn,
+    html.nur-kopie .ch-slider-big,
     html.nur-kopie .hz-preset,
     html.nur-kopie .hz-mini,
     html.nur-kopie .hz-rund,
-    html.nur-kopie .hz-modus,
-    html.nur-kopie .hz-luefter,
-    html.nur-kopie .light-slider,
-    html.nur-kopie input[type="range"],
-    html.nur-kopie [onclick*="setChargerMode"],
+    /* Strom und Anlage */
     html.nur-kopie [onclick*="toggleRelay"],
+    html.nur-kopie [onclick*="_toggleRelayFromWide"],
     html.nur-kopie [onclick*="toggleInverter"],
-    html.nur-kopie [onclick*="syncTime"],
-    html.nur-kopie [onclick*="ackAll"],
+    html.nur-kopie [onclick*="setChargerMode"],
+    html.nur-kopie [onclick*="saveChargerSettings"],
+    /* Heizung */
     html.nur-kopie [onclick*="hzPreset"],
     html.nur-kopie [onclick*="hzHand"],
     html.nur-kopie [onclick*="hzModus"],
     html.nur-kopie [onclick*="hzSoll"],
     html.nur-kopie [onclick*="hzLuefter"],
+    html.nur-kopie [onclick*="hzPruefen"],
     html.nur-kopie [onclick*="hzAbbrechen"],
-    html.nur-kopie [onclick^="save"] {
+    html.nur-kopie [onclick*="hzEinstellungenSpeichern"],
+    /* System */
+    html.nur-kopie [onclick*="syncTime"],
+    html.nur-kopie [onclick*="runUpdate"],
+    html.nur-kopie [onclick*="saveSettings"],
+    html.nur-kopie [onclick*="saveRules"],
+    html.nur-kopie [onclick*="ackAllAlarms"],
+    /* Wartung, Stauplan, Aufgaben */
+    html.nur-kopie [onclick*="saveWartungTask"],
+    html.nur-kopie [onclick*="saveWartungDone"],
+    html.nur-kopie [onclick*="saveWartungSettings"],
+    html.nur-kopie [onclick*="addWartungCat"],
+    html.nur-kopie [onclick*="deleteWartungCat"],
+    html.nur-kopie [onclick*="deleteWartungTask"],
+    html.nur-kopie [onclick*="saveStauEdit"],
+    html.nur-kopie [onclick*="deleteStauItem"],
+    html.nur-kopie [onclick*="selectFach"],
+    html.nur-kopie [onclick*="createMondayItem"] {
       opacity: .34 !important; filter: grayscale(1);
       pointer-events: none !important; cursor: not-allowed !important;
     }
