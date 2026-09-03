@@ -198,6 +198,12 @@ async def sync(ws: WebSocket) -> None:
                 continue
             elif typ == p.ZUSTAND:
                 speicher.zustand_setzen(n['daten'], _uhrbuch.aufloesen(wand, mono, gestellt))
+                # Und weiter an alle offenen Oberflaechen — sonst zeigen sie
+                # einmal Daten und danach nie wieder etwas Neues.
+                weiter = dict(n['daten'] or {})
+                weiter['quelle'] = 'server'
+                weiter['alter_s'] = 0
+                await _an_zuschauer(weiter)
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
             elif typ == p.EREIGNIS:
@@ -450,3 +456,91 @@ def startseite() -> HTMLResponse:
 
 if STATISCH.exists():
     app.mount('/static', StaticFiles(directory=str(STATISCH)), name='static')
+
+
+# ── Lesende Anfragen ans Boot durchreichen ──────────────────────────────────
+# Die Oberflaeche fragt weit mehr ab als Zustand und Verlauf: Alarme, Heizung,
+# Geraete, Tanks, Wartung, Verbindung, Tageswerte. Diese Daten liegen auf dem
+# Pi, nicht hier — und sie alle ueber den Sync zu spiegeln hiesse, jede
+# kuenftige Erweiterung an ZWEI Stellen zu pflegen.
+#
+# Deshalb: Was der Server selbst weiss, beantwortet er aus seiner Kopie (das
+# ist das Wichtige — Zustand und Verlauf sind auch da, wenn das Boot schweigt).
+# Alles andere Lesende geht durch dieselbe Verbindung ans Boot.
+#
+# Ein GET veraendert nichts, deshalb braucht es hier keine Weissliste wie bei
+# den Befehlen — aber sehr wohl das Leserecht und eine kurze Frist: haengt das
+# Boot, soll die Oberflaeche eine Antwort bekommen und nicht warten.
+
+_DURCHREICHEN_FRIST_S = 8.0
+
+
+@app.get('/api/{rest:path}', include_in_schema=False)
+async def lesend_durchreichen(rest: str, request: Request,
+                              k: dict = Depends(braucht(r.LESEN))):
+    pfad = '/api/' + rest
+    if request.url.query:
+        pfad += '?' + request.url.query
+    try:
+        ergebnis = await _vermittlung.senden('GET', pfad, None, frist=_DURCHREICHEN_FRIST_S)
+    except KeinBoot:
+        # 409 und nicht 503: der Server ist in Ordnung, das Boot ist weg. Die
+        # Oberflaeche kann daraus einen ehrlichen Hinweis machen, statt einen
+        # Fehler anzuzeigen.
+        raise HTTPException(409, detail='Das Boot ist nicht verbunden.') from None
+    except Zeitueberschreitung:
+        raise HTTPException(504, detail='Das Boot hat nicht geantwortet.') from None
+    if not ergebnis.get('ok'):
+        raise HTTPException(int(ergebnis.get('status') or 502),
+                            detail=ergebnis.get('fehler') or 'Das Boot hat abgelehnt.')
+    return JSONResponse(ergebnis.get('antwort') if ergebnis.get('antwort') is not None else {})
+
+
+# ── Die Oberflaeche mit Live-Daten versorgen ────────────────────────────────
+# Die PWA haelt einen WebSocket offen und erwartet darueber neue Zustaende. Auf
+# dem Pi ist das die Verbindung zum Bus; hier ist es die Weitergabe dessen, was
+# vom Boot hereinkommt. Ohne diesen Endpunkt zeigt die Oberflaeche einmal Daten
+# und danach nie wieder etwas Neues.
+
+_zuschauer: set = set()
+
+
+async def _an_zuschauer(zustand: dict) -> None:
+    """Einen neuen Zustand an alle offenen Oberflaechen geben."""
+    if not _zuschauer:
+        return
+    tot = []
+    for ws in list(_zuschauer):
+        try:
+            await ws.send_json(zustand)
+        except Exception:
+            tot.append(ws)
+    for ws in tot:
+        _zuschauer.discard(ws)
+
+
+@app.websocket('/ws')
+async def oberflaeche_ws(ws: WebSocket) -> None:
+    # Der WebSocket kommt nicht durch die HTTP-Anmeldung — Browser koennen bei
+    # einer WebSocket-Verbindung keine eigenen Koepfe setzen. Geschuetzt ist er
+    # dadurch, dass Caddy die Anmeldung schon beim Laden der Seite verlangt hat
+    # und der Browser das Cookie mitschickt. Mit der eigenen Anmeldung wird das
+    # hier durch eine Sitzungspruefung ersetzt.
+    await ws.accept()
+    _zuschauer.add(ws)
+    try:
+        z = speicher.zustand()
+        if z:
+            daten = dict(z['daten'])
+            daten['quelle'] = 'server'
+            daten['alter_s'] = z['alter_s']
+            await ws.send_json(daten)
+        while True:
+            # Die Oberflaeche schickt nichts ausser gelegentlichen Lebenszeichen.
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _zuschauer.discard(ws)

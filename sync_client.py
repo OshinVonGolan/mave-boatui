@@ -282,9 +282,13 @@ def lokal_ueber_http(methode: str, pfad: str, rumpf, port: int = 8080) -> tuple:
     Umweg kostet auf dem Pi einen lokalen Aufruf ohne TLS.
     """
     ziel = f'http://127.0.0.1:{port}{pfad}'
-    daten = json.dumps(rumpf).encode() if rumpf is not None else b'{}'
+    # Bei GET keinen Rumpf mitschicken: ein GET mit Koerper ist unsauber, und
+    # manche Bibliotheken machen daraus stillschweigend ein POST.
+    daten = None if methode.upper() == 'GET' else (
+        json.dumps(rumpf).encode() if rumpf is not None else b'{}')
     req = urllib.request.Request(ziel, data=daten, method=methode)
-    req.add_header('Content-Type', 'application/json')
+    if daten is not None:
+        req.add_header('Content-Type', 'application/json')
     # Kennzeichnet den Aufruf als aus der Ferne kommend. Die App kann damit
     # spaeter unterscheiden, was aus dem Bordnetz und was von aussen kam.
     req.add_header('X-Herkunft', 'server')
