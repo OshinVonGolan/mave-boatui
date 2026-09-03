@@ -178,6 +178,40 @@ gesperrt**, per Schalter freigebbar, und nur für den Eigner. Alles andere
 
 ---
 
+## War das Boot offline, oder ist der Pi abgestürzt?
+
+Eigner-Wunsch vom 03.09.2026: In der Online-Ansicht soll sichtbar sein, ob das
+Boot in einem Zeitraum offline war oder der Pi abgestürzt ist — auslesbar,
+sobald es wieder Verbindung gibt.
+
+Das sind **zwei verschiedene Dinge**, und sie brauchen zwei Quellen:
+
+- **Der Server** weiß, wann er Kontakt hatte. Er führt Sitzungen (von der ersten
+  Nachricht bis zum letzten Lebenszeichen); die Zwischenräume sind die Lücken.
+- **Warum** der Kontakt fehlte, weiß nur der Pi. Ein Funkloch sieht auf dem
+  Server genauso aus wie ein Stromausfall.
+
+Der Pi führt deshalb eine **Startmarke** (`sync/startmarke.py`): Beim Hochlauf
+schreibt er sie, beim geordneten Beenden entfernt er sie wieder. Liegt sie beim
+nächsten Start noch da, war das Ende unsauber. Dazu die `boot_id` des Kernels —
+sie sagt, ob der ganze Rechner neu gestartet ist oder nur der Dienst — und die
+Laufzeit aus `/proc/uptime`, mit der sich der Systemstart zurückrechnen lässt.
+
+Daraus deutet der Server jede Lücke:
+
+| Befund | Bedeutung | Verlauf |
+|---|---|---|
+| **funkloch** | Der Pi lief durch, nur die Verbindung fehlte | vollständig, wird nachgeliefert |
+| **stromlos** | Rechner war aus, unsauberes Ende — Stromausfall oder Absturz | fehlt in diesem Zeitraum wirklich |
+| **neustart** | Rechner wurde geordnet neu gestartet | fehlt kurz |
+| **dienst** | Nur der Dienst neu gestartet (Update), Rechner lief durch | fast lückenlos |
+
+Ist der Systemstart bekannt, wird die Lücke geteilt: bis dahin war der Rechner
+**aus**, danach lief er nur **ohne Verbindung**. Genau diese Unterscheidung
+beantwortet die Frage „hat er weitergemessen?".
+
+---
+
 ## Etappen
 
 Jede Etappe kann für sich etwas, das vorher nicht ging.
