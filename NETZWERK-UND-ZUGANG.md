@@ -111,9 +111,54 @@ Die Erneuerung läuft bereits per Cron (viermal täglich `acme.sh --cron`).
 DNS-01 wurde gewählt, weil der Name auf eine **private** Adresse zeigen soll —
 eine HTTP-Prüfung von außen ist dafür unmöglich.
 
-Der zugehörige A-Eintrag fehlt zum Stand 03.09.2026 noch, und der Pi liefert
-noch kein HTTPS aus: dafür müsste etwas auf Port 443 hören, und das braucht
-root.
+**Seit 04.09.2026 liefert der Pi HTTPS aus.** nginx nimmt auf 443 an und
+reicht an uvicorn auf 8080 weiter (`/etc/nginx/sites-available/mave-tls`).
+
+```
+Zertifikat   /etc/nginx/mave/{fullchain.cer,privkey.key}
+             Verzeichnis gehört joshy — acme.sh läuft als joshy im Cron und
+             muss dort schreiben können; nginx liest als root.
+Erneuerung   acme.sh --install-cert mit reloadcmd "sudo /usr/sbin/nginx -s reload"
+Sudo-Regel   /etc/sudoers.d/020_nginx_reload — genau ein Befehl, ohne Passwort.
+             Ohne sie müsste alle 60 Tage jemand von Hand eines eintippen, und
+             wenn es niemand tut, ist die Bordansicht weg.
+Verbindung   TLSv1.3 mit ChaCha20-Poly1305, Handschlag 71 ms über das Bordnetz
+```
+
+**Warum ChaCha20 und nicht AES:** Der Zero hat keine Krypto-Beschleunigung
+(`OPENSSL_armcap=0x0`). Gemessen: ChaCha20 37 MB/s, AES-256-GCM 9,7 MB/s.
+Python kann die TLS-1.3-Cipher nicht wählen (`ssl.set_ciphersuites` fehlt) —
+uvicorn wäre deshalb beim langsamen AES gelandet. Das ist der Grund, warum die
+Verschlüsselung bei nginx liegt und nicht in der Anwendung.
+
+**Warum ECC und nicht RSA:** ECDSA P-256 signiert hier in 1,6 ms, RSA-2048
+braucht 55 ms. Ein RSA-Zertifikat würde den einen Kern bei jedem Handschlag
+für eine Zwanzigstelsekunde blockieren.
+
+### Was im Bordnetz noch fehlt
+
+Der A-Eintrag `pi.mave.circuit-sailor.com → 192.168.1.103` ist gesetzt und
+öffentlich sichtbar (per DNS-over-HTTPS geprüft). **Im Bordnetz löst er
+trotzdem nicht auf**: der RUTX50 filtert private Adressen aus DNS-Antworten
+heraus — der übliche Schutz gegen DNS-Rebinding.
+
+Zu tun (Verwaltungsoberfläche des Routers, Network → DNS):
+
+```
+rebind_domain = circuit-sailor.com      # Ausnahme vom Rebind-Schutz
+```
+
+Alternativ ein lokaler DNS-Eintrag, der denselben Namen direkt auf
+192.168.1.103 zeigt. Bis dahin ist der Pi über `http://192.168.1.103:8080`
+erreichbar wie bisher — nur eben ohne sicheren Kontext und damit ohne
+installierbare Anwendung.
+
+Zum Prüfen ohne Router-Änderung:
+
+```
+curl --resolve pi.mave.circuit-sailor.com:443:192.168.1.103 \
+     https://pi.mave.circuit-sailor.com/api/zugang
+```
 
 **Warum das überhaupt zählt:** ohne TLS kein sicherer Kontext, ohne sicheren
 Kontext kein Service Worker — und ohne den lässt sich die PWA nicht als
