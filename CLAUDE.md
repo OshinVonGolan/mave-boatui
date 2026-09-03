@@ -14,7 +14,7 @@ Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten �
 ### 1. Version bumpen bei jedem Commit der die App verändert
 ```python
 # main.py Zeile ~45
-VERSION = _git_semver() or '1.56.2'   # ← hochzählen: 1.56.2 → 1.56.3
+VERSION = _git_semver() or '1.56.3'   # ← hochzählen: 1.56.3 → 1.56.4
 ```
 Commit-Message-Format (für Changelog):
 ```

@@ -748,10 +748,31 @@
 
     /* Bis 700 px zwei Zeilen a drei Feldern — darunter reicht die Breite fuer
        sechs nebeneinander nicht, ohne dass die Unterzeilen abschneiden.
-       Genau deshalb bleiben es SECHS Zellen, auch wenn eine davon leer ist:
-       bei fuenf haette die zweite Zeile eine Luecke. */
+       Genau deshalb sind es SECHS Felder: bei fuenf haette die zweite Zeile
+       eine Luecke. */
     @media (max-width: 700px) {
       .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+      /* Und sie BLEIBEN zwei Zeilen, auch angedockt. Aus zwei Zeilen zu je
+         drei Feldern eine Zeile mit sechs zu machen war verwirrend: die
+         Felder wechselten mitten in der Bewegung den Platz, und drei davon
+         landeten woanders. Ohne Umbruch ist der ganze Weg stufenlos.
+         Muss NACH der 6-Spalten-Regel weiter oben stehen — gleiche
+         Spezifitaet, es entscheidet die Reihenfolge. */
+      body.leiste-kompakt .statusbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+      /* Den Platz holt sich die Leiste stattdessen von der Kopfzeile: die
+         schiebt sich im selben Zug nach oben aus dem Bild, und die Leiste
+         rueckt an ihre Stelle. Unterm Strich steht dann WENIGER fest als
+         vorher (Kopfzeile 50 px + Leiste 37 px), und es wackelt nichts.
+         Nur am Telefon: am Rechner ist Platz genug, dort bleibt die
+         Kopfzeile mit ihren Knoepfen stehen. */
+      header { transform: translateY(calc(-1 * var(--header-h) * var(--leiste-eng))); }
+      .statusbar-halter { top: calc(var(--header-h) * (1 - var(--leiste-eng))); }
+
+      /* Angedockt so flach wie moeglich, damit zwei Zeilen nicht mehr Platz
+         brauchen als vorher eine. */
+      body.leiste-kompakt .sb-item { padding-top: 3px; padding-bottom: 3px; }
     }
     @media (max-width: 640px) {
       .sb-item { padding: calc(9px - 4px * var(--leiste-eng))

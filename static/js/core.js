@@ -257,17 +257,21 @@ let _leisteGleitTimer = null;
 /**
  * Zwischen normaler und kompakter Leiste umschalten — mit gleitenden Feldern.
  *
- * Alles andere an der Leiste haengt stufenlos am Scrollstand (--leiste-eng).
- * Die SPALTENZAHL nicht: am Telefon werden aus zwei Zeilen zu je drei Feldern
- * plotzlich eine Zeile mit sechs, und eine Zeile weniger ist genau die
- * Sprunghoehe. Rechnen laesst sich das nicht.
+ * Alles an der Leiste, das sich rechnen laesst, haengt stufenlos am
+ * Scrollstand (--leiste-eng). Der Rest — Spaltenzahl, Randlinien, Breite —
+ * schaltet an dieser Stelle um und wuerde dabei springen.
  *
- * Also wird gemessen statt gerechnet: erst die Plaetze vor dem Umschalten
- * merken, dann umschalten, dann die neuen Plaetze lesen und jedes Feld per
- * transform an seinen ALTEN Platz zuruecksetzen. Im naechsten Bild laeuft es
- * von dort an den neuen — die drei Felder der zweiten Zeile gleiten also nach
- * oben, statt zu springen. Die Hoehe der Leiste laeuft im selben Zug mit,
- * damit auch der Inhalt darunter nicht ruckt.
+ * Deshalb wird hier gemessen statt gerechnet: erst die Plaetze vor dem
+ * Umschalten merken, dann umschalten, dann die neuen Plaetze lesen und jedes
+ * Feld per transform an seinen ALTEN Platz zuruecksetzen. Im naechsten Bild
+ * laeuft es von dort an den neuen. Die Hoehe der Leiste laeuft im selben Zug
+ * mit, damit auch der Inhalt darunter nicht ruckt.
+ *
+ * Gebaut wurde das fuer den Zeilenumbruch am Telefon (zwei Reihen zu je drei
+ * wurden eine Zeile mit sechs). Den gibt es seit v1.56.3 nicht mehr — dort
+ * bleiben es zwei Reihen. Die Bewegung bleibt trotzdem: sie greift bei jeder
+ * Verschiebung, die beim Umschalten entsteht, und kostet nichts, wenn sich
+ * nichts bewegt (dann steigt sie gleich wieder aus).
  *
  * transform und height sind beide billig zu animieren: sie loesen keinen
  * Neuumbruch der Kacheln darunter aus.
