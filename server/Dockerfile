@@ -14,7 +14,14 @@ RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*"
 # gehoert NICHT ins Serverabbild — er wuerde nur Angriffsflaeche mitbringen.
 # Die Bundle-Reihenfolge teilen sich Pi und Server — sonst laufen die
 # beiden Oberflaechen auseinander.
-COPY js_bundle_liste.py /app/
+# Drei Dateien aus der Wurzel, und nur diese drei. Sie sind geteilt, nicht
+# geliehen: die Bundle-Reihenfolge muss auf beiden Seiten gleich sein, und ein
+# Konto muss an Bord und auf dem Server identisch behandelt werden — sonst
+# meldet sich jemand hier an und dort nicht. jsonio haengt an
+# konten_speicher (atomares Schreiben von JSON).
+# Der uebrige Pi-Code (main.py, can_reader.py und der Rest) bleibt draussen:
+# er waere hier nur Angriffsflaeche.
+COPY js_bundle_liste.py konten_speicher.py jsonio.py /app/
 COPY sync/    /app/sync/
 COPY server/  /app/server/
 # Die Oberflaeche: dieselben Dateien wie auf dem Pi, damit es nicht zwei
