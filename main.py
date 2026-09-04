@@ -62,7 +62,33 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-VERSION  = _git_semver() or '1.59.0'
+def _fassung() -> str:
+    """Die laufende Fassung, fortlaufend gezaehlt.
+
+    Steht HEAD genau auf einem Tag, gilt der Tag. Sonst wird ab dem letzten Tag
+    weitergezaehlt: 1.59.0 + 42 Aenderungen = 1.59.42. Vorher hiess alles nach
+    einem Tag gleich, und "welche Fassung laeuft da eigentlich" war nicht zu
+    beantworten.
+    """
+    genau = _git_semver()
+    if genau:
+        return genau
+    try:
+        tag = subprocess.run(['git', 'describe', '--tags', '--abbrev=0'],
+                             cwd=Path(__file__).parent, capture_output=True,
+                             text=True, timeout=5).stdout.strip()
+        seit = subprocess.run(['git', 'rev-list', '--count', f'{tag}..HEAD'],
+                              cwd=Path(__file__).parent, capture_output=True,
+                              text=True, timeout=5).stdout.strip()
+        if tag and seit.isdigit():
+            haupt, _, _ = tag.lstrip('v').rpartition('.')
+            return f'{haupt}.{seit}'
+    except Exception:
+        pass
+    return '1.59.0'
+
+
+VERSION  = _fassung()
 GIT_HASH = _git_hash()
 
 # Hintergrund-Cache: lesbare Remote-Version + ob ein Update verfügbar ist.
@@ -1308,10 +1334,15 @@ def _changelog(bereich: str, grenze: int = 40) -> list[dict]:
     Überschrift — die ist ohnehin die Kurzfassung.
     """
     try:
+        # %x00 als Trenner und --name-only fuer die Dateien: daraus faellt ab,
+        # WELCHEN Teil eine Aenderung betrifft — Bordansicht oder Logbuch.
         erg = _lauf(['git', 'log', bereich, '--no-merges', f'-n{grenze}',
-                     '--pretty=format:EINTRAG%x00%H%x00%at%x00%s%x00%b'], 12)
+                     '--name-only',
+                     '--pretty=format:EINTRAG%x00%H%x00%at%x00%s%x00%b%x00DATEIEN'], 15)
     except Exception:
         return []
+
+    nummern = _versionsnummern(bereich, grenze)
     raus = []
     for block in erg.stdout.split('EINTRAG\x00'):
         if not block.strip():
@@ -1319,7 +1350,9 @@ def _changelog(bereich: str, grenze: int = 40) -> list[dict]:
         teile = block.split('\x00')
         if len(teile) < 4:
             continue
-        hash_, zeit, titel, rumpf = teile[0], teile[1], teile[2], (teile[3] if len(teile) > 3 else '')
+        hash_, zeit, titel = teile[0], teile[1], teile[2]
+        rest = teile[3] if len(teile) > 3 else ''
+        rumpf, _, dateien = rest.partition('DATEIEN')
         punkte = [z.strip()[2:].strip() for z in rumpf.splitlines()
                   if z.strip().startswith('* ')]
         raus.append({
@@ -1327,8 +1360,65 @@ def _changelog(bereich: str, grenze: int = 40) -> list[dict]:
             'zeit': float(zeit) if zeit.strip().isdigit() else None,
             'titel': titel.strip(),
             'punkte': punkte,
+            'bereiche': _bereiche(dateien),
+            'version': nummern.get(hash_.strip()[:10]),
         })
     return raus
+
+
+def _bereiche(dateien: str) -> list[str]:
+    """Welchen Teil der Anlage eine Aenderung betrifft.
+
+    Abgeleitet aus den geaenderten Dateien, nicht aus dem Text: der Text kann
+    luegen, die Dateiliste nicht. Es geht um die Frage "muss ich hinsehen?" —
+    wer nur die Bordansicht benutzt, interessiert sich nicht fuer eine
+    Aenderung am Logbuch.
+    """
+    b = set()
+    for zeile in (dateien or '').splitlines():
+        d = zeile.strip()
+        if not d:
+            continue
+        if 'diagnose' in d:
+            b.add('Logbuch')
+        elif d.startswith('server/'):
+            b.add('Server')
+        elif d.startswith('static/') or d == 'main.py':
+            b.add('Bordansicht')
+        elif d.startswith('sync/') or d in ('konten_speicher.py', 'debug_log.py'):
+            b.add('Grundlagen')
+    return sorted(b)
+
+
+def _versionsnummern(bereich: str, grenze: int) -> dict:
+    """Je Commit eine Versionsnummer, fortlaufend gezaehlt.
+
+    Bisher trug nur ein Stand, der genau auf einem git-Tag lag, eine Nummer —
+    alle anderen hiessen gleich. Gezaehlt wird deshalb ab dem letzten Tag: die
+    dritte Stelle ist die Anzahl der Aenderungen seither. Das braucht keine
+    Pflege, steigt monoton und benennt jeden Stand eindeutig.
+    """
+    try:
+        letzter_tag = _lauf(['git', 'describe', '--tags', '--abbrev=0'], 8).stdout.strip()
+        if not letzter_tag:
+            return {}
+        basis = letzter_tag.lstrip('v')
+        haupt, _, _ = basis.rpartition('.')
+        seit = _lauf(['git', 'rev-list', '--count', f'{letzter_tag}..HEAD'], 8).stdout.strip()
+        gesamt = int(seit) if seit.isdigit() else 0
+        # Die Reihenfolge von `git log` ist neueste zuerst und linear (ein
+        # Zweig, ohne Zusammenfuehrungen) — der i-te Eintrag liegt also genau
+        # i Aenderungen hinter dem neuesten.
+        hashes = _lauf(['git', 'log', bereich, '--no-merges', f'-n{grenze}',
+                        '--pretty=format:%H'], 10).stdout.split()
+        raus = {}
+        for i, h in enumerate(hashes):
+            nr = gesamt - i
+            if nr >= 0:
+                raus[h[:10]] = f'{haupt}.{nr}'
+        return raus
+    except Exception:
+        return {}
 
 
 @app.post('/api/system/zurueck')
