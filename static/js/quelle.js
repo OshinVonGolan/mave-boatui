@@ -231,3 +231,53 @@ window.fetch = function (eingabe, optionen) {
     return antwort;
   });
 };
+
+// ── Veraltete Oberfläche erkennen ──────────────────────────────────────────
+// Der Anlass: Die Oberfläche zeigte graue Schaltflächen und leere Kacheln, und
+// zwar NUR beim Eigner — im Browser lief eine alte Fassung, während der Server
+// längst eine neue auslieferte. Das ist von außen nicht zu unterscheiden von
+// einem echten Fehler, und man sucht an der falschen Stelle.
+//
+// Erkannt wird es über den Stand, der beim Ausliefern in die Seite eingesetzt
+// wurde. Die Seite kann ihn nicht selbst erfragen — dann bekäme sie ja den
+// neuen und hielte sich für aktuell.
+
+const _EIGENER_STAND = document.querySelector('meta[name="mave-stand"]')?.content || '';
+let _standGemeldet = false;
+
+async function _standPruefen() {
+  if (_standGemeldet || !_EIGENER_STAND || _EIGENER_STAND === '__STAND__') return;
+  try {
+    const r = await fetch('/api/stand', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.stand || d.stand === _EIGENER_STAND) return;
+    _standGemeldet = true;
+    _veraltetZeigen(d.stand);
+  } catch (_) { /* kein Netz: dann eben beim nächsten Mal */ }
+}
+
+function _veraltetZeigen(neuerStand) {
+  const b = document.createElement('div');
+  b.className = 'veraltet';
+  b.innerHTML =
+    '<span class="kb-mark">Veraltet</span>'
+    + '<span class="kb-txt">Diese Seite läuft auf einem älteren Stand. '
+    + 'Bis sie neu geladen ist, können Werte fehlen und Schaltflächen gesperrt aussehen.</span>'
+    + '<button class="veraltet-knopf" onclick="_neuLadenHart()">Jetzt neu laden</button>';
+  document.body.appendChild(b);
+  console.warn('[stand] Seite ist', _EIGENER_STAND, '— ausgeliefert wird', neuerStand);
+}
+
+async function _neuLadenHart() {
+  // Erst den Zwischenspeicher des Service Workers räumen, sonst holt das
+  // Neuladen dieselbe alte Fassung wieder hervor.
+  try {
+    const namen = await caches.keys();
+    await Promise.all(namen.map(n => caches.delete(n)));
+  } catch (_) {}
+  location.reload();
+}
+
+setTimeout(_standPruefen, 4000);
+setInterval(_standPruefen, 120000);

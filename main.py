@@ -725,7 +725,8 @@ async def root(req: Request):
     pfad = STATIC_DIR / 'index.html'
     mtime = pfad.stat().st_mtime
     if _index_cache['mtime'] < mtime:
-        _index_cache['data']  = pfad.read_bytes()
+        roh = pfad.read_text(encoding='utf-8').replace('__STAND__', _git_hash() or '?')
+        _index_cache['data']  = roh.encode()
         _index_cache['mtime'] = mtime
         _index_cache['etag']  = f'"{int(mtime)}-{len(_index_cache["data"])}"'
     if req.headers.get('if-none-match') == _index_cache['etag']:
@@ -1367,6 +1368,19 @@ async def system_zurueck(body: dict):
     asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     return {'ok': True, 'vorher': vorher, 'jetzt': ziel[:10],
             'titel': treffer[0]['titel']}
+
+
+@app.get('/api/stand')
+async def oberflaechen_stand():
+    """Mit welchem Stand die Oberflaeche gerade ausgeliefert wuerde.
+
+    Winzig und ohne Anmeldung: die Seite fragt ihn im Takt und vergleicht ihn
+    mit dem, der bei ihrer Auslieferung eingesetzt wurde. Weichen sie ab, laeuft
+    im Browser eine alte Fassung — aus dem Zwischenspeicher oder aus einem Tab,
+    der seit Tagen offen ist. Verraten wird dabei nichts: eine Commit-Kennung
+    sagt nichts ueber das Boot.
+    """
+    return {'stand': _git_hash() or '?'}
 
 
 @app.get('/api/system/versionen')

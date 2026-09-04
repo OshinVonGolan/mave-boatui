@@ -7,6 +7,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mave" />
   <meta name="theme-color" content="#0f172a" />
+  <!-- Mit welchem Stand diese Seite ausgeliefert wurde. Wird beim Ausliefern
+       eingesetzt; kommt die Seite aus dem Zwischenspeicher, steht hier ein
+       alter Wert — und genau daran erkennt die Oberflaeche, dass sie veraltet
+       ist. Ohne das haelt sich eine gespeicherte Seite fuer aktuell, weil sie
+       den Stand ja frisch vom Server erfragt. -->
+  <meta name="mave-stand" content="__STAND__" />
   <title>Mave — Bord Monitor</title>
   <!-- crossorigin ist hier keine Formsache: Chrome holt ein Manifest laut
        Spezifikation ANONYM, auch bei gleicher Herkunft und auch wenn der

@@ -114,6 +114,7 @@ OFFEN = (
     '/api/system/version',   # die PWA muss erkennen, mit wem sie spricht
     '/api/jserror',          # Fehlermeldungen entstehen VOR der Anmeldung
     '/api/zugang',           # sagt, ob ueberhaupt ein Konto existiert
+    '/api/stand',            # sagt nur, ob die Oberflaeche veraltet ist
 )
 
 # Welches Recht ein Pfad verlangt. Erster Treffer gewinnt, deshalb steht das

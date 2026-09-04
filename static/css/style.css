@@ -1027,7 +1027,16 @@
     .inv-pill:not(.on) .inv-pill-label.left  { color: var(--text); }
 
     /* ── Cards ── */
-    .card { background: var(--surface); border: 1px solid var(--border);
+    /* Der Fokusrahmen einer Kachel lag AUSSERHALB ihrer Kante und wurde oben
+       von der klebenden Statusleiste abgeschnitten. Nach innen gelegt bleibt er
+       vollstaendig sichtbar. Das scroll-margin sorgt dafuer, dass eine
+       angesprungene Kachel unter der Leiste landet und nicht dahinter. */
+    .card:focus-visible, .card:focus-within {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .card { scroll-margin-top: calc(var(--header-h) + 62px);
+      background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px;
       display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
     .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
@@ -2336,4 +2345,22 @@
     .qp-wegtitel {
       font-size: 9px; font-weight: 700; letter-spacing: .1em;
       text-transform: uppercase; color: var(--text3); margin-bottom: 6px;
+    }
+
+    /* Hinweis auf eine veraltete Seite. Unten statt oben: er soll auffallen,
+       aber nicht die Kopfzeile verdecken, während man noch arbeitet. */
+    .veraltet {
+      position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 300;
+      display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+      padding: 12px 14px; border-radius: 12px;
+      background: color-mix(in srgb, var(--yellow) 17%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+      box-shadow: 0 10px 30px rgba(0,0,0,.4);
+      font-size: 12px; color: var(--text);
+    }
+    .veraltet .kb-txt { flex: 1 1 220px; line-height: 1.4; }
+    .veraltet-knopf {
+      background: var(--yellow); border: none; border-radius: 8px; color: var(--bg);
+      padding: 8px 14px; font-size: 12px; font-weight: 700; font-family: inherit;
+      cursor: pointer; white-space: nowrap;
     }

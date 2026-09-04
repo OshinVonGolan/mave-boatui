@@ -716,6 +716,12 @@ def diagnose(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse
     })
 
 
+@app.get('/api/stand')
+def oberflaechen_stand() -> JSONResponse:
+    """Wie auf dem Pi: womit die Oberflaeche ausgeliefert wuerde."""
+    return JSONResponse({'stand': _abbild_stand()})
+
+
 @app.get('/api/system/version')
 def version() -> JSONResponse:
     """Ohne Anmeldung erreichbar, damit die PWA erkennen kann, mit WEM sie
@@ -852,8 +858,25 @@ def startseite(request: Request) -> HTMLResponse:
     seite = STATISCH / name
     if not seite.exists():
         raise HTTPException(500, detail='Oberfläche fehlt im Abbild')
-    return HTMLResponse(seite.read_text(encoding='utf-8'),
-                        headers={'Cache-Control': 'no-cache'})
+    # Denselben Platzhalter wie auf dem Pi fuellen. Welcher Stand hier steht,
+    # sagt der Server aus SEINEM Abbild — die Oberflaeche kommt schliesslich
+    # von ihm.
+    roh = seite.read_text(encoding='utf-8').replace('__STAND__', _abbild_stand())
+    return HTMLResponse(roh, headers={'Cache-Control': 'no-cache'})
+
+
+def _abbild_stand() -> str:
+    """Eine Kennung des ausgelieferten Standes.
+
+    Im Container gibt es kein git. Genommen wird deshalb die Aenderungszeit des
+    Bundles — sie aendert sich bei jedem Neubau und reicht voellig: es geht nur
+    darum, ZU ERKENNEN, dass sich etwas geaendert hat.
+    """
+    try:
+        js = STATISCH / 'js' / 'init.js'
+        return f'abbild-{int(js.stat().st_mtime)}'
+    except OSError:
+        return 'unbekannt'
 
 
 if STATISCH.exists():
