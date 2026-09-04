@@ -36,6 +36,7 @@ const _ALARM_VORGABE = {
   lautstaerke: 0.6,       // 0…1, gilt nur für den eigenen Ton
   wiederholen: true,      // bis quittiert
   takt_s: 20,             // Abstand der Wiederholungen
+  push: false,            // auch melden, wenn die Anwendung zu ist
 };
 
 let _alarmCfg = null;
@@ -175,6 +176,87 @@ async function alarmHinweisErlauben() {
   openAlarmSettings();
 }
 
+// ── Push: die Meldung bei geschlossener Anwendung ─────────────────────────
+// Der Server sendet, nicht das Boot: ein Abo zeigt auf den Push-Dienst des
+// Browserherstellers, und dorthin kommt man nur mit Internet. Im Bordnetz
+// meldet man sich beim Pi an, der das Abo weiterreicht — dieselbe Adresse,
+// derselbe Ursprung, es ist also gleichgültig, wo man den Schalter umlegt.
+
+function _base64ZuBytes(b64) {
+  // Der Schlüssel kommt url-sicher und ohne Füllzeichen — beides muss zurück,
+  // bevor atob ihn versteht.
+  const voll = (b64 + '='.repeat((4 - b64.length % 4) % 4))
+    .replace(/-/g, '+').replace(/_/g, '/');
+  const roh = atob(voll);
+  return Uint8Array.from([...roh].map(c => c.charCodeAt(0)));
+}
+
+async function pushAnmelden() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    _toast('Dieses Gerät kann keine Meldungen im Hintergrund'); return false;
+  }
+  if (Notification.permission !== 'granted') {
+    const antwort = await Notification.requestPermission();
+    if (antwort !== 'granted') { _toast('Ohne Erlaubnis geht es nicht'); return false; }
+  }
+  try {
+    const d = await (await fetch('/api/push/schluessel', { cache: 'no-store' })).json();
+    if (!d.bereit || !d.schluessel) {
+      // Der häufige Fall im Bordnetz ohne Uplink — und er gehört gesagt, statt
+      // stumm zu scheitern.
+      _toast(d.grund || 'Der Server ist nicht erreichbar');
+      return false;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const abo = await reg.pushManager.getSubscription()
+      || await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _base64ZuBytes(d.schluessel),
+      });
+    const r = await fetch('/api/push/anmelden', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ abo: abo.toJSON() }),
+    });
+    if (!r.ok) { _toast('Der Server hat die Anmeldung abgelehnt'); return false; }
+    _toast('Für Meldungen angemeldet');
+    return true;
+  } catch (e) {
+    _toast('Anmeldung nicht möglich: ' + (e.message || e));
+    return false;
+  }
+}
+
+async function pushAbmelden() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const abo = await reg.pushManager.getSubscription();
+    if (!abo) return true;
+    await fetch('/api/push/abmelden', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ abo: abo.toJSON(), endpunkt: abo.endpoint }),
+    });
+    await abo.unsubscribe();
+    _toast('Von Meldungen abgemeldet');
+    return true;
+  } catch (_) { return false; }
+}
+
+async function pushUmschalten(an) {
+  const ok = an ? await pushAnmelden() : await pushAbmelden();
+  _alarmCfg.push = an ? ok : false;
+  _alarmCfgSichern();
+  openAlarmSettings();
+}
+
+async function pushProbe() {
+  try {
+    const r = await fetch('/api/push/probe', { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    _toast(r.ok ? `An ${d.geschickt ?? 0} Gerät(e) geschickt`
+                : (d.detail || 'Probe nicht möglich'));
+  } catch (_) { _toast('Probe nicht möglich'); }
+}
+
 // ── Der Hinweis, wenn der Browser den Ton noch nicht erlaubt ──────────────
 function _hinweisZeigen() {
   if (document.getElementById('tonHinweis')) return;
@@ -292,6 +374,24 @@ function openAlarmSettings() {
     </div>` : ''}
 
     <div class="set-card">
+      <div class="set-card-hd">Auch wenn die Anwendung zu ist</div>
+      <div style="font-size:12px;color:var(--text3);margin:-4px 0 10px;line-height:1.55">
+        Dann meldet der <b>Server</b>, nicht das Boot — und das braucht Internet
+        auf beiden Seiten. Im Bordnetz ohne Uplink kommt nichts an, obwohl der
+        Bordrechner im selben Raum steht. Dafür gibt es den Ton oben.
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="alPush">Meldungen im Hintergrund</label>
+        <input type="checkbox" id="alPush"${an(_alarmCfg.push)}
+               onchange="pushUmschalten(this.checked)">
+      </div>
+      <div class="settings-row" style="border-bottom:none">
+        <label class="settings-label">Ausprobieren</label>
+        <button class="btn-secondary" onclick="pushProbe()">Probemeldung schicken</button>
+      </div>
+    </div>
+
+    <div class="set-card">
       <div class="set-card-hd">Wann und wie oft</div>
       <div class="settings-row">
         <label class="settings-label" for="alNurKrit">Nur bei kritischen Alarmen</label>
@@ -359,6 +459,9 @@ function saveAlarmSettings() {
   _alarmCfg.lautstaerke = Number(w('alLaut').value) / 100;
   _alarmCfg.wiederholen = w('alWdh').checked;
   _alarmCfg.takt_s = Number(w('alTakt').value);
+  // `push` wird hier bewusst NICHT aus dem Formular gelesen: der Schalter
+  // meldet sich beim Server an oder ab und wirkt sofort. Ihn hier noch einmal
+  // zu setzen hiesse, einen gescheiterten Versuch als Erfolg abzulegen.
   _alarmCfgSichern();
   // Der Takt kann sich geändert haben — die laufende Uhr neu stellen.
   _wiederholStoppen();

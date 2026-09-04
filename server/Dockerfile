@@ -8,7 +8,12 @@ FROM python:3.12-slim
 RUN useradd --create-home --uid 10001 mave
 
 WORKDIR /app
-RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*"
+# pywebpush bringt py_vapid und http-ece mit — beides fuer Web Push noetig.
+# Die Verschluesselung dafuer schreiben wir nicht selbst: signiertes Zertifikat
+# (VAPID, ES256) plus verschluesselte Nutzlast (AES128GCM) ist nichts zum
+# Selbermachen.
+RUN pip install --no-cache-dir "fastapi==0.115.*" "uvicorn[standard]==0.32.*" \
+                               "pywebpush==2.0.*"
 
 # Nur was gebraucht wird. Der Pi-Teil (main.py, can_reader.py und der Rest)
 # gehoert NICHT ins Serverabbild — er wuerde nur Angriffsflaeche mitbringen.

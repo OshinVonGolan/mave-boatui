@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS sitzung (
     -- aus — auch die nach einem Neustart des SERVERS.
     lauf_id   TEXT
 );
+CREATE TABLE IF NOT EXISTS push_abo (
+    endpunkt  TEXT PRIMARY KEY,
+    konto     TEXT NOT NULL,
+    daten     TEXT NOT NULL,
+    geraet    TEXT,
+    angelegt  REAL NOT NULL,
+    zuletzt   REAL
+);
+
 CREATE TABLE IF NOT EXISTS ereignis (
     folge     INTEGER PRIMARY KEY,
     zeit      REAL,
@@ -223,6 +232,45 @@ class Speicher:
         return self._db.execute('SELECT COUNT(*) AS n FROM geparkt').fetchone()['n']
 
     # ── Ereignisse ──────────────────────────────────────────────────────────
+
+    # ── Push-Abos ───────────────────────────────────────────────────────────
+    # Der Endpunkt ist die Kennung: er ist je Geraet und Browser eindeutig und
+    # zugleich die Adresse, an die gesendet wird. Meldet sich dasselbe Geraet
+    # erneut an, ersetzt es seinen Eintrag — sonst kaeme jede Meldung doppelt.
+
+    def push_abo_setzen(self, endpunkt: str, konto: str, abo: dict,
+                        geraet: str = '') -> None:
+        with self._lock:
+            self._db.execute(
+                'INSERT INTO push_abo (endpunkt, konto, daten, geraet, angelegt, zuletzt) '
+                'VALUES (?, ?, ?, ?, ?, NULL) '
+                'ON CONFLICT(endpunkt) DO UPDATE SET '
+                '  konto = excluded.konto, daten = excluded.daten, geraet = excluded.geraet',
+                (endpunkt, konto, json.dumps(abo, ensure_ascii=False), geraet, time.time()))
+            self._db.commit()
+
+    def push_abo_loeschen(self, endpunkt: str) -> None:
+        with self._lock:
+            self._db.execute('DELETE FROM push_abo WHERE endpunkt = ?', (endpunkt,))
+            self._db.commit()
+
+    def push_abos(self, konto: str | None = None) -> list[dict]:
+        with self._lock:
+            if konto:
+                zeilen = self._db.execute(
+                    'SELECT * FROM push_abo WHERE konto = ? ORDER BY angelegt', (konto,)).fetchall()
+            else:
+                zeilen = self._db.execute(
+                    'SELECT * FROM push_abo ORDER BY angelegt').fetchall()
+        return [{'endpunkt': z['endpunkt'], 'konto': z['konto'],
+                 'abo': json.loads(z['daten']), 'geraet': z['geraet'],
+                 'angelegt': z['angelegt'], 'zuletzt': z['zuletzt']} for z in zeilen]
+
+    def push_abo_gesehen(self, endpunkt: str) -> None:
+        with self._lock:
+            self._db.execute('UPDATE push_abo SET zuletzt = ? WHERE endpunkt = ?',
+                             (time.time(), endpunkt))
+            self._db.commit()
 
     def ereignis_anhaengen(self, folge: int, art: str, daten: dict,
                            zeit: float | None) -> None:

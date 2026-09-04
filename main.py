@@ -1613,6 +1613,42 @@ async def system_zurueck(body: dict):
             'titel': treffer[0]['titel']}
 
 
+# ── Push ────────────────────────────────────────────────────────────────────
+# Im Bordnetz laeuft die Anwendung auf DIESEM Rechner, ein Geraet meldet sich
+# also hier an. Senden kann nur der Server: ein Push-Abo zeigt auf den Dienst
+# des Browserherstellers, und dorthin kommt man nur mit Internet. Der Pi nimmt
+# das Abo entgegen und reicht es weiter — so wie er es mit Anmeldungen auch tut.
+
+@app.get('/api/push/schluessel')
+async def push_schluessel():
+    """Der oeffentliche Schluessel des Servers, aus dem Handschlag."""
+    schluessel = getattr(sync, 'push_schluessel', '') or ''
+    return {'bereit': bool(schluessel), 'schluessel': schluessel,
+            'grund': '' if schluessel else 'Der Server ist gerade nicht verbunden.'}
+
+
+@app.post('/api/push/anmelden')
+async def push_anmelden(daten: dict, request: Request):
+    konto = getattr(request.state, 'konto', None) or {}
+    try:
+        await sync.push_melden(daten.get('abo') or daten, konto.get('name', ''),
+                               zg.geraet_aus_ua(request.headers.get('user-agent', '')))
+    except Exception as e:
+        raise HTTPException(503, detail=str(e)) from None
+    return {'ok': True}
+
+
+@app.post('/api/push/abmelden')
+async def push_abmelden(daten: dict, request: Request):
+    konto = getattr(request.state, 'konto', None) or {}
+    try:
+        await sync.push_melden(daten.get('abo') or {}, konto.get('name', ''),
+                               abmelden=True)
+    except Exception as e:
+        raise HTTPException(503, detail=str(e)) from None
+    return {'ok': True}
+
+
 @app.get('/api/stand')
 async def oberflaechen_stand():
     """Mit welchem Stand die Oberflaeche gerade ausgeliefert wuerde.

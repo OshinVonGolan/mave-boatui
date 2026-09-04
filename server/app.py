@@ -40,6 +40,7 @@ from server.speicher import Speicher
 from sync import protokoll as p
 from sync import rechte as r
 from sync import zugang as zg
+from server.push import PushDienst, KeinPush
 from sync import zeit as sz
 
 log = logging.getLogger('mave-server')
@@ -243,6 +244,19 @@ async def sync(ws: WebSocket) -> None:
                     else:
                         konten.sitzungen_uebernehmen(
                             {d['kennung']: d.get('sitzung') or {}})
+            elif typ == p.PUSH:
+                # Ein Geraet hat sich im Bordnetz beim Pi angemeldet. Senden
+                # kann nur der Server — hier landet es also.
+                d = n['daten'] or {}
+                try:
+                    if d.get('abmelden'):
+                        push.abmelden((d.get('abo') or {}).get('endpoint', ''))
+                    else:
+                        push.anmelden(d.get('abo') or {}, str(d.get('konto') or ''),
+                                      str(d.get('geraet') or ''))
+                    log.info('Push-Abo vom Boot uebernommen (%s)', d.get('konto'))
+                except Exception as e:
+                    log.warning('Push-Abo vom Boot abgewiesen: %s', e)
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
             elif typ == p.EREIGNIS:
@@ -250,6 +264,11 @@ async def sync(ws: WebSocket) -> None:
                 speicher.ereignis_anhaengen(
                     n['folge'], d.get('art', 'unbekannt'), d,
                     _uhrbuch.aufloesen(wand, mono, gestellt))
+                # Ein Alarm ist der Grund, warum es Push ueberhaupt gibt.
+                # Nebenlaeufig: der Versand geht ueber fremde Server und darf
+                # den Datenstrom vom Boot nicht aufhalten.
+                if d.get('art') == 'alarm':
+                    asyncio.create_task(_push_bei_alarm(d))
                 # Ein Wechsel der Betriebsart ist nicht nur ein Ereignis fuers
                 # Protokoll, sondern aendert den ANGEZEIGTEN Zustand: der
                 # Bediener soll sehen, warum seltener Daten kommen. Ohne diese
@@ -298,7 +317,8 @@ async def _hallo(ws: WebSocket, n: dict) -> int:
     # Der Server nennt seinen Stand, der Pi schickt ab dort weiter. Das ist die
     # ganze Nachliefer-Logik.
     verteilung = konten.zum_verteilen() if konten else {'konten': [], 'stand': ''}
-    await ws.send_json(p.stand(speicher.verlauf_stand(), verteilung['stand']))
+    await ws.send_json(p.stand(speicher.verlauf_stand(), verteilung['stand'],
+                               push.oeffentlicher_schluessel))
     # Die Kontenkopie geht gleich mit. Sie ist klein (ein paar Zeilen je Konto)
     # und der Pi braucht sie, BEVOR sich jemand an Bord anmelden will — sie
     # erst auf Nachfrage zu schicken hiesse, die erste Anmeldung im Bordnetz
@@ -506,6 +526,58 @@ async def logout(request: Request) -> JSONResponse:
     antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/',
                           domain=zg.keks_bereich(request.headers.get('host', '')))
     return antwort
+
+
+# ── Push ────────────────────────────────────────────────────────────────────
+# Die Meldung, wenn die Anwendung zu ist. Einzelheiten in server/push.py —
+# vor allem die eine, die man kennen muss: das Senden laeuft ueber den
+# Push-Dienst des Browserherstellers und braucht deshalb Internet auf BEIDEN
+# Seiten. Im Bordnetz ohne Uplink kommt nichts an, obwohl der Pi im selben
+# Raum steht. Dafuer gibt es daneben den Ton bei offener Anwendung.
+push = PushDienst(DATEN / 'push_vapid.json', speicher)
+
+
+@app.get('/api/push/schluessel')
+def push_schluessel(k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
+    """Der oeffentliche Schluessel. Das Geraet braucht ihn, um sich anzumelden."""
+    return JSONResponse({'bereit': push.bereit, 'schluessel': push.oeffentlicher_schluessel,
+                         'grund': push.grund})
+
+
+@app.post('/api/push/anmelden')
+async def push_anmelden(daten: dict, request: Request,
+                        k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
+    """Ein Geraet traegt sich ein.
+
+    Nur LESEN noetig: wer die Werte sehen darf, darf auch benachrichtigt
+    werden. Die Meldung selbst enthaelt nichts, was ueber das hinausgeht.
+    """
+    try:
+        push.anmelden(daten.get('abo') or daten, k.get('name', ''),
+                      zg.geraet_aus_ua(request.headers.get('user-agent', '')))
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e)) from None
+    return JSONResponse({'ok': True})
+
+
+@app.post('/api/push/abmelden')
+async def push_abmelden(daten: dict,
+                        k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
+    endpunkt = (daten or {}).get('endpunkt') or (daten.get('abo') or {}).get('endpoint')
+    if endpunkt:
+        push.abmelden(endpunkt)
+    return JSONResponse({'ok': True})
+
+
+@app.post('/api/push/probe')
+async def push_probe(k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
+    """Eine Probemeldung an die eigenen Geraete — damit man es einmal gesehen
+    hat, bevor es ernst wird."""
+    try:
+        return JSONResponse(push.senden('Probe', 'So sieht eine Meldung von Mave aus.',
+                                        kennung='mave-probe'))
+    except KeinPush as e:
+        raise HTTPException(503, detail=str(e)) from None
 
 
 @app.get('/api/zugang')
@@ -1204,6 +1276,30 @@ def _abbild_stand() -> str:
 
 if STATISCH.exists():
     app.mount('/static', StaticFiles(directory=str(STATISCH)), name='static')
+
+
+async def _push_bei_alarm(d: dict) -> None:
+    """Einen Alarm als Benachrichtigung hinausschicken.
+
+    Im Threadpool: pywebpush spricht HTTP mit dem Push-Dienst, und das ist
+    blockierend. Direkt in der Schleife stuende in dieser Zeit der ganze
+    Server — auch der Datenstrom vom Boot.
+    """
+    kritisch = d.get('schwere') == 'critical'
+    name = d.get('name') or 'Alarm'
+    wert = d.get('wert')
+    text = name + (f' — {wert}' if wert is not None else '')
+    try:
+        ergebnis = await run_in_threadpool(
+            push.senden,
+            'Alarm an Bord' if kritisch else 'Hinweis an Bord', text,
+            kennung='mave-alarm-' + str(d.get('kennung') or 'x'),
+            dringend=kritisch)
+        log.info('Alarm gepusht: %s', ergebnis)
+    except KeinPush as e:
+        log.info('Alarm nicht gepusht: %s', e)
+    except Exception as e:
+        log.warning('Alarm nicht gepusht: %s', e)
 
 
 # ── Lesende Anfragen ans Boot durchreichen ──────────────────────────────────

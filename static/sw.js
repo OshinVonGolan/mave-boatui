@@ -16,7 +16,7 @@
 // Die Nummer MUSS hoch, wenn sich eine Datei aus der Huelle aendert: der
 // activate-Schritt loescht jeden Speicher, der nicht so heisst. Ohne das
 // haette ein Geraet nach dem Icon-Wechsel noch wochenlang das alte Symbol.
-const SPEICHER = 'mave-huelle-v3';
+const SPEICHER = 'mave-huelle-v4';
 
 // Die Huelle: was die Oberflaeche zum Starten braucht. Bewusst kurz — alles
 // Weitere kommt beim ersten Besuch von selbst dazu.
@@ -100,6 +100,51 @@ self.addEventListener('notificationclick', e => {
       }
     }
     await self.clients.openWindow(ziel);
+  })());
+});
+
+// ── Push ───────────────────────────────────────────────────────────────────
+// Was ankommt, wenn die Anwendung ZU ist. Der Server schickt es ueber den
+// Push-Dienst des Browserherstellers; hier wird daraus eine Benachrichtigung.
+//
+// `userVisibleOnly` gilt: ein Push MUSS sichtbar werden, sonst entzieht der
+// Browser die Erlaubnis. Deshalb steht am Ende immer eine Meldung — auch wenn
+// die Nutzlast unlesbar ankommt.
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { /* dann eben ohne */ }
+  const titel = d.titel || 'Mave';
+  e.waitUntil(self.registration.showNotification(titel, {
+    body: d.text || 'Es gibt etwas Neues an Bord.',
+    icon: '/static/icon-192.png',
+    badge: '/static/favicon-32.png',
+    tag: d.tag || 'mave',
+    renotify: true,
+    requireInteraction: !!d.dringend,
+    data: { url: d.url || '/#alarme' },
+  }));
+});
+
+// Der Push-Dienst kann ein Abo austauschen — meist nach laengerer Zeit oder
+// wenn der Browser aufraeumt. Ohne diese Meldung waere das Geraet danach
+// stumm, ohne dass es jemandem auffiele.
+self.addEventListener('pushsubscriptionchange', e => {
+  e.waitUntil((async () => {
+    try {
+      const alt = e.oldSubscription;
+      const neu = e.newSubscription || await self.registration.pushManager.subscribe(
+        e.oldSubscription ? e.oldSubscription.options : { userVisibleOnly: true });
+      if (alt) {
+        await fetch('/api/push/abmelden', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ abo: alt.toJSON(), endpunkt: alt.endpoint }),
+        });
+      }
+      await fetch('/api/push/anmelden', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abo: neu.toJSON() }),
+      });
+    } catch (_) { /* beim naechsten Oeffnen der App faellt es auf */ }
   })());
 });
 

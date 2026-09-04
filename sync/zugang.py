@@ -195,6 +195,12 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     ('*',    r'^/api/connectivity',           r.EINSTELLEN),
     ('PUT',  r'^/api/devices/registry$',     r.EINSTELLEN),
     ('PATCH', r'^/api/lights/preset/',       r.EINSTELLEN),   # Preset AENDERN
+    # Sich fuer Meldungen anmelden darf jeder, der die Werte sehen darf. Die
+    # Meldung selbst sagt nichts, was er nicht ohnehin sehen koennte — und
+    # unter die Vorgabe fuer POST (schalten) zu fallen hiesse, dass ein Gast
+    # ueber einen Alarm nicht benachrichtigt werden kann, den er auf dem Schirm
+    # sehen darf.
+    ('*',    r'^/api/push/',                  r.LESEN),
     # Alles andere Schreibende ist Bedienen. Das ist die VORGABE fuer neue
     # Endpunkte, und sie ist bewusst gewaehlt: die meisten schreibenden Aufrufe
     # dieser Anlage sind Bedienung. Wer einen Endpunkt baut, der mehr tut —

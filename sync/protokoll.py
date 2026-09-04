@@ -33,6 +33,7 @@ VERLAUF  = 'verlauf'    # ein Buendel Verlaufseintraege, mit Folgenummern
 EREIGNIS = 'ereignis'   # Alarm, Stoerung, Systemereignis — sofort
 QUITTUNG = 'quittung'   # Ergebnis eines Befehls
 SITZUNG  = 'sitzung'     # eine neue Anmeldung an Bord, damit der Server sie kennt
+PUSH     = 'push'        # ein Geraet moechte benachrichtigt werden — der Server sendet
 
 # Server -> Pi
 STAND    = 'stand'      # "ich habe Verlauf bis Folge N", dazu Kontenrevision
@@ -43,7 +44,7 @@ KONTEN   = 'konten'     # die Kontenkopie, damit der Pi ohne Internet anmelden k
 PING     = 'ping'
 PONG     = 'pong'
 
-_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, SITZUNG, PING, PONG})
+_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, SITZUNG, PUSH, PING, PONG})
 _VOM_SERVER  = frozenset({STAND, BEFEHL, KONTEN, PING, PONG})
 _MIT_FOLGE   = frozenset({VERLAUF, EREIGNIS})
 
@@ -84,7 +85,7 @@ def hallo(geraet: str, fassung: int, version: str, verlauf_folge: int,
     }, wand=wand, mono=mono, gestellt=gestellt)
 
 
-def stand(verlauf_bis: int, konten_stand: str = '') -> dict:
+def stand(verlauf_bis: int, konten_stand: str = '', push_schluessel: str = '') -> dict:
     """Die Antwort des Servers: bis wohin er den Verlauf hat.
 
     `konten_stand` ist eine Kennung des Kontenbestands, kein Zaehler — ein
@@ -92,9 +93,16 @@ def stand(verlauf_bis: int, konten_stand: str = '') -> dict:
     liefe nach einem Neustart der falschen Seite aus dem Tritt; die Kennung
     stimmt immer, weil sie aus den Daten selbst folgt. Der Pi vergleicht sie
     mit seiner eigenen und fordert nur bei Abweichung eine neue Kopie an.
+
+    Der `push_schluessel` faehrt mit, weil das Boot ihn braucht und nicht
+    selbst hat: meldet sich ein Geraet im Bordnetz fuer Benachrichtigungen an,
+    fragt es den Pi nach dem oeffentlichen Schluessel — den kennt aber nur der
+    Server, der auch sendet. Ein eigener Abruf dafuer waere ein zweites Rohr
+    fuer eine Zeichenkette, die ohnehin bei jedem Verbinden vorbeikommt.
     """
     return umschlag(STAND, {'verlauf_bis': int(verlauf_bis),
-                            'konten_stand': str(konten_stand or '')})
+                            'konten_stand': str(konten_stand or ''),
+                            'push_schluessel': str(push_schluessel or '')})
 
 
 def sitzung(kennung: str, daten: dict, beendet: bool = False) -> dict:
@@ -110,6 +118,19 @@ def sitzung(kennung: str, daten: dict, beendet: bool = False) -> dict:
     """
     return umschlag(SITZUNG, {'kennung': kennung, 'sitzung': daten,
                               'beendet': bool(beendet)})
+
+
+def push_abo(abo: dict, konto: str, geraet: str = '', abmelden: bool = False) -> dict:
+    """Ein Geraet im Bordnetz moechte benachrichtigt werden.
+
+    Es hat sich beim PI angemeldet — der ist im Bordnetz die Adresse, unter der
+    die Anwendung laeuft. Senden kann aber nur der Server: ein Push-Abo zeigt
+    auf den Dienst des Browserherstellers, und dorthin kommt man nur mit
+    Internet. Der Pi reicht das Abo deshalb weiter, so wie er es mit
+    Anmeldungen auch tut.
+    """
+    return umschlag(PUSH, {'abo': abo, 'konto': konto, 'geraet': geraet,
+                           'abmelden': bool(abmelden)})
 
 
 def konten(daten: dict) -> dict:

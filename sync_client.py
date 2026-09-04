@@ -109,6 +109,7 @@ class SyncClient:
         self._letzter_zustand = 0.0
         self._gemeldete_art: str | None = None
         self._start_mono = time.monotonic()
+        self._push_schluessel = ''
         self.zustand_gesendet = 0
         self.verlauf_gesendet = 0
         self.befehle_ausgefuehrt = 0
@@ -184,6 +185,10 @@ class SyncClient:
             antwort = p.pruefe(json.loads(await ws.recv()), vom_pi=False)
             if antwort['typ'] != p.STAND:
                 raise RuntimeError(f'Erwartet wurde der Stand, kam: {antwort["typ"]}')
+            # Der oeffentliche Push-Schluessel kommt im Handschlag mit. Das Boot
+            # braucht ihn, um ein Geraet im Bordnetz anmelden zu koennen; er
+            # gehoert dem Server, der auch sendet.
+            self._push_schluessel = str((antwort['daten'] or {}).get('push_schluessel') or '')
             ab = int((antwort['daten'] or {}).get('verlauf_bis', 0)) + 1
             log.info('Mit dem Server verbunden. Verlauf ab %d, Betriebsart %s', ab, self._art())
 
@@ -328,6 +333,24 @@ class SyncClient:
             await self._senden(p.sitzung(kennung, daten, beendet))
         except Exception as e:
             log.debug('Sitzung nicht gemeldet: %s', e)
+
+    @property
+    def push_schluessel(self) -> str:
+        """Der oeffentliche Schluessel des Servers, aus dem Handschlag."""
+        return self._push_schluessel
+
+    async def push_melden(self, abo: dict, konto: str, geraet: str = '',
+                          abmelden: bool = False) -> None:
+        """Ein an Bord entstandenes Push-Abo zum Server tragen.
+
+        Ohne Verbindung passiert nichts, und dann ist das Abo auch nutzlos: der
+        Server sendet, nicht das Boot. Wer sich im Bordnetz ohne Internet
+        anmeldet, bekommt genau deshalb eine ehrliche Rueckmeldung statt einer
+        stillen Ablage.
+        """
+        if self._ws is None:
+            raise RuntimeError('Kein Server erreichbar — ohne ihn kann niemand senden.')
+        await self._senden(p.push_abo(abo, konto, geraet, abmelden))
 
     async def ereignis(self, art: str, daten: dict, folge: int | None = None) -> None:
         """Alarme und Stoerungen. Gehen in JEDER Betriebsart sofort hinaus —
