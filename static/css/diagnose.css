@@ -85,6 +85,19 @@ body {
 .rahmen {
   display: grid; grid-template-columns: var(--schiene-b) minmax(0, 1fr);
   align-items: stretch; min-height: 100vh; min-height: 100dvh;
+  /* Die Flaeche der Schiene gehoert der SPALTE, nicht dem Element.
+     Das Element ist genau einen Bildschirm hoch und klebt oben — richtig so,
+     denn es soll beim Rollen stehenbleiben. Traegt es aber auch die Farbe,
+     endet die Flaeche auf einer langen Seite dort, wo der Bildschirm endet,
+     und darunter steht die Spalte leer. Beim Rollen faellt das nicht auf
+     (die Schiene wandert ja mit), auf einem Bild der ganzen Seite sofort.
+     Deshalb malt der Rahmen die Spalte durchgehend aus, samt Trennlinie, und
+     die Schiene selbst bleibt durchsichtig. */
+  background:
+    linear-gradient(to right,
+      var(--surface) 0 calc(var(--schiene-b) - 1px),
+      var(--border) calc(var(--schiene-b) - 1px) var(--schiene-b),
+      transparent var(--schiene-b));
 }
 
 .schiene {
@@ -92,7 +105,6 @@ body {
   height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 2px;
   padding: 14px 10px max(14px, env(safe-area-inset-bottom)) 10px;
-  background: var(--surface); border-right: 1px solid var(--border);
   z-index: 40;
 }
 /* Die Marke oben in der Schiene, wie der Name auf einem Programmfenster. */
@@ -217,8 +229,9 @@ main {
    Jetzt liegt sie daneben und kommt auf Griff herein. Die Ordnung bleibt, die
    Hoehe bleibt dem Inhalt. */
 @media (max-width: 900px) {
-  .rahmen { grid-template-columns: 1fr; }
+  .rahmen { grid-template-columns: 1fr; background: none; }
   .schiene {
+    background: var(--surface); border-right: 1px solid var(--border);
     position: fixed; top: 0; left: 0; bottom: 0;
     width: min(280px, 84vw); height: 100dvh;
     transform: translateX(-100%);
