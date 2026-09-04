@@ -52,8 +52,10 @@ function _dspLoad() {
   try {
     const raw = localStorage.getItem(_DSP_KEY);
     let saved = raw ? JSON.parse(raw) : {};
-    if ((saved.ver ?? 1) < _DSP_VER) saved = { activeProfile: saved.activeProfile };
-    _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile, tiles: {} };
+    if ((saved.ver ?? 1) < _DSP_VER) saved = { activeProfile: saved.activeProfile,
+                                              spalten: saved.spalten };
+    _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile,
+             spalten: saved.spalten ?? 'auto', tiles: {} };
     // Die Kachelreihenfolge ueberlebt das Neuaufbauen: _dsp wird hier aus den
     // Vorgaben zusammengesetzt, alles Nichtgenannte ginge sonst verloren.
     if (Array.isArray(saved.reihenfolge)) _dsp.reihenfolge = saved.reihenfolge;
@@ -132,12 +134,37 @@ function _dspActiveProfile() {
 // Zeilenhöhe = (Spaltenbreite − gap) / 2, damit 2 Zeilen exakt 1 Spaltenbreite
 // ergeben (Quadrat). grid-auto-flow:dense packt automatisch ohne Lücken oben.
 
+// Ab welcher Kachelbreite es eng wird. Am laufenden System gemessen: bei
+// 176 px laufen Batterie-, Wechselrichter- und Lichtkachel ueber ihren Rand,
+// ab 205 px nicht mehr. 200 ist die Schwelle mit etwas Luft.
+const _KACHEL_ENG_PX = 200;
+
+/** Wie viele Spalten das Raster gerade hat. */
 function _cols() {
+  // Eine feste Wahl schlaegt die Breite. Grund: das Wandtablet am Kartentisch
+  // meldet im Hochformat gut 530 Pixel und bekaeme nach der Breitenregel eine
+  // einzige Spalte — die Seite ist damit 1600 Pixel hoch und man scrollt an
+  // einem fest montierten Geraet. Mit zwei Spalten sind es 1000, und die
+  // Kacheln haben immer noch 243 Pixel. Das ist eine Entscheidung ueber das
+  // GERAET, nicht ueber die Breite, und deshalb steht sie in den Einstellungen.
+  const fest = parseInt((_dsp && _dsp.spalten) || 'auto', 10);
+  if (fest >= 1 && fest <= 4) return fest;
   const w = window.innerWidth;
   if (w < 640)  return 1;
   if (w < 1024) return 2;
   if (w < 1600) return 3;
   return 4;
+}
+
+/** Wie breit eine Kachel bei dieser Spaltenzahl waere — fuer die Einstellung. */
+function _kachelbreite(spalten) {
+  const main = document.querySelector('main');
+  if (!main || spalten < 1) return 0;
+  const cs = getComputedStyle(main);
+  const gap = parseFloat(cs.columnGap) || 16;
+  const innen = main.clientWidth - (parseFloat(cs.paddingLeft) || 0)
+                                 - (parseFloat(cs.paddingRight) || 0);
+  return Math.round((innen - (spalten - 1) * gap) / spalten);
 }
 
 // Kachelelemente einmal merken — _applyGrid läuft bei jedem resize-Frame,
@@ -865,6 +892,19 @@ function openDisplaySettings() {
         Automatisch: bei Breite &lt;640 px → Mobil, sonst Laptop.
         Kiosk aktiviert die Bottom-Navigation.
       </div>
+
+      <div class="settings-row" style="margin-top:12px">
+        <label class="settings-label">Spalten</label>
+        <select class="settings-input" id="dspSpaltenSel" style="max-width:220px;cursor:pointer"
+                onchange="_spaltenHinweis()">
+          <option value="auto">Automatisch (nach Breite)</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px" id="dspSpaltenHinweis"></div>
     </div>
 
     ${_PROFILES.map(p => `
@@ -886,10 +926,33 @@ function openDisplaySettings() {
   `;
 
   $('dspProfileSel').value = _dsp.activeProfile;
+  $('dspSpaltenSel').value = _dsp.spalten || 'auto';
+  _spaltenHinweis();
+}
+
+/** Was die gewaehlte Spaltenzahl auf DIESEM Bildschirm bedeutet.
+ *
+ *  Eine Zahl ohne Folge ist eine Zumutung: "3 Spalten" sagt niemandem, ob das
+ *  hier noch lesbar ist. Deshalb steht daneben, wie breit eine Kachel damit
+ *  waere — und ab wann es zu eng wird.
+ */
+function _spaltenHinweis() {
+  const feld = $('dspSpaltenHinweis'), wahl = $('dspSpaltenSel');
+  if (!feld || !wahl) return;
+  const gewaehlt = wahl.value === 'auto' ? _cols() : parseInt(wahl.value, 10);
+  const breite = _kachelbreite(gewaehlt);
+  const eng = breite > 0 && breite < _KACHEL_ENG_PX;
+  feld.innerHTML = wahl.value === 'auto'
+    ? `Hier ergibt das zurzeit <b>${gewaehlt}</b> Spalte${gewaehlt === 1 ? '' : 'n'} `
+      + `à ${breite} px. Dreht man das Gerät, ändert sich das mit.`
+    : `Feste Wahl: ${breite} px je Kachel. Gilt nur auf diesem Gerät.`
+      + (eng ? ' <span style="color:var(--yellow)">Darunter wird es eng — '
+             + 'unter 200 px laufen einzelne Kacheln über ihren Rand.</span>' : '');
 }
 
 function saveDisplaySettings(silent) {
   _dsp.activeProfile = $('dspProfileSel').value;
+  _dsp.spalten = ($('dspSpaltenSel') || {}).value || 'auto';
   for (const p of _PROFILES) {
     for (const t of _TILES) {
       const el = $(`dsp_${p.id}_${t.id}`);
