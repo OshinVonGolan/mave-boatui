@@ -221,7 +221,15 @@ function fertigZeigen() {
     </div>`;
   // Kurz stehen lassen: ein Sprung ohne Bestätigung fühlt sich an, als wäre
   // etwas schiefgegangen.
-  setTimeout(() => { location.href = '/'; }, 1800);
+  //
+  // Und zur BORDANSICHT, nicht auf "/": kam die Einladung über den
+  // Logbuch-Namen, führte "/" dorthin — und dort steht die Crew vor einer
+  // Abweisung, weil sie das Logbuch gar nicht öffnen darf. Ein Willkommen,
+  // das mit "kein Zugang" endet, ist ein schlechtes Willkommen.
+  const ziel = location.hostname.startsWith('logbuch.')
+    ? location.protocol + '//' + location.hostname.replace(/^logbuch\./, 'mave.') + '/'
+    : '/';
+  setTimeout(() => { location.href = ziel; }, 1800);
 }
 
 start();
