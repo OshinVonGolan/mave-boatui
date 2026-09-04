@@ -261,6 +261,40 @@ class Ereignisnummern(unittest.TestCase):
         self.assertGreater(sync_client._ereignis_folge(), 0)
 
 
+class PushProtokoll(unittest.TestCase):
+    """Der Schlüssel fährt im Handschlag mit, das Abo geht vom Boot zum Server.
+
+    Warum überhaupt: senden kann nur der Server (ein Push-Abo zeigt auf den
+    Dienst des Browserherstellers). Meldet sich ein Gerät im Bordnetz an,
+    landet die Anmeldung aber beim Pi — der muss sie weiterreichen und braucht
+    dafür den öffentlichen Schlüssel, den er nicht selbst hat.
+    """
+
+    def test_stand_traegt_den_schluessel(self):
+        n = p.stand(42, 'abc', 'BGYoHYyB')
+        self.assertEqual(n['daten']['push_schluessel'], 'BGYoHYyB')
+        self.assertEqual(n['daten']['verlauf_bis'], 42)
+
+    def test_stand_ohne_schluessel_bleibt_gueltig(self):
+        """Ohne eingerichtetes Push darf der Handschlag nicht scheitern."""
+        n = p.stand(1)
+        self.assertEqual(n['daten']['push_schluessel'], '')
+
+    def test_abo_geht_nur_vom_pi_zum_server(self):
+        n = p.push_abo({'endpoint': 'https://x/y', 'keys': {}}, 'joshy', 'Tablet')
+        self.assertEqual(n['typ'], p.PUSH)
+        self.assertEqual(n['daten']['konto'], 'joshy')
+        self.assertFalse(n['daten']['abmelden'])
+        # Richtung: der Pi schickt, der Server empfaengt.
+        p.pruefe(n, vom_pi=True)
+        with self.assertRaises(p.ProtokollFehler):
+            p.pruefe(n, vom_pi=False)
+
+    def test_abmelden_faehrt_als_gleiche_nachricht(self):
+        n = p.push_abo({'endpoint': 'https://x/y'}, 'joshy', abmelden=True)
+        self.assertTrue(n['daten']['abmelden'])
+
+
 if __name__ == '__main__':
     unittest.main()
 

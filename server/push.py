@@ -71,7 +71,16 @@ class PushDienst:
                 self._vapid.save_key(str(self._datei))
                 self._datei.chmod(0o600)
                 log.info('Push: neues Schluesselpaar erzeugt (%s)', self._datei)
-            self._oeffentlich = self._vapid.public_key_urlsafe_base64()
+            # py_vapid gibt den Schluessel als Kurvenobjekt heraus, nicht als
+            # Zeichenkette. Der Browser will ihn als unkomprimierten Punkt in
+            # url-sicherem Base64 — genau die Form, die `applicationServerKey`
+            # erwartet.
+            from cryptography.hazmat.primitives import serialization
+            from py_vapid import b64urlencode
+            roh = self._vapid.public_key.public_bytes(
+                serialization.Encoding.X962,
+                serialization.PublicFormat.UncompressedPoint)
+            self._oeffentlich = b64urlencode(roh)
             self._bereit = True
             self._grund = ''
         except Exception as e:                       # pragma: no cover
