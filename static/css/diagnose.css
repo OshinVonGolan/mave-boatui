@@ -699,3 +699,170 @@ main {
     text-indent: -9999px; overflow: hidden; white-space: nowrap;
   }
 }
+
+/* ── Dashboard ("Überblick") ────────────────────────────────────────────────
+   Ein Zwoelferraster, geteilt in drei Baender. Zwoelf, weil sich damit
+   Drittel, Viertel und Sechstel sauber legen lassen — bei zehn Spalten geht
+   das Drittel nicht auf, und genau die Aufteilung 6+3+3 traegt das erste Band.
+
+   Die Baender tragen dieselben kleinen Ueberschriften wie die Schiene und die
+   Anwesenheitsliste (.sl-gruppe, .aw-gruppe): dieselbe Sache, dieselbe
+   Gestalt. */
+.db {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px; align-items: stretch;
+}
+.db-band {
+  grid-column: 1 / -1;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text3); margin: 8px 0 -4px;
+}
+.db-band:first-child { margin-top: 0; }
+.db-karte { display: flex; flex-direction: column; min-width: 0; }
+.sp6 { grid-column: span 6; }
+.sp5 { grid-column: span 5; }
+.sp4 { grid-column: span 4; }
+.sp3 { grid-column: span 3; }
+
+/* Zwei Stufen, nicht fuenf. Bei 1180 wird aus 6+3+3 ein 6+6 und aus 5+4+3 ein
+   6+6+12; darunter steht alles untereinander. Mehr Stufen sehen im Entwurf
+   klug aus und fuehren im Betrieb dazu, dass niemand mehr weiss, warum eine
+   Karte gerade so breit ist. */
+@media (max-width: 1180px) {
+  .sp6, .sp5, .sp4 { grid-column: span 6; }
+  .sp3 { grid-column: span 6; }
+}
+@media (max-width: 760px) {
+  .db { gap: 13px; }
+  .sp6, .sp5, .sp4, .sp3 { grid-column: 1 / -1; }
+}
+
+/* Der Balken ganz oben, wenn der ganze Schnappschuss alt ist. */
+.db-warnung {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 17px; border-radius: 12px;
+  background: color-mix(in srgb, var(--yellow) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--yellow) 38%, transparent);
+  font-size: 13px; color: var(--text);
+}
+.db-warnung.schwer {
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--red) 38%, transparent);
+}
+.dbw-mark {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  background: var(--yellow); color: #1b1405; border-radius: 5px;
+  padding: 2px 7px; flex: 0 0 auto;
+}
+.db-warnung.schwer .dbw-mark { background: var(--red); color: #240b0b; }
+
+/* ── Innenleben einer Karte ─────────────────────────────────────────────── */
+/* Die Antwort steht als SATZ oben, die Zahl gross darunter, die Belege klein
+   darunter. Wer aus zwei Metern draufsieht, liest den Satz; wer davorsitzt,
+   liest die Zahlen. */
+.dk-kopf {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px;
+}
+.dk-kopf h2 {
+  margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--text3);
+}
+.dk-frische {
+  margin-left: auto; font-size: 10.5px; color: var(--text3); white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.dk-punkt {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: 0 0 auto;
+}
+.dk-punkt.alt { background: var(--yellow); }
+.dk-punkt.aus { background: var(--text3); }
+
+.dk-satz { font-size: 15px; font-weight: 600; line-height: 1.35; }
+.dk-satz.gut { color: var(--green); }
+.dk-satz.mau { color: var(--yellow); }
+.dk-satz.schlecht { color: var(--red); }
+.dk-satz.leer { color: var(--text2); font-weight: 500; }
+
+.dk-gross {
+  font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; margin: 10px 0 2px;
+}
+.dk-gross.gut { color: var(--green); }
+.dk-gross.mau { color: var(--yellow); }
+.dk-gross.schlecht { color: var(--red); }
+.dk-gross .dk-einheit { font-size: 17px; font-weight: 600; color: var(--text2); margin-left: 5px; }
+
+.dk-neben { font-size: 12px; color: var(--text2); }
+
+/* Die Belegzeile: Name links, Wert rechts. Immer dasselbe Muster, damit das
+   Auge in jeder Karte an derselben Stelle sucht. */
+.dk-liste { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; }
+.dk-zeile {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 0; border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.dk-zeile:first-child { border-top: none; }
+.dk-name { color: var(--text2); }
+.dk-wert { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+.dk-wert.still { color: var(--text3); font-weight: 500; }
+.dk-wert.gut { color: var(--green); }
+.dk-wert.mau { color: var(--yellow); }
+.dk-wert.schlecht { color: var(--red); }
+.dk-grund { font-size: 11.5px; color: var(--text3); margin-top: -2px; padding-bottom: 6px; }
+
+/* Kante links, wenn etwas nicht stimmt. Kein Umsortieren, keine Blinkerei. */
+.db-karte.warnt { border-left: 3px solid var(--yellow); }
+.db-karte.schlimm { border-left: 3px solid var(--red); }
+
+/* ── Sparkline ──────────────────────────────────────────────────────────── */
+/* Als SVG und nicht als Canvas: es skaliert von selbst mit der Karte mit.
+   Ein Canvas muesste bei jeder Breitenaenderung neu gerechnet und neu
+   gezeichnet werden — genau die Falle, die auf der Messwerte-Seite den
+   Groessenbeobachter noetig macht. Fuer eine Linie ohne Achsen lohnt das nicht. */
+.dk-funke { display: block; width: 100%; height: 44px; margin: 10px 0 4px; overflow: visible; }
+.dk-funke.hoch { height: 78px; }
+.dk-funke-leer {
+  height: 44px; margin: 10px 0 4px; display: flex; align-items: center;
+  font-size: 11.5px; color: var(--text3);
+}
+
+/* ── Tankbalken ─────────────────────────────────────────────────────────── */
+.dk-tank { padding: 9px 0; }
+.dk-tank + .dk-tank { border-top: 1px solid var(--border); }
+.dk-tank-kopf { display: flex; align-items: baseline; gap: 9px; font-size: 13px; }
+.dk-tank-kopf b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.dk-tank-kopf .dk-tank-neben { margin-left: auto; font-size: 11.5px; color: var(--text3); }
+.dk-balken {
+  height: 7px; border-radius: 4px; background: var(--surface2); margin-top: 7px;
+  overflow: hidden;
+}
+.dk-balken i { display: block; height: 100%; border-radius: 4px; background: var(--blau); }
+.dk-balken i.mau { background: var(--yellow); }
+.dk-balken i.schlecht { background: var(--red); }
+
+/* ── Lichtkreise ────────────────────────────────────────────────────────── */
+.dk-kreise { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.dk-kreis {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--surface2); border: 1px solid var(--border);
+  display: grid; place-items: center;
+  font-size: 10.5px; color: var(--text3); font-variant-numeric: tabular-nums;
+}
+.dk-kreis.an {
+  background: color-mix(in srgb, var(--yellow) 30%, var(--surface2));
+  border-color: color-mix(in srgb, var(--yellow) 55%, transparent);
+  color: var(--text);
+}
+
+/* Die Fusszeile der Verbindungskarte (Antwortzeit, Durchsatz). */
+.db-fuss {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  display: flex; gap: 22px; flex-wrap: wrap; font-size: 12.5px;
+}
+.db-fuss span { color: var(--text2); }
+.db-fuss b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Die Chronik im Dashboard bekommt eine Hoehe und rollt darin. Ohne das
+   bestimmt allein ihre Laenge die Hoehe des ganzen Bandes. */
+.db .liste { max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }

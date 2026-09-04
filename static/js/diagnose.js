@@ -165,8 +165,12 @@ async function start() {
   }
 
   await laden();
+  await dashboardVerlaufLaden();
   await messwerteLaden();
   setInterval(laden, 30000);
+  // Der Verlauf fuers Dashboard aendert sich langsam — ein Punkt je neun
+  // Minuten. Alle fuenf Minuten nachzuladen reicht und kostet den Pi wenig.
+  setInterval(dashboardVerlaufLaden, 300000);
   // Messwerte seltener: sie ändern sich langsam und kosten mehr.
   setInterval(messwerteLaden, 120000);
 }
@@ -206,67 +210,423 @@ function seiteZeigen(name) {
   window.scrollTo(0, 0);
 }
 
-// ── Überblick ──────────────────────────────────────────────────────────────
-// Die Startseite beantwortet drei Fragen auf einen Blick: Wie steht es gerade?
-// Wer ist da? Und war zuletzt etwas los?
+// ── Überblick: das Dashboard ───────────────────────────────────────────────
+// Die Startseite beantwortet der Reihe nach die Fragen, mit denen jemand sie
+// öffnet, der auf dem Boot LEBT:
+//
+//   Strom   — reicht er, und wie lange noch?
+//   Bord    — ist es warm, reichen die Vorräte, brennt noch Licht?
+//   Anlage  — läuft sie überhaupt, und sind die Zahlen oben von jetzt?
+//
+// Jede Karte beantwortet genau EINE davon, und zwar zuerst als Satz: aus zwei
+// Metern Entfernung liest man "Reicht rund 5 Tage", nicht "90,9 %". Die Zahlen
+// stehen darunter für den, der genauer hinsieht.
+//
+// Die Anordnung liegt fest. Eine Karte, die heute Sorgen macht, bekommt eine
+// farbige Kante — sie wandert aber nicht nach oben. Eine Oberfläche, die ihre
+// Reihenfolge ändert, muss man jedes Mal neu lesen.
 
-// Ein Symbol je Kennzahl. Aus dem eigenen SVG-Satz, keine Schriftzeichen:
-// die Oberflaeche fuehrt keine Bildzeichen als Symbolersatz.
-const _svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-const ZAHL_ICON = {
-  'Ladestand': _svg('<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/><rect x="4" y="9" width="9" height="6" rx="1" fill="currentColor" stroke="none"/>'),
-  'Bilanz':    _svg('<path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/>'),
-  'Wasser':    _svg('<path d="M12 3s6 6.5 6 10.5A6 6 0 0 1 6 13.5C6 9.5 12 3 12 3z"/>'),
-  'Diesel':    _svg('<path d="M4 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14"/><path d="M3 20h13"/><path d="M17 9l3 2v7a1.5 1.5 0 0 1-3 0"/>'),
-  'Innen':     _svg('<path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"/>'),
-  standard:    _svg('<circle cx="12" cy="12" r="9"/>'),
-};
+// Ein eigener, kurzer Verlauf fürs Dashboard. Getrennt von der Messwerte-Seite:
+// die hat ihren eigenen Zeitraum, den der Betrachter einstellt, und der soll
+// sich nicht dadurch verstellen, dass jemand kurz auf den Überblick schaut.
+let _dbVerlauf = null;
+
+async function dashboardVerlaufLaden() {
+  const bis = Date.now() / 1000;
+  const von = bis - 24 * 3600;
+  // 160 Punkte auf 24 Stunden: ein Punkt je neun Minuten. Für eine Linie ohne
+  // Achsen ist mehr nicht sichtbar und kostet den Pi nur Arbeit.
+  const d = await hole(`/api/verlauf/reihen?von=${Math.floor(von)}&bis=${Math.ceil(bis)}&punkte=160`);
+  if (d) { _dbVerlauf = d; zeichneUeberblick(); }
+}
+
+/** Die Mittelwerte einer Reihe aus dem Dashboard-Verlauf, oder null. */
+function _reihe(feld) {
+  const p = _dbVerlauf && _dbVerlauf.punkte;
+  if (!p || !p.length) return null;
+  const w = p.map(x => Array.isArray(x[feld]) ? x[feld][0] : x[feld])
+             .filter(v => typeof v === 'number');
+  return w.length >= 3 ? w : null;
+}
+
+/** Der zuletzt gemessene Wert einer Reihe. */
+function _reiheLetzt(feld) {
+  const w = _reihe(feld);
+  return w ? w[w.length - 1] : null;
+}
+
+/**
+ * Eine Linie ohne Achsen — als SVG und nicht als Canvas.
+ *
+ * Ein SVG skaliert von selbst mit der Karte mit. Ein Canvas müsste bei jeder
+ * Breitenänderung neu gerechnet und neu gezeichnet werden; genau dafür braucht
+ * die Messwerte-Seite ihren Größenbeobachter. Für eine Linie ohne Beschriftung
+ * lohnt dieser Aufwand nicht.
+ */
+function _funke(werte, farbe, hoch) {
+  if (!werte) return '<div class="dk-funke-leer">kein Verlauf für die letzten 24 Stunden</div>';
+  const min = Math.min(...werte), max = Math.max(...werte);
+  const spanne = (max - min) || 1;
+  const n = werte.length;
+  const pkt = werte.map((v, i) =>
+    `${(i / (n - 1) * 100).toFixed(2)},${(100 - (v - min) / spanne * 100).toFixed(2)}`);
+  return `<svg class="dk-funke${hoch ? ' hoch' : ''}" viewBox="0 0 100 100"
+      preserveAspectRatio="none" aria-hidden="true">
+    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-width="1.7"
+      vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+// Ab wann ein Wert nicht mehr "von jetzt" ist. Der Bus meldet im Sekundentakt;
+// zwei Minuten Stille sind kein Rauschen mehr, sondern eine Aussage.
+const FRISCH_S = 120;
+
+/**
+ * Wie alt ein Messwert WIRKLICH ist.
+ *
+ * Die Falle: jede Gruppe trägt ihr eigenes `_age_s`, aber das ist die Zeit seit
+ * dem letzten Bus-Rahmen AUF DEM BOOT, gemessen zum Zeitpunkt der Aufnahme.
+ * Schweigt das Boot seit sechs Stunden, steht in dieser Zahl trotzdem "0,3" —
+ * sie ist mit dem Schnappschuss eingefroren. Wer sie ungeprüft anzeigt,
+ * behauptet Aktualität, die es nicht gibt. Deshalb kommt das Alter der
+ * Übertragung obendrauf.
+ *
+ * `null` heißt etwas ganz anderes als "alt": das Gerät war seit dem Start nie
+ * am Bus. Ladegerät und Lichtmaschine sind nicht verbaut — das ist Absicht und
+ * kein Fehler, und es muss auch so dastehen.
+ */
+function _frische(gruppe) {
+  const z = _daten.zustand;
+  const g = (z && z[gruppe]) || {};
+  const eigen = g._age_s !== undefined ? g._age_s
+              : (g.age_s !== undefined ? g.age_s : null);
+  if (eigen === null || eigen === undefined) return { art: 'aus', alt: null, text: 'nicht am Bus' };
+  const versatz = (z && z.quelle === 'server' && !z.boot_verbunden) ? (z.alter_s || 0) : 0;
+  const alt = eigen + versatz;
+  return alt < FRISCH_S
+    ? { art: 'frisch', alt, text: 'jetzt' }
+    : { art: 'alt', alt, text: 'vor ' + dauer(alt) };
+}
+
+function _kopf(titel, gruppe) {
+  const f = _frische(gruppe);
+  const kl = f.art === 'frisch' ? '' : (f.art === 'aus' ? 'aus' : 'alt');
+  return `<div class="dk-kopf"><h2>${esc(titel)}</h2>
+    <span class="dk-frische"><i class="dk-punkt ${kl}"></i>${esc(f.text)}</span></div>`;
+}
+
+function _zeile(name, wert, art, grund) {
+  return `<div class="dk-zeile"><span class="dk-name">${esc(name)}</span>
+      <span class="dk-wert ${art || ''}">${esc(wert)}</span></div>`
+    + (grund ? `<div class="dk-grund">${esc(grund)}</div>` : '');
+}
+
+/** Eine Dauer, wie man sie sagt: "rund 5 Tage", nicht "119,4 Stunden". */
+function _grob(stunden) {
+  if (stunden == null || !isFinite(stunden) || stunden <= 0) return null;
+  if (stunden < 1.5) return `${Math.round(stunden * 60)} Minuten`;
+  if (stunden < 36) return `rund ${Math.round(stunden)} Stunden`;
+  const t = stunden / 24;
+  return t < 10 ? `rund ${t.toFixed(t < 3 ? 1 : 0)} Tage` : `über eine Woche`;
+}
+
+// ── Die einzelnen Karten ───────────────────────────────────────────────────
+
+function _karteBatterie(z) {
+  const b = z.battery || {}, bms = z.bms || {};
+  const soc = b.soc;
+  const stufe = soc == null ? '' : (soc >= 50 ? 'gut' : soc >= 25 ? 'mau' : 'schlecht');
+
+  // Zwei unabhängige Wege zur selben Frage — und das ist die eigentliche
+  // Nachricht. Der Shunt rechnet aus entnommenen Ah, das BMS aus Restenergie.
+  // Stimmen sie überein, kann man der Zahl glauben. Weichen sie stark ab, wird
+  // das GESAGT, statt stillschweigend eine der beiden zu bevorzugen.
+  //
+  // `ttg` steht in MINUTEN (can_reader.py). Die Gegenprobe bestätigt es: 7210
+  // ergibt 120 Stunden, und remaining_kwh / Verbrauch ergibt 119.
+  //
+  // Gerechnet wird gegen den VERBRAUCH, nicht gegen den Nettofluss — am Steg
+  // ist netto nahe null und ergäbe absurde Zahlen. Die nützliche Frage ist:
+  // wie lange komme ich hin, wenn nichts mehr nachkommt.
+  const verbrauchW = (b.power != null && b.power < 0) ? -b.power : null;
+  const ttgStd = b.ttg != null ? b.ttg / 60 : null;
+  const bmsStd = (bms.remaining_kwh != null && verbrauchW)
+    ? bms.remaining_kwh * 1000 / verbrauchW : null;
+
+  let satz, satzArt = stufe;
+  if (b.power != null && b.power > 5) {
+    satz = 'Wird gerade geladen';
+    satzArt = 'gut';
+  } else if (ttgStd != null && bmsStd != null
+             && (ttgStd / bmsStd > 2 || bmsStd / ttgStd > 2)) {
+    const a = Math.min(ttgStd, bmsStd), c = Math.max(ttgStd, bmsStd);
+    satz = `Reicht ${_grob(a)} bis ${_grob(c)}`;
+    satzArt = 'mau';
+  } else {
+    const std = ttgStd != null ? ttgStd : bmsStd;
+    satz = std != null ? `Reicht ${_grob(std)}` : 'Restlaufzeit nicht bestimmbar';
+    if (std == null) satzArt = 'leer';
+    else if (std < 24) satzArt = 'mau';
+    else if (std < 8) satzArt = 'schlecht';
+  }
+
+  const uneins = (ttgStd != null && bmsStd != null
+                  && (ttgStd / bmsStd > 2 || bmsStd / ttgStd > 2));
+  return _kopf('Bordbatterie', 'battery')
+    + `<div class="dk-satz ${satzArt}">${esc(satz)}</div>`
+    + `<div class="dk-gross ${stufe}">${soc != null ? soc.toFixed(1) : '—'}<span class="dk-einheit">%</span></div>`
+    + `<div class="dk-neben">Ladestand nach Shunt${bms.soc != null ? ` · BMS meldet ${Math.round(bms.soc)} %` : ''}</div>`
+    + _funke(_reihe('soc'), 'var(--green)', true)
+    + '<div class="dk-liste">'
+    + _zeile('Bilanz', b.current != null
+        ? `${b.current > 0 ? '+' : ''}${b.current.toFixed(1)} A${b.power != null ? ` · ${Math.round(Math.abs(b.power))} W` : ''}`
+        : '—',
+        b.current == null ? 'still' : (b.current >= 0 ? 'gut' : ''),
+        b.current == null ? '' : (b.current >= 0 ? 'es kommt mehr herein als heraus' : 'es wird entnommen'))
+    + _zeile('Spannung', b.voltage != null ? b.voltage.toFixed(2) + ' V' : '—')
+    + _zeile('Starterbatterie', b.starter_voltage != null ? b.starter_voltage.toFixed(2) + ' V' : '—',
+             b.starter_voltage != null && b.starter_voltage < 12.2 ? 'mau' : '')
+    + _zeile('Zuletzt voll', b.time_since_full != null ? 'vor ' + dauer(b.time_since_full) : '—',
+             b.time_since_full != null && b.time_since_full > 7 * 86400 ? 'mau' : '')
+    + (uneins ? `<div class="dk-grund">Shunt und BMS sind sich über die Restlaufzeit nicht einig — die Spanne oben nennt beide.</div>` : '')
+    + '</div>';
+}
+
+function _karteZufluss(z) {
+  const s = z.solar || {}, o = z.orion || {}, c = z.charger || {}, i = z.inverter || {};
+  const rein = (s.power || 0) + (o.output_power || 0);
+  const satz = rein > 5 ? `Es kommen ${Math.round(rein)} W herein` : 'Zurzeit kommt nichts nach';
+  return _kopf('Zufluss', 'solar')
+    + `<div class="dk-satz ${rein > 5 ? 'gut' : 'leer'}">${esc(satz)}</div>`
+    + `<div class="dk-gross">${s.power != null ? Math.round(s.power) : '—'}<span class="dk-einheit">W Solar</span></div>`
+    + _funke(_reihe('solar1'), 'var(--violet)')
+    + '<div class="dk-liste">'
+    + _zeile('Solar heute', s.yield_today_wh != null ? Math.round(s.yield_today_wh) + ' Wh' : '—',
+             '', s.charge_state_n2k ? 'Regler: ' + s.charge_state_n2k : '')
+    + _zeile('Lichtmaschine', o.output_power != null ? Math.round(o.output_power) + ' W' : '—',
+             (o.output_power || 0) > 5 ? 'gut' : 'still',
+             o.off_reason_label && !(o.output_power > 5) ? 'aus: ' + o.off_reason_label : '')
+    // Ausdrücklich NICHT "0 W": das Gerät ist nicht verbaut, und eine Null
+    // sähe aus wie eine Messung.
+    + _zeile('Landstrom', c._age_s == null ? 'nicht am Bus'
+        : (c.power != null ? Math.round(c.power) + ' W' : '—'),
+        c._age_s == null ? 'still' : '')
+    + _zeile('230 V', i.state || '—', i.state === 'Aus' ? 'still' : 'gut',
+             i.ac_power ? Math.round(i.ac_power) + ' W am Ausgang' : '')
+    + '</div>';
+}
+
+function _karteZellen(z) {
+  const bms = z.bms || {}, b = z.battery || {};
+  const drift = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+    ? (bms.highest_cell_v - bms.lowest_cell_v) * 1000 : null;
+  // 30 mV: darunter arbeiten die Zellen zusammen, darüber läuft eine davon weg.
+  // 60 mV ist der Punkt, an dem der Balancer nicht mehr hinterherkommt.
+  const stufe = drift == null ? '' : (drift < 30 ? 'gut' : drift < 60 ? 'mau' : 'schlecht');
+  const satz = drift == null ? 'Das BMS meldet keine Zellspannungen'
+    : drift < 30 ? 'Die Zellen laufen im Gleichschritt'
+    : drift < 60 ? 'Eine Zelle läuft etwas weg' : 'Eine Zelle läuft deutlich weg';
+  const socDiff = (bms.soc != null && b.soc != null) ? Math.abs(bms.soc - b.soc) : null;
+  return _kopf('Zellen', 'bms')
+    + `<div class="dk-satz ${drift == null ? 'leer' : stufe}">${esc(satz)}</div>`
+    + `<div class="dk-gross ${stufe}">${drift != null ? Math.round(drift) : '—'}<span class="dk-einheit">mV Abstand</span></div>`
+    + _funke(_reihe('zelldiff'), 'var(--violet)')
+    + '<div class="dk-liste">'
+    + _zeile('Höchste / niedrigste',
+        (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+          ? `${bms.highest_cell_v.toFixed(3)} / ${bms.lowest_cell_v.toFixed(3)} V` : '—',
+        '', bms.lowest_cell_nr != null ? `niedrigste ist Zelle ${bms.lowest_cell_nr} von ${bms.cell_count || '?'}` : '')
+    + _zeile('Zelltemperatur',
+        (bms.lowest_temp != null && bms.highest_temp != null)
+          ? `${bms.lowest_temp.toFixed(1)} – ${bms.highest_temp.toFixed(1)} °C` : '—',
+        bms.lowest_temp != null && bms.lowest_temp < 2 ? 'mau' : '',
+        bms.lowest_temp != null && bms.lowest_temp < 2 ? 'unter 2 °C darf nicht geladen werden' : '')
+    // Die beiden Ladestände weichen bauartbedingt ab — das ist keine Störung,
+    // sondern zwei Messverfahren. Erst ein grosser Abstand ist eine Aussage.
+    + _zeile('Ladestand BMS / Shunt',
+        (bms.soc != null && b.soc != null) ? `${Math.round(bms.soc)} / ${b.soc.toFixed(1)} %` : '—',
+        socDiff != null && socDiff > 15 ? 'mau' : '',
+        socDiff != null && socDiff > 15 ? 'die beiden messen sehr verschieden' : '')
+    + _zeile('Ladezyklen', b.cycles != null ? String(b.cycles) : '—')
+    + '</div>';
+}
+
+function _karteWaerme(z) {
+  const h = z.heizung || {};
+  const st = h.state || {};
+  const raeume = st.rooms || h.rooms || [];
+  const temps = raeume.map(r => r.roomTemp).filter(x => typeof x === 'number');
+  const heizer = st.heater || {};
+  const verbaut = heizer.availability !== 'not_wired';
+
+  const mittel = temps.length ? temps.reduce((a, c) => a + c, 0) / temps.length : null;
+  let satz, art;
+  if (mittel != null) {
+    // Der Satz sagt, WIE es ist; die Zahl darunter sagt, wie viel. Beides
+    // dasselbe zu sagen waere verschenkter Platz.
+    satz = mittel >= 20 ? 'Es ist warm an Bord'
+         : mittel >= 15 ? 'Angenehm kühl'
+         : mittel >= 8 ? 'Es ist kalt an Bord' : 'Nahe am Frost';
+    art = mittel >= 15 ? 'gut' : mittel >= 8 ? 'mau' : 'schlecht';
+  } else if (!h.reachable) {
+    satz = 'Die Heizungssteuerung meldet sich nicht';
+    art = 'mau';
+  } else {
+    satz = 'Kein Raumfühler meldet eine Temperatur';
+    art = 'mau';
+  }
+  // Wo keine Zahl ist, steht auch kein grosser Gedankenstrich: der sieht aus
+  // wie ein Messwert und ist keiner. Dann tragen die Raumzeilen die Karte.
+  const gross = mittel != null
+    ? `<div class="dk-gross ${art}">${mittel.toFixed(1)}<span class="dk-einheit">°C</span></div>` : '';
+  let zeilen = '';
+  for (const r of raeume) {
+    zeilen += _zeile(r.name || 'Raum',
+      typeof r.roomTemp === 'number' ? r.roomTemp.toFixed(1) + ' °C'
+        : (r.conn === 'offline' ? 'meldet sich nicht' : 'kein Wert'),
+      typeof r.roomTemp === 'number' ? '' : 'mau',
+      r.target != null ? `Ziel ${r.target} °C` : '');
+  }
+  return _kopf('Wärme', 'heizung')
+    + `<div class="dk-satz ${art}">${esc(satz)}</div>`
+    + gross
+    + `<div class="dk-neben">${esc(st.preset && st.preset.name ? 'Vorwahl: ' + st.preset.name : 'keine Vorwahl gemeldet')}</div>`
+    + '<div class="dk-liste">'
+    + zeilen
+    + _zeile('Heizgerät', verbaut ? (heizer.state || heizer.mode || '—') : 'nicht angeschlossen',
+             verbaut ? '' : 'still',
+             !verbaut && heizer.availabilityText ? heizer.availabilityText : '')
+    + _zeile('Steuergerät', h.reachable ? 'antwortet' : 'meldet sich nicht',
+             h.reachable ? 'gut' : 'mau',
+             h.info && h.info.wifi ? `WLAN ${h.info.wifi.rssi} dBm` : '')
+    + '</div>';
+}
+
+function _karteVorrat(z) {
+  const t = z.tanks || {};
+  // 200 L je Tank, wie in der Bordansicht. Die Prozente kommen flach vom Bus;
+  // die Liter rechnet die Anzeige, nicht das Boot.
+  const LITER = 200;
+  const tanks = [
+    { name: 'Wasser', wert: t.tank1, reihe: 'tank1', farbe: 'var(--blau)' },
+    { name: 'Diesel', wert: t.tank2, reihe: 'tank2', farbe: 'var(--yellow)' },
+  ];
+  const knapp = tanks.filter(x => typeof x.wert === 'number' && x.wert < 25);
+  const satz = knapp.length
+    ? (knapp.length === 1 ? `${knapp[0].name} wird knapp` : 'Wasser und Diesel werden knapp')
+    : 'Die Vorräte reichen';
+  let inhalt = '';
+  for (const x of tanks) {
+    const p = typeof x.wert === 'number' ? x.wert : null;
+    const stufe = p == null ? '' : p < 12 ? 'schlecht' : p < 25 ? 'mau' : '';
+    // Tempo aus dem Verlauf: 24 Stunden zurück gegen jetzt. Erst damit wird
+    // aus "19,6 %" ein "reicht noch etwa vier Tage".
+    const w = _reihe(x.reihe);
+    let tempo = '';
+    if (w && p != null && w.length > 5) {
+      const proTag = w[0] - w[w.length - 1];
+      if (proTag > 0.8) {
+        const tage = p / proTag;
+        tempo = `${proTag.toFixed(1)} Punkte in 24 Std · reicht noch ${_grob(tage * 24)}`;
+      } else if (proTag < -0.8) {
+        tempo = `${Math.abs(proTag).toFixed(1)} Punkte aufgefüllt`;
+      } else {
+        tempo = 'seit gestern unverändert';
+      }
+    }
+    inhalt += `<div class="dk-tank">
+      <div class="dk-tank-kopf"><b class="${stufe}">${p != null ? Math.round(p) : '—'} %</b>
+        <span>${esc(x.name)}</span>
+        <span class="dk-tank-neben">${p != null ? Math.round(p / 100 * LITER) + ' von ' + LITER + ' L' : ''}</span></div>
+      <div class="dk-balken"><i class="${stufe}" style="width:${p != null ? Math.max(1, Math.min(100, p)) : 0}%"></i></div>
+      ${tempo ? `<div class="dk-grund">${esc(tempo)}</div>` : ''}
+    </div>`;
+  }
+  return _kopf('Vorräte', 'tanks')
+    + `<div class="dk-satz ${knapp.length ? 'mau' : 'gut'}">${esc(satz)}</div>`
+    + inhalt;
+}
+
+function _karteLicht(z) {
+  const l = z.lights || {};
+  const k = l.channels || [];
+  const an = k.filter(x => x > 0).length;
+  return _kopf('Licht', 'lights')
+    + `<div class="dk-satz ${an ? '' : 'leer'}">${an ? `${an} von ${k.length} Kreisen brennen` : 'Alles aus'}</div>`
+    + `<div class="dk-kreise">${k.map((x, i) =>
+        `<span class="dk-kreis ${x > 0 ? 'an' : ''}" title="Kreis ${i + 1}: ${x} %">${i + 1}</span>`).join('')}</div>`
+    + `<div class="dk-neben">Die Lichtkreise stehen nicht im Verlauf — hier gibt es deshalb keine Linie.</div>`;
+}
 
 function zeichneUeberblick() {
   const z = _daten.zustand;
   const v = _daten.verbindung;
+
   if (z) {
-    const b = z.battery || {}, t = z.tanks || {}, h = z.heizung || {};
     const alter = z.alter_s;
     $('ueberblickStand').textContent = (z.quelle === 'server' && alter != null)
       ? `Stand: ${alter < 90 ? 'gerade eben' : 'vor ' + dauer(alter)}`
       : 'Stand: laufend';
-    const raeume = Object.values(h.rooms || h.raeume || {});
-    const temp = raeume.map(r => r.temp ?? r.temperatur)
-                       .filter(x => typeof x === 'number');
-    const zahlen = [
-      { wert: b.soc != null ? Math.round(b.soc) + ' %' : '—', lbl: 'Ladestand',
-        neben: b.voltage != null ? b.voltage.toFixed(2) + ' V' : '',
-        art: b.soc == null ? '' : (b.soc > 50 ? 'gut' : (b.soc > 25 ? 'mau' : '')) },
-      { wert: b.current != null ? b.current.toFixed(1) + ' A' : '—', lbl: 'Bilanz',
-        neben: b.current == null ? '' : (b.current >= 0 ? 'wird geladen' : 'wird entnommen') },
-      // Die Tanks kommen flach und in Prozent; die Liter rechnet die
-      // Bordansicht aus der Tankgröße. 200 L je Tank, wie dort.
-      { wert: typeof t.tank1 === 'number' ? Math.round(t.tank1) + ' %' : '—',
-        lbl: 'Wasser', neben: typeof t.tank1 === 'number' ? Math.round(t.tank1 * 2) + ' von 200 L' : '',
-        art: typeof t.tank1 === 'number' && t.tank1 < 15 ? 'mau' : '' },
-      { wert: typeof t.tank2 === 'number' ? Math.round(t.tank2) + ' %' : '—',
-        lbl: 'Diesel', neben: typeof t.tank2 === 'number' ? Math.round(t.tank2 * 2) + ' von 200 L' : '',
-        art: typeof t.tank2 === 'number' && t.tank2 < 15 ? 'mau' : '' },
-      { wert: temp.length ? (temp.reduce((a, c) => a + c, 0) / temp.length).toFixed(1) + ' °C' : '—',
-        lbl: 'Innen',
-        neben: temp.length ? (h.command === 'on' || h.running ? 'Heizung läuft' : 'Heizung aus')
-                           : 'kein Raumfühler online' },
-    ];
-    $('jetztZahlen').innerHTML = zahlen.map(x => `
-      <div class="zahl ${x.art || ''}">
-        <span class="zahl-icon">${ZAHL_ICON[x.lbl] || ZAHL_ICON.standard}</span>
-        <div class="zahl-wert ${x.art || ''}">${esc(x.wert)}</div>
-        <div class="zahl-lbl">${esc(x.lbl)}</div>
-        <div class="zahl-neben">${esc(x.neben)}</div>
-      </div>`).join('');
+
+    // Der Balken ganz oben. Er sagt das, was sonst niemand sagt: dass die
+    // ganze Seite alt ist. Die Gruppenalter in den Karten könnten das nicht —
+    // sie sind mit dem Schnappschuss eingefroren.
+    const w = $('dbWarnung');
+    if (z.quelle === 'server' && !z.boot_verbunden) {
+      const lange = (alter || 0) > 3600;
+      w.className = 'db-warnung' + (lange ? ' schwer' : '');
+      w.innerHTML = '<span class="dbw-mark">Gespeichert</span>'
+        + `<span>Das Boot ist nicht verbunden. Alle Werte auf dieser Seite sind der letzte
+           übertragene Stand — ${alter != null ? 'vor ' + esc(dauer(alter)) : 'Alter unbekannt'}.
+           Was sich seitdem geändert hat, steht hier nicht.</span>`;
+      w.hidden = false;
+    } else {
+      w.hidden = true;
+    }
+
+    $('kBatterie').innerHTML = _karteBatterie(z);
+    $('kZufluss').innerHTML  = _karteZufluss(z);
+    $('kZellen').innerHTML   = _karteZellen(z);
+    $('kWaerme').innerHTML   = _karteWaerme(z);
+    $('kVorrat').innerHTML   = _karteVorrat(z);
+    $('kLicht').innerHTML    = _karteLicht(z);
+
+    // Die farbige Kante: nur da, wo wirklich etwas zu tun ist.
+    const b = z.battery || {}, bms = z.bms || {}, t = z.tanks || {};
+    const drift = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
+      ? (bms.highest_cell_v - bms.lowest_cell_v) * 1000 : null;
+    const kante = (id, warnt, schlimm) => {
+      const e = $(id);
+      e.classList.toggle('warnt', !!warnt && !schlimm);
+      e.classList.toggle('schlimm', !!schlimm);
+    };
+    kante('kBatterie', b.soc != null && b.soc < 50, b.soc != null && b.soc < 25);
+    kante('kZellen', drift != null && drift >= 30, drift != null && drift >= 60);
+    kante('kVorrat',
+      [t.tank1, t.tank2].some(x => typeof x === 'number' && x < 25),
+      [t.tank1, t.tank2].some(x => typeof x === 'number' && x < 12));
+    const raeume = (z.heizung && z.heizung.state && z.heizung.state.rooms) || [];
+    kante('kWaerme', !raeume.some(r => typeof r.roomTemp === 'number'), false);
   }
 
   if (v) {
     $('verbKurz').textContent = v.verbunden
       ? 'seit ' + zeitpunkt(v.seit) : 'zurzeit unterbrochen';
     _streifenBauen('streifenKurz', 'streifenKurzAchse', 1);
+    const ping = _reiheLetzt('ping_ms'), down = _reiheLetzt('down_mbit');
+    // Der Streifen darüber sagt, OB die Verbindung stand. Diese beiden Linien
+    // sagen, wie gut sie war — ein Boot kann durchgehend "verbunden" sein und
+    // trotzdem die halbe Nacht auf jede Antwort eine Sekunde warten.
+    $('dbNetz').innerHTML =
+      `<span>Antwortzeit <b>${ping != null ? Math.round(ping) + ' ms' : '—'}</b></span>`
+      + `<span>Durchsatz <b>${down != null ? down.toFixed(1) + ' Mbit/s' : '—'}</b></span>`
+      + `<span>Messwerte <b>${(_daten.diagnose && _daten.diagnose.verlauf_stand != null)
+            ? _daten.diagnose.verlauf_stand.toLocaleString('de-DE') : '—'}</b></span>`;
+    $('dbNetzVerlauf').innerHTML =
+      '<div class="dk-zeile"><span class="dk-name">Antwortzeit, 24 Std</span></div>'
+      + _funke(_reihe('ping_ms'), 'var(--yellow)')
+      + '<div class="dk-zeile"><span class="dk-name">Durchsatz, 24 Std</span></div>'
+      + _funke(_reihe('down_mbit'), 'var(--blau)');
   }
 
   // Was zuletzt los war: Ausfälle und Ereignisse in EINER Liste, damit man
@@ -281,7 +641,10 @@ function zeichneUeberblick() {
     eintraege.push({ t: e.zeit || e.wand, marke: '', wort: '', text: ereignisText(e), rechts: '' });
   }
   eintraege.sort((a, b) => (b.t || 0) - (a.t || 0));
-  const zeigen = eintraege.slice(0, 8);
+  // Sechs statt acht, und mit eigener Rolle: sonst bestimmt allein die Laenge
+  // dieser Liste die Hoehe des ganzen Bandes, und die Verbindungskarte daneben
+  // steht zur Haelfte leer.
+  const zeigen = eintraege.slice(0, 6);
   $('letztes').innerHTML = zeigen.length ? zeigen.map(x => `
     <div class="zeile">
       <div class="z-zeit">${esc(zeitpunkt(x.t))}</div>

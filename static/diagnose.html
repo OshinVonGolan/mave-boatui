@@ -150,36 +150,55 @@
         <span class="hinweis" id="ueberblickStand"></span>
       </div>
 
-      <div class="zahlen" id="jetztZahlen"></div>
+      <!-- Wenn das Boot schweigt, ist der GANZE Schnappschuss alt — und
+           nicht etwa nur einzelne Werte darin. Das steht dann ganz oben und
+           nicht klein am Rand: eine Seite voller Zahlen, die aussehen wie von
+           jetzt, ist auf einem Boot gefaehrlicher als eine leere Seite. -->
+      <div class="db-warnung" id="dbWarnung" hidden></div>
 
-      <!-- Zwei Spalten: links das Breite (Verbindungsverlauf, Chronik), rechts
-           das Schmale (wer da ist). Untereinander wuerde die Anwesenheitsliste
-           eine ganze Bildschirmbreite fuer drei Zeilen beanspruchen. -->
-      <div class="raster">
-        <div class="raster-breit">
-          <section class="tafel">
-            <div class="tafel-kopf">
-              <h2>Verbindung</h2>
-              <span class="hinweis" id="verbKurz"></span>
-            </div>
-            <div class="streifen" id="streifenKurz"></div>
-            <div class="streifen-achse" id="streifenKurzAchse"></div>
-          </section>
+      <!-- Drei Baender in der Reihenfolge der Fragen, mit denen man die Seite
+           oeffnet: Reicht der Strom? Wie steht es an Bord? Laeuft die Anlage?
+           Die Reihenfolge liegt fest. Eine Karte, die heute Sorgen macht,
+           steht morgen an derselben Stelle — sie bekommt eine farbige Kante,
+           wandert aber nicht nach oben. Eine Oberflaeche, die ihre Anordnung
+           aendert, muss man jedes Mal neu lesen. -->
+      <div class="db">
 
-          <section class="tafel">
-            <div class="tafel-kopf"><h2>Zuletzt geschehen</h2></div>
-            <div class="liste" id="letztes"></div>
-          </section>
-        </div>
+        <div class="db-band">Strom</div>
+        <section class="tafel db-karte sp6" id="kBatterie"></section>
+        <section class="tafel db-karte sp3" id="kZufluss"></section>
+        <section class="tafel db-karte sp3" id="kZellen"></section>
 
-        <div class="raster-schmal">
-          <section class="tafel">
-            <div class="tafel-kopf">
-              <h2>Wer ist da</h2>
-            </div>
-            <div class="anwesend" id="anwesend"></div>
-          </section>
-        </div>
+        <div class="db-band">Bord</div>
+        <section class="tafel db-karte sp5" id="kWaerme"></section>
+        <section class="tafel db-karte sp4" id="kVorrat"></section>
+        <section class="tafel db-karte sp3" id="kLicht"></section>
+
+        <!-- Hier kommen spaeter Position und Navigation dazu: eine vierte
+             Karte in diesem Band, nicht ein neues Feld irgendwo unten. Solange
+             es die Daten nicht gibt, steht hier auch kein leerer Platzhalter. -->
+
+        <div class="db-band">Anlage</div>
+        <section class="tafel db-karte sp5">
+          <div class="tafel-kopf">
+            <h2>Verbindung</h2>
+            <span class="hinweis" id="verbKurz"></span>
+          </div>
+          <div class="streifen" id="streifenKurz"></div>
+          <div class="streifen-achse" id="streifenKurzAchse"></div>
+          <div class="db-fuss" id="dbNetz"></div>
+          <div class="dk-liste" id="dbNetzVerlauf"></div>
+        </section>
+
+        <section class="tafel db-karte sp4">
+          <div class="tafel-kopf"><h2>Zuletzt geschehen</h2></div>
+          <div class="liste" id="letztes"></div>
+        </section>
+
+        <section class="tafel db-karte sp3">
+          <div class="tafel-kopf"><h2>Wer ist da</h2></div>
+          <div class="anwesend" id="anwesend"></div>
+        </section>
       </div>
     </section>
 
