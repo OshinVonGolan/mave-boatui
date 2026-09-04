@@ -15,6 +15,51 @@ _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode    = ssl.CERT_NONE
 
 
+def _gps_lesen(roh: dict):
+    """Die Positionsmeldung des Routers in Zahlen übersetzen — oder None.
+
+    Zwei Eigenheiten von RutOS, die man kennen muss:
+
+    Erstens liefert es ALLES als Zeichenkette, auch Zahlen. Wer sie ungeprüft
+    weiterreicht, hat später Strings in einer Karte.
+
+    Zweitens antwortet es auch dann mit einer Position, wenn es gerade keinen
+    Fix hat — dann steht dort die zuletzt bekannte. Ohne Fix ist sie wertlos
+    und wird hier verworfen: eine alte Position, die aussieht wie eine
+    aktuelle, ist auf einem Boot schlimmer als gar keine.
+
+    Der Router führt zwei Zeitstempel. `timestamp` steht in seiner eigenen,
+    hier falsch gestellten Zeitzone (UTC+1, während Sommerzeit gilt);
+    `utc_timestamp` stimmte im Vergleich mit der Uhr des Bordrechners auf die
+    Sekunde. Deshalb nur dieser.
+    """
+    def zahl(schluessel):
+        try:
+            return float(roh.get(schluessel))
+        except (TypeError, ValueError):
+            return None
+
+    fix = str(roh.get('fix_status') or '0').strip()
+    lat, lon = zahl('latitude'), zahl('longitude')
+    if fix in ('0', '', 'none', 'None') or lat is None or lon is None:
+        return None
+    # 0/0 liegt im Atlantik vor Ghana und heisst in der Praxis "kein Wert".
+    if abs(lat) < 1e-7 and abs(lon) < 1e-7:
+        return None
+    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        return None
+
+    zeit = zahl('utc_timestamp')
+    return {
+        'lat': round(lat, 6),          # sechs Stellen sind gut 10 cm
+        'lon': round(lon, 6),
+        'hoehe_m': zahl('altitude'),
+        'satelliten': int(zahl('satellites') or 0),
+        'genauigkeit': zahl('accuracy'),
+        'zeit': zeit,
+    }
+
+
 class ConnectivityMonitor:
 
     def __init__(self, router_host, router_user, router_pass,
@@ -146,8 +191,27 @@ class ConnectivityMonitor:
                 self._leases_ok = False
         self._leases_zaehler -= 1
 
+        # Die Position aus dem GNSS des Routers. Sie ist die EINZIGE Quelle
+        # dafuer an Bord: am NMEA-2000-Bus sendet niemand 129025/129026/129029
+        # — am laufenden Bus nachgesehen, dort kommen nur Tank-, Batterie-,
+        # Lader- und Victron-eigene PGNs an.
+        #
+        # Scheitert der Abruf, ist das kein Fehler des ganzen Durchlaufs: die
+        # Verbindungsdaten sind wichtiger als die Position, und ohne Fix gibt
+        # es sie ohnehin nicht immer.
+        gps = None
+        try:
+            roh = self._http(f'{self._router_host}/api/gps/position/status',
+                             headers=hdrs).get('data') or {}
+            gps = _gps_lesen(roh)
+        except Exception as e:
+            if not getattr(self, '_gps_warn_logged', False):
+                log.info('Position nicht verfügbar (%s)', e)
+                self._gps_warn_logged = True
+
         wan_ip = primary.get('ipaddr', '') or ''
         return {
+            'gps':            gps,
             'active_type':    primary.get('network_type', 'unknown'),
             'active_uptime':  primary.get('uptime', 0),
             'wired_up':       wired  is not None,

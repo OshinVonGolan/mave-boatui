@@ -318,6 +318,25 @@ def _zustand_fuer_server() -> dict:
     hundert Byte — auch ueber Mobilfunk kein Argument.
     """
     d = state.to_dict()
+    # Die Position. Sie kommt nicht vom Bus, sondern vom GNSS des Routers, und
+    # gehoert deshalb nicht in BoatState — aber sehr wohl in das, was der
+    # Server bekommt: gezeigt wird sie ausschliesslich im Logbuch, und das
+    # laeuft dort.
+    try:
+        pos = ((conn_mon.get_status() if conn_mon else {})
+               .get('router') or {}).get('gps')
+        if pos:
+            # Dasselbe Alterfeld wie bei den Bus-Gruppen, damit die Anzeige
+            # nicht zwei Wege kennen muss. Gemessen ab dem Fix des Empfaengers,
+            # nicht ab dem Abruf: der Router antwortet auch mit einem alten Fix,
+            # und der Abruf saehe dann taufrisch aus.
+            zeit = pos.get('zeit')
+            pos = dict(pos)
+            pos['_age_s'] = round(max(0.0, time.time() - zeit), 1) \
+                if isinstance(zeit, (int, float)) and zeit > 1704067200 else None
+        d['position'] = pos
+    except Exception as e:
+        log.warning('Position geht nicht mit zum Server: %s', e)
     try:
         d['heizung'] = heizung.snapshot()
     except Exception as e:
@@ -414,7 +433,13 @@ def _grob_sammeln(entry: dict) -> None:
         mittel = {'ts': _grob_minute * 60 + 30}
         for k, (summe, anzahl) in _grob_eimer.items():
             if anzahl:
-                mittel[k] = round(summe / anzahl, 4)
+                # Vier Stellen sind fuer jeden Messwert reichlich — fuer eine
+                # geografische Breite aber rund elf Meter. Eine Spur am
+                # Liegeplatz saehe damit aus, als haette das Boot Sprünge
+                # gemacht. Position deshalb mit sechs Stellen, das sind gut
+                # zehn Zentimeter.
+                stellen = 6 if k in ('lat', 'lon') else 4
+                mittel[k] = round(summe / anzahl, stellen)
         if len(mittel) > 1:
             history_grob.append(mittel)
             grob_store.append(mittel)
@@ -493,6 +518,17 @@ async def broadcast(data: dict):
     # "war das Netz gestern Abend schon so schlecht?" liess sich nicht
     # beantworten.
     netz = conn_mon.get_status() if conn_mon else None
+    # Die Position in den Verlauf. Nur so entsteht eine Spur — und nur deshalb
+    # steht sie hier: gezeigt wird sie ausschliesslich im Logbuch.
+    #
+    # Sie wandert durch die Minutenmittelung; ein Mittelwert aus sechzig
+    # Positionen einer Minute ist genau das, was eine Spur braucht (er glaettet
+    # das Rauschen der Empfaenger weg). Ohne Fix steht hier nichts, und dann
+    # fehlt der Punkt in der Spur — richtig so, denn es gab keinen.
+    gps = ((netz or {}).get('router') or {}).get('gps') or {}
+    if isinstance(gps.get('lat'), (int, float)) and isinstance(gps.get('lon'), (int, float)):
+        entry['lat'] = gps['lat']
+        entry['lon'] = gps['lon']
     sl = (netz or {}).get('starlink') or {}
     ping = sl.get('ping_ms')
     if isinstance(ping, (int, float)) and not isinstance(ping, bool):

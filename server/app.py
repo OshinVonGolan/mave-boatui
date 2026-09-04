@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import secrets
+import math
 import time
 from pathlib import Path
 
@@ -790,6 +791,111 @@ def meine_rechte(k: dict = Depends(konto)) -> JSONResponse:
 # ── Messwerte fuers Logbuch ─────────────────────────────────────────────────
 
 _REIHEN_MAX = 1500      # mehr Punkte kann kein Bildschirm zeigen
+
+
+# Wie weit zwei Punkte auseinanderliegen duerfen, bevor die Spur einen neuen
+# setzt. 15 m: darunter ist es das Rauschen eines schwojenden Bootes am Anker,
+# darueber ist es Fahrt. Und alle zwei Stunden ein Punkt, auch wenn sich nichts
+# ruehrt — sonst sieht eine Woche am Steg aus wie ein einziger Augenblick, und
+# eine Luecke im Aufschrieb liesse sich nicht von Stillliegen unterscheiden.
+_SPUR_ABSTAND_M = 15.0
+_SPUR_TAKT_S = 2 * 3600
+
+
+def _meter(lat1, lon1, lat2, lon2) -> float:
+    """Abstand zweier Punkte in Metern.
+
+    Aequirektangulaere Naeherung statt Haversine: auf den paar Kilometern, um
+    die es hier geht, liegt sie im Zentimeterbereich daneben und kostet einen
+    Bruchteil der Rechenzeit. Auf einem Bordrechner zaehlt das.
+    """
+    lat_m = math.radians((lat1 + lat2) / 2)
+    dx = math.radians(lon2 - lon1) * math.cos(lat_m)
+    dy = math.radians(lat2 - lat1)
+    return math.hypot(dx, dy) * 6371000.0
+
+
+# Mehr Punkte muss keine Karte zeichnen. Ein Boot, das drei Wochen am Anker
+# schwojt, bewegt sich echt — jede dieser Bewegungen einzeln zu uebertragen
+# nuetzt aber niemandem, und auf einem Telefon wird die Linie zaeh.
+_SPUR_MAX_PUNKTE = 2500
+
+
+@app.get('/api/verlauf/spur')
+def verlauf_spur(tage: int = Query(30, ge=1, le=365),
+                 k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    """Die gefahrene Spur der letzten Tage, ausgeduennt.
+
+    Warum nicht ueber /api/verlauf/reihen: das dampft in Eimer GLEICHER BREITE
+    ein. Fuer einen Messwert ist das richtig, fuer einen Weg nicht — dreissig
+    Tage auf 800 Punkte heisst ein Punkt je 54 Minuten, und ein Hafenmanoever
+    verschwindet darin vollstaendig, waehrend drei Wochen am Steg 700 Punkte
+    auf demselben Fleck bekommen.
+
+    Hier wird stattdessen nach ZURUECKGELEGTEM WEG ausgeduennt: ein neuer Punkt,
+    sobald sich das Boot weiter als eine Bootslaenge bewegt hat. Liegt es still,
+    entsteht alle zwei Stunden einer — damit man sieht, dass es dalag, und nicht
+    bloss, dass nichts aufgeschrieben wurde.
+
+    Die Position kommt aus dem GNSS des Routers. Fehlt sie in einer Zeile, gab
+    es keinen Fix; dann fehlt der Punkt, und das ist die ehrliche Auskunft.
+    """
+    jetzt = time.time()
+    seit = jetzt - tage * 86400
+    # Grenze grosszuegig: dreissig Tage sind rund 43.000 Minutenzeilen.
+    zeilen = speicher.verlauf(seit=seit, grenze=tage * 1500 + 2000)
+
+    # Erst die brauchbaren Zeilen heraussuchen, dann ausduennen. Getrennt,
+    # damit das Ausduennen mit groesserem Abstand wiederholt werden kann, ohne
+    # die Datenbank noch einmal zu fragen.
+    roh = []
+    for z in zeilen:
+        lat, lon = z.get('lat'), z.get('lon')
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            continue
+        if isinstance(lat, bool) or isinstance(lon, bool):
+            continue
+        roh.append((z.get('zeit') or 0.0, lat, lon))
+
+    def ausduennen(abstand_m):
+        raus, letzter = [], None
+        for t, lat, lon in roh:
+            if letzter is not None:
+                weit = _meter(letzter[1], letzter[2], lat, lon) >= abstand_m
+                lang = t - letzter[0] >= _SPUR_TAKT_S
+                if not weit and not lang:
+                    continue
+            letzter = (t, lat, lon)
+            raus.append({'t': round(t, 1), 'lat': lat, 'lon': lon})
+        return raus
+
+    # Verdoppeln, bis es passt. Ein schwojendes Boot bewegt sich wirklich —
+    # aber ab einer gewissen Zahl beschreibt jeder weitere Punkt dieselbe
+    # Sache noch einmal.
+    abstand = _SPUR_ABSTAND_M
+    punkte = ausduennen(abstand)
+    while len(punkte) > _SPUR_MAX_PUNKTE and abstand < 5000:
+        abstand *= 2
+        punkte = ausduennen(abstand)
+
+    # Der letzte gemessene Punkt gehoert immer dazu, auch wenn er nach der
+    # Ausduennung herausgefallen waere: er ist der aktuellste, den es gibt.
+    for z in reversed(zeilen):
+        lat, lon = z.get('lat'), z.get('lon')
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)) \
+                and not isinstance(lat, bool):
+            if not punkte or punkte[-1]['t'] != round(z.get('zeit') or 0, 1):
+                punkte.append({'t': round(z.get('zeit') or 0, 1), 'lat': lat, 'lon': lon})
+            break
+
+    mit_position = len(roh)
+    return JSONResponse({
+        'punkte': punkte,
+        'zeilen_gesamt': len(zeilen),
+        'zeilen_mit_position': mit_position,
+        'von': seit, 'bis': jetzt,
+        'abstand_m': abstand, 'takt_s': _SPUR_TAKT_S,
+    })
 
 
 @app.get('/api/verlauf/reihen')

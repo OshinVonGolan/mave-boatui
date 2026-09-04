@@ -129,6 +129,16 @@ async function start() {
     zeichneAusfaelle();
   });
 
+  $('spurZeit').addEventListener('click', e => {
+    const k = e.target.closest('.zw-knopf');
+    if (!k) return;
+    _spurTage = Number(k.dataset.tage);
+    $('spurZeit').querySelectorAll('.zw-knopf').forEach(b => b.classList.toggle('an', b === k));
+    _spur = null;
+    zeichnePosition();
+    spurLaden().then(() => { if (_karte) karteZeichnen(); });
+  });
+
   $('messZeit').addEventListener('click', e => {
     const k = e.target.closest('.zw-knopf');
     if (!k) return;
@@ -202,6 +212,9 @@ function seiteZeigen(name) {
   // verborgenen Seite ist die Breite null und der Graph bliebe leer.
   if (name === 'messwerte' && _messDaten) requestAnimationFrame(zeichneMesswerte);
   if (name === 'verfuegbarkeit') { zeichneLegende(); zeichneStreifen(); }
+  // Die Karte braucht ein sichtbares Feld, um ihre Groesse zu bestimmen —
+  // auf einer verborgenen Seite ist sie null Pixel breit und bliebe grau.
+  if (name === 'position') positionOeffnen();
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
@@ -653,6 +666,211 @@ function zeichneUeberblick() {
     </div>`).join('') : '<div class="leerlauf">Nichts Auffälliges.</div>';
 }
 
+// ── Position ───────────────────────────────────────────────────────────────
+// Wo das Boot liegt und wo es lag — mehr nicht. Ausdrücklich KEINE Navigation:
+// kein Kurs, keine Geschwindigkeit, kein Besteck. Die Quelle ist das GNSS des
+// Routers; am NMEA-2000-Bus sendet niemand eine Position (am laufenden Bus
+// nachgesehen), es gibt also keine zweite Meinung.
+
+let _spurTage = 30;
+let _spur = null;
+let _karte = null, _karteSpur = null, _karteBoot = null;
+let _leaflet = null;
+
+/**
+ * Die Kartenbibliothek erst holen, wenn jemand die Karte auch sehen will.
+ *
+ * 145 kB bei jedem Öffnen des Logbuchs mitzuschleppen wäre Verschwendung —
+ * die meisten Besuche gelten dem Ladestand, nicht der Karte. Sie liegt bei
+ * uns und nicht in einem Verteilnetz: die Seite soll nicht davon abhängen,
+ * dass ein fremder Server erreichbar ist.
+ */
+function leafletLaden() {
+  if (_leaflet) return _leaflet;
+  _leaflet = new Promise((fertig, schiefgegangen) => {
+    const stil = document.createElement('link');
+    stil.rel = 'stylesheet';
+    stil.href = '/static/karte/leaflet.css';
+    document.head.appendChild(stil);
+    const js = document.createElement('script');
+    js.src = '/static/karte/leaflet.js';
+    js.onload = () => fertig(window.L);
+    js.onerror = () => schiefgegangen(new Error('Kartenbibliothek nicht ladbar'));
+    document.head.appendChild(js);
+  });
+  return _leaflet;
+}
+
+/** Grad und Dezimalminuten — so steht es in jedem Logbuch und auf jedem Plotter. */
+function _gradMinuten(wert, achse) {
+  if (typeof wert !== 'number') return '—';
+  const richtung = achse === 'lat' ? (wert >= 0 ? 'N' : 'S') : (wert >= 0 ? 'E' : 'W');
+  const abs = Math.abs(wert);
+  const grad = Math.floor(abs);
+  const minuten = (abs - grad) * 60;
+  const stellen = achse === 'lat' ? 2 : 3;
+  return `${String(grad).padStart(stellen, '0')}° ${minuten.toFixed(3).padStart(6, '0')}' ${richtung}`;
+}
+
+/**
+ * Der Router nennt seinen Gütewert "accuracy". Er ist KEINE Meterangabe: 0,6
+ * Meter kann ein Empfänger dieser Klasse nicht, und der Wert sinkt, wenn mehr
+ * Satelliten in Sicht sind — er verhält sich also wie ein HDOP. Deshalb steht
+ * hier ein Wort und nicht eine erfundene Meterzahl.
+ */
+function _guete(wert) {
+  if (typeof wert !== 'number') return { wort: '—', art: '' };
+  if (wert < 1) return { wort: 'sehr gut', art: 'gut' };
+  if (wert < 2) return { wort: 'gut', art: 'gut' };
+  if (wert < 5) return { wort: 'brauchbar', art: '' };
+  if (wert < 10) return { wort: 'mäßig', art: 'mau' };
+  return { wort: 'schlecht', art: 'schlecht' };
+}
+
+async function spurLaden() {
+  const d = await hole(`/api/verlauf/spur?tage=${_spurTage}`);
+  if (!d) return;
+  _spur = d;
+  zeichnePosition();
+  // Und die Karte auch. Sie wird beim Oeffnen gezeichnet, sobald die
+  // Bibliothek da ist — das ist meist FRUEHER, als die Spur vom Server
+  // zurueckkommt. Ohne diese Zeile blieb die Linie deshalb aus, waehrend die
+  // Fusszeile darunter brav "558 Punkte" meldete.
+  if (_karte) karteZeichnen();
+}
+
+function positionOeffnen() {
+  zeichnePosition();
+  spurLaden();
+  leafletLaden().then(karteZeichnen).catch(() => {
+    const f = $('karte');
+    if (f) f.innerHTML = '<div class="karte-warte">Die Kartenbibliothek ließ sich '
+      + 'nicht laden. Die Koordinaten daneben stimmen trotzdem.</div>';
+  });
+}
+
+function karteZeichnen() {
+  const L = window.L;
+  const feld = $('karte');
+  if (!L || !feld) return;
+
+  if (!_karte) {
+    feld.innerHTML = '';
+    _karte = L.map(feld, { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, className: 'karte-grund',
+      attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(_karte);
+    // Die Seezeichen liegen als durchsichtige Schicht darüber und bleiben
+    // ungedimmt — sie sind der Grund, warum es OpenSeaMap und nicht irgendeine
+    // Karte ist.
+    L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+      maxZoom: 18, opacity: 1,
+      attribution: '&copy; <a href="https://openseamap.org">OpenSeaMap</a>',
+    }).addTo(_karte);
+    _karte.setView([54.0, 10.5], 8);
+  }
+
+  const punkte = ((_spur && _spur.punkte) || []).map(p => [p.lat, p.lon]);
+  if (_karteSpur) { _karte.removeLayer(_karteSpur); _karteSpur = null; }
+  if (punkte.length > 1) {
+    _karteSpur = L.polyline(punkte, {
+      color: '#22d3ee', weight: 2.5, opacity: .8, lineJoin: 'round',
+    }).addTo(_karte);
+  }
+
+  // Der aktuelle Standort: bevorzugt der gemessene aus dem Zustand, sonst der
+  // letzte Punkt der Spur. Beides fehlt nur, wenn es nie einen Fix gab.
+  const pos = (_daten.zustand || {}).position;
+  const jetzt = (pos && typeof pos.lat === 'number')
+    ? [pos.lat, pos.lon]
+    : (punkte.length ? punkte[punkte.length - 1] : null);
+  if (_karteBoot) { _karte.removeLayer(_karteBoot); _karteBoot = null; }
+  if (jetzt) {
+    _karteBoot = L.circleMarker(jetzt, {
+      radius: 7, color: '#0b1120', weight: 2,
+      fillColor: '#22d3ee', fillOpacity: 1,
+    }).addTo(_karte).bindTooltip('Mave', { direction: 'top', offset: [0, -8] });
+  }
+
+  if (_karteSpur) {
+    _karte.fitBounds(_karteSpur.getBounds(), { padding: [34, 34], maxZoom: 16 });
+  } else if (jetzt) {
+    _karte.setView(jetzt, 15);
+  }
+  // Nach dem Einblenden stimmt die Größe erst, wenn das Feld wirklich steht.
+  setTimeout(() => _karte && _karte.invalidateSize(), 60);
+}
+
+function zeichnePosition() {
+  const feld = $('posJetzt');
+  if (!feld) return;
+  const z = _daten.zustand || {};
+  const pos = z.position;
+  const f = _frische('position');
+
+  if (!pos || typeof pos.lat !== 'number') {
+    feld.innerHTML = '<div class="dk-kopf"><h2>Standort</h2></div>'
+      + '<div class="dk-satz leer">Zurzeit keine Position</div>'
+      + '<div class="dk-neben">Der Router meldet keinen gültigen Fix. Das kann an '
+      + 'der Antenne liegen, an der Umgebung — oder daran, dass der Router aus ist.</div>';
+  } else {
+    const g = _guete(pos.genauigkeit);
+    const alt = pos.zeit ? (Date.now() / 1000 - pos.zeit) : null;
+    feld.innerHTML = _kopf('Standort', 'position')
+      + `<div class="pos-koord">${esc(_gradMinuten(pos.lat, 'lat'))}<br>`
+      + `${esc(_gradMinuten(pos.lon, 'lon'))}</div>`
+      + `<div class="dk-neben" style="margin-top:6px">${pos.lat.toFixed(6)}, ${pos.lon.toFixed(6)}</div>`
+      + `<button class="pos-kopieren" onclick="positionKopieren(${pos.lat},${pos.lon})">Koordinaten kopieren</button>`
+      + '<div class="dk-liste">'
+      + _zeile('Satelliten', pos.satelliten != null ? String(pos.satelliten) : '—',
+               pos.satelliten >= 6 ? 'gut' : pos.satelliten >= 4 ? 'mau' : 'schlecht')
+      + _zeile('Güte', `${g.wort}${pos.genauigkeit != null ? ' (' + pos.genauigkeit + ')' : ''}`,
+               g.art, 'kleiner ist besser — es ist kein Meterwert')
+      + _zeile('Höhe', pos.hoehe_m != null ? pos.hoehe_m.toFixed(1) + ' m' : '—')
+      + _zeile('Letzter Fix', alt != null ? 'vor ' + dauer(alt) : '—',
+               alt != null && alt > 600 ? 'mau' : '')
+      + '</div>';
+  }
+
+  const stand = $('spurStand');
+  if (stand) {
+    if (!_spur) {
+      stand.innerHTML = '<span>Spur wird geladen…</span>';
+    } else if (!_spur.punkte.length) {
+      // Ehrlich statt leer: nach dem Einbau gibt es die Spur erst, wenn sie
+      // aufgeschrieben wurde. Dreissig Tage brauchen dreissig Tage.
+      stand.innerHTML = '<span>Für diesen Zeitraum liegt keine Position vor. '
+        + 'Aufgeschrieben wird sie erst, seit der Bordrechner sie vom Router holt.</span>';
+    } else {
+      const von = _spur.punkte[0].t, bis = _spur.punkte[_spur.punkte.length - 1].t;
+      stand.innerHTML =
+        `<span>Spur <b>${_spurTage} Tage</b></span>`
+        + `<span><b>${_spur.punkte.length}</b> Punkte</span>`
+        + `<span>von <b>${esc(zeitpunkt(von))}</b> bis <b>${esc(zeitpunkt(bis))}</b></span>`
+        + `<span>ein Punkt je <b>${_spur.abstand_m} m</b> oder <b>${Math.round(_spur.takt_s / 3600)} Std</b></span>`;
+    }
+  }
+}
+
+async function positionKopieren(lat, lon) {
+  const text = `${_gradMinuten(lat, 'lat')} ${_gradMinuten(lon, 'lon')}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    popZeigen(`<div class="pop-titel">Kopiert</div>
+      <p style="color:var(--text2);font-size:13px;margin:0 0 16px">
+        <span class="pos-koord">${esc(text)}</span></p>
+      <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Gut</button></div>`);
+  } catch (_) {
+    // Ohne Zwischenablage (alter Browser, kein sicherer Kontext) wenigstens
+    // zum Abschreiben hinlegen.
+    popZeigen(`<div class="pop-titel">Koordinaten</div>
+      <p style="color:var(--text2);font-size:13px;margin:0 0 16px">
+        <span class="pos-koord">${esc(text)}</span></p>
+      <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Gut</button></div>`);
+  }
+}
+
 function zeichneAnwesend() {
   const a = _daten.anwesend;
   const feld = $('anwesend');
@@ -737,6 +955,7 @@ async function laden() {
   if (a) _daten.anwesend = a;
   zeichneZustand();
   zeichneUeberblick();
+  if (_seite === 'position') { zeichnePosition(); if (_karte) karteZeichnen(); }
   zeichneAnwesend();
   zeichneStreifen();
   zeichneZahlen();
