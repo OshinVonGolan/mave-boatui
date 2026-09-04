@@ -16,7 +16,7 @@
 // Die Nummer MUSS hoch, wenn sich eine Datei aus der Huelle aendert: der
 // activate-Schritt loescht jeden Speicher, der nicht so heisst. Ohne das
 // haette ein Geraet nach dem Icon-Wechsel noch wochenlang das alte Symbol.
-const SPEICHER = 'mave-huelle-v2';
+const SPEICHER = 'mave-huelle-v3';
 
 // Die Huelle: was die Oberflaeche zum Starten braucht. Bewusst kurz — alles
 // Weitere kommt beim ersten Besuch von selbst dazu.
@@ -77,3 +77,29 @@ self.addEventListener('fetch', e => {
       )))
   );
 });
+
+// ── Benachrichtigungen ─────────────────────────────────────────────────────
+// Sie kommen aus alarmton.js (bei offener App) und spaeter aus dem Push-Kanal
+// (bei geschlossener). Beide Wege enden hier, wenn jemand darauf tippt.
+//
+// Warum ueberhaupt Code dafuer: ohne diesen Horcher passiert beim Antippen
+// NICHTS. Eine Benachrichtigung, die sich nicht oeffnen laesst, ist eine
+// Meldung ohne Weg zur Sache.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const ziel = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil((async () => {
+    const fenster = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Ist die Anwendung schon offen, wird sie nach vorn geholt statt ein
+    // zweites Fenster aufzumachen.
+    for (const f of fenster) {
+      if (new URL(f.url).origin === self.location.origin) {
+        await f.focus();
+        try { await f.navigate(ziel); } catch (_) { /* manche Browser lassen das nicht zu */ }
+        return;
+      }
+    }
+    await self.clients.openWindow(ziel);
+  })());
+});
+
