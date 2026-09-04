@@ -1351,7 +1351,11 @@ def _changelog(bereich: str, grenze: int = 40) -> list[dict]:
         if len(teile) < 4:
             continue
         hash_, zeit, titel = teile[0], teile[1], teile[2]
-        rest = teile[3] if len(teile) > 3 else ''
+        # Alles ab Teil 3 wieder zusammensetzen: der Rumpf kann selbst
+        # Nullbytes enthalten, und die Dateiliste haengt git NACH dem Format an
+        # — nur teile[3] zu nehmen schnitt sie ab, und die Bereiche blieben
+        # deshalb leer.
+        rest = '\x00'.join(teile[3:]) if len(teile) > 3 else ''
         rumpf, _, dateien = rest.partition('DATEIEN')
         punkte = [z.strip()[2:].strip() for z in rumpf.splitlines()
                   if z.strip().startswith('* ')]
