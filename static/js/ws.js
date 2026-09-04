@@ -416,6 +416,15 @@ function updateInverterCard(inv, charger) {
   const stEl = $('invStateVal');
   if (stEl) { stEl.textContent = inv.state ?? '--'; stEl.style.color = isActive ? 'var(--green)' : 'var(--text3)'; }
 
+  // Fusszeile, wie bei der Batteriekachel: Werte, die man selten braucht, aber
+  // beim Suchen eines Fehlers sofort haben will.
+  const _fz = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  _fz('invAcA', (isActive && inv.ac_current != null) ? inv.ac_current.toFixed(1) : '--');
+  _fz('invDcV', inv.dc_voltage != null ? inv.dc_voltage.toFixed(2) : '--');
+  // cs_label ist der Zustand, den das Geraet selbst meldet ("Aus", "Invertiert",
+  // "Netz"). Er sagt mehr als das abgeleitete An/Aus daneben.
+  _fz('invCs', inv.cs_label || inv.state || '--');
+
   // Halbe-Höhe-Zusammenfassung
   const _si = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   _si('invHalfPct', isActive ? displayPct + '%' : '--%');

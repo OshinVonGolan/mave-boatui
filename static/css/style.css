@@ -2435,3 +2435,14 @@
       animation: lade-dreh .8s linear infinite;
     }
     .nh-txt { flex: 1 1 auto; }
+
+    /* Beide Karten sollen gleich gegliedert sein: Kreis, Schalter, vier Felder,
+       Fusszeile. Damit die vier Felder auf derselben Hoehe beginnen, bekommt
+       das Raster in beiden denselben Abstand nach oben — und die Fusszeile
+       wird nach unten gedrueckt, statt direkt an den Feldern zu kleben. */
+    #inverterCard .batt-grid, .card-battery .batt-grid { margin-top: 2px; }
+    #inverterCard .batt-sub { margin-top: auto; padding-top: 10px; }
+    .card-battery .batt-sub { margin-top: auto; padding-top: 10px; }
+    /* Der Schalter steht jetzt oben zwischen Kreis und Feldern — dort braucht
+       er etwas Luft, aber weniger als am Kartenende. */
+    #inverterCard .inv-pill { margin: 2px 0 2px; }

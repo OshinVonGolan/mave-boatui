@@ -444,6 +444,15 @@
       </svg>
     </div>
 
+    <!-- Der Schalter steht direkt unter dem Kreis, wie der Ah/Wh-Umschalter
+         bei der Batterie. Dadurch beginnen die vier Felder in beiden Kacheln
+         auf derselben Hoehe, und die Fusszeile schliesst beide gleich ab. -->
+    <div class="inv-pill" id="invSlideTrack" onclick="toggleInverter()">
+      <div class="inv-pill-thumb" id="invSlideThumb"></div>
+      <span class="inv-pill-label left" id="invSlideOff">Inverter Aus</span>
+      <span class="inv-pill-label right" id="invSlideOn">Inverter An</span>
+    </div>
+
     <div class="batt-grid" style="grid-template-columns:1fr 1fr">
       <div class="batt-item">
         <div class="label">Landstrom</div>
@@ -463,10 +472,10 @@
       </div>
     </div>
 
-    <div class="inv-pill" id="invSlideTrack" onclick="toggleInverter()">
-      <div class="inv-pill-thumb" id="invSlideThumb"></div>
-      <span class="inv-pill-label left" id="invSlideOff">Inverter Aus</span>
-      <span class="inv-pill-label right" id="invSlideOn">Inverter An</span>
+    <div class="batt-sub tile-hide-half">
+      <div class="batt-sub-item">AC Strom <b id="invAcA">--</b> A</div>
+      <div class="batt-sub-item">DC <b id="invDcV">--</b> V</div>
+      <div class="batt-sub-item">Zustand <b id="invCs">--</b></div>
     </div>
 
     <!-- Doppelte Breite: Status-Detail -->
