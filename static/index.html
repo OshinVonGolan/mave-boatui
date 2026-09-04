@@ -21,8 +21,10 @@
        "Verknuepfung erstellen" statt einer Installation an. Genau daran ist
        es auf dem Tablet gescheitert. -->
   <link rel="manifest" href="/static/manifest.json" crossorigin="use-credentials" />
-  <link rel="apple-touch-icon" href="/static/icon-192.png" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f172a'/><g transform='translate(6 5) scale(0.85)' fill='none' stroke='%23e2e8f0' stroke-width='2.4' stroke-linecap='round'><circle cx='12' cy='5' r='3'/><path d='M12 22V8M5 12H2a10 10 0 0 0 20 0h-3'/></g></svg>">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="stylesheet" href="/static/css/geraete.css">
   <script>
@@ -68,7 +70,7 @@
 
 
 <header>
-  <div class="logo" onclick="_closeAllOverlays();history.replaceState(null,'',location.pathname);" style="cursor:pointer">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
+  <div class="logo" onclick="_closeAllOverlays();history.replaceState(null,'',location.pathname);" style="cursor:pointer"><span class="marke-mave">Mave</span> <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
 
   <!-- Clock — centered via grid -->
   <span id="topbarClock" style="font-size:13px;font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums;letter-spacing:.04em;text-align:center">00:00</span>

@@ -2461,5 +2461,33 @@
       background: transparent; color: var(--ink-dim); padding: 7px 10px;
     }
     #vollbildPille .vp-weg:hover { color: var(--ink); }
-    /* Im Kiosk-Vollbild waere sie sinnlos — dort ist der Wunsch ja erfuellt. */
+    /* Solange die Anmeldemaske steht, hat der Vollbild zu warten: sie liegt
+       ueber der Seite, und eine Schaltflaeche darunter waere nur im Weg. */
     html.anmeldung-offen #vollbildPille { display: none; }
+
+    /* ── Der Schriftzug "Mave" ────────────────────────────────────────────── */
+    /* Der Bootsname steht in "Fall in love" — der Schrift, die auch am Rumpf
+       klebt. Geladen wird dafuer KEINE Schriftdatei: der Zug ist ein einziger
+       Pfad, der sich nie aendert. Als Maske geladen nimmt er die Farbe seiner
+       Umgebung an (background: currentColor), bleibt bei jeder Groesse scharf,
+       blitzt beim Laden nicht als Ersatzschrift auf — und die Schriftdatei
+       selbst muss nicht mit ausgeliefert werden (sie ist "nur privat"
+       lizenziert). Der Text bleibt im Element stehen: Vorleser und die Suche
+       finden ihn, er steht nur ausserhalb des sichtbaren Bereichs. */
+    .marke-mave {
+      /* Ohne Maskenunterstuetzung bleibt schlichter Text stehen — kein
+         leeres Rechteck. Die Maskenregeln stehen deshalb im @supports. */
+      font-style: italic; text-transform: none; letter-spacing: .02em;
+    }
+    .logo .marke-mave { color: var(--accent); }
+    @supports ((-webkit-mask-image: url(#a)) or (mask-image: url(#a))) {
+      .marke-mave {
+        display: inline-block; vertical-align: -.34em;
+        height: 1.5em; aspect-ratio: 2.469 / 1;
+        background: currentColor;
+        -webkit-mask: url(/static/marke-mave.svg) no-repeat center / contain;
+                mask: url(/static/marke-mave.svg) no-repeat center / contain;
+        /* Der Text raus aus dem Bild, aber im Dokument. */
+        text-indent: -9999px; overflow: hidden; white-space: nowrap;
+      }
+    }

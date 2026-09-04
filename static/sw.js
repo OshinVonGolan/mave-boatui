@@ -13,7 +13,10 @@
 // sichtbarer Fehler als eine unsichtbare Luege. Deshalb gehen /api/-Anfragen
 // immer und ausschliesslich ins Netz.
 
-const SPEICHER = 'mave-huelle-v1';
+// Die Nummer MUSS hoch, wenn sich eine Datei aus der Huelle aendert: der
+// activate-Schritt loescht jeden Speicher, der nicht so heisst. Ohne das
+// haette ein Geraet nach dem Icon-Wechsel noch wochenlang das alte Symbol.
+const SPEICHER = 'mave-huelle-v2';
 
 // Die Huelle: was die Oberflaeche zum Starten braucht. Bewusst kurz — alles
 // Weitere kommt beim ersten Besuch von selbst dazu.
@@ -25,6 +28,9 @@ const HUELLE = [
   '/static/manifest.json',
   '/static/icon-192.png',
   '/static/icon-512.png',
+  // Der Schriftzug in der Kopfzeile ist eine Maskendatei — fehlt sie, steht
+  // dort ein leerer Platz statt des Bootsnamens.
+  '/static/marke-mave.svg',
 ];
 
 self.addEventListener('install', e => {

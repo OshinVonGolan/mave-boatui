@@ -603,3 +603,20 @@ main {
   margin: 4px 0 14px; padding-top: 13px; border-top: 1px solid var(--border);
 }
 .konto-weitere .knopf { font-size: 11px; padding: 6px 10px; }
+
+/* ── Der Schriftzug "Mave" ──────────────────────────────────────────────────
+   Siehe style.css: ein Pfad als Maske, keine Schriftdatei. Hier eine Spur
+   kleiner, weil die Kopfzeile des Logbuchs flacher ist als die der
+   Bordansicht. */
+.marke-mave { font-style: italic; text-transform: none; letter-spacing: .02em; }
+.marke .marke-mave { color: var(--accent); }
+@supports ((-webkit-mask-image: url(#a)) or (mask-image: url(#a))) {
+  .marke-mave {
+    display: inline-block; vertical-align: -.32em;
+    height: 1.45em; aspect-ratio: 2.469 / 1;
+    background: currentColor;
+    -webkit-mask: url(/static/marke-mave.svg) no-repeat center / contain;
+            mask: url(/static/marke-mave.svg) no-repeat center / contain;
+    text-indent: -9999px; overflow: hidden; white-space: nowrap;
+  }
+}
