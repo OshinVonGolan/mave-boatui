@@ -101,5 +101,84 @@ class Ausduennen(unittest.TestCase):
                                           53.896098, 10.769512), 0.0, places=6)
 
 
+class SpurOhneStapel(unittest.TestCase):
+    """Der ausdrückliche Wunsch des Eigners: keine hundert Punkte auf demselben
+    Fleck, wenn das Boot sich nicht bewegt hat.
+
+    Vorher setzte die Spur zusätzlich alle zwei Stunden einen Punkt, damit sich
+    "lag da" von "nichts aufgeschrieben" unterscheiden liess. Der Gedanke war
+    richtig, die Umsetzung nicht: drei Wochen am Steg ergaben dreihundertsechzig
+    Punkte übereinander. Dieselbe Auskunft trägt jetzt die Liegezeit am Punkt
+    (`bis`), und eine echte Lücke beginnt einen neuen Abschnitt (`neu`).
+    """
+
+    def setUp(self):
+        import os, sys
+        os.environ.setdefault('MAVE_GERAET_TOKEN', 'x' * 20)
+        os.environ.setdefault('MAVE_PASSWORT', 'x' * 20)
+        sys.path.insert(0, '.')
+        from server.app import _spur_ausduennen, _SPUR_ABSTAND_M
+        self.duennen = _spur_ausduennen
+        self.abstand = _SPUR_ABSTAND_M
+
+    def test_am_steg_bleibt_es_bei_einem_punkt(self):
+        """Sieben Tage im Minutentakt am selben Fleck, mit dem Rauschen eines
+        Empfängers (rund zwei Meter). Das ist der Alltag dieses Bootes."""
+        import random
+        rnd = random.Random(7)
+        t0 = 1788000000
+        roh = [(t0 + i * 60,
+                53.896098 + (rnd.random() - .5) * 0.000036,
+                10.769512 + (rnd.random() - .5) * 0.000060)
+               for i in range(7 * 24 * 60)]
+        punkte = self.duennen(roh, self.abstand)
+        self.assertEqual(len(punkte), 1,
+                         f'Ein Boot, das liegt, ergibt einen Punkt — nicht {len(punkte)}.')
+        # Und die Liegezeit steht dran, statt in Punkten gezählt zu werden.
+        self.assertAlmostEqual(punkte[0]['bis'] - punkte[0]['t'],
+                               (7 * 24 * 60 - 1) * 60, delta=1)
+
+    def test_bewegung_ergibt_punkte(self):
+        """Eine Fahrt muss sichtbar bleiben."""
+        t0 = 1788000000
+        # Rund 55 m je Schritt nach Norden (0.0005° Breite)
+        roh = [(t0 + i * 60, 53.896098 + i * 0.0005, 10.769512) for i in range(20)]
+        punkte = self.duennen(roh, self.abstand)
+        self.assertEqual(len(punkte), 20)
+
+    def test_unter_der_schwelle_entsteht_nichts_neues(self):
+        """Zehn Meter sind keine Bewegung — zwanzig schon."""
+        t0 = 1788000000
+        # 0.00009° Breite sind rund 10 m
+        roh = [(t0 + i * 60, 53.896098 + i * 0.00009, 10.769512) for i in range(3)]
+        self.assertEqual(len(self.duennen(roh, 20.0)), 2)   # nach zwei Schritten 20 m
+        self.assertEqual(len(self.duennen(roh, 50.0)), 1)
+
+    def test_luecke_beginnt_einen_neuen_abschnitt(self):
+        """Schweigt der Bordrechner, darf die Karte keine Linie darüber ziehen —
+        wo das Boot dazwischen war, weiss niemand."""
+        t0 = 1788000000
+        roh = [(t0, 53.896098, 10.769512),
+               (t0 + 60, 53.896098, 10.769512),
+               # zwei Stunden Stille, danach derselbe Fleck
+               (t0 + 7200, 53.896098, 10.769512),
+               (t0 + 7260, 53.896098, 10.769512)]
+        punkte = self.duennen(roh, self.abstand)
+        self.assertEqual(len(punkte), 2)
+        self.assertFalse(punkte[0]['neu'])
+        self.assertTrue(punkte[1]['neu'],
+                        'Nach einer Lücke muss ein neuer Abschnitt beginnen.')
+
+    def test_kurze_stille_ist_keine_luecke(self):
+        """Ein paar ausgefallene Minuten sind Betrieb, kein Loch."""
+        t0 = 1788000000
+        roh = [(t0, 53.896098, 10.769512), (t0 + 300, 53.896098, 10.769512)]
+        punkte = self.duennen(roh, self.abstand)
+        self.assertEqual(len(punkte), 1)
+
+    def test_leere_eingabe(self):
+        self.assertEqual(self.duennen([], self.abstand), [])
+
+
 if __name__ == '__main__':
     unittest.main()

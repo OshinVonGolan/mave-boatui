@@ -674,7 +674,7 @@ function zeichneUeberblick() {
 
 let _spurTage = 30;
 let _spur = null;
-let _karte = null, _karteSpur = null, _karteBoot = null;
+let _karte = null, _karteSpur = null, _karteBoot = null, _karteLiegen = null;
 let _leaflet = null;
 
 /**
@@ -771,12 +771,38 @@ function karteZeichnen() {
     _karte.setView([54.0, 10.5], 8);
   }
 
-  const punkte = ((_spur && _spur.punkte) || []).map(p => [p.lat, p.lon]);
+  // Abschnitte statt einer durchgezogenen Linie. Ein Punkt mit `neu` folgt auf
+  // eine Lücke im Aufschrieb — eine Linie darüber wäre gelogen, denn wo das
+  // Boot dazwischen war, weiss niemand.
+  const roh = (_spur && _spur.punkte) || [];
+  const abschnitte = [];
+  for (const p of roh) {
+    if (!abschnitte.length || p.neu) abschnitte.push([]);
+    abschnitte[abschnitte.length - 1].push([p.lat, p.lon]);
+  }
+  const punkte = roh.map(p => [p.lat, p.lon]);
+
   if (_karteSpur) { _karte.removeLayer(_karteSpur); _karteSpur = null; }
-  if (punkte.length > 1) {
-    _karteSpur = L.polyline(punkte, {
+  const mitLinie = abschnitte.filter(a => a.length > 1);
+  if (mitLinie.length) {
+    _karteSpur = L.polyline(mitLinie, {
       color: '#22d3ee', weight: 2.5, opacity: .8, lineJoin: 'round',
     }).addTo(_karte);
+  }
+
+  // Wo das Boot länger lag, steht ein Ring — statt hundert Punkte übereinander.
+  // Wie lange, sagt die Beschriftung beim Darauffahren.
+  if (_karteLiegen) { _karte.removeLayer(_karteLiegen); _karteLiegen = null; }
+  const liegen = roh.filter(p => (p.bis - p.t) >= 3600);
+  if (liegen.length) {
+    _karteLiegen = L.layerGroup(liegen.map(p => L.circleMarker([p.lat, p.lon], {
+      // Der Ring wächst mit der Liegezeit, aber nur langsam und gedeckelt:
+      // sonst verdeckt ein Winterlager die halbe Karte.
+      radius: Math.min(11, 4 + Math.log10((p.bis - p.t) / 3600) * 3),
+      color: '#22d3ee', weight: 1.6, opacity: .75,
+      fillColor: '#22d3ee', fillOpacity: .16,
+    }).bindTooltip(`lag hier ${dauer(p.bis - p.t)}<br>ab ${zeitpunkt(p.t)}`,
+                   { direction: 'top' }))).addTo(_karte);
   }
 
   // Der aktuelle Standort: bevorzugt der gemessene aus dem Zustand, sonst der
@@ -793,10 +819,15 @@ function karteZeichnen() {
     }).addTo(_karte).bindTooltip('Mave', { direction: 'top', offset: [0, -8] });
   }
 
-  if (_karteSpur) {
-    _karte.fitBounds(_karteSpur.getBounds(), { padding: [34, 34], maxZoom: 16 });
-  } else if (jetzt) {
-    _karte.setView(jetzt, 15);
+  // Zuschnitt über ALLE Punkte, nicht über die Linie: lag das Boot die ganze
+  // Zeit an einem Fleck, gibt es überhaupt keine Linie — und früher wäre die
+  // Karte dann auf die Ostsee statt auf den Liegeplatz gesprungen.
+  const alle = punkte.slice();
+  if (jetzt) alle.push(jetzt);
+  if (alle.length > 1) {
+    _karte.fitBounds(L.latLngBounds(alle), { padding: [34, 34], maxZoom: 16 });
+  } else if (alle.length === 1) {
+    _karte.setView(alle[0], 15);
   }
   // Nach dem Einblenden stimmt die Größe erst, wenn das Feld wirklich steht.
   setTimeout(() => _karte && _karte.invalidateSize(), 60);
@@ -843,12 +874,15 @@ function zeichnePosition() {
       stand.innerHTML = '<span>Für diesen Zeitraum liegt keine Position vor. '
         + 'Aufgeschrieben wird sie erst, seit der Bordrechner sie vom Router holt.</span>';
     } else {
-      const von = _spur.punkte[0].t, bis = _spur.punkte[_spur.punkte.length - 1].t;
+      const von = _spur.punkte[0].t;
+      const bis = _spur.punkte[_spur.punkte.length - 1].bis;
+      const abschnitte = _spur.punkte.filter(p => p.neu).length + 1;
       stand.innerHTML =
         `<span>Spur <b>${_spurTage} Tage</b></span>`
         + `<span><b>${_spur.punkte.length}</b> Punkte</span>`
         + `<span>von <b>${esc(zeitpunkt(von))}</b> bis <b>${esc(zeitpunkt(bis))}</b></span>`
-        + `<span>ein Punkt je <b>${_spur.abstand_m} m</b> oder <b>${Math.round(_spur.takt_s / 3600)} Std</b></span>`;
+        + `<span>neuer Punkt ab <b>${_spur.abstand_m} m</b> Bewegung</span>`
+        + (abschnitte > 1 ? `<span><b>${abschnitte}</b> Abschnitte — dazwischen wurde nichts aufgeschrieben</span>` : '');
     }
   }
 }
