@@ -18,25 +18,28 @@ const _QUELLE_ART = {
     kurz: 'Direkt', ton: 'ok',
     titel: 'Direkt mit dem Boot',
     text: 'Dein Gerät spricht ohne Umweg mit dem Rechner an Bord. Alle Werte sind live, Schalter wirken sofort.',
-    weg: ['Dieses Gerät', 'Bordnetz', 'Pi an Bord'],
+    weg: ['Dein Browser', 'Bordnetz', 'Pi an Bord'],
   },
   server_live: {
     kurz: 'Server', ton: 'neutral',
     titel: 'Über den Server',
     text: 'Du bist nicht im Bordnetz. Die Daten laufen über den Server — das Boot ist dort gerade angemeldet, die Werte sind aktuell.',
-    weg: ['Dieses Gerät', 'Server', 'Pi an Bord'],
+    weg: ['Dein Browser', 'Internet', 'Pi an Bord'],
   },
   server_kopie: {
     kurz: 'Kopie', ton: 'warn',
     titel: 'Gespeicherte Kopie',
-    text: 'Das Boot ist beim Server gerade nicht angemeldet. Du siehst den zuletzt übertragenen Stand. Schalten ist nicht möglich.',
-    weg: ['Dieses Gerät', 'Server', 'Boot offline'],
+    text: 'Das Boot ist beim Server gerade nicht angemeldet. Ladestand, Tanks, '
+        + 'Strom und Heizung zeigen den zuletzt übertragenen Stand. Alles, was '
+        + 'der Server nur durchreicht — Internet, Wartung, Geräteliste — gibt es '
+        + 'ohne Boot gar nicht und bleibt leer. Schalten ist nicht möglich.',
+    weg: ['Dein Browser', 'Server', 'Boot ist weg'],
   },
   unbekannt: {
     kurz: '—', ton: 'neutral',
     titel: 'Quelle wird ermittelt',
     text: 'Noch sind keine Daten eingetroffen.',
-    weg: ['Dieses Gerät', '?', '?'],
+    weg: ['Dein Browser', '…', '…'],
   },
 };
 
@@ -113,6 +116,10 @@ function renderQuellePop() {
   ).join('<div class="qw-strich"></div>');
   pop.innerHTML =
     `<div class="qp-kopf">${a.titel}</div>` +
+    // Ueberschrift, damit die drei Kaesten als WEG lesbar sind. Ohne sie sahen
+    // sie aus wie weitere Zustaende neben "Direkt" und "Server" — der erste
+    // Kasten wurde fuer eine dritte Quellenart gehalten.
+    `<div class="qp-wegtitel">Weg der Daten</div>` +
     `<div class="qp-weg">${weg}</div>` +
     `<div class="qp-text">${a.text}</div>` +
     (alter && _quelle.art !== 'direkt'
@@ -171,11 +178,20 @@ function _kopieSetzen(an, alterText) {
   if (!banner) return;
   banner.classList.toggle('hidden', !an);
   if (an) {
+    // Der Hinweis nennt BEIDES: dass die Werte alt sind, und dass manche
+    // ueberhaupt fehlen. Der Server hebt nur auf, was ihm das Boot laufend
+    // schickt — Zustand und Verlauf. Was er auf Nachfrage durchreicht
+    // (Internet, Wartung, Geräteliste, Tageswerte), gibt es ohne Boot gar
+    // nicht. Nur "die Daten sind alt" zu sagen waere die halbe Wahrheit, und
+    // die falsche Haelfte: man wuerde die leeren Kacheln fuer einen Fehler
+    // halten.
     banner.innerHTML =
       '<span class="kb-mark">Keine Live-Daten</span>'
-      + '<span class="kb-txt">Das Boot ist offline. Angezeigt wird der zuletzt übertragene Stand'
+      + '<span class="kb-txt">Das Boot ist offline. Ladestand, Tanks, Strom und Heizung '
+      + 'zeigen den zuletzt übertragenen Stand'
       + (alterText ? ' von <b>' + alterText + '</b>' : '')
-      + '. Schalten ist nicht möglich.</span>';
+      + '. Internet, Wartung und Geräteliste werden nicht gespeichert und '
+      + 'bleiben leer. Schalten ist nicht möglich.</span>';
   }
 }
 

@@ -269,6 +269,26 @@ _sync_cfg = _sync_konfig()
 _INTERN = secrets.token_urlsafe(32)
 
 
+def _zustand_fuer_server() -> dict:
+    """Was zum Server hochgeht — der Bordzustand plus die Heizung.
+
+    Die Heizung haengt an einem eigenen Poller und war deshalb nicht Teil des
+    Zustands. Fuer die Bordansicht ist das gleichgueltig (dort holt sie sich
+    ihre Kachel selbst), fuer den Server aber nicht: was nicht mitgeht, hat er
+    nicht, und was er nicht hat, kann er nicht zeigen, wenn das Boot schweigt.
+
+    Und genau danach fragt man aus der Ferne im Winter zuerst: laeuft die
+    Heizung noch, wie kalt ist es drinnen. Der Schnappschuss ist ein paar
+    hundert Byte — auch ueber Mobilfunk kein Argument.
+    """
+    d = state.to_dict()
+    try:
+        d['heizung'] = heizung.snapshot()
+    except Exception as e:
+        log.debug('Heizungszustand nicht verfügbar: %s', e)
+    return d
+
+
 def _konten_stand() -> str:
     return konten.zum_verteilen()['stand']
 
@@ -282,7 +302,7 @@ sync = sync_client.SyncClient(
     token=_sync_cfg.get('token', ''),
     geraet=_sync_cfg.get('geraet', 'mave-pi'),
     version=VERSION,
-    zustand_holen=state.to_dict,
+    zustand_holen=_zustand_fuer_server,
     verlauf_holen=lambda ab, grenze: grob_store.ab_folge(ab, grenze),
     verlauf_stand=grob_store.hoechste_folge,
     conn_status=(conn_mon.get_status if conn_mon else (lambda: None)),
