@@ -41,6 +41,34 @@ Mobilfunk     o2 - de, 5G (NSA), VoLTE — vorhanden, aber nicht der aktive Weg
 WLAN-Clients  8
 ```
 
+## Die drei Namen
+
+```
+mave.circuit-sailor.com       Die Bordansicht. Im Bordnetz biegt der Router
+                              diesen Namen auf den Pi um (statischer Eintrag),
+                              draussen zeigt er auf den Server. EINE Herkunft,
+                              eine Installation — dieselbe App an Bord und
+                              unterwegs.
+
+pi.mave.circuit-sailor.com    Der unmissverstaendliche Weg zum Boot. Zeigt
+                              immer auf 192.168.1.103. Bleibt bestehen, weil er
+                              auch dann noch funktioniert, wenn am Router etwas
+                              verstellt ist — und weil man bei der Fehlersuche
+                              wissen will, mit WEM man spricht.
+
+logbuch.circuit-sailor.com    Diagnose und Fernwartung. Zeigt IMMER auf den
+                              Server und wird nie umgebogen. Sonst waere das
+                              Logbuch ausgerechnet an Bord nicht erreichbar —
+                              und dort sitzt man, wenn man nachsehen will,
+                              warum etwas nicht stimmt.
+```
+
+Der eigene Name fuers Logbuch ist zugleich die sauberere Trennung: das
+maechtige Verwalter-Cookie kommt so nie am Bordrechner vorbei.
+
+Beide Namen, die auf den Pi zeigen koennen, haben dort ein eigenes Zertifikat
+(`/etc/nginx/mave/`), beide werden von acme.sh erneuert.
+
 ## Zugänge
 
 ### Zum Pi
