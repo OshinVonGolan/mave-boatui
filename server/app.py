@@ -623,6 +623,78 @@ async def konto_aendern(name: str, aenderung: KontoAenderung,
     return JSONResponse(stand)
 
 
+class PasswortWechsel(BaseModel):
+    altes: str
+    neues: str
+
+
+@app.post('/api/mein/passwort')
+def eigenes_passwort(daten: PasswortWechsel, request: Request,
+                     k: dict = Depends(konto)) -> JSONResponse:
+    """Sein eigenes Passwort aendern — jeder, fuer sich, ohne Verwalter.
+
+    Das alte muss mit: eine Sitzung kann auf einem fremden, offenen Geraet
+    liegen. Ohne diesen Nachweis koennte jeder, der kurz an ein
+    unbeaufsichtigtes Handy kommt, das Konto uebernehmen.
+    """
+    if len(daten.neues or '') < 8:
+        raise HTTPException(400, detail='Das neue Passwort braucht mindestens 8 Zeichen.')
+    try:
+        konten.passwort_selbst_aendern(k['name'], daten.altes, daten.neues)
+    except KontoFehler as e:
+        raise HTTPException(400, detail=str(e)) from None
+    # Alle Sitzungen sind beendet — auch die eigene. Gleich wieder anmelden,
+    # sonst steht man nach dem Wechsel vor der Anmeldemaske.
+    token, konto_neu = konten.anmelden(
+        k['name'], daten.neues,
+        herkunft=_herkunft(request),
+        geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
+    antwort = JSONResponse({'ok': True})
+    _sitzung_setzen(antwort, request, token)
+    return antwort
+
+
+@app.post('/api/konten/{name}/abmelden')
+def konto_abmelden(name: str, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    """Alle Sitzungen eines Kontos beenden — fuer ein verlorenes Geraet.
+
+    Ohne das bliebe nur der Umweg ueber einen Passwortwechsel. Der wirkt zwar,
+    zwingt aber jemanden, sich ein neues auszudenken, obwohl das alte in
+    Ordnung ist.
+    """
+    return JSONResponse({'beendet': konten.sitzungen_beenden(name)})
+
+
+@app.post('/api/konten/{name}/einladung')
+async def einladung_erneuern(name: str,
+                             k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    """Einen neuen Einladungslink erzeugen — auch fuer ein vergessenes Passwort.
+
+    Statt jemandem ein neues Passwort zu diktieren, das er per Nachricht
+    bekommt und nie aendert, setzt er es ueber denselben Weg selbst. Das alte
+    bleibt gueltig, bis der Link eingeloest wird: ein Link, der nie ankommt,
+    darf niemanden aussperren.
+    """
+    try:
+        token = konten.neu_einladen(name)
+    except KontoFehler as e:
+        raise HTTPException(400, detail=str(e)) from None
+    await _konten_zum_boot()
+    return JSONResponse({'name': name, 'einladungslink': f'/einladung#{name}:{token}'})
+
+
+@app.delete('/api/konten/{name}/einladung')
+async def einladung_zuruecknehmen(name: str,
+                                  k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
+    """Eine offene Einladung ungueltig machen, ohne das Konto zu loeschen."""
+    try:
+        konten.einladung_zuruecknehmen(name)
+    except KontoFehler as e:
+        raise HTTPException(400, detail=str(e)) from None
+    await _konten_zum_boot()
+    return JSONResponse({'ok': True})
+
+
 @app.delete('/api/konten/{name}')
 async def konto_loeschen(name: str, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
     if name == k.get('name'):

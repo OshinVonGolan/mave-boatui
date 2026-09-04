@@ -60,6 +60,21 @@ h1 { font-size: 19px; font-weight: 700; margin: 24px 0 6px; }
 .feld input:focus { outline: none; border-color: var(--accent); }
 .hinweis-klein { font-size: 11px; color: var(--text3); margin-top: -8px; margin-bottom: 16px; }
 
+/* Die Regeln werden gruen, sobald sie erfuellt sind — man sieht beim Tippen,
+   woran es noch fehlt, statt es nach dem Absenden zu erfahren. */
+.regeln { list-style: none; margin: -8px 0 16px; padding: 0; }
+.regeln li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 11.5px; line-height: 1.5; color: var(--text3);
+  padding: 2px 0; transition: color .2s;
+}
+.regeln li.ok { color: var(--green); }
+.regeln li.hinweis { color: var(--text3); opacity: .75; }
+.regeln li.hinweis.ok { color: var(--green); opacity: 1; }
+.regel-punkt {
+  flex: 0 0 14px; text-align: center; font-weight: 700;
+}
+
 .knopf {
   width: 100%; padding: 13px; border: none; border-radius: 10px;
   background: var(--accent); color: var(--bg);
@@ -152,8 +167,7 @@ function formularZeigen(d) {
   $('inhalt').innerHTML = `
     <h1>Willkommen an Bord, ${esc(d.anzeigename || d.name)}</h1>
     <p class="unter">Du wurdest als <b>${esc(d.rolle_name)}</b> für den Bordmonitor
-      der Mave eingetragen. Es fehlt nur noch dein Passwort — und das wählst du
-      selbst, niemand sonst kennt es.</p>
+      der Mave eingetragen. Es fehlt nur noch dein Passwort.</p>
 
     <div class="kann">
       <div class="kann-titel">Was du damit kannst</div>
@@ -164,11 +178,12 @@ function formularZeigen(d) {
       <label class="feld"><span>Dein Anmeldename</span>
         <input type="text" value="${esc(d.name)}" disabled></label>
       <label class="feld"><span>Passwort wählen</span>
-        <input id="pw1" type="password" autocomplete="new-password" required minlength="8"></label>
-      <div class="hinweis-klein">Mindestens acht Zeichen. Ein Satz, den du dir
-        merken kannst, ist besser als ein kurzes kompliziertes Wort.</div>
+        <input id="pw1" type="password" autocomplete="new-password" required
+               oninput="regelnPruefen()"></label>
+      <ul class="regeln" id="regeln"></ul>
       <label class="feld"><span>Noch einmal</span>
-        <input id="pw2" type="password" autocomplete="new-password" required></label>
+        <input id="pw2" type="password" autocomplete="new-password" required
+               oninput="regelnPruefen()"></label>
       <div class="fehler hidden" id="fehler"></div>
       <button class="knopf" type="submit" id="knopf">Passwort setzen und anmelden</button>
     </form>
@@ -181,7 +196,45 @@ function formularZeigen(d) {
       <p>Im Browsermenü lässt sie sich als App installieren. Dann liegt sie mit
          eigenem Symbol auf dem Startbildschirm und öffnet ohne Adressleiste.</p>
     </div>`;
+  regelnPruefen();
   setTimeout(() => $('pw1') && $('pw1').focus(), 80);
+}
+
+// Dieselben Regeln wie auf dem Server (sync/konten.py). Sie stehen hier ein
+// zweites Mal, weil eine Rückmeldung beim Tippen nun einmal im Browser
+// entstehen muss — der Server prüft sie TROTZDEM. Was nur der Browser prüft,
+// prüft niemand.
+//
+// Zur Auswahl: Länge schlägt Komplexität. "Passwort1!" erfüllt jede übliche
+// Zeichenregel und ist in Sekunden geraten; ein Satz aus vier Wörtern nicht.
+// Deshalb entfallen die Zeichenregeln ab 16 Zeichen — sonst erzwingt man genau
+// die "Sommer2026!"-Passwörter.
+const PW_MIN = 10, PW_SATZ = 16;
+
+function regelnFuer(p, name) {
+  const satz = p.length >= PW_SATZ;
+  return [
+    { text: `mindestens ${PW_MIN} Zeichen`, ok: p.length >= PW_MIN },
+    { text: 'Groß- und Kleinbuchstaben', ok: satz || (/[a-zäöüß]/.test(p) && /[A-ZÄÖÜ]/.test(p)) },
+    { text: 'eine Ziffer oder ein Sonderzeichen', ok: satz || /[^a-zA-ZäöüÄÖÜß]/.test(p) },
+    { text: `oder ein ganzer Satz ab ${PW_SATZ} Zeichen — dann entfallen die beiden Regeln darüber`,
+      ok: satz, hinweis: true },
+    { text: 'nicht dein Anmeldename', ok: p.length > 0 && (!name || !p.toLowerCase().includes(name.toLowerCase())) },
+  ];
+}
+
+function regelnPruefen() {
+  const p = $('pw1') ? $('pw1').value : '';
+  const p2 = $('pw2') ? $('pw2').value : '';
+  const liste = regelnFuer(p, _name);
+  $('regeln').innerHTML = liste.map(r =>
+    `<li class="${r.ok ? 'ok' : ''}${r.hinweis ? ' hinweis' : ''}">
+       <span class="regel-punkt">${r.ok ? '&#10003;' : '&#183;'}</span>${esc(r.text)}
+     </li>`).join('')
+    + (p2 ? `<li class="${p === p2 ? 'ok' : ''}">
+        <span class="regel-punkt">${p === p2 ? '&#10003;' : '&#183;'}</span>beide Eingaben gleich</li>` : '');
+  const fertig = liste.every(r => r.ok || r.hinweis) && p === p2 && p2.length > 0;
+  if ($('knopf')) $('knopf').disabled = !fertig;
 }
 
 async function setzen(ev) {
@@ -189,7 +242,8 @@ async function setzen(ev) {
   const pw1 = $('pw1').value, pw2 = $('pw2').value;
   const fehler = $('fehler'), knopf = $('knopf');
   const zeigen = t => { fehler.textContent = t; fehler.classList.remove('hidden'); };
-  if (pw1.length < 8) return zeigen('Das Passwort braucht mindestens acht Zeichen.'), false;
+  const offen = regelnFuer(pw1, _name).filter(r => !r.ok && !r.hinweis);
+  if (offen.length) return zeigen('Es fehlt noch: ' + offen.map(r => r.text).join(', ')), false;
   if (pw1 !== pw2) return zeigen('Die beiden Eingaben sind nicht gleich.'), false;
 
   knopf.disabled = true; knopf.textContent = 'Einen Moment…';

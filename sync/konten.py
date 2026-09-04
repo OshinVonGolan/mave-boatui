@@ -64,6 +64,49 @@ class KontoFehler(ValueError):
 
 # ── Passwoerter ─────────────────────────────────────────────────────────────
 
+# ── Was ein brauchbares Passwort ausmacht ──────────────────────────────────
+# Die Regeln stehen HIER und nicht in der Oberflaeche: was nur der Browser
+# prueft, prueft niemand.
+#
+# Zur Auswahl: Laenge schlaegt Komplexitaet. "Passwort1!" erfuellt jede uebliche
+# Zeichenklassen-Regel und ist trotzdem in Sekunden geraten; ein Satz aus vier
+# Woertern nicht. Deshalb gelten die Zeichenregeln nur bis 16 Zeichen — wer
+# einen ganzen Satz nimmt, muss keine Ziffer hineinquetschen. Genau diese
+# Quetscherei erzeugt sonst die "Sommer2026!"-Passwoerter.
+PW_MINDESTLAENGE = 10
+PW_SATZLAENGE = 16
+
+
+def passwort_regeln(passwort: str, name: str = '') -> list[dict]:
+    """Jede Regel mit Text und ob sie erfuellt ist.
+
+    Gibt eine Liste zurueck und kein blosses ja/nein, damit die Oberflaeche
+    anzeigen kann, WAS noch fehlt — und beide Seiten dieselben Worte benutzen.
+    """
+    p = passwort or ''
+    lang_genug = len(p) >= PW_MINDESTLAENGE
+    ist_satz = len(p) >= PW_SATZLAENGE
+    return [
+        {'text': f'mindestens {PW_MINDESTLAENGE} Zeichen', 'erfuellt': lang_genug},
+        {'text': 'Groß- und Kleinbuchstaben',
+         'erfuellt': ist_satz or (any(c.islower() for c in p) and any(c.isupper() for c in p))},
+        {'text': 'mindestens eine Ziffer oder ein Sonderzeichen',
+         'erfuellt': ist_satz or any(c.isdigit() or not c.isalnum() for c in p)},
+        {'text': f'oder einfach ein Satz ab {PW_SATZLAENGE} Zeichen — dann entfallen die beiden Regeln darüber',
+         'erfuellt': ist_satz, 'hinweis': True},
+        {'text': 'nicht der eigene Anmeldename',
+         'erfuellt': bool(p) and (not name or name.lower() not in p.lower())},
+    ]
+
+
+def passwort_pruefen(passwort: str, name: str = '') -> None:
+    """Wirft KontoFehler, wenn das Passwort die Regeln nicht erfuellt."""
+    offen = [r['text'] for r in passwort_regeln(passwort, name)
+             if not r['erfuellt'] and not r.get('hinweis')]
+    if offen:
+        raise KontoFehler('Das Passwort erfüllt nicht: ' + '; '.join(offen))
+
+
 def hash_erzeugen(passwort: str, *, n_exp: int = SCRYPT_N_EXP) -> str:
     """Einen Passworthash bauen. Format:
 
@@ -73,6 +116,8 @@ def hash_erzeugen(passwort: str, *, n_exp: int = SCRYPT_N_EXP) -> str:
     ohne dass alte Passwoerter ungueltig werden.
     """
     if not isinstance(passwort, str) or len(passwort) < 8:
+        # Letzte Bremse. Die eigentlichen Regeln stehen in passwort_pruefen und
+        # greifen frueher — hier faengt nur ab, was daran vorbeikaeme.
         raise KontoFehler('Das Passwort muss mindestens 8 Zeichen haben.')
     if len(passwort) > 1024:
         # Ohne Grenze koennte ein langes Passwort selbst zur Last werden.

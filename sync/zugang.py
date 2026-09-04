@@ -123,6 +123,9 @@ OFFEN = (
 REGELN: tuple[tuple[str, str, str], ...] = (
     # (Methode oder '*', Muster, Recht)
     ('*',    r'^/api/konten',                r.VERWALTEN),
+    # Das eigene Konto: angemeldet sein genuegt. Wer hier mehr verlangte,
+    # koennte sein Passwort nicht aendern, ohne den Eigner zu fragen.
+    ('POST', r'^/api/mein/',                 r.LESEN),
     ('POST', r'^/api/system/update$',        r.FERNWARTEN),
     # Zurueckgehen ist ein Eingriff in den laufenden Code, keine Bedienung.
     # Ohne diese Zeile fiele es unter die Vorgabe "Schalten" — und die hat

@@ -145,3 +145,134 @@ function _sitzungVerloren() {
   _angemeldet = false;
   anmeldungZeigen('Die Sitzung ist abgelaufen. Bitte erneut anmelden.');
 }
+
+// ── Kontomenü ──────────────────────────────────────────────────────────────
+// In der Bordansicht stand nirgends, mit welchem Konto man unterwegs ist, und
+// sein Passwort ändern konnte man gar nicht — dafür musste man den Eigner
+// fragen. Beides gehört dorthin, wo man es erwartet: hinter das eigene Symbol.
+
+function kontoMenue(ev) {
+  ev?.stopPropagation();
+  const pop = $('kontoPop');
+  if (!pop) return;
+  if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }
+
+  const k = _zugangStand && _zugangStand.konto;
+  if (!k) {
+    pop.innerHTML = `
+      <div class="kp-kopf">Nicht angemeldet</div>
+      <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>`;
+  } else {
+    const h = k.handlungen || [];
+    pop.innerHTML = `
+      <div class="kp-kopf">${_esc(k.anzeigename || k.name || '')}</div>
+      <div class="kp-rolle">${_esc(k.rolle_name || '')}</div>
+      <div class="kp-darf">${_esc(h.join(' · '))}</div>
+      <div class="kp-tat">
+        <button class="kp-knopf" onclick="passwortAendernOeffnen()">Passwort ändern</button>
+        <button class="kp-knopf warn" onclick="abmelden()">Abmelden</button>
+      </div>`;
+  }
+  pop.classList.remove('hidden');
+}
+
+document.addEventListener('click', e => {
+  const pop = $('kontoPop');
+  if (pop && !pop.classList.contains('hidden')
+      && !pop.contains(e.target) && !e.target.closest('#kontoBtn')) {
+    pop.classList.add('hidden');
+  }
+});
+
+// Dieselben Regeln wie auf dem Server (sync/konten.py) und auf der
+// Einladungsseite. Sie stehen hier ein drittes Mal, weil die Rückmeldung beim
+// Tippen im Browser entstehen muss — geprüft wird trotzdem serverseitig.
+const _PW_MIN = 10, _PW_SATZ = 16;
+
+function _pwRegeln(p, name) {
+  const satz = p.length >= _PW_SATZ;
+  return [
+    { text: `mindestens ${_PW_MIN} Zeichen`, ok: p.length >= _PW_MIN },
+    { text: 'Groß- und Kleinbuchstaben', ok: satz || (/[a-zäöüß]/.test(p) && /[A-ZÄÖÜ]/.test(p)) },
+    { text: 'eine Ziffer oder ein Sonderzeichen', ok: satz || /[^a-zA-ZäöüÄÖÜß]/.test(p) },
+    { text: `oder ein ganzer Satz ab ${_PW_SATZ} Zeichen`, ok: satz, hinweis: true },
+    { text: 'nicht dein Anmeldename',
+      ok: p.length > 0 && (!name || !p.toLowerCase().includes(name.toLowerCase())) },
+  ];
+}
+
+function passwortAendernOeffnen() {
+  $('kontoPop')?.classList.add('hidden');
+  let feld = $('pwDialog');
+  if (!feld) {
+    feld = document.createElement('div');
+    feld.id = 'pwDialog';
+    feld.className = 'anmeldung';
+    document.body.appendChild(feld);
+  }
+  feld.innerHTML = `
+    <form class="anm-karte" onsubmit="return passwortAendern(event)">
+      <div class="anm-marke">Passwort ändern</div>
+      <label class="anm-feld"><span>Bisheriges Passwort</span>
+        <input id="pwAlt" type="password" autocomplete="current-password" required></label>
+      <label class="anm-feld"><span>Neues Passwort</span>
+        <input id="pwNeu" type="password" autocomplete="new-password" required
+               oninput="_pwRegelnZeigen()"></label>
+      <ul class="pw-regeln" id="pwRegeln"></ul>
+      <label class="anm-feld"><span>Noch einmal</span>
+        <input id="pwNeu2" type="password" autocomplete="new-password" required
+               oninput="_pwRegelnZeigen()"></label>
+      <div class="anm-fehler hidden" id="pwFehler"></div>
+      <button class="anm-knopf" type="submit" id="pwKnopf" disabled>Ändern</button>
+      <button type="button" class="anm-knopf" style="background:none;color:var(--text2);
+              border:1px solid var(--border);margin-top:2px"
+              onclick="$('pwDialog').remove()">Abbrechen</button>
+    </form>`;
+  _pwRegelnZeigen();
+  setTimeout(() => $('pwAlt')?.focus(), 60);
+}
+
+function _pwRegelnZeigen() {
+  const p = $('pwNeu')?.value || '', p2 = $('pwNeu2')?.value || '';
+  const name = (_zugangStand?.konto?.name) || '';
+  const liste = _pwRegeln(p, name);
+  $('pwRegeln').innerHTML = liste.map(r =>
+    `<li class="${r.ok ? 'ok' : ''}${r.hinweis ? ' hinweis' : ''}">
+       <span class="regel-punkt">${r.ok ? '&#10003;' : '&#183;'}</span>${r.text}</li>`).join('')
+    + (p2 ? `<li class="${p === p2 ? 'ok' : ''}"><span class="regel-punkt">${
+        p === p2 ? '&#10003;' : '&#183;'}</span>beide Eingaben gleich</li>` : '');
+  const fertig = liste.every(r => r.ok || r.hinweis) && p === p2 && p2.length > 0;
+  if ($('pwKnopf')) $('pwKnopf').disabled = !fertig;
+}
+
+async function passwortAendern(ev) {
+  ev.preventDefault();
+  const fehler = $('pwFehler'), knopf = $('pwKnopf');
+  knopf.disabled = true; knopf.textContent = 'Einen Moment…';
+  try {
+    const r = await fetch('/api/mein/passwort', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ altes: $('pwAlt').value, neues: $('pwNeu').value }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      fehler.textContent = d.detail || 'Das hat nicht geklappt.';
+      fehler.classList.remove('hidden');
+      return false;
+    }
+    // Alle anderen Sitzungen sind beendet; diese läuft mit dem neuen Cookie
+    // weiter. Ein Neuladen macht das sichtbar und stellt sicher, dass nichts
+    // Altes hängen bleibt.
+    $('pwDialog').innerHTML = '<div class="anm-karte" style="text-align:center">'
+      + '<div class="anm-marke">Geändert</div>'
+      + '<div class="anm-wohin" style="border:none;padding:0">Alle anderen Anmeldungen '
+      + 'wurden dabei beendet.</div></div>';
+    setTimeout(() => location.reload(), 1600);
+  } catch (_) {
+    fehler.textContent = 'Keine Verbindung.';
+    fehler.classList.remove('hidden');
+  } finally {
+    knopf.disabled = false; knopf.textContent = 'Ändern';
+  }
+  return false;
+}

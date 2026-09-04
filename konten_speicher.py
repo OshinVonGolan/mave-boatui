@@ -288,6 +288,33 @@ class Konten:
         return klartext, {'name': name, 'rolle': rolle,
                           'anzeigename': k.anzeigename(konto)}
 
+    def neu_einladen(self, name: str) -> str:
+        """Einen neuen Einladungslink fuer ein BESTEHENDES Konto erzeugen.
+
+        Zwei Faelle, derselbe Weg: die erste Einladung ist verfallen oder nie
+        angekommen — oder jemand hat sein Passwort vergessen. Statt ihm ein
+        neues zu diktieren (das er dann per Nachricht bekommt und nie aendert),
+        setzt er es ueber denselben Link selbst.
+
+        Das alte Passwort bleibt WEITER GUELTIG, bis der Link eingeloest wird.
+        Sonst wuerde ein Link, der nie ankommt, jemanden aussperren — und der
+        haeufigste Grund fuer eine Neueinladung ist ja gerade, dass der erste
+        nicht angekommen ist.
+        """
+        with self._lock:
+            konto = self._konten.get((name or '').strip())
+            if not konto:
+                raise k.KontoFehler(f'Kein Konto namens {name!r}.')
+            if konto.get('gesperrt'):
+                raise k.KontoFehler('Dieses Konto ist gesperrt — erst entsperren.')
+            klartext, kennung = k.einladung_erzeugen()
+            jetzt = time.time()
+            konto['einladung'] = {'kennung': kennung, 'bis': jetzt + k.EINLADUNG_DAUER_S,
+                                  'von': jetzt}
+            self._sichern_konten()
+        log.info('Neuer Einladungslink für %r', konto['name'])
+        return klartext
+
     def einladung_pruefen(self, name: str, token: str) -> dict | None:
         """Zu welchem Konto ein Einladungslink gehoert — oder None.
 
@@ -308,6 +335,7 @@ class Konten:
             konto = self._konten.get((name or '').strip())
             if not konto or not k.einladung_gueltig(konto, token, time.time()):
                 raise k.KontoFehler('Dieser Link gilt nicht mehr.')
+            k.passwort_pruefen(passwort, konto['name'])
             konto['hash'] = k.hash_erzeugen(passwort)
             # Verbraucht: ein Link, der zweimal geht, ist ein Link, der
             # weitergegeben werden kann.
@@ -340,7 +368,11 @@ class Konten:
             if gesperrt is not None:
                 konto['gesperrt'] = bool(gesperrt)
             if laeuft_ab is not None:
-                konto['laeuft_ab'] = float(laeuft_ab) if laeuft_ab else None
+                # Das Feld heisst im Kontenmodell `gueltig_bis` — `laeuft_ab`
+                # war ein zweiter Name fuer dieselbe Sache, und die Pruefung
+                # (k.abgelaufen) sah nur den einen. Ein befristeter Zugang lief
+                # damit nie ab.
+                konto['gueltig_bis'] = float(laeuft_ab) if laeuft_ab else None
             if person is not None:
                 konto['person'] = str(person).strip()[:80]
             if spitzname is not None:
@@ -362,7 +394,61 @@ class Konten:
                 'spitzname': konto.get('spitzname') or '',
                 'anzeigename': k.anzeigename(konto),
                 'gesperrt': bool(konto.get('gesperrt')),
-                'laeuft_ab': konto.get('laeuft_ab')}
+                'gueltig_bis': konto.get('gueltig_bis')}
+
+    def passwort_selbst_aendern(self, name: str, altes: str, neues: str) -> None:
+        """Sein eigenes Passwort aendern — mit Nachweis des alten.
+
+        Der Nachweis ist der Punkt: eine Sitzung kann auf einem fremden,
+        offenen Geraet liegen. Ohne das alte Passwort koennte jeder, der kurz
+        an ein unbeaufsichtigtes Handy kommt, das Konto uebernehmen.
+
+        Alle anderen Sitzungen enden dabei — wer sein Passwort aendert, tut das
+        oft, WEIL es abhandengekommen ist.
+        """
+        konto = self._konten.get((name or '').strip())
+        if not konto or not k.hash_pruefen(altes or '', konto.get('hash') or _BLIND):
+            raise k.KontoFehler('Das bisherige Passwort stimmt nicht.')
+        with self._lock:
+            konto['hash'] = k.hash_erzeugen(neues)
+            weg = [kn for kn, si in self._sitzungen.items() if si.get('konto') == konto['name']]
+            for kn in weg:
+                self._sitzungen.pop(kn, None)
+            self._sichern_konten()
+            self._sichern_sitzungen()
+        log.info('%r hat sein Passwort selbst geändert, %d Sitzungen beendet',
+                 konto['name'], len(weg))
+
+    def sitzungen_beenden(self, name: str) -> int:
+        """Alle Sitzungen eines Kontos beenden — fuer ein verlorenes Geraet.
+
+        Bisher ging das nur ueber den Umweg eines Passwortwechsels. Der wirkt
+        zwar, zwingt aber jemanden, sich ein neues auszudenken, obwohl das alte
+        in Ordnung ist.
+        """
+        with self._lock:
+            weg = [kn for kn, si in self._sitzungen.items()
+                   if si.get('konto') == (name or '').strip()]
+            for kn in weg:
+                self._sitzungen.pop(kn, None)
+            if weg:
+                self._sichern_sitzungen()
+        log.info('%d Sitzungen von %r beendet', len(weg), name)
+        return len(weg)
+
+    def einladung_zuruecknehmen(self, name: str) -> None:
+        """Eine offene Einladung ungueltig machen, ohne das Konto zu loeschen.
+
+        Bisher blieb nur, das ganze Konto zu entfernen — und damit auch seine
+        Rolle und seinen Namen, obwohl man nur den Link zurueckziehen wollte.
+        """
+        with self._lock:
+            konto = self._konten.get((name or '').strip())
+            if not konto or not konto.get('einladung'):
+                raise k.KontoFehler('Für dieses Konto ist keine Einladung offen.')
+            konto.pop('einladung', None)
+            self._sichern_konten()
+        log.info('Einladung von %r zurückgenommen', name)
 
     def loeschen(self, name: str) -> None:
         with self._lock:
@@ -391,7 +477,12 @@ class Konten:
             liste = [
                 {'name': kt['name'], 'hash': kt.get('hash'), 'rolle': kt.get('rolle'),
                  'person': kt.get('person') or '', 'spitzname': kt.get('spitzname') or '',
-                 'gesperrt': bool(kt.get('gesperrt')), 'laeuft_ab': kt.get('laeuft_ab'),
+                 'gesperrt': bool(kt.get('gesperrt')),
+                 # Die Befristung MUSS mit: sonst laeuft ein Technikerzugang an
+                 # Bord weiter, waehrend er auf dem Server laengst abgelaufen
+                 # ist — und das Bordnetz ist genau der Ort, an dem er dann
+                 # noch schalten koennte.
+                 'gueltig_bis': kt.get('gueltig_bis'),
                  # Die Uebersteuerungen MUESSEN mit: sonst gilt an Bord wieder
                  # die blosse Rolle, und ein einzeln entzogenes Recht waere
                  # ueber das Bord-WLAN wieder da.

@@ -136,6 +136,17 @@
         <path d="M7 7h10v10H7z"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>
       </svg>
     </button>
+    <!-- Wer ist angemeldet. Vorher stand nirgends in der Bordansicht, mit
+         welchem Konto man unterwegs ist — und ein Passwort aendern konnte man
+         gar nicht, ohne den Eigner zu fragen. -->
+    <button class="icon-btn" id="kontoBtn" onclick="kontoMenue(event)" title="Konto">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>
+      </svg>
+    </button>
+    <div class="konto-pop hidden" id="kontoPop"></div>
+
     <button class="icon-btn burger-hide" id="settingsBtn" onclick="openSettings()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>

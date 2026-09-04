@@ -430,8 +430,113 @@ class Einladungen(Basis):
         for c in v['konten']:
             self.assertNotIn('einladung', c)
 
+    def test_neu_einladen_laesst_das_alte_passwort_gelten(self):
+        """Ein Link, der nie ankommt, darf niemanden aussperren — und genau
+        das ist der häufigste Grund für eine Neueinladung."""
+        self.konten.anlegen('vergesslich', 'Das alte Passwort 1', 'crew')
+        token = self.konten.neu_einladen('vergesslich')
+        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das alte Passwort 1'))
+        # Erst das Einlösen ersetzt es
+        self.konten.einladung_einloesen('vergesslich', token, 'Das neue Passwort 2')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.anmelden('vergesslich', 'Das alte Passwort 1')
+        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das neue Passwort 2'))
+
+    def test_gesperrtes_konto_bekommt_keinen_link(self):
+        self.konten.anlegen('gesperrt', 'Ein Passwort 12', 'crew')
+        self.konten.aendern('gesperrt', gesperrt=True)
+        with self.assertRaises(k.KontoFehler):
+            self.konten.neu_einladen('gesperrt')
+
+    def test_schwaches_passwort_wird_beim_einloesen_abgewiesen(self):
+        self.konten.einladen('neu', 'crew')
+        token = self.konten.neu_einladen('neu')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.einladung_einloesen('neu', token, 'kurz')
+
     def test_offene_einladung_ist_in_der_liste_sichtbar(self):
         self.konten.einladen('crew', 'crew')
         (c,) = [x for x in self.konten.liste() if x['name'] == 'crew']
         self.assertTrue(c['eingeladen'])
         self.assertIsNotNone(c['einladung_bis'])
+
+
+class Befristung(Basis):
+    """Befristete Zugänge — der Techniker ist der einzige Fremde im System.
+
+    Der Fehler, den das hier absichert: das Feld hieß an einer Stelle
+    `laeuft_ab` und an der anderen `gueltig_bis`. Die Ablaufprüfung las nur das
+    eine, gesetzt wurde das andere — ein befristeter Zugang wäre nie abgelaufen.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.konten.anlegen('techniker', 'ein Werkstattpasswort', 'techniker')
+
+    def test_befristung_wird_gesetzt_und_gelesen(self):
+        bis = time.time() + 3600
+        self.konten.aendern('techniker', laeuft_ab=bis)
+        konto = self.konten._konten['techniker']
+        self.assertAlmostEqual(konto['gueltig_bis'], bis, places=1)
+        self.assertFalse(k.abgelaufen(konto, time.time()))
+
+    def test_abgelaufener_zugang_kommt_nicht_mehr_herein(self):
+        token, _ = self.konten.anmelden('techniker', 'ein Werkstattpasswort')
+        self.konten.aendern('techniker', laeuft_ab=time.time() - 1)
+        self.assertIsNone(self.konten.konto_zu_token(token),
+                          'Eine laufende Sitzung muss mit dem Ablauf enden')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.anmelden('techniker', 'ein Werkstattpasswort')
+
+    def test_befristung_faehrt_ans_boot_mit(self):
+        """Sonst läuft der Zugang an Bord weiter — dort, wo er schalten kann."""
+        bis = time.time() + 3600
+        self.konten.aendern('techniker', laeuft_ab=bis)
+        v = self.konten.zum_verteilen()
+        (t,) = [c for c in v['konten'] if c['name'] == 'techniker']
+        self.assertAlmostEqual(t['gueltig_bis'], bis, places=1)
+
+    def test_befristung_laesst_sich_wieder_aufheben(self):
+        self.konten.aendern('techniker', laeuft_ab=time.time() + 60)
+        self.konten.aendern('techniker', laeuft_ab=0)
+        self.assertIsNone(self.konten._konten['techniker']['gueltig_bis'])
+
+
+class Selbstbedienung(Basis):
+    """Was jemand mit dem EIGENEN Konto tun darf."""
+
+    def setUp(self):
+        super().setUp()
+        self.konten.anlegen('crew', 'das alte Passwort', 'crew')
+
+    def test_eigenes_passwort_aendern(self):
+        self.konten.passwort_selbst_aendern('crew', 'das alte Passwort', 'das neue Passwort')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.anmelden('crew', 'das alte Passwort')
+        self.assertIsNotNone(self.konten.anmelden('crew', 'das neue Passwort'))
+
+    def test_ohne_das_alte_passwort_geht_es_nicht(self):
+        """Eine Sitzung kann auf einem fremden offenen Gerät liegen."""
+        with self.assertRaises(k.KontoFehler):
+            self.konten.passwort_selbst_aendern('crew', 'geraten', 'das neue Passwort')
+        self.assertIsNotNone(self.konten.anmelden('crew', 'das alte Passwort'))
+
+    def test_aendern_beendet_alle_sitzungen(self):
+        token, _ = self.konten.anmelden('crew', 'das alte Passwort')
+        self.konten.passwort_selbst_aendern('crew', 'das alte Passwort', 'das neue Passwort')
+        self.assertIsNone(self.konten.konto_zu_token(token))
+
+    def test_sitzungen_beenden_ohne_passwortwechsel(self):
+        a, _ = self.konten.anmelden('crew', 'das alte Passwort')
+        b, _ = self.konten.anmelden('crew', 'das alte Passwort')
+        self.assertEqual(self.konten.sitzungen_beenden('crew'), 2)
+        self.assertIsNone(self.konten.konto_zu_token(a))
+        self.assertIsNone(self.konten.konto_zu_token(b))
+        # Das Passwort gilt weiter — man muss sich kein neues ausdenken
+        self.assertIsNotNone(self.konten.anmelden('crew', 'das alte Passwort'))
+
+    def test_einladung_zuruecknehmen_laesst_das_konto_stehen(self):
+        self.konten.einladen('gast', 'gast')
+        self.konten.einladung_zuruecknehmen('gast')
+        self.assertIn('gast', self.konten._konten)
+        self.assertIsNone(self.konten.offene_einladung('gast'))

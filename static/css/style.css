@@ -2364,3 +2364,37 @@
       padding: 8px 14px; font-size: 12px; font-weight: 700; font-family: inherit;
       cursor: pointer; white-space: nowrap;
     }
+
+    /* ── Kontomenü ───────────────────────────────────────────────────────── */
+    .konto-pop {
+      position: fixed; top: calc(var(--header-basis) - 4px); right: 12px; z-index: 130;
+      width: min(260px, calc(100vw - 24px));
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0,0,0,.38); padding: 15px 16px;
+    }
+    .konto-pop.hidden { display: none; }
+    .kp-kopf { font-size: 15px; font-weight: 700; color: var(--text); }
+    .kp-rolle { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .kp-darf { font-size: 10px; color: var(--text3); margin-top: 6px; line-height: 1.5; }
+    .kp-text { font-size: 12px; color: var(--text2); margin-top: 6px; line-height: 1.5; }
+    .kp-tat {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--border);
+    }
+    .kp-knopf {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text2); padding: 8px 11px; font-size: 12px; font-family: inherit;
+      cursor: pointer; transition: all .15s; text-align: left;
+    }
+    .kp-knopf:hover { border-color: var(--text3); color: var(--text); }
+    .kp-knopf.warn { color: var(--red); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
+
+    .pw-regeln { list-style: none; margin: -6px 0 10px; padding: 0; }
+    .pw-regeln li {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 11.5px; line-height: 1.5; color: var(--text3);
+      padding: 2px 0; transition: color .2s;
+    }
+    .pw-regeln li.ok { color: var(--green); }
+    .pw-regeln li.hinweis { opacity: .75; }
+    .pw-regeln .regel-punkt { flex: 0 0 14px; text-align: center; font-weight: 700; }
