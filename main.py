@@ -769,7 +769,9 @@ _js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 async def js_bundle(req: Request):
     js_dir = STATIC_DIR / 'js'
     latest = max((js_dir / f).stat().st_mtime for f in _JS_FILES if (js_dir / f).exists())
-    if _js_bundle['mtime'] < latest:
+    # `!=` statt `<`: siehe / weiter unten — nach einem Zuruecknehmen kann die
+    # Datei aelter sein als die im Speicher.
+    if _js_bundle['mtime'] != latest:
         parts = []
         for f in _JS_FILES:
             p = js_dir / f
@@ -787,7 +789,7 @@ async def js_bundle(req: Request):
     )
 
 
-_index_cache: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+_index_cache: dict = {'data': b'', 'etag': '', 'mtime': 0.0, 'stand': ''}
 
 
 @app.get('/', include_in_schema=False)
@@ -802,11 +804,27 @@ async def root(req: Request):
     """
     pfad = STATIC_DIR / 'index.html'
     mtime = pfad.stat().st_mtime
-    if _index_cache['mtime'] < mtime:
-        roh = pfad.read_text(encoding='utf-8').replace('__STAND__', _git_hash() or '?')
+    stand = _git_hash() or '?'
+    # Der Stand MUSS mit in die Bedingung. Vorher hing der Zwischenspeicher
+    # allein an der Aenderungszeit von index.html — und in die Seite wird eine
+    # Commit-Kennung eingesetzt, die sich bei JEDEM Commit aendert. Ein Commit,
+    # der index.html nicht anfasst (nur CSS, nur JavaScript, nur ein Bild),
+    # lieferte danach fuer immer die alte Kennung aus, waehrend /api/stand die
+    # neue meldete. Die Seite verglich beide, fand sie verschieden und zeigte
+    # "Diese Seite laeuft auf einem aelteren Stand" — auch direkt nach dem
+    # Neuladen, weil das Neuladen an der Ursache nichts aendert.
+    #
+    # `!=` statt `<`: nach einem Zuruecknehmen auf eine aeltere Fassung kann die
+    # Datei aelter sein als die im Speicher, und mit `<` wuerde der Speicher nie
+    # wieder anfassen.
+    if _index_cache['mtime'] != mtime or _index_cache['stand'] != stand:
+        roh = pfad.read_text(encoding='utf-8').replace('__STAND__', stand)
         _index_cache['data']  = roh.encode()
         _index_cache['mtime'] = mtime
-        _index_cache['etag']  = f'"{int(mtime)}-{len(_index_cache["data"])}"'
+        _index_cache['stand'] = stand
+        # Der Stand gehoert in die Kennung: sonst bekommt ein Browser mit der
+        # alten Kennung ein leeres 304 und behaelt die alte Seite.
+        _index_cache['etag']  = f'"{int(mtime)}-{stand}-{len(_index_cache["data"])}"'
     if req.headers.get('if-none-match') == _index_cache['etag']:
         return Response(status_code=304)
     return Response(
