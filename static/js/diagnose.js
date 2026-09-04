@@ -12,7 +12,8 @@ const $ = id => document.getElementById(id);
 let _konto = null;
 let _tage = 7;
 let _alleAusfaelle = false;
-let _daten = { verbindung: null, diagnose: null, konten: null };
+let _daten = { verbindung: null, diagnose: null, konten: null,
+               zustand: null, anwesend: null };
 
 // ── Formate ────────────────────────────────────────────────────────────────
 
@@ -84,8 +85,17 @@ async function start() {
   $('wer').textContent = _konto.rolle_name;
   $('inhalt').hidden = false;
   const darf = _konto.handlungen || [];
-  $('kontenTafel').hidden = !darf.includes('verwalten');
-  $('wartungTafel').hidden = !darf.includes('fernwarten');
+  $('slKonten').hidden = !darf.includes('verwalten');
+  $('slWartung').hidden = !darf.includes('fernwarten');
+
+  $('seitenleiste').addEventListener('click', e => {
+    const k = e.target.closest('.sl-knopf');
+    if (k) seiteZeigen(k.dataset.seite);
+  });
+  // Die Seite steht in der Adresse: ein Lesezeichen auf die Messwerte soll
+  // dort landen, und der Zurück-Knopf soll tun, was er verspricht.
+  window.addEventListener('hashchange', () => seiteZeigen(location.hash.slice(1) || 'ueberblick'));
+  seiteZeigen(location.hash.slice(1) || 'ueberblick');
 
   $('zeitwahl').addEventListener('click', e => {
     const k = e.target.closest('.zw-knopf');
@@ -121,20 +131,142 @@ async function start() {
   setInterval(messwerteLaden, 120000);
 }
 
+let _seite = 'ueberblick';
+
+function seiteZeigen(name) {
+  const knopf = document.querySelector(`.sl-knopf[data-seite="${name}"]`);
+  if (!knopf || knopf.hidden) name = 'ueberblick';
+  _seite = name;
+  document.querySelectorAll('.sl-knopf').forEach(k =>
+    k.classList.toggle('an', k.dataset.seite === name));
+  document.querySelectorAll('.seite').forEach(s => { s.hidden = s.dataset.seite !== name; });
+  if (location.hash.slice(1) !== name) history.replaceState(null, '', '#' + name);
+  // Canvas-Groessen stimmen nur, wenn das Element sichtbar IST — auf einer
+  // verborgenen Seite ist die Breite null und der Graph bliebe leer.
+  if (name === 'messwerte' && _messDaten) requestAnimationFrame(zeichneMesswerte);
+  if (name === 'verfuegbarkeit') zeichneStreifen();
+  window.scrollTo(0, 0);
+}
+
+// ── Überblick ──────────────────────────────────────────────────────────────
+// Die Startseite beantwortet drei Fragen auf einen Blick: Wie steht es gerade?
+// Wer ist da? Und war zuletzt etwas los?
+
+function zeichneUeberblick() {
+  const z = _daten.zustand;
+  const v = _daten.verbindung;
+  if (z) {
+    const b = z.battery || {}, t = z.tanks || {}, h = z.heizung || {};
+    const alter = z.alter_s;
+    $('ueberblickStand').textContent = (z.quelle === 'server' && alter != null)
+      ? `Stand: ${alter < 90 ? 'gerade eben' : 'vor ' + dauer(alter)}`
+      : 'Stand: laufend';
+    const raeume = Object.values(h.rooms || h.raeume || {});
+    const temp = raeume.map(r => r.temp ?? r.temperatur)
+                       .filter(x => typeof x === 'number');
+    const zahlen = [
+      { wert: b.soc != null ? Math.round(b.soc) + ' %' : '—', lbl: 'Ladestand',
+        neben: b.voltage != null ? b.voltage.toFixed(2) + ' V' : '',
+        art: b.soc == null ? '' : (b.soc > 50 ? 'gut' : (b.soc > 25 ? 'mau' : '')) },
+      { wert: b.current != null ? b.current.toFixed(1) + ' A' : '—', lbl: 'Bilanz',
+        neben: b.current == null ? '' : (b.current >= 0 ? 'wird geladen' : 'wird entnommen') },
+      { wert: t.tank1?.percent != null ? Math.round(t.tank1.percent) + ' %' : '—',
+        lbl: 'Wasser', neben: t.tank1?.liters != null ? Math.round(t.tank1.liters) + ' L' : '' },
+      { wert: t.tank2?.percent != null ? Math.round(t.tank2.percent) + ' %' : '—',
+        lbl: 'Diesel', neben: t.tank2?.liters != null ? Math.round(t.tank2.liters) + ' L' : '' },
+      { wert: temp.length ? (temp.reduce((a, c) => a + c, 0) / temp.length).toFixed(1) + ' °C' : '—',
+        lbl: 'Innen', neben: h.command === 'on' || h.running ? 'Heizung läuft' : 'Heizung aus' },
+    ];
+    $('jetztZahlen').innerHTML = zahlen.map(x => `
+      <div class="zahl">
+        <div class="zahl-wert ${x.art || ''}">${esc(x.wert)}</div>
+        <div class="zahl-lbl">${esc(x.lbl)}</div>
+        <div class="zahl-neben">${esc(x.neben)}</div>
+      </div>`).join('');
+  }
+
+  if (v) {
+    $('verbKurz').textContent = v.verbunden
+      ? 'seit ' + zeitpunkt(v.seit) : 'zurzeit unterbrochen';
+    _streifenBauen('streifenKurz', 'streifenKurzAchse', 1);
+  }
+
+  // Was zuletzt los war: Ausfälle und Ereignisse in EINER Liste, damit man
+  // nicht zwei Zeitachsen im Kopf zusammenfügen muss.
+  const eintraege = [];
+  for (const l of (v?.luecken || [])) {
+    const a = ART[l.art] || ART.unbekannt;
+    eintraege.push({ t: l.ab, marke: l.art, wort: a.wort, text: l.grund || a.satz,
+                     rechts: dauer(l.dauer_s) });
+  }
+  for (const e of (_daten.diagnose?.ereignisse || [])) {
+    eintraege.push({ t: e.zeit || e.wand, marke: '', wort: '', text: ereignisText(e), rechts: '' });
+  }
+  eintraege.sort((a, b) => (b.t || 0) - (a.t || 0));
+  const zeigen = eintraege.slice(0, 8);
+  $('letztes').innerHTML = zeigen.length ? zeigen.map(x => `
+    <div class="zeile">
+      <div class="z-zeit">${esc(zeitpunkt(x.t))}</div>
+      <div><div class="z-text">${x.marke ? `<span class="z-marke ${esc(x.marke)}">${esc(x.wort)}</span>` : ''}${esc(x.text)}</div></div>
+      <div class="z-dauer">${esc(x.rechts)}</div>
+    </div>`).join('') : '<div class="leerlauf">Nichts Auffälliges.</div>';
+}
+
+function zeichneAnwesend() {
+  const a = _daten.anwesend;
+  const feld = $('anwesend');
+  if (!a) { feld.innerHTML = '<div class="leerlauf">wird geladen…</div>'; return; }
+  const jetzt = Date.now() / 1000;
+
+  const zeile = (s, art) => {
+    const seit = jetzt - (s.zuletzt || 0);
+    const still = seit > 300;
+    return `<div class="aw-zeile">
+      <span class="aw-punkt ${still ? 'still' : art}"></span>
+      <span>
+        <div class="aw-wer">${esc(s.konto)}${s.kiosk ? ' <span class="hinweis">(Kiosk)</span>' : ''}</div>
+        <div class="aw-was">${esc(s.geraet || 'unbekanntes Gerät')}${s.herkunft ? ' · ' + esc(s.herkunft) : ''}</div>
+      </span>
+      <span class="aw-wann">${still ? 'zuletzt vor ' + dauer(seit) : 'gerade aktiv'}</span>
+    </div>`;
+  };
+
+  let h = '';
+  if ((a.an_bord || []).length) {
+    h += '<div class="aw-gruppe">An Bord</div>' + a.an_bord.map(s => zeile(s, '')).join('');
+  } else if (a.boot_erreichbar) {
+    h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Niemand am Bordrechner angemeldet.</div>';
+  } else {
+    h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Das Boot ist nicht verbunden — von dort ist nichts zu erfahren.</div>';
+  }
+  if ((a.ueber_server || []).length) {
+    h += '<div class="aw-gruppe">Aus der Ferne</div>'
+       + a.ueber_server.map(s => zeile(s, 'fern')).join('');
+  }
+  feld.innerHTML = h;
+}
+
 async function laden() {
-  const [v, d] = await Promise.all([hole('/api/verbindung'), hole('/api/diagnose/uebersicht')]);
+  const [v, d, z, a] = await Promise.all([
+    hole('/api/verbindung'), hole('/api/diagnose/uebersicht'),
+    hole('/api/status'), hole('/api/anwesend'),
+  ]);
   if (v) _daten.verbindung = v;
   if (d) _daten.diagnose = d;
+  if (z) _daten.zustand = z;
+  if (a) _daten.anwesend = a;
   zeichneZustand();
+  zeichneUeberblick();
+  zeichneAnwesend();
   zeichneStreifen();
   zeichneZahlen();
   zeichneAusfaelle();
   zeichneEreignisse();
-  if (!$('kontenTafel').hidden) {
+  if (!$('slKonten').hidden) {
     const k = await hole('/api/konten');
     if (k) { _daten.konten = k; zeichneKonten(); }
   }
-  if (!$('wartungTafel').hidden) zeichneWartung();
+  if (!$('slWartung').hidden) zeichneWartung();
 }
 
 // ── Kopfzeile ──────────────────────────────────────────────────────────────

@@ -35,6 +35,32 @@ from sync import rechte as r
 SITZUNG_COOKIE = 'mave_sitzung'
 
 
+def geraet_aus_ua(ua: str) -> str:
+    """Aus der Browserkennung eine lesbare Geraetebezeichnung machen.
+
+    Absichtlich grob. Es geht um die Frage "welches Geraet ist das?" an einem
+    Boot mit einer Handvoll Geraeten — nicht um Statistik. Eine vollstaendige
+    Auswertung waere viel Code fuer eine Angabe, die ohnehin nur der Eigner
+    liest, und die Kennungen luegen bekanntlich.
+    """
+    u = (ua or '')
+    if not u:
+        return 'unbekannt'
+    system = ('iPhone' if 'iPhone' in u else
+              'iPad' if 'iPad' in u else
+              'Android' if 'Android' in u else
+              'Mac' if 'Macintosh' in u or 'Mac OS' in u else
+              'Windows' if 'Windows' in u else
+              'Linux' if 'Linux' in u else '')
+    browser = ('Firefox' if 'Firefox/' in u else
+               'Edge' if 'Edg/' in u else
+               'Chrome' if 'Chrome/' in u or 'CriOS' in u else
+               'Safari' if 'Safari/' in u else '')
+    if system and browser:
+        return f'{browser} auf {system}'
+    return system or browser or 'unbekannt'
+
+
 def herkunft_erlaubt(origin: str, gastgeber: str) -> bool:
     """Ob ein WebSocket-Handschlag von einer zulaessigen Seite kommt.
 

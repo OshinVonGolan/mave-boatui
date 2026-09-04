@@ -423,7 +423,10 @@ def login(daten: Anmeldung, request: Request) -> JSONResponse:
         raise HTTPException(429, detail='Zu viele Fehlversuche. Bitte später erneut.')
 
     try:
-        token, k = konten.anmelden(daten.name, daten.passwort, kiosk=daten.kiosk)
+        token, k = konten.anmelden(
+            daten.name, daten.passwort, kiosk=daten.kiosk,
+            herkunft=_herkunft(request),
+            geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
     except KontoFehler as e:
         versuche.append(jetzt)
         _FEHLVERSUCHE[quelle] = versuche
@@ -461,6 +464,35 @@ def zugang(request: Request) -> JSONResponse:
         'angemeldet': bool(k),
         'ersteinrichtung': bool(konten and konten.leer),
         'konto': r.uebersicht(k) if k else None,
+    })
+
+
+@app.get('/api/anwesend')
+async def anwesend(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    """Wer gerade angemeldet ist — und ob an Bord oder von auswaerts.
+
+    Die Unterscheidung faellt nicht ueber eine IP-Adresse, sondern darueber, WO
+    die Sitzung liegt: im Bordnetz zeigt mave.circuit-sailor.com auf den Pi,
+    wer dort eine Sitzung hat, sitzt also im Bordnetz. Wer nur hier eine hat,
+    ist woanders. Das ist zuverlaessiger als jede Adressauswertung — und es
+    faellt ganz nebenbei ab, ohne dass irgendwo mitgeschrieben werden muesste,
+    wer sich wo aufhaelt.
+    """
+    hier = konten.sitzungen() if konten else []
+    an_bord, boot_erreichbar = [], False
+    if _verbindung['sitzung'] is not None:
+        try:
+            ergebnis = await _vermittlung.senden('GET', '/api/anwesend', None,
+                                                 frist=_DURCHREICHEN_FRIST_S,
+                                                 konto=k.get('name', ''))
+            an_bord = ((ergebnis or {}).get('antwort') or {}).get('sitzungen') or []
+            boot_erreichbar = True
+        except (KeinBoot, Zeitueberschreitung):
+            pass
+    return JSONResponse({
+        'an_bord': an_bord,
+        'ueber_server': hier,
+        'boot_erreichbar': boot_erreichbar,
     })
 
 

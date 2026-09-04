@@ -116,7 +116,8 @@ class Konten:
 
     # ── Anmelden ────────────────────────────────────────────────────────────
 
-    def anmelden(self, name: str, passwort: str, *, kiosk: bool = False) -> tuple[str, dict]:
+    def anmelden(self, name: str, passwort: str, *, kiosk: bool = False,
+                 herkunft: str = '', geraet: str = '') -> tuple[str, dict]:
         """Gibt (Sitzungstoken, Konto) zurueck oder wirft KontoFehler.
 
         Die Meldung ist bei falschem Namen und falschem Passwort DIESELBE —
@@ -149,6 +150,11 @@ class Konten:
                 'seit': time.time(),
                 'zuletzt': time.time(),
                 'kiosk': bool(kiosk),
+                # Woher und womit — damit sich im Logbuch sagen laesst, WER
+                # gerade an Bord ist und mit welchem Geraet. Ohne diese beiden
+                # Angaben waere eine Sitzung nur ein Name ohne Gesicht.
+                'herkunft': (herkunft or '')[:45],
+                'geraet': (geraet or '')[:60],
             }
             self._aufraeumen()
             self._sichern_sitzungen()
@@ -183,11 +189,40 @@ class Konten:
             return None
         if k.abgelaufen(konto, _jetzt_falls_verlaesslich()):
             return None
-        if time.time() - s.get('zuletzt', 0) > 3600:
+        # Der Zeitpunkt wandert im Speicher bei JEDEM Zugriff mit — sonst
+        # zeigte die Anwesenheit einen bis zu einer Stunde alten Stand.
+        # Geschrieben wird trotzdem hoechstens alle zehn Minuten: auf einer
+        # SD-Karte ist jeder Schreibvorgang einer zu viel.
+        jetzt = time.time()
+        vorher = s.get('zuletzt', 0)
+        s['zuletzt'] = jetzt
+        if jetzt - vorher > 600:
             with self._lock:
-                s['zuletzt'] = time.time()
                 self._sichern_sitzungen()
         return dict(konto, _sitzung_kiosk=bool(s.get('kiosk')))
+
+    def sitzungen(self) -> list[dict]:
+        """Die offenen Sitzungen, fuer die Anwesenheitsanzeige.
+
+        OHNE die Sitzungskennung — die ist das Geheimnis, mit dem man die
+        Sitzung uebernehmen koennte. Sie hat in keiner Anzeige etwas zu suchen,
+        auch nicht in einer, die nur der Eigner sieht.
+        """
+        jetzt = time.time()
+        raus = []
+        for si in self._sitzungen.values():
+            zuletzt = si.get('zuletzt', 0)
+            if not si.get('kiosk') and jetzt - zuletzt > SITZUNG_DAUER_S:
+                continue                       # abgelaufen, wird beim naechsten Zugriff entfernt
+            raus.append({
+                'konto': si.get('konto'),
+                'seit': si.get('seit'),
+                'zuletzt': zuletzt,
+                'kiosk': bool(si.get('kiosk')),
+                'herkunft': si.get('herkunft') or '',
+                'geraet': si.get('geraet') or '',
+            })
+        return sorted(raus, key=lambda x: x['zuletzt'], reverse=True)
 
     def konto_nach_name(self, name: str):
         """Ein Konto ohne Sitzung nachschlagen — fuer Aufrufe, die der Server

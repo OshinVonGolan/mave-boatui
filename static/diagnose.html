@@ -11,17 +11,16 @@
 <body>
 
 <!--
-  Das Diagnosewerkzeug. Bewusst NICHT wie die PWA gebaut: die zeigt, wie es dem
-  Boot JETZT geht, dieses hier zeigt, wie es ihm ERGANGEN IST. Deshalb steht
-  oben kein Messwert, sondern ein Zeitstrahl — die Frage, die der Eigner
-  gestellt hat, lautet "war das Boot offline oder ist der Pi abgestuerzt?", und
-  die beantwortet man nicht mit einer Momentaufnahme.
+  Das Diagnosewerkzeug. Bewusst NICHT wie die Bordansicht gebaut: die zeigt,
+  wie es dem Boot JETZT geht, dieses hier zeigt, wie es ihm ERGANGEN IST.
+
+  Eine Seitenleiste und keine lange Rolle: hierher kommt man mit einer Frage
+  ("war das Boot heute Nacht offline?", "wie lief die Heizung letzte Woche?")
+  und will direkt dorthin, nicht an allem anderen vorbeiscrollen.
 -->
 
 <header class="kopf">
-  <div class="marke">
-    MAVE <span>Logbuch</span>
-  </div>
+  <div class="marke">MAVE <span>Logbuch</span></div>
   <div class="kopf-mitte" id="bootZustand">
     <span class="zust-punkt" id="zustPunkt"></span>
     <span id="zustText">wird geladen…</span>
@@ -29,89 +28,153 @@
   <div class="kopf-rechts">
     <span class="wer" id="wer"></span>
     <button class="knopf-schlicht" onclick="abmelden()">Abmelden</button>
-    <a class="knopf-schlicht" id="zurBordansicht" href="/">Zur Bordansicht</a>
+    <a class="knopf-schlicht" id="zurBordansicht" href="/">Bordansicht</a>
   </div>
 </header>
 
-<main id="inhalt" hidden>
+<div class="rahmen" id="inhalt" hidden>
 
-  <!-- Verfügbarkeit: das Herzstück -->
-  <section class="tafel breit">
-    <div class="tafel-kopf">
-      <h2>Verfügbarkeit</h2>
-      <div class="zeitwahl" id="zeitwahl">
-        <button class="zw-knopf an" data-tage="7">7 Tage</button>
-        <button class="zw-knopf" data-tage="30">30 Tage</button>
-        <button class="zw-knopf" data-tage="90">90 Tage</button>
+  <nav class="seitenleiste" id="seitenleiste">
+    <button class="sl-knopf an" data-seite="ueberblick">
+      <span class="sl-name">Überblick</span>
+      <span class="sl-neben">Zustand und Anwesenheit</span>
+    </button>
+    <button class="sl-knopf" data-seite="messwerte">
+      <span class="sl-name">Messwerte</span>
+      <span class="sl-neben">Graphen und Ausgabe</span>
+    </button>
+    <button class="sl-knopf" data-seite="verfuegbarkeit">
+      <span class="sl-name">Verfügbarkeit</span>
+      <span class="sl-neben">Ausfälle und Ereignisse</span>
+    </button>
+    <button class="sl-knopf" data-seite="konten" id="slKonten" hidden>
+      <span class="sl-name">Konten</span>
+      <span class="sl-neben">Zugänge verwalten</span>
+    </button>
+    <button class="sl-knopf" data-seite="wartung" id="slWartung" hidden>
+      <span class="sl-name">Fernwartung</span>
+      <span class="sl-neben">Aktualisieren, Uhr stellen</span>
+    </button>
+  </nav>
+
+  <main>
+
+    <!-- Überblick -->
+    <section class="seite" data-seite="ueberblick">
+      <div class="seiten-kopf">
+        <h1>Überblick</h1>
+        <span class="hinweis" id="ueberblickStand"></span>
       </div>
-    </div>
-    <div class="streifen" id="streifen"></div>
-    <div class="streifen-achse" id="streifenAchse"></div>
-    <div class="legende">
-      <span class="lg"><i class="lg-farbe an"></i>verbunden</span>
-      <span class="lg"><i class="lg-farbe funkloch"></i>kein Netz</span>
-      <span class="lg"><i class="lg-farbe stromlos"></i>stromlos</span>
-      <span class="lg"><i class="lg-farbe neustart"></i>Neustart</span>
-      <span class="lg"><i class="lg-farbe dienst"></i>nur der Dienst</span>
-      <span class="lg"><i class="lg-farbe unbekannt"></i>unklar</span>
-    </div>
-  </section>
 
-  <!-- Kennzahlen -->
-  <section class="zahlen" id="zahlen"></section>
+      <div class="zahlen" id="jetztZahlen"></div>
 
-  <!-- Messwerte: der eigentliche Diagnoseteil -->
-  <section class="tafel breit">
-    <div class="tafel-kopf">
-      <h2>Messwerte</h2>
-      <div class="werkzeug">
-        <div class="zeitwahl" id="messZeit">
-          <button class="zw-knopf" data-std="6">6 Std</button>
-          <button class="zw-knopf an" data-std="24">24 Std</button>
-          <button class="zw-knopf" data-std="168">7 Tage</button>
-          <button class="zw-knopf" data-std="720">30 Tage</button>
+      <section class="tafel">
+        <div class="tafel-kopf">
+          <h2>Wer ist da</h2>
+          <span class="hinweis">angemeldete Geräte</span>
         </div>
-        <button class="knopf stumm" onclick="exportOeffnen()">Daten holen</button>
+        <div class="anwesend" id="anwesend"></div>
+      </section>
+
+      <section class="tafel">
+        <div class="tafel-kopf">
+          <h2>Verbindung</h2>
+          <span class="hinweis" id="verbKurz"></span>
+        </div>
+        <div class="streifen" id="streifenKurz"></div>
+        <div class="streifen-achse" id="streifenKurzAchse"></div>
+      </section>
+
+      <section class="tafel">
+        <div class="tafel-kopf"><h2>Zuletzt geschehen</h2></div>
+        <div class="liste" id="letztes"></div>
+      </section>
+    </section>
+
+    <!-- Messwerte -->
+    <section class="seite" data-seite="messwerte" hidden>
+      <div class="seiten-kopf">
+        <h1>Messwerte</h1>
+        <div class="werkzeug">
+          <div class="zeitwahl" id="messZeit">
+            <button class="zw-knopf" data-std="6">6 Std</button>
+            <button class="zw-knopf an" data-std="24">24 Std</button>
+            <button class="zw-knopf" data-std="168">7 Tage</button>
+            <button class="zw-knopf" data-std="720">30 Tage</button>
+          </div>
+          <button class="knopf stumm" onclick="exportOeffnen()">Daten holen</button>
+        </div>
       </div>
-    </div>
-    <div class="reihen-kopf">
-      <span class="hinweis" id="messStand"></span>
-      <div class="gruppenwahl" id="gruppenwahl"></div>
-    </div>
-    <div class="reihen" id="reihen"></div>
-    <div class="zeitachse" id="zeitachse"></div>
-  </section>
+      <section class="tafel breit">
+        <div class="reihen-kopf">
+          <span class="hinweis" id="messStand"></span>
+          <div class="gruppenwahl" id="gruppenwahl"></div>
+        </div>
+        <div class="reihen" id="reihen"></div>
+        <div class="zeitachse" id="zeitachse"></div>
+      </section>
+    </section>
 
-  <!-- Ausfälle im Klartext -->
-  <section class="tafel">
-    <div class="tafel-kopf"><h2>Ausfälle</h2><span class="hinweis" id="ausfaelleZahl"></span></div>
-    <div class="liste" id="ausfaelle"></div>
-    <button class="knopf stumm mehr" id="ausfaelleMehr" hidden
-            onclick="ausfaelleAlle()">Alle zeigen</button>
-  </section>
+    <!-- Verfügbarkeit -->
+    <section class="seite" data-seite="verfuegbarkeit" hidden>
+      <div class="seiten-kopf">
+        <h1>Verfügbarkeit</h1>
+        <div class="zeitwahl" id="zeitwahl">
+          <button class="zw-knopf an" data-tage="7">7 Tage</button>
+          <button class="zw-knopf" data-tage="30">30 Tage</button>
+          <button class="zw-knopf" data-tage="90">90 Tage</button>
+        </div>
+      </div>
 
-  <!-- Ereignisse -->
-  <section class="tafel">
-    <div class="tafel-kopf"><h2>Ereignisse</h2><span class="hinweis">was das Boot gemeldet hat</span></div>
-    <div class="liste" id="ereignisse"></div>
-  </section>
+      <section class="tafel breit">
+        <div class="streifen" id="streifen"></div>
+        <div class="streifen-achse" id="streifenAchse"></div>
+        <div class="legende">
+          <span class="lg"><i class="lg-farbe an"></i>verbunden</span>
+          <span class="lg"><i class="lg-farbe funkloch"></i>kein Netz</span>
+          <span class="lg"><i class="lg-farbe stromlos"></i>stromlos</span>
+          <span class="lg"><i class="lg-farbe neustart"></i>Neustart</span>
+          <span class="lg"><i class="lg-farbe dienst"></i>nur der Dienst</span>
+          <span class="lg"><i class="lg-farbe unbekannt"></i>unklar</span>
+        </div>
+      </section>
 
-  <!-- Konten -->
-  <section class="tafel breit" id="kontenTafel" hidden>
-    <div class="tafel-kopf">
-      <h2>Konten</h2>
-      <button class="knopf" onclick="kontoNeuOeffnen()">Konto anlegen</button>
-    </div>
-    <div class="konten" id="konten"></div>
-  </section>
+      <div class="zahlen" id="zahlen"></div>
 
-  <!-- Fernwartung -->
-  <section class="tafel" id="wartungTafel" hidden>
-    <div class="tafel-kopf"><h2>Fernwartung</h2></div>
-    <div class="wartung" id="wartung"></div>
-  </section>
+      <section class="tafel">
+        <div class="tafel-kopf"><h2>Ausfälle</h2><span class="hinweis" id="ausfaelleZahl"></span></div>
+        <div class="liste" id="ausfaelle"></div>
+        <button class="knopf stumm mehr" id="ausfaelleMehr" hidden
+                onclick="ausfaelleAlle()">Alle zeigen</button>
+      </section>
 
-</main>
+      <section class="tafel">
+        <div class="tafel-kopf"><h2>Ereignisse</h2><span class="hinweis">was das Boot gemeldet hat</span></div>
+        <div class="liste" id="ereignisse"></div>
+      </section>
+    </section>
+
+    <!-- Konten -->
+    <section class="seite" data-seite="konten" hidden>
+      <div class="seiten-kopf">
+        <h1>Konten</h1>
+        <button class="knopf" onclick="kontoNeuOeffnen()">Konto anlegen</button>
+      </div>
+      <section class="tafel breit">
+        <div class="konten" id="konten"></div>
+      </section>
+    </section>
+
+    <!-- Fernwartung -->
+    <section class="seite" data-seite="wartung" hidden>
+      <div class="seiten-kopf"><h1>Fernwartung</h1></div>
+      <section class="tafel">
+        <div class="wartung" id="wartung"></div>
+      </section>
+    </section>
+
+  </main>
+</div>
 
 <div class="sperre" id="sperre" hidden>
   <div class="sperre-karte">

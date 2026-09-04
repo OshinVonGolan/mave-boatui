@@ -605,8 +605,11 @@ async def login(request: Request):
     """
     daten = await request.json()
     try:
-        token, k = konten.anmelden(str(daten.get('name', '')), str(daten.get('passwort', '')),
-                                   kiosk=bool(daten.get('kiosk')))
+        token, k = konten.anmelden(
+            str(daten.get('name', '')), str(daten.get('passwort', '')),
+            kiosk=bool(daten.get('kiosk')),
+            herkunft=(request.client.host if request.client else ''),
+            geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
     except Exception as e:
         log.warning('Anmeldung an Bord gescheitert für %r', daten.get('name'))
         return JSONResponse({'detail': str(e)}, status_code=401)
@@ -623,6 +626,17 @@ async def logout(request: Request):
     antwort = JSONResponse({'ok': True})
     antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
     return antwort
+
+
+@app.get('/api/anwesend')
+async def anwesend():
+    """Wer gerade am BOOT angemeldet ist — also an Bord.
+
+    Der Unterschied zum Server ist die ganze Aussage: im Bordnetz zeigt
+    mave.circuit-sailor.com auf den Pi, wer hier eine Sitzung hat, sitzt also
+    im Bordnetz. Wer nur ueber den Server hereinkommt, ist woanders.
+    """
+    return {'quelle': 'boot', 'sitzungen': konten.sitzungen()}
 
 
 @app.get('/api/zugang')
