@@ -1046,6 +1046,17 @@ async function abmelden() {
   location.reload();
 }
 
+// Denselben Service Worker wie die Bordansicht anmelden. Nicht wegen des
+// Zwischenspeichers — das Logbuch braucht ohnehin frische Daten —, sondern
+// wegen der Installierbarkeit: Chrome bietet "Installieren" (eigenes Fenster,
+// eigenes Symbol) nur an, wenn ein Service Worker mit fetch-Handler laeuft.
+// Ohne ihn bleibt es bei einer Verknuepfung, die im Browser aufgeht.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 start();
 
 // ── Messwerte ──────────────────────────────────────────────────────────────
