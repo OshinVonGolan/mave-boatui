@@ -134,6 +134,19 @@ function _dspActiveProfile() {
 // Zeilenhöhe = (Spaltenbreite − gap) / 2, damit 2 Zeilen exakt 1 Spaltenbreite
 // ergeben (Quadrat). grid-auto-flow:dense packt automatisch ohne Lücken oben.
 
+// Fuer welche Kachelbreite die Inhalte gebaut sind. Bei 376 px passt alles;
+// darunter faengt es an zu klemmen — die Batteriekachel stellt ihre Werte dann
+// untereinander statt nebeneinander und wird zu hoch, Beschriftungen brechen um.
+//
+// Statt jede Kachel einzeln fuer schmale Bilder umzubauen, wird sie als GANZES
+// verkleinert: sie rechnet weiter mit ihren 376 Pixeln und wird beim Zeichnen
+// zusammengeschoben. Der Vorschlag kam vom Eigner, und er ist der bessere —
+// er loest Breite und Hoehe in einem Zug, und die Kachel sieht aus wie
+// entworfen, nur kleiner.
+const _KACHEL_ENTWURF_PX = 376;
+// Weiter als hierhin nicht: darunter wird es nicht mehr eng, sondern unlesbar.
+const _MASSSTAB_MIN = 0.6;
+
 // Ab welcher Kachelbreite es eng wird. Am laufenden System gemessen: bei
 // 176 px laufen Batterie-, Wechselrichter- und Lichtkachel ueber ihren Rand,
 // ab 205 px nicht mehr. 200 ist die Schwelle mit etwas Luft.
@@ -382,7 +395,48 @@ function _tilesInDomOrder() {
  * Groessen in Rastereinheiten (eine Zeile = halbe Kachelhoehe):
  *   normal  1 Spalte x 2 Zeilen      half  1 x 1      wide  2 x 2
  */
-function _rasterPacken(kacheln, cols) {
+/**
+ * Wie viele Rasterzeilen der Inhalt einer Kachel WIRKLICH braucht.
+ *
+ * Die Zeilenhoehe haengt an der Spaltenbreite: eine normale Kachel ist ein
+ * Quadrat, also zwei Zeilen à (Spaltenbreite − Abstand) / 2. Das geht auf,
+ * solange eine Spalte breit genug ist.
+ *
+ * Auf dem Wandtablet im Hochformat sind es bei zwei Spalten 243 Pixel — und
+ * damit ist eine Zeile nur noch 113 hoch. Die Batteriekachel braucht bei
+ * dieser Breite aber 359 Pixel: was auf einem breiten Bild nebeneinander
+ * steht, steht hier untereinander. Sie stand einfach ueber ihren Rand hinaus
+ * und ins Feld darunter. Genau das war "klappt so maessig".
+ *
+ * Deshalb wird gemessen statt gerechnet. Die Kachel bekommt dafuer kurz ihre
+ * natuerliche Hoehe (`align-self: start` hebt das Strecken auf die Zeilenhoehe
+ * auf), und daraus ergibt sich, wie viele Zeilen sie belegen muss. Die
+ * eingestellte Groesse bleibt die UNTERGRENZE: eine Kachel wird nie kleiner
+ * als gewuenscht, nur bei Bedarf hoeher.
+ */
+function _zeilenBedarf(el, mindest, rowH, gap, massstab) {
+  if (!rowH) return mindest;
+  const merk = { h: el.style.height, as: el.style.alignSelf, gr: el.style.gridRow };
+  // Damit die Messung nicht von der aktuellen Platzierung abhaengt: erst die
+  // Zeilenbindung loesen, sonst streckt das Raster die Kachel weiter.
+  el.style.gridRow = '';
+  el.style.alignSelf = 'start';
+  el.style.height = 'auto';
+  // scrollHeight zaehlt in den EIGENEN Einheiten der Kachel — die sind bei
+  // verkleinerter Darstellung groesser als die Pixel auf dem Schirm. Erst mit
+  // dem Massstab multipliziert wird daraus die Hoehe, die sie wirklich einnimmt.
+  const noetig = el.scrollHeight * (massstab || 1);
+  el.style.height = merk.h;
+  el.style.alignSelf = merk.as;
+  el.style.gridRow = merk.gr;
+  // n Zeilen decken n*rowH plus (n−1) Abstaende dazwischen ab.
+  const zeilen = Math.ceil((noetig + gap) / (rowH + gap));
+  // Nach oben begrenzt: eine Kachel, die aus irgendeinem Grund riesig meldet,
+  // soll nicht das halbe Raster belegen.
+  return Math.max(mindest, Math.min(8, zeilen));
+}
+
+function _rasterPacken(kacheln, cols, rowH, gap, massstab) {
   const belegt = [];                       // belegt[zeile][spalte]
   const frei = (r, c, w, h) => {
     if (c + w > cols) return false;
@@ -398,10 +452,18 @@ function _rasterPacken(kacheln, cols) {
     }
   };
 
+  // Erst alle Hoehen messen, dann platzieren. Getrennt, weil das Messen die
+  // Zeilenbindung kurz loest — mitten im Packen waere das ein Durcheinander.
+  for (const k of kacheln) {
+    k.w = (k.sz === 'wide') ? Math.min(2, cols) : 1;
+    k.hMin = (k.sz === 'half') ? 1 : 2;
+    k.h = _zeilenBedarf(k.el, k.hMin, rowH, gap, massstab);
+  }
+
   const platziert = [];
   for (const k of kacheln) {
-    const w = (k.sz === 'wide') ? Math.min(2, cols) : 1;
-    const h = (k.sz === 'half') ? 1 : 2;
+    const w = k.w;
+    const h = k.h;
     let r = 0, c = 0;
     sucher: for (r = 0; r < 200; r++) {          // 200 Zeilen sind reichlich
       for (c = 0; c <= cols - w; c++) if (frei(r, c, w, h)) break sucher;
@@ -442,17 +504,24 @@ function _applyGrid() {
 
   main.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
+  let rowH = 0, gap = 16, massstab = 1;
   if (cols === 1) {
     main.style.gridAutoRows = 'auto';
   } else {
     const cs    = getComputedStyle(main);
-    const gap   = parseFloat(cs.columnGap)    || 16;
+    gap         = parseFloat(cs.columnGap)    || 16;
     const padL  = parseFloat(cs.paddingLeft)  || 0;
     const padR  = parseFloat(cs.paddingRight) || 0;
     const inner = main.clientWidth - padL - padR;
     const colW  = (inner - (cols - 1) * gap) / cols;
-    const rowH  = Math.max(70, (colW - gap) / 2);
+    rowH        = Math.max(70, (colW - gap) / 2);
     main.style.gridAutoRows = rowH + 'px';
+    // Ist die Spalte schmaler als der Entwurf, wird die ganze Kachel kleiner
+    // gezeichnet — Inhalt eingeschlossen. `zoom` und nicht `transform`: zoom
+    // wirkt auf die Anordnung, die Kachel RECHNET also mit ihrer vollen Breite
+    // und passt anschliessend in die schmale Spalte. Ein transform wuerde sie
+    // nur optisch schrumpfen und darunter weiter zu gross bleiben.
+    massstab = Math.min(1, Math.max(_MASSSTAB_MIN, colW / _KACHEL_ENTWURF_PX));
   }
 
   _kachelOrdnungAnwenden();     // gespeicherte Reihenfolge VOR der Verteilung
@@ -479,12 +548,16 @@ function _applyGrid() {
     // wieder aufgerissen — die leere Tank-Kachel blitzte dann kurz auf.
     if (cols === 1 || _tileOhneDaten(el)) {
       el.style.gridColumn = el.style.gridRow = el.style.order = '';
+      el.style.zoom = '';
       continue;
     }
+    // Der Massstab MUSS vor dem Messen stehen: die Hoehe, die eine Kachel
+    // braucht, haengt an der Breite, mit der sie rechnet.
+    el.style.zoom = (cols > 1 && massstab < 1) ? String(massstab.toFixed(4)) : '';
     kacheln.push({ el, sz });
   }
 
-  if (cols > 1) _rasterPacken(kacheln, cols);
+  if (cols > 1) _rasterPacken(kacheln, cols, rowH, gap, massstab);
 
   _gridSig = _gridVisSig();
   if (!_gridWatchOn) _gridWatchInit();
@@ -941,13 +1014,17 @@ function _spaltenHinweis() {
   if (!feld || !wahl) return;
   const gewaehlt = wahl.value === 'auto' ? _cols() : parseInt(wahl.value, 10);
   const breite = _kachelbreite(gewaehlt);
-  const eng = breite > 0 && breite < _KACHEL_ENG_PX;
-  feld.innerHTML = wahl.value === 'auto'
+  const mass = gewaehlt > 1
+    ? Math.min(1, Math.max(_MASSSTAB_MIN, breite / _KACHEL_ENTWURF_PX)) : 1;
+  const kleiner = mass < 0.995
+    ? ` Die Kacheln werden dafür auf <b>${Math.round(mass * 100)} %</b> verkleinert — `
+      + 'samt Inhalt, damit nichts umbricht oder abgeschnitten wird.' : '';
+  feld.innerHTML = (wahl.value === 'auto'
     ? `Hier ergibt das zurzeit <b>${gewaehlt}</b> Spalte${gewaehlt === 1 ? '' : 'n'} `
       + `à ${breite} px. Dreht man das Gerät, ändert sich das mit.`
-    : `Feste Wahl: ${breite} px je Kachel. Gilt nur auf diesem Gerät.`
-      + (eng ? ' <span style="color:var(--yellow)">Darunter wird es eng — '
-             + 'unter 200 px laufen einzelne Kacheln über ihren Rand.</span>' : '');
+    : `Feste Wahl: ${breite} px je Kachel. Gilt nur auf diesem Gerät.`) + kleiner
+    + (mass <= _MASSSTAB_MIN + 0.001
+       ? ' <span style="color:var(--yellow)">Kleiner geht es nicht — hier wird es unlesbar.</span>' : '');
 }
 
 function saveDisplaySettings(silent) {
