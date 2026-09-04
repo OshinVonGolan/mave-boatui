@@ -188,6 +188,48 @@ def lan_index(conn: dict | None) -> dict:
             'clients': list(clients or [])}
 
 
+def namen_nach_ip(conn: dict | None) -> dict[str, dict]:
+    """Adresse → wie das Geraet im Netz heisst.
+
+    Fuer die Anwesenheitsliste. Bisher stand dort, was der Browser ueber sich
+    verraet — "Chrome auf Android". Das beschreibt eine Software und kein
+    Geraet: an Bord sind zwei Android-Geraete, beide melden dasselbe, und wer
+    aus der Ferne nachsieht, wer da gerade eingeloggt ist, erfaehrt nichts.
+
+    Der Router weiss es besser. Er hat den DHCP-Namen, den das Geraet selbst
+    angibt ("Galaxy-Tab-S9"), und er hat die MAC-Adresse. Beides haengt an der
+    IP, mit der die Sitzung hereinkam.
+
+    WLAN-Liste vor Lease: die WLAN-Liste ist eine Aussage ueber jetzt und
+    bringt zusaetzlich Signal und Band mit. Eine Lease kann auf ein Geraet
+    zeigen, das laengst weg ist — als NAME taugt sie trotzdem, und fuer Geraete
+    am Kabel ist sie die einzige Quelle.
+    """
+    router = (conn or {}).get('router') or {}
+    raus: dict[str, dict] = {}
+    for l in (router.get('dhcp_leases') or []):
+        ip = _txt(l.get('ip'))
+        if ip:
+            raus[ip] = {'name': _txt(l.get('hostname')), 'mac': _mac(l.get('mac')),
+                        'quelle': 'lease'}
+    for c in (router.get('wifi_clients') or []):
+        ip = _txt(c.get('ip'))
+        if not ip:
+            continue
+        vorher = raus.get(ip) or {}
+        raus[ip] = {
+            # Die WLAN-Liste fuehrt den Namen nicht immer mit; dann bleibt der
+            # aus der Lease stehen, statt ihn gegen einen leeren zu tauschen.
+            'name': _txt(c.get('hostname')) or vorher.get('name', ''),
+            'mac': _mac(c.get('mac')) or vorher.get('mac', ''),
+            'quelle': 'wlan',
+            'signal': c.get('signal'),
+            'band': _txt(c.get('band')),
+            'ssid': _txt(c.get('ssid')),
+        }
+    return raus
+
+
 def stoker_index(snapshot: dict | None) -> dict:
     """Hub und Raumknoten aus der Momentaufnahme von heating.py.
 

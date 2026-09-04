@@ -79,6 +79,19 @@ CREATE TABLE IF NOT EXISTS ereignis (
     daten     TEXT NOT NULL,
     empfangen REAL NOT NULL
 );
+
+-- Kleinkram, der ueber einen Neustart hinweg stehenbleiben muss: bis wohin ein
+-- Konto die Alarme gesehen hat, welches Wettermodell gilt. Eine eigene Tabelle
+-- je Kleinigkeit waere Unfug, eine JSON-Datei danebenzulegen auch — dann haette
+-- der Dienst zwei Orte, an denen Zustand liegt, und einer davon ohne
+-- Transaktion. Ein leeres `konto` heisst: gilt fuer alle.
+CREATE TABLE IF NOT EXISTS merker (
+    konto      TEXT NOT NULL,
+    schluessel TEXT NOT NULL,
+    wert       TEXT NOT NULL,
+    geaendert  REAL NOT NULL,
+    PRIMARY KEY (konto, schluessel)
+);
 """
 
 
@@ -378,3 +391,51 @@ class Speicher:
             'SELECT * FROM ereignis ORDER BY folge DESC LIMIT ?', (grenze,)).fetchall()
         return [{'folge': z['folge'], 'zeit': z['zeit'], 'art': z['art'],
                  'daten': json.loads(z['daten'])} for z in zeilen]
+
+    def ereignisse_ab(self, folge: int, arten: tuple[str, ...] | None = None,
+                      grenze: int = 300) -> list[dict]:
+        """Ereignisse NEUER als `folge`, aelteste zuerst.
+
+        Aelteste zuerst, im Gegensatz zu `ereignisse`: hier liest man vorwaerts
+        durch das, was seit dem letzten Blick geschehen ist, und baut daraus
+        einen Verlauf. Rueckwaerts muesste der Aufrufer die Liste erst wieder
+        umdrehen, bevor er "erst ausgeloest, dann quittiert" erkennen kann.
+        """
+        bedingung = 'folge > ?'
+        werte: list = [int(folge)]
+        if arten:
+            bedingung += ' AND art IN (%s)' % ','.join('?' * len(arten))
+            werte.extend(arten)
+        werte.append(int(grenze))
+        zeilen = self._db.execute(
+            f'SELECT * FROM ereignis WHERE {bedingung} ORDER BY folge ASC LIMIT ?',
+            werte).fetchall()
+        return [{'folge': z['folge'], 'zeit': z['zeit'], 'art': z['art'],
+                 'daten': json.loads(z['daten'])} for z in zeilen]
+
+    def ereignis_stand(self) -> int:
+        """Die hoechste Folgenummer — der Stand, den ein "gesehen" festhaelt."""
+        z = self._db.execute('SELECT MAX(folge) AS m FROM ereignis').fetchone()
+        return int((z and z['m']) or 0)
+
+    # ── Merker ──────────────────────────────────────────────────────────────
+
+    def merker(self, schluessel: str, konto: str = '', vorgabe=None):
+        z = self._db.execute(
+            'SELECT wert FROM merker WHERE konto = ? AND schluessel = ?',
+            (konto or '', schluessel)).fetchone()
+        if not z:
+            return vorgabe
+        try:
+            return json.loads(z['wert'])
+        except (ValueError, TypeError):
+            return vorgabe
+
+    def merker_setzen(self, schluessel: str, wert, konto: str = '') -> None:
+        with self._lock:
+            self._db.execute(
+                'INSERT INTO merker (konto, schluessel, wert, geaendert) VALUES (?, ?, ?, ?) '
+                'ON CONFLICT(konto, schluessel) DO UPDATE SET wert = excluded.wert, '
+                'geaendert = excluded.geaendert',
+                (konto or '', schluessel, json.dumps(wert, ensure_ascii=False), time.time()))
+            self._db.commit()

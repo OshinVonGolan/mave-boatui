@@ -16,7 +16,7 @@ import urllib.request
 import zlib
 from collections import deque
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -343,7 +343,52 @@ def _zustand_fuer_server() -> dict:
         # Sichtbar und nicht auf debug: geht der Schnappschuss still verloren,
         # fehlt die Heizung in der Serverkopie, und niemand weiss warum.
         log.warning('Heizungszustand geht nicht mit zum Server: %s', e)
+    try:
+        d['wartung'] = _wartung_stand()
+    except Exception as e:
+        log.warning('Wartungsstand geht nicht mit zum Server: %s', e)
     return d
+
+
+def _wartung_stand() -> dict:
+    """Wie viele Wartungsaufgaben ueberfaellig oder bald faellig sind.
+
+    Nur die Zaehlung, nicht der Plan. Der Plan waere ueber den Fernabruf zu
+    haben — aber genau dann nicht, wenn man ihn braucht: wer von unterwegs ins
+    Logbuch schaut, tut das ueblicherweise, WEIL das Boot allein liegt, und ein
+    Abruf ueber die Vermittlung setzt voraus, dass es antwortet. Drei Zahlen
+    kosten nichts und stehen auch dann noch da, wenn seit Tagen Funkstille ist.
+
+    Gerechnet wird wie in der Bordansicht (`getWartungStatus`), damit nicht
+    zwei Stellen unterschiedlich zaehlen: kein Intervall heisst "von Hand" und
+    zaehlt nirgends mit, nie erledigt heisst ueberfaellig.
+    """
+    plan = read_json(WARTUNG_FILE, [])
+    frist = int(((read_json(PRESETS_FILE, {}) or {}).get('wartung') or {})
+                .get('due_soon_days', 7))
+    heute = date.today()
+    ueberfaellig = bald = gesamt = 0
+    for kategorie in (plan if isinstance(plan, list) else []):
+        for aufgabe in (kategorie.get('tasks') or []):
+            tage = aufgabe.get('interval_days')
+            if not isinstance(tage, int) or tage <= 0:
+                continue                       # von Hand gefuehrt, hat keine Faelligkeit
+            gesamt += 1
+            zuletzt = aufgabe.get('last_done')
+            if not zuletzt:
+                ueberfaellig += 1
+                continue
+            try:
+                faellig = date.fromisoformat(str(zuletzt)[:10]) + timedelta(days=tage)
+            except ValueError:
+                continue
+            rest = (faellig - heute).days
+            if rest < 0:
+                ueberfaellig += 1
+            elif rest <= frist:
+                bald += 1
+    return {'ueberfaellig': ueberfaellig, 'bald': bald, 'gesamt': gesamt,
+            'frist_tage': frist}
 
 
 def _konten_stand() -> str:
@@ -417,9 +462,9 @@ _grob_eimer: dict = {}
 _grob_minute: int = -1
 
 
-# Welche Alarme schon nach draussen gemeldet sind. Nur die Kennungen — die
-# Alarme selbst haelt die Engine.
-_alarm_gemeldet: set = set()
+# Welche Alarme schon nach draussen gemeldet sind, und ob sie beim letzten Mal
+# quittiert waren. Nur das — die Alarme selbst haelt die Engine.
+_alarm_gemeldet: dict = {}
 
 
 def _alarme_melden() -> None:
@@ -430,22 +475,36 @@ def _alarme_melden() -> None:
     wurde von NIRGENDWO aufgerufen. Alarme erreichten den Server also nie: im
     Logbuch fehlten sie, und eine Benachrichtigung haette es nie geben koennen.
 
-    Gemeldet wird beides, das Auftreten und das Verschwinden. Ein Alarm, der
-    nur kommt und nie geht, steht sonst fuer immer in der Chronik.
+    Gemeldet wird dreierlei: das Auftreten, das Quittieren und das
+    Verschwinden. Ein Alarm, der nur kommt und nie geht, steht sonst fuer immer
+    in der Chronik — und ohne das Quittieren koennte auswaerts niemand
+    unterscheiden, ob ein Alarm von jemandem GESEHEN wurde oder ob er nur
+    stundenlang unbemerkt lief. Genau diese Unterscheidung ist der Grund, aus
+    dem man von unterwegs ueberhaupt ins Logbuch schaut.
+
+    Das Quittieren wird hier abgeleitet und nicht an den Endpunkten gemeldet:
+    quittiert wird an mehreren Stellen (einzeln, alle auf einmal, kuenftig
+    vielleicht aus einer Benachrichtigung heraus), und jede davon muesste sonst
+    daran denken. Ein Vergleich gegen den letzten Stand denkt immer daran.
     """
     global _alarm_gemeldet
     offen = {a['id']: a for a in alarms.get_alarms() if not a.get('resolved')}
     neu = [a for kennung, a in offen.items() if kennung not in _alarm_gemeldet]
-    weg = _alarm_gemeldet - set(offen)
-    if not neu and not weg:
+    quittiert = [a for kennung, a in offen.items()
+                 if kennung in _alarm_gemeldet and a.get('acknowledged')
+                 and not _alarm_gemeldet[kennung]]
+    weg = set(_alarm_gemeldet) - set(offen)
+    if not neu and not weg and not quittiert:
         return
-    _alarm_gemeldet = set(offen)
+    _alarm_gemeldet = {kennung: bool(a.get('acknowledged')) for kennung, a in offen.items()}
     for a in neu:
         _ereignis_absetzen('alarm', {
             'kennung': a['id'], 'name': a.get('name'), 'schluessel': a.get('key'),
             'wert': a.get('value'), 'schwelle': a.get('threshold'),
             'schwere': a.get('severity'), 'zeit': a.get('timestamp'),
         })
+    for a in quittiert:
+        _ereignis_absetzen('alarm_quittiert', {'kennung': a['id'], 'name': a.get('name')})
     for kennung in weg:
         _ereignis_absetzen('alarm_weg', {'kennung': kennung})
 
@@ -804,8 +863,30 @@ async def anwesend():
     Der Unterschied zum Server ist die ganze Aussage: im Bordnetz zeigt
     mave.circuit-sailor.com auf den Pi, wer hier eine Sitzung hat, sitzt also
     im Bordnetz. Wer nur ueber den Server hereinkommt, ist woanders.
+
+    Dazu, wo es geht, der NAME des Geraets aus der Router-Liste. Der Browser
+    verraet nur seine Gattung ("Chrome auf Android"); der Router kennt den
+    Namen, den das Geraet selbst angibt. Das ist der Unterschied zwischen
+    "irgendein Android" und "das Tablet im Salon".
+
+    Die Zuordnung passiert nur an Bord und nur hier: die IP einer Sitzung ist
+    eine Adresse im BORDNETZ. Auf dem Server zeigt sie ins Internet und
+    bedeutet dort nichts — dieselbe Verknuepfung waere dort schlicht falsch.
     """
-    return {'quelle': 'boot', 'sitzungen': konten.sitzungen()}
+    sitzungen = konten.sitzungen()
+    try:
+        namen = geraete.namen_nach_ip(conn_mon.get_status() if conn_mon else None)
+    except Exception as e:                    # der Router ist kein Grund, die Liste zu verlieren
+        log.debug('Gerätenamen nicht ermittelbar: %s', e)
+        namen = {}
+    for si in sitzungen:
+        treffer = namen.get(si.get('herkunft') or '')
+        if treffer and treffer.get('name'):
+            si['geraet_name'] = treffer['name']
+            si['geraet_quelle'] = treffer.get('quelle')
+            if treffer.get('signal') is not None:
+                si['geraet_signal'] = treffer['signal']
+    return {'quelle': 'boot', 'sitzungen': sitzungen}
 
 
 @app.get('/api/zugang')

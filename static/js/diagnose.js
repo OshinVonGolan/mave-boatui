@@ -174,7 +174,16 @@ async function start() {
     }
   }
 
+  // Die Hoehe des Ueberblicks an Kopfzeile und Innenabstand fuehren — er soll
+  // genau einen Bildschirm fuellen, ohne dass man rollen muss.
+  _ueberblickHoeheFuehren();
+
   await laden();
+  await einstellungenLaden();
+  // Der Vorhang kommt NACH dem ersten Laden: er soll ueber einer Seite liegen,
+  // auf der schon etwas steht. Ueber einer leeren Seite saehe er aus wie ein
+  // Fehler beim Start.
+  await alarmeLaden();
   await dashboardVerlaufLaden();
   await messwerteLaden();
   setInterval(laden, 30000);
@@ -215,6 +224,10 @@ function seiteZeigen(name) {
   // Die Karte braucht ein sichtbares Feld, um ihre Groesse zu bestimmen —
   // auf einer verborgenen Seite ist sie null Pixel breit und bliebe grau.
   if (name === 'position') positionOeffnen();
+  // Dasselbe fuer die kleine Karte im Ueberblick: auf einer verborgenen Seite
+  // ist ihr Feld null Pixel breit und sie bliebe grau.
+  if (name === 'ueberblick') dbKarteZeigen();
+  if (name === 'einstellungen') zeichneEinstellungen();
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
@@ -266,28 +279,6 @@ function _reihe(feld) {
 function _reiheLetzt(feld) {
   const w = _reihe(feld);
   return w ? w[w.length - 1] : null;
-}
-
-/**
- * Eine Linie ohne Achsen — als SVG und nicht als Canvas.
- *
- * Ein SVG skaliert von selbst mit der Karte mit. Ein Canvas müsste bei jeder
- * Breitenänderung neu gerechnet und neu gezeichnet werden; genau dafür braucht
- * die Messwerte-Seite ihren Größenbeobachter. Für eine Linie ohne Beschriftung
- * lohnt dieser Aufwand nicht.
- */
-function _funke(werte, farbe, hoch) {
-  if (!werte) return '<div class="dk-funke-leer">kein Verlauf für die letzten 24 Stunden</div>';
-  const min = Math.min(...werte), max = Math.max(...werte);
-  const spanne = (max - min) || 1;
-  const n = werte.length;
-  const pkt = werte.map((v, i) =>
-    `${(i / (n - 1) * 100).toFixed(2)},${(100 - (v - min) / spanne * 100).toFixed(2)}`);
-  return `<svg class="dk-funke${hoch ? ' hoch' : ''}" viewBox="0 0 100 100"
-      preserveAspectRatio="none" aria-hidden="true">
-    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-width="1.7"
-      vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>
-  </svg>`;
 }
 
 // Ab wann ein Wert nicht mehr "von jetzt" ist. Der Bus meldet im Sekundentakt;
@@ -343,327 +334,681 @@ function _grob(stunden) {
   return t < 10 ? `rund ${t.toFixed(t < 3 ? 1 : 0)} Tage` : `über eine Woche`;
 }
 
-// ── Die einzelnen Karten ───────────────────────────────────────────────────
+/**
+ * Der Verlauf der letzten 24 Stunden als FLÄCHE hinter dem Text.
+ *
+ * Dieselbe Sprache wie in der Statusleiste der Bordansicht: nach unten
+ * durchsichtig auslaufend, in der Zustandsfarbe des Feldes. Kein Diagramm —
+ * es gibt keine Achsen, keine Beschriftung und nichts abzulesen. Die Frage,
+ * die es beantwortet, ist nicht "wie viel", sondern "war das schon länger so".
+ *
+ * Als SVG und nicht als Canvas: es skaliert von selbst mit dem Feld mit. Ein
+ * Canvas müsste bei jeder Breitenänderung neu gerechnet werden — genau die
+ * Falle, die auf der Messwerte-Seite den Größenbeobachter nötig macht.
+ *
+ * `unten`/`oben` fest zu setzen ist bei Prozenten Pflicht: eine Skalierung auf
+ * die Spannweite malt aus 79 %…81 % einen Berg und aus 5 %…95 % denselben
+ * Berg. Wo es keine natürliche Skala gibt (Antwortzeit), wird automatisch
+ * skaliert — dann sagt die Fläche wenigstens die Form der Nacht.
+ */
+function _wasch(werte, farbe, unten, oben) {
+  if (!werte || werte.length < 3) return '';
+  const min = unten != null ? unten : Math.min(...werte);
+  let max = oben != null ? oben : Math.max(...werte);
+  if (!(max > min)) max = min + 1;
+  const n = werte.length;
+  const y = v => (100 - (Math.max(min, Math.min(max, v)) - min) / (max - min) * 100).toFixed(2);
+  const pkt = werte.map((v, i) => `${(i / (n - 1) * 100).toFixed(2)},${y(v)}`);
+  // Die Kennung muss je Feld verschieden sein, sonst greifen alle Flächen auf
+  // denselben Verlauf zu und tragen dieselbe Farbe.
+  const kennung = 'wasch' + (_waschZaehler++);
+  return `<div class="ampel-spur"><svg viewBox="0 0 100 100" preserveAspectRatio="none"
+      aria-hidden="true">
+    <defs><linearGradient id="${kennung}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${farbe}" stop-opacity=".26"/>
+      <stop offset="1" stop-color="${farbe}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <path d="M0,100 L${pkt.join(' L')} L100,100 Z" fill="url(#${kennung})"/>
+    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-opacity=".42"
+      stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+  </svg></div>`;
+}
+let _waschZaehler = 0;
 
-function _karteBatterie(z) {
-  const b = z.battery || {}, bms = z.bms || {};
+/** Kopf einer Dashboard-Karte: Name links, ein Wort zum Zustand rechts. */
+function _karteKopf(titel, hinweis) {
+  return `<div class="tafel-kopf"><h2>${esc(titel)}</h2>`
+    + `<span class="hinweis">${esc(hinweis || '')}</span></div>`;
+}
+
+// ── Zeile 1: die Ampeln ────────────────────────────────────────────────────
+// Farbe vor Zahl. Aus zwei Metern soll man sehen, ob etwas nicht stimmt; die
+// Zahl steht daneben, für den zweiten Blick. Fünf Fragen in der Reihenfolge,
+// in der sie jemand stellt, der aus der Ferne nachsieht: Hält der Strom? Weiss
+// das Boot, wo es ist? Komme ich dran? Meldet sich der Rechner? Ist etwas
+// fällig?
+
+/** Eine Ampel. `stufe` ist gut/warn/rot oder leer — Farbe und Punkt in einem. */
+function _ampel(name, stufe, wert, einheit, neben, wasch) {
+  return `<div class="ampel">${wasch || ''}
+    <div class="ampel-kopf"><span class="punkt ${stufe}"></span>
+      <span class="ampel-name">${esc(name)}</span></div>
+    <div class="ampel-wert ${stufe ? 'w-' + stufe : 'w-ruhe'}">${esc(wert)}${
+      einheit ? `<small>${esc(einheit)}</small>` : ''}</div>
+    <div class="ampel-neben">${esc(neben || '')}</div>
+  </div>`;
+}
+
+function _ampelnBauen(z, v) {
+  const b = z.battery || {}, pos = z.position || null;
   const soc = b.soc;
-  const stufe = soc == null ? '' : (soc >= 50 ? 'gut' : soc >= 25 ? 'mau' : 'schlecht');
 
-  // Zwei unabhängige Wege zur selben Frage — und das ist die eigentliche
-  // Nachricht. Der Shunt rechnet aus entnommenen Ah, das BMS aus Restenergie.
-  // Stimmen sie überein, kann man der Zahl glauben. Weichen sie stark ab, wird
-  // das GESAGT, statt stillschweigend eine der beiden zu bevorzugen.
-  //
-  // `ttg` steht in MINUTEN (can_reader.py). Die Gegenprobe bestätigt es: 7210
-  // ergibt 120 Stunden, und remaining_kwh / Verbrauch ergibt 119.
-  //
-  // Gerechnet wird gegen den VERBRAUCH, nicht gegen den Nettofluss — am Steg
-  // ist netto nahe null und ergäbe absurde Zahlen. Die nützliche Frage ist:
-  // wie lange komme ich hin, wenn nichts mehr nachkommt.
-  const verbrauchW = (b.power != null && b.power < 0) ? -b.power : null;
-  const ttgStd = b.ttg != null ? b.ttg / 60 : null;
-  const bmsStd = (bms.remaining_kwh != null && verbrauchW)
-    ? bms.remaining_kwh * 1000 / verbrauchW : null;
+  // Batterie. Dieselben Schwellen wie überall sonst in dieser Oberfläche — 50
+  // und 25 —, damit Gelb hier nicht etwas anderes heisst als in der
+  // Bordansicht.
+  const battStufe = soc == null ? '' : soc >= 50 ? 'gut' : soc >= 25 ? 'warn' : 'rot';
+  const battNeben = [
+    b.voltage != null ? b.voltage.toFixed(2) + ' V' : null,
+    b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) + ' A' : null,
+  ].filter(Boolean).join(' · ') || 'keine Messung';
 
-  let satz, satzArt = stufe;
-  if (b.power != null && b.power > 5) {
-    satz = 'Wird gerade geladen';
-    satzArt = 'gut';
-  } else if (ttgStd != null && bmsStd != null
-             && (ttgStd / bmsStd > 2 || bmsStd / ttgStd > 2)) {
-    const a = Math.min(ttgStd, bmsStd), c = Math.max(ttgStd, bmsStd);
-    satz = `Reicht ${_grob(a)} bis ${_grob(c)}`;
-    satzArt = 'mau';
-  } else {
-    const std = ttgStd != null ? ttgStd : bmsStd;
-    satz = std != null ? `Reicht ${_grob(std)}` : 'Restlaufzeit nicht bestimmbar';
-    if (std == null) satzArt = 'leer';
-    else if (std < 24) satzArt = 'mau';
-    else if (std < 8) satzArt = 'schlecht';
+  // GPS. Gezählt werden Satelliten, nicht Meter: der Router meldet eine Güte
+  // (HDOP), und die ist keine Entfernung. Wer "3 m" liest, glaubt an eine
+  // Genauigkeit, die so nicht dasteht.
+  const sats = pos && pos.satelliten != null ? pos.satelliten : null;
+  const fixAlt = pos && pos._age_s != null ? pos._age_s : null;
+  const gpsStufe = !pos ? '' : sats == null ? 'warn'
+    : sats >= 6 ? 'gut' : sats >= 4 ? 'warn' : 'rot';
+  const gpsNeben = !pos ? 'kein Fix vom Router'
+    : fixAlt != null ? 'Fix vor ' + dauer(fixAlt) : 'Fix ohne Zeitangabe';
+
+  // Internet. Die Antwortzeit sagt mehr als ein Häkchen: eine Leitung kann
+  // durchgehend "verbunden" sein und trotzdem die halbe Nacht auf jede Antwort
+  // eine Sekunde brauchen.
+  const ping = _reiheLetzt('ping_ms');
+  const netzStufe = ping == null ? '' : ping < 120 ? 'gut' : ping < 400 ? 'warn' : 'rot';
+  const traeger = ((z.connectivity || {}).router || {}).active_type || '';
+  const traegerWort = { wired: 'Kabel', mobile: 'Mobilfunk', wifi: 'WLAN' }[traeger] || '';
+
+  // Verbindung zum Pi. Nicht "verbunden ja/nein", sondern wie zuverlässig:
+  // eine Leitung, die zehnmal am Tag abreisst, ist etwas anderes als eine, die
+  // steht — und beide stünden als "verbunden" da.
+  const verbunden = !!(v && v.verbunden);
+  const luecken24 = ((v || {}).luecken || []).filter(
+    l => (l.ab || 0) > Date.now() / 1000 - 86400).length;
+  const piStufe = !verbunden ? 'rot' : luecken24 > 3 ? 'warn' : 'gut';
+  const piWert = !verbunden ? 'weg'
+    : (z.quelle === 'server' && z.alter_s != null && z.alter_s > 90 ? dauer(z.alter_s) : 'jetzt');
+  const piNeben = verbunden
+    ? (luecken24 ? `${luecken24} ${luecken24 === 1 ? 'Lücke' : 'Lücken'} in 24 Std`
+                 : 'ohne Unterbrechung')
+    : (v && v.seit ? 'zuletzt ' + zeitpunkt(v.seit) : 'nicht verbunden');
+
+  // Wartung. Ohne Verlaufsfläche, und das mit Absicht: ein Wartungsplan hat
+  // keinen Tagesverlauf. Eine Fläche wäre hier reine Dekoration.
+  const wa = z.wartung || null;
+  const wStufe = !wa ? '' : wa.ueberfaellig ? 'rot' : wa.bald ? 'warn' : 'gut';
+  const wWert = !wa ? '—' : wa.ueberfaellig ? String(wa.ueberfaellig)
+    : wa.bald ? String(wa.bald) : 'alles';
+  const wNeben = !wa ? 'kein Wartungsplan übertragen'
+    : wa.ueberfaellig ? (wa.bald ? `überfällig · ${wa.bald} bald fällig` : 'überfällig')
+    : wa.bald ? `bald fällig, ${wa.frist_tage} Tage Vorlauf`
+    : `${wa.gesamt} Aufgaben im Plan`;
+
+  const spurPi = _piSpur(v);
+  return '<div class="ampeln">'
+    + _ampel('Batterie', battStufe, soc != null ? soc.toFixed(0) : '—',
+             soc != null ? '%' : '', battNeben,
+             _wasch(_reihe('soc'), 'var(--green)', 0, 100))
+    + _ampel('GPS', gpsStufe, sats != null ? String(sats) : (pos ? 'Fix' : '—'),
+             sats != null ? 'Sat' : '', gpsNeben)
+    + _ampel('Internet', netzStufe, ping != null ? Math.round(ping) : '—',
+             ping != null ? 'ms' : '',
+             [traegerWort, 'Antwortzeit'].filter(Boolean).join(' · '),
+             _wasch(_reihe('ping_ms'), 'var(--yellow)'))
+    + _ampel('Pi', piStufe, piWert, '', piNeben,
+             spurPi ? _wasch(spurPi, 'var(--accent)', 0, 1) : '')
+    + _ampel('Wartung', wStufe, wWert, '', wNeben)
+    + '</div>';
+}
+
+/**
+ * Die Erreichbarkeit der letzten 24 Stunden als Reihe aus Null und Eins.
+ *
+ * Anders als die übrigen Flächen kommt diese nicht aus dem Messverlauf,
+ * sondern aus den Lücken: eine Reihe "war verbunden" gibt es nicht. Das ist
+ * auch die ehrlichere Quelle — während einer Lücke schreibt der Pi nichts auf,
+ * eine Verlaufsreihe hätte dort gar keinen Wert und nicht etwa eine Null.
+ */
+function _piSpur(v) {
+  if (!v) return null;
+  const bis = Date.now() / 1000, von = bis - 86400;
+  const N = 96;                                 // ein Punkt je Viertelstunde
+  const reihe = new Array(N).fill(1);
+  for (const l of (v.luecken || [])) {
+    const a = Math.max(von, l.ab || 0);
+    const e = Math.min(bis, (l.ab || 0) + (l.dauer_s || 0));
+    if (!(e > a)) continue;
+    const i0 = Math.max(0, Math.floor((a - von) / 86400 * N));
+    const i1 = Math.min(N, Math.ceil((e - von) / 86400 * N));
+    for (let i = i0; i < i1; i++) reihe[i] = 0;
   }
-
-  const uneins = (ttgStd != null && bmsStd != null
-                  && (ttgStd / bmsStd > 2 || bmsStd / ttgStd > 2));
-  return _kopf('Bordbatterie', 'battery')
-    + `<div class="dk-satz ${satzArt}">${esc(satz)}</div>`
-    + `<div class="dk-gross ${stufe}">${soc != null ? soc.toFixed(1) : '—'}<span class="dk-einheit">%</span></div>`
-    + `<div class="dk-neben">Ladestand nach Shunt${bms.soc != null ? ` · BMS meldet ${Math.round(bms.soc)} %` : ''}</div>`
-    + _funke(_reihe('soc'), 'var(--green)', true)
-    + '<div class="dk-liste">'
-    + _zeile('Bilanz', b.current != null
-        ? `${b.current > 0 ? '+' : ''}${b.current.toFixed(1)} A${b.power != null ? ` · ${Math.round(Math.abs(b.power))} W` : ''}`
-        : '—',
-        b.current == null ? 'still' : (b.current >= 0 ? 'gut' : ''),
-        b.current == null ? '' : (b.current >= 0 ? 'es kommt mehr herein als heraus' : 'es wird entnommen'))
-    + _zeile('Spannung', b.voltage != null ? b.voltage.toFixed(2) + ' V' : '—')
-    + _zeile('Starterbatterie', b.starter_voltage != null ? b.starter_voltage.toFixed(2) + ' V' : '—',
-             b.starter_voltage != null && b.starter_voltage < 12.2 ? 'mau' : '')
-    + _zeile('Zuletzt voll', b.time_since_full != null ? 'vor ' + dauer(b.time_since_full) : '—',
-             b.time_since_full != null && b.time_since_full > 7 * 86400 ? 'mau' : '')
-    + (uneins ? `<div class="dk-grund">Shunt und BMS sind sich über die Restlaufzeit nicht einig — die Spanne oben nennt beide.</div>` : '')
-    + '</div>';
+  return reihe.some(x => x === 0) ? reihe : null;   // eine gerade Linie sagt nichts
 }
 
-function _karteZufluss(z) {
-  const s = z.solar || {}, o = z.orion || {}, c = z.charger || {}, i = z.inverter || {};
-  const rein = (s.power || 0) + (o.output_power || 0);
-  const satz = rein > 5 ? `Es kommen ${Math.round(rein)} W herein` : 'Zurzeit kommt nichts nach';
-  return _kopf('Zufluss', 'solar')
-    + `<div class="dk-satz ${rein > 5 ? 'gut' : 'leer'}">${esc(satz)}</div>`
-    + `<div class="dk-gross">${s.power != null ? Math.round(s.power) : '—'}<span class="dk-einheit">W Solar</span></div>`
-    + _funke(_reihe('solar1'), 'var(--violet)')
-    + '<div class="dk-liste">'
-    + _zeile('Solar heute', s.yield_today_wh != null ? Math.round(s.yield_today_wh) + ' Wh' : '—',
-             '', s.charge_state_n2k ? 'Regler: ' + s.charge_state_n2k : '')
-    + _zeile('Lichtmaschine', o.output_power != null ? Math.round(o.output_power) + ' W' : '—',
-             (o.output_power || 0) > 5 ? 'gut' : 'still',
-             o.off_reason_label && !(o.output_power > 5) ? 'aus: ' + o.off_reason_label : '')
-    // Ausdrücklich NICHT "0 W": das Gerät ist nicht verbaut, und eine Null
-    // sähe aus wie eine Messung.
-    + _zeile('Landstrom', c._age_s == null ? 'nicht am Bus'
-        : (c.power != null ? Math.round(c.power) + ' W' : '—'),
-        c._age_s == null ? 'still' : '')
-    + _zeile('230 V', i.state || '—', i.state === 'Aus' ? 'still' : 'gut',
-             i.ac_power ? Math.round(i.ac_power) + ' W am Ausgang' : '')
-    + '</div>';
+// ── Zeile 2 links: Ort und Wetter ──────────────────────────────────────────
+
+function _ortBauen(z) {
+  const pos = z.position;
+  const hat = pos && typeof pos.lat === 'number';
+  const koord = hat
+    ? `<div class="koord">${esc(_gradMinuten(pos.lat, 'lat'))}<br>${esc(_gradMinuten(pos.lon, 'lon'))}</div>`
+    : '<div class="koord"><span>Der Router meldet keinen gültigen Fix.</span></div>';
+  return _karteKopf('Ort und Wetter',
+      hat ? (pos._age_s != null ? 'Fix vor ' + dauer(pos._age_s) : 'Position gemeldet')
+          : 'keine Position')
+    + `<div class="ort">
+      <div class="kartenfeld" id="dbKarteFeld">
+        <div class="karten-warte">${hat ? 'Karte wird geladen…' : 'Ohne Position keine Karte.'}</div>
+      </div>
+      <div class="ort-daten">${koord}${_wetterBauen()}</div>
+    </div>`;
 }
 
-function _karteZellen(z) {
-  const bms = z.bms || {}, b = z.battery || {};
-  const drift = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
-    ? (bms.highest_cell_v - bms.lowest_cell_v) * 1000 : null;
-  // 30 mV: darunter arbeiten die Zellen zusammen, darüber läuft eine davon weg.
-  // 60 mV ist der Punkt, an dem der Balancer nicht mehr hinterherkommt.
-  const stufe = drift == null ? '' : (drift < 30 ? 'gut' : drift < 60 ? 'mau' : 'schlecht');
-  const satz = drift == null ? 'Das BMS meldet keine Zellspannungen'
-    : drift < 30 ? 'Die Zellen laufen im Gleichschritt'
-    : drift < 60 ? 'Eine Zelle läuft etwas weg' : 'Eine Zelle läuft deutlich weg';
-  const socDiff = (bms.soc != null && b.soc != null) ? Math.abs(bms.soc - b.soc) : null;
-  return _kopf('Zellen', 'bms')
-    + `<div class="dk-satz ${drift == null ? 'leer' : stufe}">${esc(satz)}</div>`
-    + `<div class="dk-gross ${stufe}">${drift != null ? Math.round(drift) : '—'}<span class="dk-einheit">mV Abstand</span></div>`
-    + _funke(_reihe('zelldiff'), 'var(--violet)')
-    + '<div class="dk-liste">'
-    + _zeile('Höchste / niedrigste',
-        (bms.highest_cell_v != null && bms.lowest_cell_v != null)
-          ? `${bms.highest_cell_v.toFixed(3)} / ${bms.lowest_cell_v.toFixed(3)} V` : '—',
-        '', bms.lowest_cell_nr != null ? `niedrigste ist Zelle ${bms.lowest_cell_nr} von ${bms.cell_count || '?'}` : '')
-    + _zeile('Zelltemperatur',
-        (bms.lowest_temp != null && bms.highest_temp != null)
-          ? `${bms.lowest_temp.toFixed(1)} – ${bms.highest_temp.toFixed(1)} °C` : '—',
-        bms.lowest_temp != null && bms.lowest_temp < 2 ? 'mau' : '',
-        bms.lowest_temp != null && bms.lowest_temp < 2 ? 'unter 2 °C darf nicht geladen werden' : '')
-    // Die beiden Ladestände weichen bauartbedingt ab — das ist keine Störung,
-    // sondern zwei Messverfahren. Erst ein grosser Abstand ist eine Aussage.
-    + _zeile('Ladestand BMS / Shunt',
-        (bms.soc != null && b.soc != null) ? `${Math.round(bms.soc)} / ${b.soc.toFixed(1)} %` : '—',
-        socDiff != null && socDiff > 15 ? 'mau' : '',
-        socDiff != null && socDiff > 15 ? 'die beiden messen sehr verschieden' : '')
-    + _zeile('Ladezyklen', b.cycles != null ? String(b.cycles) : '—')
-    + '</div>';
+function _wetterBauen() {
+  if (_wetter === 'laedt') {
+    return '<div class="wetter"><div class="wetter-quelle">Wetter wird geholt…</div></div>';
+  }
+  if (!_wetter) {
+    return '<div class="wetter"><div class="wetter-quelle">Kein Wetter verfügbar.</div></div>';
+  }
+  const w = _wetter;
+  const zeile = (name, wert) => wert
+    ? `<div class="wetter-zeile"><span>${esc(name)}</span><b>${esc(wert)}</b></div>` : '';
+  const modell = (_wetterModelle.find(m => m.kennung === w.modell) || {}).name || w.modell || 'Open-Meteo';
+  return `<div class="wetter">
+    <div class="wetter-haupt">
+      <span class="wetter-grad">${w.temperatur != null ? Math.round(w.temperatur) + '°' : '—'}</span>
+      <span class="wetter-wort">${esc(w.text || '')}</span></div>
+    ${zeile('Gefühlt', w.gefuehlt != null ? Math.round(w.gefuehlt) + ' °C' : '')}
+    ${zeile('Wind', w.wind_kn != null
+        ? (Math.round(w.wind_kn) + ' kn ' + _himmelsrichtung(w.wind_grad)).trim() : '')}
+    ${zeile('Böen', w.boe_kn != null ? Math.round(w.boe_kn) + ' kn' : '')}
+    ${zeile('Luftdruck', w.druck != null ? Math.round(w.druck) + ' hPa' : '')}
+    <div class="wetter-quelle">${esc(modell)}${
+      w.gemessen ? ' · ' + esc(String(w.gemessen).slice(11, 16)) : ''}${
+      w.veraltet ? ' · alter Wert' : ''}</div>
+  </div>`;
 }
 
-function _karteWaerme(z) {
+/** Grad in die Richtung, aus der es weht — so wird an Bord darüber geredet. */
+function _himmelsrichtung(grad) {
+  if (typeof grad !== 'number') return '';
+  const namen = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO',
+                 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return namen[Math.round((((grad % 360) + 360) % 360) / 22.5) % 16];
+}
+
+// ── Zeile 2 rechts: Strom ──────────────────────────────────────────────────
+// Was hereinkommt und was hinausgeht — vier Zeilen, immer dieselben, immer in
+// derselben Reihenfolge. Ein Gerät, das nicht am Bus ist, sagt das, statt eine
+// Null zu zeigen: eine Null sähe aus wie eine Messung.
+
+function _stromBauen(z) {
+  const s = z.solar || {}, o = z.orion || {}, c = z.charger || {},
+        i = z.inverter || {}, b = z.battery || {};
+  const zeile = (name, strich, wert, einheit, aus) => `<div class="quelle">
+    <span class="q-strich ${strich || ''}"></span>
+    <span class="q-name">${esc(name)}</span>
+    <span class="q-wert ${aus ? 'q-aus' : ''}">${esc(wert)}${
+      einheit ? `<small>${esc(einheit)}</small>` : ''}</span></div>`;
+
+  const landDa = c._age_s != null;
+  const landAn = landDa && (c.power || 0) > 5;
+  const solarAn = (s.power || 0) > 5;
+  const orionAn = (o.output_power || 0) > 5;
+  const wechselAn = (i.ac_power || 0) > 5 || (!!i.state && i.state !== 'Aus');
+  const rein = (s.power || 0) + (o.output_power || 0) + (landDa ? (c.power || 0) : 0);
+
+  return _karteKopf('Strom', landAn ? 'am Landstrom'
+      : rein > 5 ? 'es kommt nach' : 'nichts kommt nach')
+    + '<div class="quellen">'
+    + zeile('Landstrom', landAn ? 'an' : '',
+            !landDa ? 'nicht am Bus' : landAn ? Math.round(c.power) : 'aus',
+            landAn ? 'W' : '', !landAn)
+    + zeile('Solar', solarAn ? 'an' : '', solarAn ? Math.round(s.power) : 'aus',
+            solarAn ? 'W' : '', !solarAn)
+    + zeile('Lichtmaschine', orionAn ? 'an' : '',
+            orionAn ? Math.round(o.output_power) : 'aus', orionAn ? 'W' : '', !orionAn)
+    + zeile('Wechselrichter', wechselAn ? 'raus' : '',
+            wechselAn ? (i.ac_power != null ? Math.round(i.ac_power) : (i.state || 'an'))
+                      : (i.state || 'aus'),
+            wechselAn && i.ac_power != null ? 'W' : '', !wechselAn)
+    + '</div>'
+    + `<div class="bilanz"><span>${b.current == null ? 'Bilanz'
+        : b.current >= 0 ? 'In die Batterie' : 'Aus der Batterie'}</span>`
+    + `<b class="${b.current == null ? '' : b.current >= 0 ? 'w-gut' : ''}">${
+        b.current != null ? (b.current > 0 ? '+' : '') + b.current.toFixed(1) + ' A' : '—'
+      }</b></div>`;
+}
+
+// ── Zeile 3 links: Heizung ─────────────────────────────────────────────────
+// Dieselben Wörter wie in der Bordansicht. Sie stehen hier ein zweites Mal,
+// weil das Logbuch ein eigenes Bündel ist und nichts aus dem Bordbündel sieht
+// — aber sie müssen dieselben BLEIBEN: "Läuft" darf nicht hier so und dort
+// anders heissen, sonst redet dieselbe Anlage in zwei Sprachen.
+const HZ_ZUSTAND = {
+  off: 'Aus', starting: 'Startet', running: 'Läuft',
+  stopping: 'Stoppt', cooldown: 'Nachlauf', fault: 'Störung',
+};
+const HZ_MODUS = { off: 'Aus', auto: 'Automatik', manual: 'Manuell' };
+
+function _heizungBauen(z) {
   const h = z.heizung || {};
   const st = h.state || {};
   const raeume = st.rooms || h.rooms || [];
-  const temps = raeume.map(r => r.roomTemp).filter(x => typeof x === 'number');
   const heizer = st.heater || {};
-  const verbaut = heizer.availability !== 'not_wired';
+  // `not_wired` heisst: der Hub läuft, aber am Autoterm-Gerät hängt nichts.
+  // Das ist etwas anderes als "aus" und muss auch anders dastehen.
+  const verbaut = heizer.availability !== 'not_wired' && heizer.available !== false;
 
-  const mittel = temps.length ? temps.reduce((a, c) => a + c, 0) / temps.length : null;
-  let satz, art;
-  if (mittel != null) {
-    // Der Satz sagt, WIE es ist; die Zahl darunter sagt, wie viel. Beides
-    // dasselbe zu sagen waere verschenkter Platz.
-    satz = mittel >= 20 ? 'Es ist warm an Bord'
-         : mittel >= 15 ? 'Angenehm kühl'
-         : mittel >= 8 ? 'Es ist kalt an Bord' : 'Nahe am Frost';
-    art = mittel >= 15 ? 'gut' : mittel >= 8 ? 'mau' : 'schlecht';
-  } else if (!h.reachable) {
-    satz = 'Die Heizungssteuerung meldet sich nicht';
-    art = 'mau';
-  } else {
-    satz = 'Kein Raumfühler meldet eine Temperatur';
-    art = 'mau';
-  }
-  // Wo keine Zahl ist, steht auch kein grosser Gedankenstrich: der sieht aus
-  // wie ein Messwert und ist keiner. Dann tragen die Raumzeilen die Karte.
-  const gross = mittel != null
-    ? `<div class="dk-gross ${art}">${mittel.toFixed(1)}<span class="dk-einheit">°C</span></div>` : '';
+  const kennzahl = (name, wert, einheit, klasse) => `<div class="kennzahl">
+    <span class="k-name">${esc(name)}</span>
+    <span class="k-wert ${klasse || ''}">${esc(wert)}${
+      einheit ? `<small>${esc(einheit)}</small>` : ''}</span></div>`;
+
+  const zustand = !h.configured ? '—' : !verbaut ? 'nicht verbaut'
+    : (HZ_ZUSTAND[heizer.state] || heizer.state || '—');
+  const stufe = heizer.state === 'running' ? 'w-gut'
+    : heizer.state === 'fault' ? 'w-rot'
+    : (heizer.state === 'starting' || heizer.state === 'stopping') ? 'w-warn' : 'w-ruhe';
+
   let zeilen = '';
   for (const r of raeume) {
-    zeilen += _zeile(r.name || 'Raum',
-      typeof r.roomTemp === 'number' ? r.roomTemp.toFixed(1) + ' °C'
-        : (r.conn === 'offline' ? 'meldet sich nicht' : 'kein Wert'),
-      typeof r.roomTemp === 'number' ? '' : 'mau',
-      r.target != null ? `Ziel ${r.target} °C` : '');
-  }
-  return _kopf('Wärme', 'heizung')
-    + `<div class="dk-satz ${art}">${esc(satz)}</div>`
-    + gross
-    + `<div class="dk-neben">${esc(st.preset && st.preset.name ? 'Vorwahl: ' + st.preset.name : 'keine Vorwahl gemeldet')}</div>`
-    + '<div class="dk-liste">'
-    + zeilen
-    + _zeile('Heizgerät', verbaut ? (heizer.state || heizer.mode || '—') : 'nicht angeschlossen',
-             verbaut ? '' : 'still',
-             !verbaut && heizer.availabilityText ? heizer.availabilityText : '')
-    + _zeile('Steuergerät', h.reachable ? 'antwortet' : 'meldet sich nicht',
-             h.reachable ? 'gut' : 'mau',
-             h.info && h.info.wifi ? `WLAN ${h.info.wifi.rssi} dBm` : '')
-    + '</div>';
-}
-
-function _karteVorrat(z) {
-  const t = z.tanks || {};
-  // 200 L je Tank, wie in der Bordansicht. Die Prozente kommen flach vom Bus;
-  // die Liter rechnet die Anzeige, nicht das Boot.
-  const LITER = 200;
-  const tanks = [
-    { name: 'Wasser', wert: t.tank1, reihe: 'tank1', farbe: 'var(--blau)' },
-    { name: 'Diesel', wert: t.tank2, reihe: 'tank2', farbe: 'var(--yellow)' },
-  ];
-  const knapp = tanks.filter(x => typeof x.wert === 'number' && x.wert < 25);
-  const satz = knapp.length
-    ? (knapp.length === 1 ? `${knapp[0].name} wird knapp` : 'Wasser und Diesel werden knapp')
-    : 'Die Vorräte reichen';
-  let inhalt = '';
-  for (const x of tanks) {
-    const p = typeof x.wert === 'number' ? x.wert : null;
-    const stufe = p == null ? '' : p < 12 ? 'schlecht' : p < 25 ? 'mau' : '';
-    // Tempo aus dem Verlauf: 24 Stunden zurück gegen jetzt. Erst damit wird
-    // aus "19,6 %" ein "reicht noch etwa vier Tage".
-    const w = _reihe(x.reihe);
-    let tempo = '';
-    if (w && p != null && w.length > 5) {
-      const proTag = w[0] - w[w.length - 1];
-      if (proTag > 0.8) {
-        const tage = p / proTag;
-        tempo = `${proTag.toFixed(1)} Punkte in 24 Std · reicht noch ${_grob(tage * 24)}`;
-      } else if (proTag < -0.8) {
-        tempo = `${Math.abs(proTag).toFixed(1)} Punkte aufgefüllt`;
-      } else {
-        tempo = 'seit gestern unverändert';
-      }
-    }
-    inhalt += `<div class="dk-tank">
-      <div class="dk-tank-kopf"><b class="${stufe}">${p != null ? Math.round(p) : '—'} %</b>
-        <span>${esc(x.name)}</span>
-        <span class="dk-tank-neben">${p != null ? Math.round(p / 100 * LITER) + ' von ' + LITER + ' L' : ''}</span></div>
-      <div class="dk-balken"><i class="${stufe}" style="width:${p != null ? Math.max(1, Math.min(100, p)) : 0}%"></i></div>
-      ${tempo ? `<div class="dk-grund">${esc(tempo)}</div>` : ''}
+    const ist = typeof r.roomTemp === 'number';
+    zeilen += `<div class="raum">
+      <span class="raum-name">${esc(r.name || 'Raum')}</span>
+      <span class="raum-ist ${ist ? (r.roomTemp < 6 ? 'w-rot' : '') : 'w-ruhe'}">${
+        ist ? r.roomTemp.toFixed(1) + ' °C'
+            : (r.conn === 'offline' ? 'meldet sich nicht' : 'kein Wert')}</span>
+      <span class="raum-soll">${r.target != null ? 'Soll ' + esc(r.target) : ''}</span>
     </div>`;
   }
-  return _kopf('Vorräte', 'tanks')
-    + `<div class="dk-satz ${knapp.length ? 'mau' : 'gut'}">${esc(satz)}</div>`
-    + inhalt;
+
+  // Nur EIN Hinweis, und zwar der wichtigste. Drei Zeilen Kleingedrucktes
+  // untereinander liest niemand — und die unterste wäre die, auf die es
+  // ankommt.
+  let hinweis = '';
+  if (!h.configured) {
+    hinweis = '<div class="heiz-hinweis still"><span class="punkt"></span>'
+      + 'Keine Heizungssteuerung eingerichtet.</div>';
+  } else if (!h.reachable) {
+    hinweis = '<div class="heiz-hinweis"><span class="punkt warn"></span>'
+      + 'Die Steuerung meldet sich nicht.</div>';
+  } else if (!verbaut) {
+    hinweis = '<div class="heiz-hinweis"><span class="punkt warn"></span>'
+      + esc(heizer.availabilityText || 'Kein Heizgerät angeschlossen') + '</div>';
+  } else if (heizer.errorCode) {
+    hinweis = '<div class="heiz-hinweis"><span class="punkt rot"></span>'
+      + 'Fehlercode ' + esc(heizer.errorCode) + '</div>';
+  }
+
+  return _karteKopf('Heizung', st.preset && st.preset.name
+      ? 'Vorwahl ' + st.preset.name : (h.configured ? 'ohne Vorwahl' : ''))
+    + '<div class="heiz">'
+    + kennzahl('Zustand', zustand, '', stufe)
+    + kennzahl('Betriebsart', HZ_MODUS[heizer.mode] || heizer.mode || '—')
+    + kennzahl('Vorlauf', heizer.flowTemp != null ? heizer.flowTemp.toFixed(1) : '—',
+               heizer.flowTemp != null ? '°C' : '')
+    + kennzahl('Starts heute', heizer.startsToday != null ? String(heizer.startsToday) : '—')
+    + '</div>'
+    + (zeilen ? `<div class="raeume">${zeilen}</div>` : '')
+    + hinweis;
 }
 
-function _karteLicht(z) {
-  const l = z.lights || {};
-  const k = l.channels || [];
-  const an = k.filter(x => x > 0).length;
-  return _kopf('Licht', 'lights')
-    + `<div class="dk-satz ${an ? '' : 'leer'}">${an ? `${an} von ${k.length} Kreisen brennen` : 'Alles aus'}</div>`
-    + `<div class="dk-kreise">${k.map((x, i) =>
-        `<span class="dk-kreis ${x > 0 ? 'an' : ''}" title="Kreis ${i + 1}: ${x} %">${i + 1}</span>`).join('')}</div>`
-    + `<div class="dk-neben">Die Lichtkreise stehen nicht im Verlauf — hier gibt es deshalb keine Linie.</div>`;
+// ── Zeile 3 rechts: Geräte an Bord ─────────────────────────────────────────
+// Wer gerade angemeldet ist — und WOMIT. Bisher stand hier, was der Browser
+// über sich verrät ("Chrome auf Android"). Das beschreibt eine Software und
+// kein Gerät: an Bord melden zwei Geräte dasselbe. Der Pi legt die Adresse der
+// Sitzung gegen die Geräteliste des Routers und liefert den Namen mit, den das
+// Gerät selbst angibt.
+
+function _geraeteBauen() {
+  const a = _daten.anwesend;
+  if (!a) return _karteKopf('Geräte an Bord', '') + '<div class="leerlauf">wird geladen…</div>';
+  const jetzt = Date.now() / 1000;
+
+  // Mehrere Sitzungen desselben Kontos auf demselben Gerät sind KEINE
+  // mehreren Anwesenden — sie entstehen bei jedem neuen Browserfenster und bei
+  // jedem Werkzeugaufruf. Zusammengefasst wird nach Konto, Gerät und Adresse;
+  // gezeigt wird die jüngste, die Anzahl steht daneben, damit vergessene
+  // Anmeldungen trotzdem auffallen.
+  const buendeln = (liste, fern) => {
+    const m = new Map();
+    for (const s of liste || []) {
+      const schluessel = [s.konto, s.geraet_name || s.geraet, s.herkunft].join('|');
+      const da = m.get(schluessel);
+      if (!da) m.set(schluessel, { ...s, anzahl: 1, fern });
+      else {
+        da.anzahl++;
+        if ((s.zuletzt || 0) > (da.zuletzt || 0)) da.zuletzt = s.zuletzt;
+      }
+    }
+    return [...m.values()];
+  };
+
+  // "Da" heisst: in der letzten halben Stunde aktiv. Eine Sitzung, die seit
+  // Stunden nichts mehr getan hat, ist keine Anwesenheit mehr — das Gerät
+  // liegt in der Schublade. Verschwiegen wird sie trotzdem nicht: eine
+  // vergessene Anmeldung auf einem fremden Gerät soll auffallen.
+  const STILL_S = 30 * 60;
+  const alle = [...buendeln(a.an_bord, false), ...buendeln(a.ueber_server, true)]
+    .sort((x, y) => (y.zuletzt || 0) - (x.zuletzt || 0));
+  const da = alle.filter(s => jetzt - (s.zuletzt || 0) < STILL_S).length;
+
+  const kopf = !a.boot_erreichbar ? 'Boot nicht verbunden'
+    : da ? da + ' verbunden' : 'niemand angemeldet';
+
+  if (!alle.length) {
+    return _karteKopf('Geräte an Bord', kopf)
+      + `<div class="leerlauf">${a.boot_erreichbar
+          ? 'Niemand am Bordrechner angemeldet.'
+          : 'Das Boot ist nicht verbunden — von dort ist nichts zu erfahren.'}</div>`;
+  }
+
+  const zeilen = alle.slice(0, 8).map(s => {
+    const seit = jetzt - (s.zuletzt || 0);
+    const still = seit >= STILL_S;
+    // Der Gerätename oben, alles Übrige klein darunter. Fehlt der Name (Gerät
+    // im fremden Netz, oder der Router schweigt), tritt die Gattung nach oben:
+    // eine leere erste Zeile wäre schlimmer als eine ungenaue.
+    const name = s.geraet_name || s.geraet || 'unbekanntes Gerät';
+    const neben = [s.anzeigename || s.konto, s.herkunft,
+                   s.geraet_name ? s.geraet : null,
+                   s.fern ? 'über den Server' : null,
+                   s.kiosk ? 'Kiosk' : null,
+                   s.anzahl > 1 ? s.anzahl + ' Anmeldungen' : null]
+      .filter(Boolean).join(' · ');
+    return `<div class="geraet">
+      <span class="punkt ${still ? '' : s.fern ? 'warn' : 'gut'}"></span>
+      <span class="g-name">${esc(name)}<span class="g-neben">${esc(neben)}</span></span>
+      <span class="g-zeit">${still ? 'vor ' + dauer(seit) : 'jetzt'}</span>
+    </div>`;
+  }).join('');
+  return _karteKopf('Geräte an Bord', kopf) + `<div class="geraete">${zeilen}</div>`;
 }
+
+// ── Das Dashboard zeichnen ─────────────────────────────────────────────────
 
 function zeichneUeberblick() {
   const z = _daten.zustand;
   const v = _daten.verbindung;
+  if (!z) return;
 
-  if (z) {
-    const alter = z.alter_s;
-    $('ueberblickStand').textContent = (z.quelle === 'server' && alter != null)
-      ? `Stand: ${alter < 90 ? 'gerade eben' : 'vor ' + dauer(alter)}`
-      : 'Stand: laufend';
+  // Der Balken ganz oben. Er sagt das, was sonst niemand sagt: dass die GANZE
+  // Seite alt ist. Die Gruppenalter in den Karten könnten das nicht — sie sind
+  // mit dem Schnappschuss eingefroren. Eine Seite voller Zahlen, die aussehen
+  // wie von jetzt, ist auf einem Boot gefährlicher als eine leere Seite.
+  const alter = z.alter_s;
+  const w = $('dbWarnung');
+  if (z.quelle === 'server' && !z.boot_verbunden) {
+    const lange = (alter || 0) > 3600;
+    w.className = 'db-warnung' + (lange ? ' schwer' : '');
+    w.innerHTML = '<span class="dbw-mark">Gespeichert</span>'
+      + `<span>Das Boot ist nicht verbunden. Alle Werte auf dieser Seite sind der letzte
+         übertragene Stand — ${alter != null ? 'vor ' + esc(dauer(alter)) : 'Alter unbekannt'}.
+         Was sich seitdem geändert hat, steht hier nicht.</span>`;
+    w.hidden = false;
+  } else {
+    w.hidden = true;
+  }
 
-    // Der Balken ganz oben. Er sagt das, was sonst niemand sagt: dass die
-    // ganze Seite alt ist. Die Gruppenalter in den Karten könnten das nicht —
-    // sie sind mit dem Schnappschuss eingefroren.
-    const w = $('dbWarnung');
-    if (z.quelle === 'server' && !z.boot_verbunden) {
-      const lange = (alter || 0) > 3600;
-      w.className = 'db-warnung' + (lange ? ' schwer' : '');
-      w.innerHTML = '<span class="dbw-mark">Gespeichert</span>'
-        + `<span>Das Boot ist nicht verbunden. Alle Werte auf dieser Seite sind der letzte
-           übertragene Stand — ${alter != null ? 'vor ' + esc(dauer(alter)) : 'Alter unbekannt'}.
-           Was sich seitdem geändert hat, steht hier nicht.</span>`;
-      w.hidden = false;
-    } else {
-      w.hidden = true;
+  $('kAmpeln').innerHTML  = _ampelnBauen(z, v);
+  $('kOrt').innerHTML     = _ortBauen(z);
+  $('kStrom').innerHTML   = _stromBauen(z);
+  $('kHeizung').innerHTML = _heizungBauen(z);
+  $('kGeraete').innerHTML = _geraeteBauen();
+
+  // Das innerHTML oben hat das Kartenfeld gerade weggeworfen. Leaflet hielte
+  // danach einen Zeiger auf ein Element, das es nicht mehr gibt — deshalb wird
+  // die Instanz verworfen und in das frische Feld neu gebaut.
+  _dbKarte = null;
+  const pos = z.position;
+  if (pos && typeof pos.lat === 'number') {
+    if (_seite === 'ueberblick') dbKarteZeigen();
+    wetterPruefen(pos);
+  }
+}
+
+// ── Die kleine Karte im Dashboard ──────────────────────────────────────────
+// Eine eigene Leaflet-Instanz, nicht die der Positionsseite: zwei Karten in
+// einem Dokument sind für Leaflet kein Problem, EINE Karte in zwei Feldern
+// dagegen schon. Und die beiden zeigen Verschiedenes — hier nur, wo das Boot
+// jetzt liegt, dort die Spur der letzten Wochen.
+
+let _dbKarte = null, _dbKarteBoot = null;
+
+function dbKarteZeigen() {
+  const pos = (_daten.zustand || {}).position;
+  const feld = $('dbKarteFeld');
+  if (!feld || !pos || typeof pos.lat !== 'number') return;
+  leafletLaden().then(() => dbKarteZeichnen()).catch(() => {
+    const warte = feld.querySelector('.karten-warte');
+    if (warte) warte.textContent = 'Die Kartenbibliothek lässt sich nicht laden.';
+  });
+}
+
+function dbKarteZeichnen() {
+  const L = window.L;
+  const feld = $('dbKarteFeld');
+  const pos = (_daten.zustand || {}).position;
+  if (!L || !feld || !pos || typeof pos.lat !== 'number') return;
+
+  if (!_dbKarte) {
+    feld.innerHTML = '';
+    // Ohne Bedienelemente: das hier ist ein Blick, kein Werkzeug. Wer die
+    // Karte wirklich benutzen will, geht auf die Positionsseite — und genau
+    // dorthin führt ein Klick.
+    _dbKarte = L.map(feld, {
+      zoomControl: false, attributionControl: false,
+      scrollWheelZoom: false, dragging: false, doubleClickZoom: false,
+      boxZoom: false, keyboard: false, touchZoom: false,
+    });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, className: 'karte-grund',
+    }).addTo(_dbKarte);
+    L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
+                { maxZoom: 18 }).addTo(_dbKarte);
+    feld.style.cursor = 'pointer';
+    feld.addEventListener('click', () => { location.hash = 'position'; });
+    feld.title = 'Zur Positionsseite';
+  }
+  _dbKarte.setView([pos.lat, pos.lon], 14);
+  if (_dbKarteBoot) _dbKarte.removeLayer(_dbKarteBoot);
+  _dbKarteBoot = L.circleMarker([pos.lat, pos.lon], {
+    radius: 7, color: '#0b1120', weight: 2, fillColor: '#22d3ee', fillOpacity: 1,
+  }).addTo(_dbKarte);
+  // Nach dem Einblenden stimmt die Größe erst, wenn das Feld wirklich steht.
+  setTimeout(() => _dbKarte && _dbKarte.invalidateSize(), 60);
+}
+
+// ── Wetter am Liegeplatz ───────────────────────────────────────────────────
+// Geholt wird es vom SERVER, nicht vom Boot: der Pi hängt am teuersten
+// Datenweg dieses Systems, und das Wetter interessiert ohnehin nur den, der
+// gerade ins Logbuch schaut. Über das Boot zu gehen wäre die falsche Richtung.
+
+let _wetter = null;              // null | 'laedt' | Datensatz
+let _wetterOrt = null;           // die Position, zu der _wetter gehört
+let _wetterModelle = [];
+
+/**
+ * Neues Wetter holen, wenn es sich lohnt.
+ *
+ * Zwei Bremsen, und beide sind nötig. Die Position ändert sich mit jedem Fix
+ * um ein paar Meter — ohne die erste Bremse liefe bei jedem Durchlauf ein
+ * Abruf. Und am Liegeplatz ändert sie sich gar nicht — ohne die zweite gäbe es
+ * nie wieder neues Wetter.
+ */
+function wetterPruefen(pos) {
+  const jetzt = Date.now() / 1000;
+  const weit = !_wetterOrt
+    || Math.abs(_wetterOrt.lat - pos.lat) > 0.02
+    || Math.abs(_wetterOrt.lon - pos.lon) > 0.02;
+  const alt = !_wetterOrt || jetzt - _wetterOrt.t > 900;
+  if (_wetter === 'laedt' || !(weit || alt)) return;
+  _wetterOrt = { lat: pos.lat, lon: pos.lon, t: jetzt };
+  wetterLaden(pos.lat, pos.lon);
+}
+
+async function wetterLaden(lat, lon) {
+  const vorher = _wetter;
+  _wetter = vorher && vorher !== 'laedt' ? vorher : 'laedt';
+  const d = await hole(`/api/logbuch/wetter?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`);
+  // Schlägt der Abruf fehl, bleibt der alte Wert stehen. Das Wetter ändert sich
+  // langsamer als die Erreichbarkeit eines fremden Dienstes.
+  _wetter = d || (vorher !== 'laedt' ? vorher : null);
+  if (_seite === 'ueberblick' && _daten.zustand) {
+    const feld = $('kOrt');
+    if (feld) {
+      // Nur den Wetterteil tauschen: ein innerHTML auf der ganzen Karte würde
+      // die Karte darin wegwerfen und Leaflet neu aufbauen lassen — bei jedem
+      // Wetterabruf ein Flackern.
+      const alt = feld.querySelector('.wetter');
+      if (alt) alt.outerHTML = _wetterBauen();
     }
-
-    $('kBatterie').innerHTML = _karteBatterie(z);
-    $('kZufluss').innerHTML  = _karteZufluss(z);
-    $('kZellen').innerHTML   = _karteZellen(z);
-    $('kWaerme').innerHTML   = _karteWaerme(z);
-    $('kVorrat').innerHTML   = _karteVorrat(z);
-    $('kLicht').innerHTML    = _karteLicht(z);
-
-    // Die farbige Kante: nur da, wo wirklich etwas zu tun ist.
-    const b = z.battery || {}, bms = z.bms || {}, t = z.tanks || {};
-    const drift = (bms.highest_cell_v != null && bms.lowest_cell_v != null)
-      ? (bms.highest_cell_v - bms.lowest_cell_v) * 1000 : null;
-    const kante = (id, warnt, schlimm) => {
-      const e = $(id);
-      e.classList.toggle('warnt', !!warnt && !schlimm);
-      e.classList.toggle('schlimm', !!schlimm);
-    };
-    kante('kBatterie', b.soc != null && b.soc < 50, b.soc != null && b.soc < 25);
-    kante('kZellen', drift != null && drift >= 30, drift != null && drift >= 60);
-    kante('kVorrat',
-      [t.tank1, t.tank2].some(x => typeof x === 'number' && x < 25),
-      [t.tank1, t.tank2].some(x => typeof x === 'number' && x < 12));
-    const raeume = (z.heizung && z.heizung.state && z.heizung.state.rooms) || [];
-    kante('kWaerme', !raeume.some(r => typeof r.roomTemp === 'number'), false);
   }
+}
 
-  if (v) {
-    $('verbKurz').textContent = v.verbunden
-      ? 'seit ' + zeitpunkt(v.seit) : 'zurzeit unterbrochen';
-    _streifenBauen('streifenKurz', 'streifenKurzAchse', 1);
-    const ping = _reiheLetzt('ping_ms'), down = _reiheLetzt('down_mbit');
-    // Der Streifen darüber sagt, OB die Verbindung stand. Diese beiden Linien
-    // sagen, wie gut sie war — ein Boot kann durchgehend "verbunden" sein und
-    // trotzdem die halbe Nacht auf jede Antwort eine Sekunde warten.
-    $('dbNetz').innerHTML =
-      `<span>Antwortzeit <b>${ping != null ? Math.round(ping) + ' ms' : '—'}</b></span>`
-      + `<span>Durchsatz <b>${down != null ? down.toFixed(1) + ' Mbit/s' : '—'}</b></span>`
-      + `<span>Messwerte <b>${(_daten.diagnose && _daten.diagnose.verlauf_stand != null)
-            ? _daten.diagnose.verlauf_stand.toLocaleString('de-DE') : '—'}</b></span>`;
-    $('dbNetzVerlauf').innerHTML =
-      '<div class="dk-zeile"><span class="dk-name">Antwortzeit, 24 Std</span></div>'
-      + _funke(_reihe('ping_ms'), 'var(--yellow)')
-      + '<div class="dk-zeile"><span class="dk-name">Durchsatz, 24 Std</span></div>'
-      + _funke(_reihe('down_mbit'), 'var(--blau)');
-  }
+// ── Alarme seit dem letzten Blick ──────────────────────────────────────────
+// Die Frage, mit der jemand unterwegs ins Logbuch schaut, ist nicht "was ist
+// gerade", sondern "was war, während ich nicht hingesehen habe". Ein Alarm,
+// der um drei Uhr nachts kam und um vier von selbst wieder ging, taucht in
+// keinem Zustand mehr auf — und ist trotzdem genau das, was man wissen will.
+//
+// Deshalb liegt der Vorhang ÜBER allem und muss weggeklickt werden. Ein
+// stiller Streifen am Rand wäre höflicher und würde übersehen; ein übersehener
+// Alarm ist der teuerste Fehler, den diese Oberfläche machen kann.
+//
+// Ob quittiert oder nicht, steht dabei: ein Alarm, der von selbst wieder ging,
+// ohne dass ihn je jemand gesehen hat, ist etwas anderes als einer, den jemand
+// zur Kenntnis genommen hat.
 
-  // Was zuletzt los war: Ausfälle und Ereignisse in EINER Liste, damit man
-  // nicht zwei Zeitachsen im Kopf zusammenfügen muss.
-  const eintraege = [];
-  for (const l of (v?.luecken || [])) {
-    const a = ART[l.art] || ART.unbekannt;
-    eintraege.push({ t: l.ab, marke: l.art, wort: a.wort, text: l.grund || a.satz,
-                     rechts: dauer(l.dauer_s) });
-  }
-  for (const e of (_daten.diagnose?.ereignisse || [])) {
-    eintraege.push({ t: e.zeit || e.wand, marke: '', wort: '', text: ereignisText(e), rechts: '' });
-  }
-  eintraege.sort((a, b) => (b.t || 0) - (a.t || 0));
-  // Sechs statt acht, und mit eigener Rolle: sonst bestimmt allein die Laenge
-  // dieser Liste die Hoehe des ganzen Bandes, und die Verbindungskarte daneben
-  // steht zur Haelfte leer.
-  const zeigen = eintraege.slice(0, 6);
-  $('letztes').innerHTML = zeigen.length ? zeigen.map(x => `
-    <div class="zeile">
-      <div class="z-zeit">${esc(zeitpunkt(x.t))}</div>
-      <div><div class="z-text">${x.marke ? `<span class="z-marke ${esc(x.marke)}">${esc(x.wort)}</span>` : ''}${esc(x.text)}</div></div>
-      <div class="z-dauer">${esc(x.rechts)}</div>
-    </div>`).join('') : '<div class="leerlauf">Nichts Auffälliges.</div>';
+let _alarmStand = 0;
+
+async function alarmeLaden() {
+  const d = await hole('/api/logbuch/alarme');
+  if (!d) return;
+  _alarmStand = d.stand || 0;
+  const liste = d.alarme || [];
+  if (!liste.length) { $('alarmVorhang').hidden = true; return; }
+
+  const jetzt = Date.now() / 1000;
+  const marke = (a) => {
+    const teile = [];
+    if (a.quittiert) teile.push('<span class="ak-marke quittiert">bestätigt</span>');
+    else teile.push('<span class="ak-marke offen">nicht bestätigt</span>');
+    if (a.weg) teile.push('<span class="ak-marke weg">wieder vorbei</span>');
+    else teile.push('<span class="ak-marke">steht noch an</span>');
+    if (a.male > 1) teile.push(`<span class="ak-marke">${a.male}×</span>`);
+    return `<div class="ak-marken">${teile.join('')}</div>`;
+  };
+  const stufe = { critical: 'rot', warning: 'warn', info: '' };
+
+  $('alarmListe').innerHTML = liste.map(a => {
+    // Wert und Schwelle nur, wenn beide dastehen: "12,1 (Schwelle 12,0)" ist
+    // eine Aussage, ein einzelnes "12,1" ohne Bezug ist keine.
+    const zahlen = (a.wert != null && a.schwelle != null)
+      ? `${_zahl(a.wert)} bei Schwelle ${_zahl(a.schwelle)}` : '';
+    const alt = a.zeit ? jetzt - a.zeit : null;
+    return `<div class="ak-eintrag">
+      <span class="punkt ${stufe[a.schwere] || 'warn'}"></span>
+      <span>
+        <div class="ak-name">${esc(a.name)}</div>
+        ${zahlen ? `<div class="ak-neben">${esc(zahlen)}</div>` : ''}
+        ${marke(a)}
+      </span>
+      <span class="ak-zeit">${esc(alt != null && alt < 86400 * 2
+        ? 'vor ' + dauer(alt) : zeitpunkt(a.zeit))}</span>
+    </div>`;
+  }).join('');
+
+  const offen = liste.filter(a => !a.quittiert).length;
+  $('alarmZahl').textContent = liste.length === 1 ? '1 Alarm' : liste.length + ' Alarme';
+  $('alarmHinweis').textContent = offen
+    ? `${offen} davon ${offen === 1 ? 'wurde' : 'wurden'} an Bord nicht bestätigt.`
+    : 'Alle wurden an Bord bestätigt.';
+  $('alarmVorhang').hidden = false;
+}
+
+/** Eine Zahl so kurz wie möglich, ohne zu lügen. */
+function _zahl(v) {
+  if (typeof v !== 'number') return String(v);
+  return Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Math.abs(v) < 10 ? 2 : 1);
+}
+
+async function alarmeGesehen() {
+  $('alarmVorhang').hidden = true;
+  // Der Stand kommt aus der ANZEIGE und nicht vom Server: zwischen Aufbau und
+  // Klick kann ein neuer Alarm eingetroffen sein, und den hätte hier niemand
+  // gesehen. Er soll beim nächsten Öffnen wieder auftauchen.
+  await fetch('/api/logbuch/alarme/gesehen', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stand: _alarmStand }),
+  }).catch(() => {});
+}
+
+// ── Einstellungen des Logbuchs ─────────────────────────────────────────────
+// Bootweit und nicht je Konto: welches Wettermodell für dieses Revier taugt,
+// ist eine Erkenntnis über die Gegend und keine Geschmacksfrage.
+
+let _einstellungen = null;
+
+async function einstellungenLaden() {
+  const d = await hole('/api/logbuch/einstellungen');
+  if (!d) return;
+  _einstellungen = d;
+  _wetterModelle = d.wetter_modelle || [];
+  zeichneEinstellungen();
+}
+
+function zeichneEinstellungen() {
+  const feld = $('einstellungen');
+  if (!feld || !_einstellungen) return;
+  const darf = (_konto.handlungen || []).includes('einstellen');
+  const jetzt = _einstellungen.wetter_modell;
+  feld.innerHTML = `
+    <div class="tafel-kopf"><h2>Wettermodell</h2>
+      <span class="hinweis">${darf ? '' : 'nur lesend — dafür fehlt die Berechtigung'}</span></div>
+    <p class="es-text">Welches Modell die Wetterdaten für den Liegeplatz liefert.
+      Über Nord- und Ostsee rechnet ICON des Deutschen Wetterdienstes deutlich
+      feiner als ein globales Modell; im Mittelmeer oder auf dem Atlantik kann
+      eine andere Wahl besser sein. Die Vorhersage kommt in jedem Fall von
+      Open-Meteo und wird zehn Minuten lang zwischengespeichert.</p>
+    <div class="es-wahl">${(_einstellungen.wetter_modelle || []).map(m => `
+      <label class="es-zeile${m.kennung === jetzt ? ' an' : ''}">
+        <input type="radio" name="wettermodell" value="${esc(m.kennung)}"
+          ${m.kennung === jetzt ? 'checked' : ''} ${darf ? '' : 'disabled'}
+          onchange="wetterModellSetzen(this.value)">
+        <span><b>${esc(m.name)}</b><span class="es-neben">${esc(m.neben)}</span></span>
+      </label>`).join('')}</div>`;
+}
+
+async function wetterModellSetzen(kennung) {
+  const r = await fetch('/api/logbuch/einstellungen', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wetter_modell: kennung }),
+  }).catch(() => null);
+  if (!r || !r.ok) { popZeigen(`<div class="pop-titel">Nicht gespeichert</div>
+    <p style="color:var(--text2);font-size:13px">Das Modell ließ sich nicht setzen.</p>
+    <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Gut</button></div>`);
+    return; }
+  _einstellungen.wetter_modell = kennung;
+  zeichneEinstellungen();
+  // Das alte Wetter stammt vom alten Modell — es jetzt stehen zu lassen, hiesse
+  // eine Zahl unter einem Namen zu zeigen, der sie nicht gerechnet hat.
+  _wetter = null; _wetterOrt = null;
+  const pos = (_daten.zustand || {}).position;
+  if (pos && typeof pos.lat === 'number') wetterPruefen(pos);
 }
 
 // ── Position ───────────────────────────────────────────────────────────────
@@ -935,78 +1280,6 @@ async function positionKopieren(lat, lon) {
   }
 }
 
-function zeichneAnwesend() {
-  const a = _daten.anwesend;
-  const feld = $('anwesend');
-  if (!a) { feld.innerHTML = '<div class="leerlauf">wird geladen…</div>'; return; }
-  const jetzt = Date.now() / 1000;
-
-  // Mehrere Sitzungen desselben Kontos auf demselben Gerät sind KEINE
-  // mehreren Anwesenden — sie entstehen bei jedem neuen Browserfenster und bei
-  // jedem Werkzeugaufruf. Zusammengefasst wird nach Konto und Gerät, gezeigt
-  // wird die jüngste; die Anzahl steht daneben, damit vergessene Anmeldungen
-  // trotzdem auffallen.
-  const buendeln = (liste) => {
-    const m = new Map();
-    for (const s of liste || []) {
-      const schluessel = (s.konto || '') + '|' + (s.geraet || '') + '|' + (s.herkunft || '');
-      const da = m.get(schluessel);
-      if (!da) m.set(schluessel, { ...s, anzahl: 1 });
-      else {
-        da.anzahl++;
-        if ((s.zuletzt || 0) > (da.zuletzt || 0)) { da.zuletzt = s.zuletzt; }
-        if ((s.seit || 0) < (da.seit || 0)) { da.seit = s.seit; }
-      }
-    }
-    return [...m.values()].sort((a, b) => (b.zuletzt || 0) - (a.zuletzt || 0));
-  };
-
-  const zeile = (s, art) => {
-    const seit = jetzt - (s.zuletzt || 0);
-    const still = seit > 300;
-    return `<div class="aw-zeile">
-      <span class="aw-punkt ${still ? 'still' : art}"></span>
-      <span>
-        <div class="aw-wer">${esc(s.anzeigename || s.konto)}${s.kiosk ? ' <span class="hinweis">(Kiosk)</span>' : ''}</div>
-        <div class="aw-was">${esc(s.geraet || 'unbekanntes Gerät')}${s.herkunft ? ' · ' + esc(s.herkunft) : ''}${
-          s.anzahl > 1 ? ' · ' + s.anzahl + ' Anmeldungen' : ''}</div>
-      </span>
-      <span class="aw-wann">${still ? 'zuletzt vor ' + dauer(seit) : 'gerade aktiv'}</span>
-    </div>`;
-  };
-
-  // "Wer ist da" heisst: wer JETZT da ist. Eine Sitzung, die seit einer
-  // Stunde nichts mehr getan hat, gehoert nicht in diese Liste — das Gerät
-  // liegt in der Schublade, der Browser ist zu, oder jemand ist von Bord. Die
-  // Sitzung bleibt gültig, sie wird nur nicht mehr als Anwesenheit gezählt.
-  const ANWESEND_S = 30 * 60;
-  const frisch = (liste) => (liste || []).filter(s => jetzt - (s.zuletzt || 0) < ANWESEND_S);
-  const stille = (liste) => (liste || []).filter(s => jetzt - (s.zuletzt || 0) >= ANWESEND_S);
-
-  let h = '';
-  const bordDa = buendeln(frisch(a.an_bord));
-  const fernDa = buendeln(frisch(a.ueber_server));
-  const ruhend = buendeln([...stille(a.an_bord), ...stille(a.ueber_server)]);
-
-  if (bordDa.length) {
-    h += '<div class="aw-gruppe">An Bord</div>' + bordDa.map(s => zeile(s, '')).join('');
-  } else if (a.boot_erreichbar) {
-    h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Niemand am Bordrechner angemeldet.</div>';
-  } else {
-    h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Das Boot ist nicht verbunden — von dort ist nichts zu erfahren.</div>';
-  }
-  if (fernDa.length) {
-    h += '<div class="aw-gruppe">Aus der Ferne</div>'
-       + fernDa.map(s => zeile(s, 'fern')).join('');
-  }
-  if (ruhend.length) {
-    // Nicht verschweigen, aber auch nicht als anwesend zeigen: eine
-    // vergessene Anmeldung auf einem fremden Gerät soll auffallen.
-    h += `<div class="aw-gruppe">Angemeldet, aber still (${ruhend.length})</div>`
-       + ruhend.slice(0, 5).map(s => zeile(s, 'still')).join('');
-  }
-  feld.innerHTML = h;
-}
 
 async function laden() {
   const [v, d, z, a] = await Promise.all([
@@ -1020,7 +1293,6 @@ async function laden() {
   zeichneZustand();
   zeichneUeberblick();
   if (_seite === 'position') { zeichnePosition(); if (_karte) karteZeichnen(); }
-  zeichneAnwesend();
   zeichneStreifen();
   zeichneZahlen();
   zeichneAusfaelle();

@@ -1049,10 +1049,29 @@
        `var(--red)33` ist kein gueltiger Farbwert — so haengt man keine
        Deckkraft an eine Variable. Der Browser hat die ganze Zeile verworfen,
        der Alarmring war also nie zu sehen. */
-    .card--alarm { border-color: var(--red) !important;
-      box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent);
-      transition: border-color .3s; }
-    .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
+    .card--alarm {
+      border-color: var(--red) !important;
+      /* Der Alarmring liegt WEITER INNEN als der blaue Ring beim Anfassen —
+         und auf einer anderen Eigenschaft.
+         Vorher nutzten beide box-shadow. Das ist dieselbe Eigenschaft, also
+         gewann die spaetere Regel: beim Anfassen verschwand der rote Ring, und
+         uebrig blieben roter Rahmen und blauer Ring uebereinander. Ein Alarm,
+         der beim Beruehren unsichtbar wird, ist keiner.
+         Jetzt: blau an der Kante (box-shadow), rot vier Pixel dahinter
+         (outline mit negativem Abstand). Beide gleichzeitig sichtbar, und
+         keiner kann den anderen verdraengen.
+         Beim Kacheln-Ordnen gewinnt die gestrichelte Greifkante — das ist ein
+         gewollter Ausnahmezustand und dauert, solange man ordnet. */
+      outline: 2px solid color-mix(in srgb, var(--red) 75%, transparent);
+      outline-offset: -5px;
+      box-shadow: none;
+      transition: border-color .3s;
+    }
+    /* Auch hier stand `var(--red)55` — kein gueltiger Farbwert, so haengt man
+       keine Deckkraft an eine Variable. Der Browser hat die Zeile verworfen,
+       den Ring gab es nie. */
+    .tank-bar-wrap--alarm { border-color: var(--red) !important;
+      box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent); }
 
     /* ── Wetter tile ── */
     .card-wx .wx-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

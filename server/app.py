@@ -1111,6 +1111,273 @@ def diagnose(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse
     })
 
 
+# ── Alarme seit dem letzten Blick ───────────────────────────────────────────
+# Die Frage, mit der man unterwegs ins Logbuch schaut, ist nicht "was ist
+# gerade", sondern "was war, waehrend ich nicht hingesehen habe". Ein Alarm,
+# der um drei Uhr nachts kam und um vier von selbst wieder ging, taucht in
+# keinem Zustand mehr auf — im Ereignisstrom steht er.
+#
+# Der Merker liegt JE KONTO. Zwei Leute schauen unabhaengig voneinander ins
+# Logbuch; haette der Marker nur einen Stand, wuerde der erste dem zweiten die
+# Meldung wegnehmen.
+
+_ALARM_ARTEN = ('alarm', 'alarm_quittiert', 'alarm_weg')
+
+
+def _alarme_seit(folge: int) -> list[dict]:
+    """Die Ereignisse ab `folge` zu einer Liste von Alarmen falten.
+
+    Vorwaerts durch den Strom: erst das Auftreten, dann was daraus wurde.
+    Rueckwaerts liesse sich "spaeter quittiert" nicht von "vorher quittiert"
+    unterscheiden.
+
+    Quittierungen und Aufloesungen zu Alarmen, deren Auftreten VOR dem Merker
+    liegt, werden uebergangen. Sie sind kein neuer Vorfall — der Alarm selbst
+    stand schon beim letzten Blick in der Liste.
+    """
+    nach_kennung: dict[str, dict] = {}
+    for e in speicher.ereignisse_ab(folge, _ALARM_ARTEN, grenze=300):
+        d = e.get('daten') or {}
+        kennung = str(d.get('kennung') or '')
+        if not kennung:
+            continue
+        if e['art'] == 'alarm':
+            # Derselbe Alarm kann in der Zeitspanne mehrfach gekommen und
+            # gegangen sein. Gezaehlt wird, wie oft — angezeigt wird einer.
+            vorhanden = nach_kennung.get(kennung)
+            if vorhanden:
+                vorhanden['male'] += 1
+                vorhanden['zeit'] = d.get('zeit') or e.get('zeit')
+                vorhanden['quittiert'] = False
+                vorhanden['weg'] = False
+            else:
+                nach_kennung[kennung] = {
+                    'kennung': kennung,
+                    'name': d.get('name') or kennung,
+                    'schluessel': d.get('schluessel'),
+                    'wert': d.get('wert'),
+                    'schwelle': d.get('schwelle'),
+                    'schwere': d.get('schwere') or 'warning',
+                    'zeit': d.get('zeit') or e.get('zeit'),
+                    'folge': e['folge'],
+                    'quittiert': False,
+                    'weg': False,
+                    'male': 1,
+                }
+        elif kennung in nach_kennung:
+            if e['art'] == 'alarm_quittiert':
+                nach_kennung[kennung]['quittiert'] = True
+            else:
+                nach_kennung[kennung]['weg'] = True
+                nach_kennung[kennung]['weg_zeit'] = e.get('zeit')
+    # Schwer zuerst, danach das Juengste oben: wer schnell schaut, liest genau
+    # die Zeile, auf die es ankommt.
+    rang = {'critical': 0, 'warning': 1, 'info': 2}
+    return sorted(nach_kennung.values(),
+                  key=lambda a: (rang.get(a['schwere'], 3), -(a['zeit'] or 0)))
+
+
+@app.get('/api/logbuch/alarme')
+def logbuch_alarme(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    konto_name = str(k.get('name') or '')
+    stand = speicher.ereignis_stand()
+    seit = speicher.merker('alarme_gesehen', konto=konto_name, vorgabe=None)
+    # Beim ALLERERSTEN Besuch nicht die ganze Vergangenheit aufblaettern: der
+    # Vorhang soll melden, was seit dem letzten Blick war, und nicht bei der
+    # Einfuehrung mit dreihundert alten Alarmen aufschlagen. Ohne Merker gilt
+    # deshalb der jetzige Stand als gesehen.
+    if seit is None:
+        speicher.merker_setzen('alarme_gesehen', stand, konto=konto_name)
+        return JSONResponse({'stand': stand, 'seit': stand, 'alarme': [], 'erstbesuch': True})
+    return JSONResponse({'stand': stand, 'seit': int(seit),
+                         'alarme': _alarme_seit(int(seit)), 'erstbesuch': False})
+
+
+class AlarmeGesehen(BaseModel):
+    stand: int = 0
+
+
+@app.post('/api/logbuch/alarme/gesehen')
+def logbuch_alarme_gesehen(body: AlarmeGesehen,
+                           k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    """Bis hierhin gesehen.
+
+    Der Stand kommt aus der Anzeige und nicht aus der Datenbank: zwischen dem
+    Aufbau des Vorhangs und dem Klick kann ein neuer Alarm eingetroffen sein,
+    und den haette der Betrachter dann nie zu Gesicht bekommen.
+    """
+    stand = max(0, min(int(body.stand or 0), speicher.ereignis_stand()))
+    speicher.merker_setzen('alarme_gesehen', stand, konto=str(k.get('name') or ''))
+    return JSONResponse({'ok': True, 'stand': stand})
+
+
+# ── Einstellungen des Logbuchs ──────────────────────────────────────────────
+# Bootweit und nicht je Konto: welches Wettermodell fuer dieses Revier taugt,
+# ist eine Erkenntnis ueber die Gegend und keine Geschmacksfrage.
+
+_WETTERMODELLE = [
+    {'kennung': 'best_match',      'name': 'Automatisch',
+     'neben': 'Open-Meteo waehlt je Ort das passendste Modell'},
+    {'kennung': 'icon_seamless',   'name': 'DWD ICON',
+     'neben': 'Deutscher Wetterdienst — fein aufgeloest über Nord- und Ostsee'},
+    {'kennung': 'ecmwf_ifs025',    'name': 'ECMWF IFS',
+     'neben': 'Europäisches Zentrum — global stark, gröber im Detail'},
+    {'kennung': 'knmi_seamless',   'name': 'KNMI Harmonie',
+     'neben': 'Niederlande — Nordsee und südliche Ostsee'},
+    {'kennung': 'meteofrance_seamless', 'name': 'Météo-France AROME',
+     'neben': 'Frankreich, Ärmelkanal und Biskaya'},
+    {'kennung': 'ukmo_seamless',   'name': 'UK Met Office',
+     'neben': 'Britische Inseln und Nordsee'},
+    {'kennung': 'gfs_seamless',    'name': 'NOAA GFS',
+     'neben': 'USA — global, als Gegenprobe'},
+]
+_MODELL_KENNUNGEN = {m['kennung'] for m in _WETTERMODELLE}
+_MODELL_VORGABE = 'icon_seamless'
+
+
+@app.get('/api/logbuch/einstellungen')
+def logbuch_einstellungen(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    return JSONResponse({
+        'wetter_modell': speicher.merker('wetter_modell', vorgabe=_MODELL_VORGABE),
+        'wetter_modelle': _WETTERMODELLE,
+    })
+
+
+class LogbuchEinstellungen(BaseModel):
+    wetter_modell: str | None = None
+
+
+@app.post('/api/logbuch/einstellungen')
+def logbuch_einstellungen_setzen(body: LogbuchEinstellungen,
+                                 k: dict = Depends(braucht(r.EINSTELLEN))) -> JSONResponse:
+    if body.wetter_modell is not None:
+        if body.wetter_modell not in _MODELL_KENNUNGEN:
+            raise HTTPException(400, detail='Unbekanntes Wettermodell')
+        speicher.merker_setzen('wetter_modell', body.wetter_modell)
+        _wetter_zwischenspeicher.clear()
+    return JSONResponse({'ok': True,
+                         'wetter_modell': speicher.merker('wetter_modell',
+                                                          vorgabe=_MODELL_VORGABE)})
+
+
+# ── Wetter am Liegeplatz ────────────────────────────────────────────────────
+# Vom Server geholt und nicht vom Boot: der Pi haengt am teuersten Datenweg,
+# den dieses System hat (Mobilfunk oder Starlink), und das Wetter interessiert
+# ohnehin nur den, der gerade ins Logbuch schaut. Es waere die falsche Seite.
+#
+# Open-Meteo braucht keinen Schluessel und erlaubt die freie Nutzung. Die
+# Modellwahl geht mit: ueber der Ostsee liegt ICON deutlich naeher an der
+# Wirklichkeit als ein globales Modell, und wer das Revier kennt, soll das
+# einstellen koennen.
+
+_WETTER_URL = 'https://api.open-meteo.com/v1/forecast'
+_WETTER_FELDER = ('temperature_2m,apparent_temperature,relative_humidity_2m,'
+                  'precipitation,weather_code,cloud_cover,pressure_msl,'
+                  'wind_speed_10m,wind_direction_10m,wind_gusts_10m')
+# Zehn Minuten. Ein Wettermodell rechnet stuendlich; oefter zu fragen holt
+# dieselbe Zahl noch einmal und belastet einen fremden, freien Dienst.
+_WETTER_FRIST_S = 600
+_wetter_zwischenspeicher: dict = {}
+
+# WMO-Schluessel in Worte. Die Tabelle ist genormt; die Uebersetzung ist es
+# nicht — "Nieselregen" statt "leichter Niederschlag geringer Intensitaet".
+_WMO = {
+    0: 'klar', 1: 'überwiegend klar', 2: 'teils bewölkt', 3: 'bedeckt',
+    45: 'Nebel', 48: 'gefrierender Nebel',
+    51: 'leichter Niesel', 53: 'Niesel', 55: 'starker Niesel',
+    56: 'gefrierender Niesel', 57: 'gefrierender Niesel',
+    61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen',
+    66: 'gefrierender Regen', 67: 'gefrierender Regen',
+    71: 'leichter Schneefall', 73: 'Schneefall', 75: 'starker Schneefall',
+    77: 'Schneegriesel',
+    80: 'Regenschauer', 81: 'Regenschauer', 82: 'kräftige Schauer',
+    85: 'Schneeschauer', 86: 'starke Schneeschauer',
+    95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'schweres Gewitter mit Hagel',
+}
+
+
+def _wetter_wert(jetzt: dict, feld: str):
+    """Einen Wert aus dem `current`-Block holen.
+
+    Open-Meteo haengt den Modellnamen an die Feldnamen an, sobald mehr als ein
+    Modell abgefragt wird. Wir fragen genau eines ab, dann bleiben die Namen
+    schlicht — aber sich darauf zu verlassen hiesse, dass eine spaetere
+    Erweiterung auf zwei Modelle die Anzeige lautlos leert.
+    """
+    if feld in jetzt:
+        return jetzt[feld]
+    for name, wert in jetzt.items():
+        if name.startswith(feld + '_'):
+            return wert
+    return None
+
+
+def _wetter_holen(lat: float, lon: float, modell: str) -> dict:
+    import urllib.parse
+    import urllib.request
+    frage = {
+        'latitude': f'{lat:.4f}', 'longitude': f'{lon:.4f}',
+        'current': _WETTER_FELDER,
+        'wind_speed_unit': 'kn',      # an Bord wird in Knoten gesprochen
+        'timezone': 'auto',
+        'forecast_days': '1',
+    }
+    if modell and modell != 'best_match':
+        frage['models'] = modell
+    url = _WETTER_URL + '?' + urllib.parse.urlencode(frage)
+    anfrage = urllib.request.Request(url, headers={'User-Agent': 'mave-logbuch'})
+    with urllib.request.urlopen(anfrage, timeout=12) as antwort:
+        roh = json.loads(antwort.read().decode('utf-8'))
+    jetzt = roh.get('current') or {}
+    code = _wetter_wert(jetzt, 'weather_code')
+    return {
+        'temperatur': _wetter_wert(jetzt, 'temperature_2m'),
+        'gefuehlt': _wetter_wert(jetzt, 'apparent_temperature'),
+        'feuchte': _wetter_wert(jetzt, 'relative_humidity_2m'),
+        'niederschlag': _wetter_wert(jetzt, 'precipitation'),
+        'bewoelkung': _wetter_wert(jetzt, 'cloud_cover'),
+        'druck': _wetter_wert(jetzt, 'pressure_msl'),
+        'wind_kn': _wetter_wert(jetzt, 'wind_speed_10m'),
+        'boe_kn': _wetter_wert(jetzt, 'wind_gusts_10m'),
+        'wind_grad': _wetter_wert(jetzt, 'wind_direction_10m'),
+        'code': code,
+        'text': _WMO.get(int(code), 'unbekannt') if isinstance(code, (int, float)) else None,
+        'gemessen': jetzt.get('time'),
+        'hoehe_m': roh.get('elevation'),
+        'modell': modell,
+        'geholt': time.time(),
+    }
+
+
+@app.get('/api/logbuch/wetter')
+async def logbuch_wetter(lat: float = Query(...), lon: float = Query(...),
+                         k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(400, detail='Unbrauchbare Position')
+    modell = speicher.merker('wetter_modell', vorgabe=_MODELL_VORGABE)
+    if modell not in _MODELL_KENNUNGEN:
+        modell = _MODELL_VORGABE
+    # Auf zwei Nachkommastellen gerundet: das sind gut zwei Kilometer, und
+    # innerhalb davon rechnet kein Modell etwas anderes. Ohne das Runden waere
+    # jede Positionsmeldung des GNSS ein neuer Abruf.
+    schluessel = (round(lat, 2), round(lon, 2), modell)
+    treffer = _wetter_zwischenspeicher.get(schluessel)
+    if treffer and time.time() - treffer['geholt'] < _WETTER_FRIST_S:
+        return JSONResponse(treffer)
+    try:
+        daten = await run_in_threadpool(_wetter_holen, lat, lon, modell)
+    except Exception as e:
+        log.warning('Wetter nicht abrufbar: %s', e)
+        # Lieber ein alter Wert mit ehrlichem Alter als gar keiner: das Wetter
+        # aendert sich langsamer als die Verbindung zu einem fremden Dienst.
+        if treffer:
+            return JSONResponse({**treffer, 'veraltet': True})
+        raise HTTPException(502, detail='Wetterdienst nicht erreichbar') from None
+    _wetter_zwischenspeicher.clear()      # eine Position, ein Eintrag
+    _wetter_zwischenspeicher[schluessel] = daten
+    return JSONResponse(daten)
+
+
 @app.get('/api/stand')
 def oberflaechen_stand() -> JSONResponse:
     """Wie auf dem Pi: womit die Oberflaeche ausgeliefert wuerde."""
