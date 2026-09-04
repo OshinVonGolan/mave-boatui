@@ -1235,8 +1235,14 @@
       user-select: none; -webkit-tap-highlight-color: transparent; }
     .preset-btn:hover:not(.disabled) { border-color: var(--accent2); background: #1a3244; }
     .preset-btn:active:not(.disabled) { transform: scale(.96); }
+    /* Der Ring lag NACH AUSSEN (box-shadow ohne inset). Aussen wird er vom
+       Nachbarn ueberdeckt und am Kartenrand beschnitten — oben sah er deshalb
+       schmaler aus als an den anderen Seiten, und kein Nachziehen der Abstaende
+       hat das je ganz behoben. Nach innen gelegt kann ihm beides nicht mehr
+       passieren: er liegt vollstaendig im Knopf.
+       Zusammen mit dem Rahmen ergibt das gleichmaessige 3 px ringsum. */
     .preset-btn.active { border-color: var(--accent); background: rgba(6,182,212,.12);
-      box-shadow: 0 0 0 1px var(--accent); }
+      box-shadow: inset 0 0 0 2px var(--accent); }
     .preset-btn.disabled { opacity: .35; cursor: not-allowed; }
     .preset-emoji { font-size: 22px; line-height: 1; }
     .preset-name  { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; }
