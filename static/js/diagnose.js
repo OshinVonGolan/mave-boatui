@@ -678,14 +678,6 @@ let _karte = null, _karteSpur = null, _karteBoot = null, _karteLiegen = null;
 let _leaflet = null;
 
 /**
- * Die Kartenbibliothek erst holen, wenn jemand die Karte auch sehen will.
- *
- * 145 kB bei jedem Öffnen des Logbuchs mitzuschleppen wäre Verschwendung —
- * die meisten Besuche gelten dem Ladestand, nicht der Karte. Sie liegt bei
- * uns und nicht in einem Verteilnetz: die Seite soll nicht davon abhängen,
- * dass ein fremder Server erreichbar ist.
- */
-/**
  * Fuehrt --ueberblick-h an der Hoehe, die dem Ueberblick tatsaechlich bleibt.
  *
  * Nicht gerechnet, sondern gemessen: die Kopfzeile bricht auf schmalen
@@ -715,6 +707,14 @@ function _ueberblickHoeheFuehren() {
   window.addEventListener('orientationchange', setzen);
 }
 
+/**
+ * Die Kartenbibliothek erst holen, wenn jemand die Karte auch sehen will.
+ *
+ * 145 kB bei jedem Öffnen des Logbuchs mitzuschleppen wäre Verschwendung —
+ * die meisten Besuche gelten dem Ladestand, nicht der Karte. Sie liegt bei
+ * uns und nicht in einem Verteilnetz: die Seite soll nicht davon abhängen,
+ * dass ein fremder Server erreichbar ist.
+ */
 function leafletLaden() {
   if (_leaflet) return _leaflet;
   _leaflet = new Promise((fertig, schiefgegangen) => {
