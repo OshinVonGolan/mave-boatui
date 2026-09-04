@@ -915,6 +915,23 @@ function vollbildNichtMehr() {
 
 const _GESTE_SCHWELLE = 1.25;   // ab 25 % Abstandsänderung ist es gemeint
 
+// Ab welcher Fensterbreite die Geste überhaupt etwas bewirkt.
+//
+// Am laufenden System gemessen: bei zwei Spalten laufen unterhalb von rund
+// 205 px je Kachel Inhalte über ihren Rand, und die Kacheln werden dafür schon
+// auf 60 % verkleinert. Auf einem Telefon (390–430 px Fensterbreite) bleiben
+// zwei Spalten damit unter jeder brauchbaren Grösse — die Geste tut dort so,
+// als gäbe es eine Wahl, die es nicht gibt.
+//
+// 480 px: darunter ist Schluss. Das trifft Telefone im Hochformat und lässt
+// Tablets ab 8 Zoll durch.
+const _GESTE_MIN_BREITE = 480;
+
+// Und mehr als zwei Spalten macht die Geste nicht. Drei oder vier sind eine
+// Entscheidung für einen grossen Bildschirm — die trifft man einmal in den
+// Einstellungen und nicht im Vorbeiwischen.
+const _GESTE_MAX_SPALTEN = 2;
+
 // Der Abstand beim Aufsetzen und der zuletzt gemessene. Ausgewertet wird erst
 // beim Loslassen — waehrend des Spreizens wuerde es sonst mehrfach schalten.
 let _gesteAnfang = 0, _gesteJetzt = 0;
@@ -925,8 +942,14 @@ function _fingerAbstand(t) {
 
 function _spaltenGeste(richtung) {
   if (!_dsp) _dspLoad();
+  if (window.innerWidth < _GESTE_MIN_BREITE) {
+    // Nicht schweigen: die Geste war Absicht, und seit der Browser-Zoom aus ist
+    // passiert sonst gar nichts — man haelt es für einen Fehler.
+    _toast('Zu schmal für zwei Spalten');
+    return;
+  }
   const jetzt = _cols();
-  const ziel = Math.max(1, Math.min(4, jetzt + richtung));
+  const ziel = Math.max(1, Math.min(_GESTE_MAX_SPALTEN, jetzt + richtung));
   if (ziel === jetzt) {
     _toast(richtung > 0 ? 'Mehr Spalten gehen nicht' : 'Weniger Spalten gehen nicht');
     return;

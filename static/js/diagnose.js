@@ -1214,7 +1214,17 @@ function ereignisText(x) {
         ? 'Übertragung gedrosselt — das Boot hängt am Mobilfunk'
         : 'Volle Übertragung — das Boot hat wieder festes Netz';
     case 'start':   return 'Das Boot hat sich angemeldet';
-    case 'alarm':   return `Alarm: ${d.text || d.name || 'ohne Angabe'}`;
+    case 'alarm': {
+      // Der Wert gehört dazu: "Alarm: Ladestand" sagt nicht, ob es knapp oder
+      // dramatisch war. Mit Wert und Schwelle liest man es in einer Zeile.
+      const name = d.name || d.text || 'ohne Angabe';
+      const zusatz = (d.wert != null && d.schwelle != null)
+        ? ` (${d.wert} statt ${d.schwelle})`
+        : (d.wert != null ? ` (${d.wert})` : '');
+      return `Alarm: ${name}${zusatz}`
+        + (d.schwere === 'critical' ? ' — kritisch' : '');
+    }
+    case 'alarm_weg': return 'Alarm vorbei';
     default:        return x.art || 'Ereignis';
   }
 }

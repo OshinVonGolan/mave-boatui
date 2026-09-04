@@ -68,7 +68,7 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'laden', 'heizung', 'wartung', 'netz', 'system', 'display'].forEach(c =>
+  ['tanks', 'batt', 'laden', 'heizung', 'wartung', 'netz', 'system', 'alarme', 'display'].forEach(c =>
     $(`setPane-${c}`)?.classList.toggle('active', c === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
@@ -81,6 +81,7 @@ function switchSettingsCat(cat) {
   } else {
     clearInterval(_settingsNetTimer); _settingsNetTimer = null;
   }
+  if (cat === 'alarme')  openAlarmSettings();
   if (cat === 'system')  refreshVersion();
   if (cat === 'laden')   refreshChargerStatus();
   if (cat === 'display') openDisplaySettings();

@@ -235,6 +235,32 @@ class Nachliefern(unittest.IsolatedAsyncioTestCase):
             aufgabe.cancel()
 
 
+class Ereignisnummern(unittest.TestCase):
+    """Ereignisse brauchen eine Nummer, die es nur einmal gibt.
+
+    Der Server legt sie mit `folge` als Primärschlüssel und INSERT OR IGNORE
+    ab. Die Betriebsart-Meldung schickte immer 0 — in der Datenbank stand
+    deshalb genau EIN solches Ereignis, jeder weitere Wechsel fiel still weg.
+    Ein Fehler ist dabei nie aufgetaucht: INSERT OR IGNORE schweigt.
+    """
+
+    def test_nummern_wiederholen_sich_nicht(self):
+        import sync_client
+        gesehen = {sync_client._ereignis_folge() for _ in range(500)}
+        self.assertEqual(len(gesehen), 500)
+
+    def test_nummern_steigen(self):
+        import sync_client
+        a = sync_client._ereignis_folge()
+        b = sync_client._ereignis_folge()
+        self.assertGreater(b, a)
+
+    def test_nummer_ist_kein_nullwert(self):
+        """Genau der alte Fehler: eine feste 0 für jedes Ereignis."""
+        import sync_client
+        self.assertGreater(sync_client._ereignis_folge(), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
 

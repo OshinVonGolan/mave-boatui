@@ -2616,3 +2616,23 @@
       .burger-konto { right: 2px; }
       html.bm-konto-auf .burger-menu { display: none; }
     }
+
+    /* ── Alarm wartet auf Ton ─────────────────────────────────────────────── */
+    /* Browser lassen Ton erst zu, nachdem jemand die Seite berührt hat. Kommt
+       davor ein Alarm, verschwindet er nicht still — er wartet sichtbar und
+       geht beim ersten Antippen los. */
+    .ton-hinweis {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      z-index: 950; display: flex; align-items: center; gap: 11px;
+      max-width: min(520px, calc(100vw - 24px));
+      padding: 11px 15px; border-radius: 12px; cursor: pointer;
+      background: color-mix(in srgb, var(--red) 16%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+      box-shadow: 0 8px 26px rgba(0, 0, 0, .45);
+      font-size: 13px; color: var(--text1); line-height: 1.4;
+    }
+    .ton-hinweis .th-mark {
+      font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+      background: var(--red); color: #240b0b; border-radius: 5px;
+      padding: 3px 8px; flex: 0 0 auto;
+    }

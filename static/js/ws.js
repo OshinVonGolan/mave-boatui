@@ -463,6 +463,9 @@ function handleData(data) {
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
     _applyAlarmBorders(data.alarms);
+    // Und Krach machen, wenn einer neu ist. Was "neu" heisst und ob dieses
+    // Geraet ueberhaupt Ton geben soll, entscheidet alarmton.js.
+    if (typeof alarmTonPruefen === 'function') alarmTonPruefen(data.alarms);
     if (!$('alarmOverlay').classList.contains('hidden') &&
         $('tabAktiv').classList.contains('active')) {
       renderAlarms(data.alarms);

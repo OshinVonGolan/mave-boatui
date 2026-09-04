@@ -417,6 +417,48 @@ _grob_eimer: dict = {}
 _grob_minute: int = -1
 
 
+# Welche Alarme schon nach draussen gemeldet sind. Nur die Kennungen — die
+# Alarme selbst haelt die Engine.
+_alarm_gemeldet: set = set()
+
+
+def _alarme_melden() -> None:
+    """Neue und aufgeloeste Alarme zum Server tragen.
+
+    Der Kanal dafuer war seit jeher da (`sync.ereignis`, im Code beschrieben
+    als "sie sind der Grund, warum das System nach draussen spricht") — und
+    wurde von NIRGENDWO aufgerufen. Alarme erreichten den Server also nie: im
+    Logbuch fehlten sie, und eine Benachrichtigung haette es nie geben koennen.
+
+    Gemeldet wird beides, das Auftreten und das Verschwinden. Ein Alarm, der
+    nur kommt und nie geht, steht sonst fuer immer in der Chronik.
+    """
+    global _alarm_gemeldet
+    offen = {a['id']: a for a in alarms.get_alarms() if not a.get('resolved')}
+    neu = [a for kennung, a in offen.items() if kennung not in _alarm_gemeldet]
+    weg = _alarm_gemeldet - set(offen)
+    if not neu and not weg:
+        return
+    _alarm_gemeldet = set(offen)
+    for a in neu:
+        _ereignis_absetzen('alarm', {
+            'kennung': a['id'], 'name': a.get('name'), 'schluessel': a.get('key'),
+            'wert': a.get('value'), 'schwelle': a.get('threshold'),
+            'schwere': a.get('severity'), 'zeit': a.get('timestamp'),
+        })
+    for kennung in weg:
+        _ereignis_absetzen('alarm_weg', {'kennung': kennung})
+
+
+def _ereignis_absetzen(art: str, daten: dict) -> None:
+    """Nebenlaeufig senden. Der Zustandsstrom darf nicht auf die Leitung warten;
+    ohne Verbindung faellt es ohnehin still aus."""
+    try:
+        asyncio.create_task(sync.ereignis(art, daten))
+    except Exception as e:
+        log.debug('Ereignis %s nicht gesendet: %s', art, e)
+
+
 def _grob_sammeln(entry: dict) -> None:
     """Sammelt einen Feinwert; bei Minutenwechsel wandert das Mittel in den
     groben Verlauf. Rein rechnerisch, kein Datei- oder Netzzugriff."""
@@ -465,6 +507,7 @@ async def broadcast(data: dict):
                   '_network_age': can_if.time_since_last_message(),
                   'heizung': heizung.snapshot()}
     alarms.check(check_data)
+    _alarme_melden()
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
     soc = data.get('battery', {}).get('soc')
     if charge_ctrl.update_soc(soc):

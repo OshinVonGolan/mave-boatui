@@ -54,6 +54,26 @@ _BUENDEL = 200
 # Verlaufszeile entsteht je Minute — zwanzig Sekunden sind prompt genug.
 _NACHLIEFERN_RUHE_S = 20
 
+# Ereignisse brauchen eine Nummer, die es nur einmal gibt.
+#
+# Der Server legt sie mit `folge` als PRIMAERSCHLUESSEL und INSERT OR IGNORE ab:
+# eine Nummer, die schon dasteht, faellt still weg. Die Betriebsart-Meldung
+# schickte immer 0 — in der Datenbank steht deshalb genau EIN solches Ereignis,
+# jeder weitere Wechsel ist verlorengegangen, ohne dass irgendwo ein Fehler
+# aufgetaucht waere.
+#
+# Millisekunden seit 1970: monoton, ohne Zustand, ueberlebt einen Neustart. Der
+# Vergleich mit der zuletzt vergebenen Nummer faengt den Fall ab, dass zwei
+# Ereignisse in dieselbe Millisekunde fallen.
+_letzte_ereignis_folge = 0
+
+
+def _ereignis_folge() -> int:
+    global _letzte_ereignis_folge
+    n = max(int(time.time() * 1000), _letzte_ereignis_folge + 1)
+    _letzte_ereignis_folge = n
+    return n
+
 
 class SyncClient:
     """Haelt die Verbindung zum Server und bedient sie."""
@@ -246,7 +266,7 @@ class SyncClient:
                 await self._senden(p.umschlag(p.EREIGNIS, {
                     'art': 'betriebsart', 'betriebsart': art,
                     'takt_s': p.takt(art)['zustand_s'],
-                }, folge=0, **self._jetzt()))
+                }, folge=_ereignis_folge(), **self._jetzt()))
                 log.info('Betriebsart jetzt %s (Takt %d s)', art, p.takt(art)['zustand_s'])
             takt = p.takt(art)['zustand_s']
             jetzt = time.monotonic()
@@ -309,13 +329,19 @@ class SyncClient:
         except Exception as e:
             log.debug('Sitzung nicht gemeldet: %s', e)
 
-    async def ereignis(self, art: str, daten: dict, folge: int) -> None:
+    async def ereignis(self, art: str, daten: dict, folge: int | None = None) -> None:
         """Alarme und Stoerungen. Gehen in JEDER Betriebsart sofort hinaus —
-        sie sind der Grund, warum das System nach draussen spricht."""
+        sie sind der Grund, warum das System nach draussen spricht.
+
+        Ohne Verbindung passiert nichts. Das ist hier kein Mangel: der Alarm
+        steht an Bord trotzdem und wird dort auch angezeigt. Was fehlt, ist die
+        Meldung nach draussen — und die kann ohne Leitung niemand geben.
+        """
         if self._ws is None:
             return
         await self._senden(p.umschlag(p.EREIGNIS, {'art': art, **daten},
-                                      folge=folge, **self._jetzt()))
+                                      folge=folge if folge is not None else _ereignis_folge(),
+                                      **self._jetzt()))
 
     async def _senden(self, nachricht: dict) -> None:
         if self._ws is None:
