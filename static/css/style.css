@@ -2596,8 +2596,11 @@
        öffnet, hätte keinen Platz. Feste Breite fürs Menü, damit die Kante des
        Kontofeldes daneben ohne Messen stimmt. */
     .burger-menu { width: 232px; min-width: 0; }
+    /* Bündig ans Menü: dessen linke Kante liegt bei 2 px Abstand plus 232 px
+       Breite, also 234 px vom rechten Rand. Kein Spalt dazwischen — die beiden
+       Felder gehören zusammen und sollen auch so aussehen. */
     .burger-konto {
-      position: fixed; top: calc(var(--header-h) + 1px); right: 240px; z-index: 200;
+      position: fixed; top: calc(var(--header-h) + 1px); right: 234px; z-index: 200;
       width: 232px;
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       padding: 6px; display: flex; flex-direction: column; gap: 2px;

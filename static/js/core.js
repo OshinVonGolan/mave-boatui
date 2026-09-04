@@ -314,6 +314,16 @@ function burgerBauen() {
   k.classList.toggle('hidden', !auf);
   if (auf) k.innerHTML = _burgerKonto();
   document.documentElement.classList.toggle('bm-konto-auf', auf);
+
+  // Oberkante auf den Konto-Knopf legen, nicht auf den Menükopf. Sonst steht
+  // das Feld weiter oben als der Eintrag, aus dem es kommt, und der
+  // Zusammenhang ist nur zu erraten. Nur nebeneinander — schmal nimmt das Feld
+  // ohnehin den Platz der Liste ein.
+  if (!auf) { k.style.top = ''; return; }
+  const knopf = m.querySelector('.bm-konto');
+  const nebeneinander = window.innerWidth > 620;
+  k.style.top = (nebeneinander && knopf)
+    ? Math.round(knopf.getBoundingClientRect().top) + 'px' : '';
 }
 
 function _burgerHaupt() {
@@ -326,7 +336,9 @@ function _burgerHaupt() {
     ? `<button class="burger-item bm-konto${_burgerAnsicht === 'konto' ? ' an' : ''}"
                onclick="burgerKontoAnsicht(event)">
          ${_bmIcon(_BM_SVG.konto)}Konto
-         <span class="bm-pfeil">${_bmIcon('<path d="M9 6l6 6-6 6"/>')}</span>
+         <!-- Nach LINKS: dorthin klappt das Feld auf. Ein Pfeil nach rechts
+              zeigte an der Bildschirmkante ins Nichts. -->
+         <span class="bm-pfeil">${_bmIcon('<path d="M15 6l-6 6 6 6"/>')}</span>
        </button>`
     : `<button class="burger-item bm-konto" onclick="closeBurger();anmeldungZeigen('')">
          ${_bmIcon(_BM_SVG.konto)}Anmelden</button>`;
