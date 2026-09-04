@@ -295,17 +295,35 @@ function zeichneAnwesend() {
     </div>`;
   };
 
+  // "Wer ist da" heisst: wer JETZT da ist. Eine Sitzung, die seit einer
+  // Stunde nichts mehr getan hat, gehoert nicht in diese Liste — das Gerät
+  // liegt in der Schublade, der Browser ist zu, oder jemand ist von Bord. Die
+  // Sitzung bleibt gültig, sie wird nur nicht mehr als Anwesenheit gezählt.
+  const ANWESEND_S = 30 * 60;
+  const frisch = (liste) => (liste || []).filter(s => jetzt - (s.zuletzt || 0) < ANWESEND_S);
+  const stille = (liste) => (liste || []).filter(s => jetzt - (s.zuletzt || 0) >= ANWESEND_S);
+
   let h = '';
-  if ((a.an_bord || []).length) {
-    h += '<div class="aw-gruppe">An Bord</div>' + buendeln(a.an_bord).map(s => zeile(s, '')).join('');
+  const bordDa = buendeln(frisch(a.an_bord));
+  const fernDa = buendeln(frisch(a.ueber_server));
+  const ruhend = buendeln([...stille(a.an_bord), ...stille(a.ueber_server)]);
+
+  if (bordDa.length) {
+    h += '<div class="aw-gruppe">An Bord</div>' + bordDa.map(s => zeile(s, '')).join('');
   } else if (a.boot_erreichbar) {
     h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Niemand am Bordrechner angemeldet.</div>';
   } else {
     h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Das Boot ist nicht verbunden — von dort ist nichts zu erfahren.</div>';
   }
-  if ((a.ueber_server || []).length) {
+  if (fernDa.length) {
     h += '<div class="aw-gruppe">Aus der Ferne</div>'
-       + buendeln(a.ueber_server).map(s => zeile(s, 'fern')).join('');
+       + fernDa.map(s => zeile(s, 'fern')).join('');
+  }
+  if (ruhend.length) {
+    // Nicht verschweigen, aber auch nicht als anwesend zeigen: eine
+    // vergessene Anmeldung auf einem fremden Gerät soll auffallen.
+    h += `<div class="aw-gruppe">Angemeldet, aber still (${ruhend.length})</div>`
+       + ruhend.slice(0, 5).map(s => zeile(s, 'still')).join('');
   }
   feld.innerHTML = h;
 }
