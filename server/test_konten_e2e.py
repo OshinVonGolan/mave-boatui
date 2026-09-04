@@ -99,7 +99,9 @@ async def boot_rolle(verbunden, kopie_da, ende):
                 empfangen.append(n)
                 if n.get('typ') == 'konten':
                     kopie_da.append(n.get('daten') or {})
-                    if len(kopie_da) >= 2:      # erste beim Verbinden, zweite nach der Sperre
+                    # Verbinden, Sperre, Anmeldung, Abmeldung — vier Anlaesse,
+                    # bei denen die Kopie ans Boot gehen MUSS.
+                    if len(kopie_da) >= 4:
                         return empfangen
         except (asyncio.TimeoutError, websockets.ConnectionClosed):
             pass
@@ -194,6 +196,33 @@ async def main():
         gesperrt = [k for k in kopien[1].get('konten', []) if k['name'] == 'crew']
         pruefe(gesperrt and gesperrt[0].get('gesperrt') is True,
                'und trägt die Sperre')
+
+    print('\n6b. Eine Anmeldung erreicht das Boot sofort')
+    # Der Fehler, der das ausgeloest hat: die Kopie ging nur bei KONTEN-
+    # aenderungen ans Boot, und ihr Stand ist ein Hash ueber die Konten. Eine
+    # neue Sitzung aendert ihn nicht. Wer sich also im Logbuch anmeldete und
+    # zur Bordansicht wechselte, stand dort wieder vor "nicht angemeldet" —
+    # obwohl das Cookie fuer beide Namen gilt.
+    zweit = Sitzung()
+    status, _ = await zweit.http('/api/login', 'POST',
+                                 rumpf={'name': 'eigner', 'passwort': EIGNER_PW})
+    pruefe(status == 200, 'ein zweites Gerät meldet sich am Server an')
+    await asyncio.sleep(2)
+    pruefe(len(kopien) >= 3, 'die Anmeldung geht sofort ans Boot, ohne Neuverbinden')
+    sitz_nach_anmeldung = set((kopien[2].get('sitzungen') or {})) if len(kopien) >= 3 else set()
+    pruefe(len(sitz_nach_anmeldung) >= 2,
+           'und traegt die offenen Sitzungen mit (%d)' % len(sitz_nach_anmeldung))
+
+    status, _ = await zweit.http('/api/logout', 'POST')
+    pruefe(status == 200, 'dasselbe Gerät meldet sich wieder ab')
+    await asyncio.sleep(2)
+    pruefe(len(kopien) >= 4, 'auch die Abmeldung geht sofort ans Boot')
+    if len(kopien) >= 4:
+        widerrufe = set(kopien[3].get('widerrufe') or {})
+        weg = sitz_nach_anmeldung - set(kopien[3].get('sitzungen') or {})
+        pruefe(bool(widerrufe), 'die Kopie traegt einen Widerruf')
+        pruefe(bool(weg & widerrufe),
+               'und zwar fuer genau die Sitzung, die verschwunden ist')
 
     print('\n7. Selbstschutz')
     status, _ = await browser.http('/api/konten/eigner', 'PATCH', rumpf={'gesperrt': True})

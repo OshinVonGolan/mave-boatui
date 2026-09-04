@@ -97,13 +97,19 @@ def stand(verlauf_bis: int, konten_stand: str = '') -> dict:
                             'konten_stand': str(konten_stand or '')})
 
 
-def sitzung(kennung: str, daten: dict) -> dict:
+def sitzung(kennung: str, daten: dict, beendet: bool = False) -> dict:
     """Eine an Bord entstandene Anmeldung, damit der Server sie auch kennt.
 
     Uebertragen wird nur die KENNUNG (der SHA-256 des Tokens), nie das Token
     selbst — wer die Verbindung mitliest, kann damit keine Sitzung uebernehmen.
+
+    Mit `beendet` traegt dieselbe Nachricht das Gegenteil: eine Abmeldung an
+    Bord. Ohne das bliebe die Sitzung auf dem Server bestehen, und wer sich an
+    Bord abmeldet, waere im Logbuch weiter drin — eine Abmeldung, die nicht
+    abmeldet, ist schlimmer als gar keine.
     """
-    return umschlag(SITZUNG, {'kennung': kennung, 'sitzung': daten})
+    return umschlag(SITZUNG, {'kennung': kennung, 'sitzung': daten,
+                              'beendet': bool(beendet)})
 
 
 def konten(daten: dict) -> dict:

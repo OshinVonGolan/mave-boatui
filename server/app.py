@@ -23,6 +23,7 @@ import secrets
 import time
 from pathlib import Path
 
+from starlette.concurrency import run_in_threadpool
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -232,7 +233,15 @@ async def sync(ws: WebSocket) -> None:
                 # die Wahrheit darueber, WER es gibt.
                 d = n['daten'] or {}
                 if konten and d.get('kennung'):
-                    konten.sitzungen_uebernehmen({d['kennung']: d.get('sitzung') or {}})
+                    if d.get('beendet'):
+                        # Eine Abmeldung an Bord. Sie MUSS auch hier wirken,
+                        # sonst bleibt das Logbuch offen, nachdem man sich am
+                        # Kartentisch abgemeldet hat.
+                        konten.sitzungen_uebernehmen(
+                            {}, {d['kennung']: time.time()})
+                    else:
+                        konten.sitzungen_uebernehmen(
+                            {d['kennung']: d.get('sitzung') or {}})
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
             elif typ == p.EREIGNIS:
@@ -293,10 +302,15 @@ async def _hallo(ws: WebSocket, n: dict) -> int:
     # und der Pi braucht sie, BEVOR sich jemand an Bord anmelden will — sie
     # erst auf Nachfrage zu schicken hiesse, die erste Anmeldung im Bordnetz
     # scheitern zu lassen.
-    if d.get('konten_stand') != verteilung['stand']:
-        await ws.send_json(p.konten(verteilung))
-        log.info('Kontenkopie ans Boot (%d Konten, Stand %s)',
-                 len(verteilung['konten']), verteilung['stand'] or '—')
+    # Immer, nicht nur bei geaenderten Konten. Der Stand ist ein Hash ueber die
+    # KONTEN — Sitzungen und Widerrufe aendern ihn nicht. Haetten wir hier
+    # weiter darauf verglichen, kaeme eine Anmeldung, die waehrend einer
+    # Trennung entstanden ist, nie an Bord an. Die Kopie ist ein paar Zeilen je
+    # Konto gross; das einmal je Verbindung zu schicken kostet nichts.
+    await ws.send_json(p.konten(verteilung))
+    log.info('Kontenkopie ans Boot (%d Konten, %d Sitzungen, Stand %s)',
+             len(verteilung['konten']), len(verteilung.get('sitzungen') or {}),
+             verteilung['stand'] or '—')
     log.info('Boot %s angemeldet, Verlauf ab %d, Betriebsart %s',
              d.get('geraet'), speicher.verlauf_stand() + 1, d.get('betriebsart'))
     # Und den Oberflaechen, dass wieder Leben da ist — sie sperren sonst
@@ -438,7 +452,7 @@ def _sitzung_setzen(antwort: JSONResponse, request: Request, token: str) -> None
 
 
 @app.post('/api/login')
-def login(daten: Anmeldung, request: Request) -> JSONResponse:
+async def login(daten: Anmeldung, request: Request) -> JSONResponse:
     """Anmelden. Die einzige Stelle, an der ein Passwort geprueft wird.
 
     Sie ist deshalb auch die einzige, die einen Ratenbegrenzer braucht: eine
@@ -453,7 +467,11 @@ def login(daten: Anmeldung, request: Request) -> JSONResponse:
         raise HTTPException(429, detail='Zu viele Fehlversuche. Bitte später erneut.')
 
     try:
-        token, k = konten.anmelden(
+        # Im Threadpool, nicht hier: das Passwort wird mit scrypt geprueft, und
+        # das dauert absichtlich lange. Direkt in der Schleife stuende in dieser
+        # Zeit der ganze Server — auch der Datenstrom vom Boot.
+        token, k = await run_in_threadpool(
+            konten.anmelden,
             daten.name, daten.passwort, kiosk=daten.kiosk,
             herkunft=_herkunft(request),
             geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
@@ -467,14 +485,22 @@ def login(daten: Anmeldung, request: Request) -> JSONResponse:
 
     _FEHLVERSUCHE.pop(quelle, None)
     log.info('%r angemeldet (%s)', k['name'], k.get('rolle'))
+    # Die frische Sitzung sofort ans Boot. Das Cookie gilt fuer alle drei Namen
+    # der Anlage, aber im Bordnetz beantwortet der PI die Bordansicht — und der
+    # kannte diese Sitzung bisher erst beim naechsten Verbindungsaufbau. Wer
+    # sich also im Logbuch anmeldete und dann zur Bordansicht wechselte, stand
+    # wieder vor "nicht angemeldet". Genau das war der Fehler.
+    await _konten_zum_boot()
     antwort = JSONResponse(r.uebersicht(k))
     _sitzung_setzen(antwort, request, token)
     return antwort
 
 
 @app.post('/api/logout')
-def logout(request: Request) -> JSONResponse:
+async def logout(request: Request) -> JSONResponse:
     konten.abmelden(zg.token_aus(request))
+    # Der Widerruf muss ans Boot, sonst gilt die Sitzung dort weiter.
+    await _konten_zum_boot()
     antwort = JSONResponse({'ok': True})
     antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/',
                           domain=zg.keks_bereich(request.headers.get('host', '')))

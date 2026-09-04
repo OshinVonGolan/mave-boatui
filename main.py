@@ -337,7 +337,8 @@ def _konten_uebernehmen(daten: dict) -> int:
     # und wer sich unter einem anmeldet, soll unter den anderen angemeldet
     # SEIN. Das Cookie gilt fuer alle drei — es nuetzt aber nichts, wenn diese
     # Seite die Sitzung nicht kennt.
-    dazu = konten.sitzungen_uebernehmen(daten.get('sitzungen') or {})
+    dazu = konten.sitzungen_uebernehmen(daten.get('sitzungen') or {},
+                                        daten.get('widerrufe') or {})
     if dazu:
         log.info('%d Sitzungen vom Server übernommen', dazu)
     return anzahl
@@ -701,7 +702,16 @@ async def login(request: Request):
 
 @app.post('/api/logout')
 async def logout(request: Request):
-    konten.abmelden(zg.token_aus(request))
+    token = zg.token_aus(request)
+    konten.abmelden(token)
+    # Dem Server sagen, dass diese Sitzung weg ist. Sonst gilt sie dort
+    # weiter — und beim naechsten Abgleich traegt er sie hierher zurueck.
+    try:
+        if token:
+            asyncio.create_task(sync.sitzung_melden(
+                konten_speicher.k.sitzung_kennung(token), {}, beendet=True))
+    except Exception as e:
+        log.debug('Abmeldung nicht gemeldet: %s', e)
     antwort = JSONResponse({'ok': True})
     antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/',
                           domain=zg.keks_bereich(request.headers.get('host', '')))

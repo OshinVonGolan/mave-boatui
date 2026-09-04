@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import hashlib
 import json
+import pathlib
 import threading
 import time
 
@@ -42,9 +43,18 @@ class Konten:
     def __init__(self, konten_datei, sitzungen_datei):
         self._konten_datei = konten_datei
         self._sitz_datei = sitzungen_datei
+        # Widerrufe liegen NEBEN den Sitzungen, nicht darin: die Sitzungsdatei
+        # hat ein Format, das beide Seiten schon lesen, und ein Wechsel darauf
+        # waere ein Update-Risiko fuer nichts.
+        self._widerruf_datei = pathlib.Path(sitzungen_datei).with_name('widerrufe.json')
         self._lock = threading.Lock()
         self._konten: dict = {}
         self._sitzungen: dict = {}
+        # Beendete Sitzungen, Kennung -> Zeitpunkt. Eine Abmeldung ist sonst
+        # nur auf der Seite wirksam, auf der geklickt wurde: die Gegenseite
+        # kennt die Sitzung weiter, und beim naechsten Abgleich traegt sie sie
+        # sogar wieder herueber. Wer sich abmeldet, ist danach ueberall ab.
+        self._widerrufe: dict = {}
         self._laden()
 
     # ── Laden und Sichern ───────────────────────────────────────────────────
@@ -54,6 +64,8 @@ class Konten:
         self._konten = rohe if isinstance(rohe, dict) else {}
         rohs = read_json(self._sitz_datei, {}) or {}
         self._sitzungen = rohs if isinstance(rohs, dict) else {}
+        rohw = read_json(self._widerruf_datei, {}) or {}
+        self._widerrufe = rohw if isinstance(rohw, dict) else {}
         self._aufraeumen()
 
     def _sichern_konten(self) -> None:
@@ -61,6 +73,17 @@ class Konten:
 
     def _sichern_sitzungen(self) -> None:
         write_json(self._sitz_datei, self._sitzungen)
+
+    def _sichern_widerrufe(self) -> None:
+        write_json(self._widerruf_datei, self._widerrufe)
+
+    def _widerrufen(self, kennungen) -> None:
+        """Sitzungen als beendet vermerken. Aufrufer haelt das Schloss."""
+        jetzt = time.time()
+        for kn in kennungen:
+            self._widerrufe[kn] = jetzt
+        if kennungen:
+            self._sichern_widerrufe()
 
     # ── Zustand ─────────────────────────────────────────────────────────────
 
@@ -173,6 +196,9 @@ class Konten:
         with self._lock:
             if self._sitzungen.pop(kennung, None) is not None:
                 self._sichern_sitzungen()
+            # Auch dann vermerken, wenn die Sitzung hier gar nicht lag: sie
+            # kann auf der Gegenseite liegen, und genau die soll sie loswerden.
+            self._widerrufen([kennung])
 
     def konto_zu_token(self, token: str) -> dict | None:
         """Das Konto zu einer Sitzung, oder None.
@@ -433,6 +459,7 @@ class Konten:
                 self._sitzungen.pop(kn, None)
             if weg:
                 self._sichern_sitzungen()
+            self._widerrufen(weg)
         log.info('%d Sitzungen von %r beendet', len(weg), name)
         return len(weg)
 
@@ -503,10 +530,11 @@ class Konten:
         # Wer die Uebertragung mitliest, kann damit keine Sitzung uebernehmen.
         with self._lock:
             sitzungen = {kn: dict(si) for kn, si in self._sitzungen.items()}
+            widerrufe = dict(self._widerrufe)
         return {'konten': liste, 'stand': hashlib.sha256(roh).hexdigest()[:16],
-                'sitzungen': sitzungen}
+                'sitzungen': sitzungen, 'widerrufe': widerrufe}
 
-    def sitzungen_uebernehmen(self, fremde: dict) -> int:
+    def sitzungen_uebernehmen(self, fremde: dict, widerrufe: dict | None = None) -> int:
         """Sitzungen der Gegenseite aufnehmen, ohne die eigenen zu verlieren.
 
         Zusammengefuehrt, nicht ersetzt: an Bord kann sich jemand angemeldet
@@ -518,10 +546,27 @@ class Konten:
         weiterbenutzen.
         """
         if not isinstance(fremde, dict):
-            return 0
+            fremde = {}
         dazu = 0
         with self._lock:
+            # Erst die Widerrufe: was drueben beendet wurde, ist auch hier
+            # beendet. Und es muss VOR dem Zusammenfuehren geschehen, sonst
+            # traegt die Gegenseite eine gerade widerrufene Sitzung wieder ein.
+            if isinstance(widerrufe, dict) and widerrufe:
+                neu = {kn: z for kn, z in widerrufe.items()
+                       if isinstance(z, (int, float)) and kn not in self._widerrufe}
+                if neu:
+                    self._widerrufe.update(neu)
+                    self._sichern_widerrufe()
+                raus = [kn for kn in neu if kn in self._sitzungen]
+                for kn in raus:
+                    del self._sitzungen[kn]
+                if raus:
+                    self._sichern_sitzungen()
+                    log.info('%d Sitzungen von der Gegenseite widerrufen', len(raus))
             for kennung, si in fremde.items():
+                if kennung in self._widerrufe:
+                    continue
                 if not isinstance(si, dict) or si.get('konto') not in self._konten:
                     continue
                 da = self._sitzungen.get(kennung)
@@ -541,6 +586,15 @@ class Konten:
                if not s.get('kiosk') and jetzt - s.get('zuletzt', 0) > SITZUNG_DAUER_S]
         for kn in weg:
             del self._sitzungen[kn]
+        # Ein Widerruf haelt genau so lange, wie die widerrufene Sitzung
+        # gegolten haette. Danach ist er gegenstandslos — und die Liste soll
+        # nicht auf Dauer wachsen.
+        alt = [kn for kn, z in self._widerrufe.items()
+               if jetzt - (z or 0) > SITZUNG_DAUER_S]
+        for kn in alt:
+            del self._widerrufe[kn]
+        if alt:
+            self._sichern_widerrufe()
 
 
 # Ein fester, gueltiger Hash fuer Anmeldeversuche mit unbekanntem Namen. So
