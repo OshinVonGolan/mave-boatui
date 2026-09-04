@@ -539,3 +539,16 @@ main {
   .ms-zeile { grid-template-columns: 1fr; gap: 2px; }
   .ms-quelle { color: var(--text3); }
 }
+
+.ae-version {
+  font-size: 12px; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ae-bereich {
+  font-size: 9px; font-weight: 600; letter-spacing: .05em;
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--surface2); color: var(--text3);
+}
+.ae-bereich.logbuch { background: color-mix(in srgb, var(--violet) 18%, transparent); color: var(--violet); }
+.ae-bereich.bordansicht { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.ae-bereich.server { background: color-mix(in srgb, var(--blau) 16%, transparent); color: var(--blau); }

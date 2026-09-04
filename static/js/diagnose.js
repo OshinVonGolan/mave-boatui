@@ -643,11 +643,17 @@ async function staendeLaden() {
 
 function _standBlock(e, art, tat) {
   const zeit = e.zeit ? zeitpunkt(e.zeit) : '';
+  // Die Bereiche sagen, ob einen die Änderung überhaupt angeht: wer nur die
+  // Bordansicht benutzt, muss eine Änderung am Logbuch nicht lesen.
+  const bereiche = (e.bereiche || []).map(b =>
+    `<span class="ae-bereich ${esc(b.toLowerCase())}">${esc(b)}</span>`).join('');
   return `<div class="ae-stand">
     <div>
       <div class="ae-kopf">
         ${art ? `<span class="ae-marke ${art === 'neu' ? 'neu' : ''}">${art === 'neu' ? 'neu' : 'läuft'}</span>` : ''}
+        ${e.version ? `<span class="ae-version">v${esc(e.version)}</span>` : ''}
         <span class="ae-zeit">${esc(zeit)}</span>
+        ${bereiche}
         <span class="ae-hash">${esc(e.hash)}</span>
       </div>
       <div class="ae-titel">${esc(e.titel)}</div>
