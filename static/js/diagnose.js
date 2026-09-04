@@ -170,12 +170,18 @@ function zeichneUeberblick() {
         art: b.soc == null ? '' : (b.soc > 50 ? 'gut' : (b.soc > 25 ? 'mau' : '')) },
       { wert: b.current != null ? b.current.toFixed(1) + ' A' : '—', lbl: 'Bilanz',
         neben: b.current == null ? '' : (b.current >= 0 ? 'wird geladen' : 'wird entnommen') },
-      { wert: t.tank1?.percent != null ? Math.round(t.tank1.percent) + ' %' : '—',
-        lbl: 'Wasser', neben: t.tank1?.liters != null ? Math.round(t.tank1.liters) + ' L' : '' },
-      { wert: t.tank2?.percent != null ? Math.round(t.tank2.percent) + ' %' : '—',
-        lbl: 'Diesel', neben: t.tank2?.liters != null ? Math.round(t.tank2.liters) + ' L' : '' },
+      // Die Tanks kommen flach und in Prozent; die Liter rechnet die
+      // Bordansicht aus der Tankgröße. 200 L je Tank, wie dort.
+      { wert: typeof t.tank1 === 'number' ? Math.round(t.tank1) + ' %' : '—',
+        lbl: 'Wasser', neben: typeof t.tank1 === 'number' ? Math.round(t.tank1 * 2) + ' von 200 L' : '',
+        art: typeof t.tank1 === 'number' && t.tank1 < 15 ? 'mau' : '' },
+      { wert: typeof t.tank2 === 'number' ? Math.round(t.tank2) + ' %' : '—',
+        lbl: 'Diesel', neben: typeof t.tank2 === 'number' ? Math.round(t.tank2 * 2) + ' von 200 L' : '',
+        art: typeof t.tank2 === 'number' && t.tank2 < 15 ? 'mau' : '' },
       { wert: temp.length ? (temp.reduce((a, c) => a + c, 0) / temp.length).toFixed(1) + ' °C' : '—',
-        lbl: 'Innen', neben: h.command === 'on' || h.running ? 'Heizung läuft' : 'Heizung aus' },
+        lbl: 'Innen',
+        neben: temp.length ? (h.command === 'on' || h.running ? 'Heizung läuft' : 'Heizung aus')
+                           : 'kein Raumfühler online' },
     ];
     $('jetztZahlen').innerHTML = zahlen.map(x => `
       <div class="zahl">
@@ -286,11 +292,19 @@ function zeichneZustand() {
 // zwanzig Minuten aussehen und nicht wie ein ganzer Tag.
 
 function zeichneStreifen() {
+  _streifenBauen('streifen', 'streifenAchse', _tage);
+}
+
+/** Der Streifen, einmal gebaut und zweimal benutzt: auf der Überblicksseite
+ *  für den letzten Tag, auf der Verfügbarkeitsseite für den gewählten
+ *  Zeitraum. Zwei Fassungen desselben Codes wären zwei Fassungen desselben
+ *  Fehlers. */
+function _streifenBauen(feldId, achseId, tage) {
   const v = _daten.verbindung;
-  const feld = $('streifen');
-  if (!v) return;
+  const feld = $(feldId);
+  if (!v || !feld) return;
   const jetzt = Date.now() / 1000;
-  const von = jetzt - _tage * 86400;
+  const von = jetzt - tage * 86400;
   const spanne = jetzt - von;
 
   const luecken = (v.luecken || [])
@@ -317,12 +331,16 @@ function zeichneStreifen() {
   }
   feld.innerHTML = html || '<div class="st-teil leer" style="width:100%"></div>';
 
-  const achse = $('streifenAchse');
-  const schritte = _tage <= 7 ? 7 : (_tage <= 30 ? 6 : 6);
+  const achse = $(achseId);
+  if (!achse) return;
+  const schritte = 6;
+  const kurz = tage <= 2;      // beim Tagesstreifen die Uhrzeit, sonst das Datum
   let a = '';
   for (let i = 0; i <= schritte; i++) {
     const t = new Date((von + spanne * i / schritte) * 1000);
-    a += `<span>${t.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</span>`;
+    a += `<span>${t.toLocaleString('de-DE', kurz
+      ? { hour: '2-digit', minute: '2-digit' }
+      : { day: '2-digit', month: '2-digit' })}</span>`;
   }
   achse.innerHTML = a;
 }

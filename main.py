@@ -285,7 +285,9 @@ def _zustand_fuer_server() -> dict:
     try:
         d['heizung'] = heizung.snapshot()
     except Exception as e:
-        log.debug('Heizungszustand nicht verfügbar: %s', e)
+        # Sichtbar und nicht auf debug: geht der Schnappschuss still verloren,
+        # fehlt die Heizung in der Serverkopie, und niemand weiss warum.
+        log.warning('Heizungszustand geht nicht mit zum Server: %s', e)
     return d
 
 
