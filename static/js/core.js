@@ -288,6 +288,8 @@ function toggleBurger(e) {
 
 function closeBurger() {
   $('burgerMenu')?.classList.add('hidden');
+  $('burgerKonto')?.classList.add('hidden');
+  document.documentElement.classList.remove('bm-konto-auf');
   _burgerAnsicht = 'haupt';
 }
 
@@ -301,7 +303,17 @@ function burgerZurueck(e)      { e?.stopPropagation(); _burgerAnsicht = 'haupt';
 function burgerBauen() {
   const m = $('burgerMenu');
   if (!m) return;
-  m.innerHTML = _burgerAnsicht === 'konto' ? _burgerKonto() : _burgerHaupt();
+  m.innerHTML = _burgerHaupt();
+  // Das Konto ist ein eigenes Feld NEBEN dem Menü, kein Austausch des Inhalts.
+  // Das Menü sitzt am rechten Rand, also klappt es nach links auf. Auf einem
+  // schmalen Gerät ist dafür kein Platz — dort tritt die Hauptliste zurück,
+  // das erledigt das Stylesheet über die Klasse unten.
+  const k = $('burgerKonto');
+  if (!k) return;
+  const auf = _burgerAnsicht === 'konto';
+  k.classList.toggle('hidden', !auf);
+  if (auf) k.innerHTML = _burgerKonto();
+  document.documentElement.classList.toggle('bm-konto-auf', auf);
 }
 
 function _burgerHaupt() {
@@ -311,7 +323,8 @@ function _burgerHaupt() {
       + `<span>${_bmEsc(k.rolle_name || '')}</span></div>`
     : '<div class="bm-wer bm-wer-leer">Nicht angemeldet</div>';
   const kontoKnopf = k
-    ? `<button class="burger-item bm-konto" onclick="burgerKontoAnsicht(event)">
+    ? `<button class="burger-item bm-konto${_burgerAnsicht === 'konto' ? ' an' : ''}"
+               onclick="burgerKontoAnsicht(event)">
          ${_bmIcon(_BM_SVG.konto)}Konto
          <span class="bm-pfeil">${_bmIcon('<path d="M9 6l6 6-6 6"/>')}</span>
        </button>`

@@ -948,16 +948,25 @@ document.addEventListener('touchmove', e => {
   if (e.touches.length === 2 && _gesteAnfang) _gesteJetzt = _fingerAbstand(e.touches);
 }, { passive: true });
 
-document.addEventListener('touchend', e => {
-  // Erst wenn beide Finger weg sind. Und nur, wenn der Anfangsabstand
-  // brauchbar war — zwei Finger, die sich beruehren, ergeben sonst ein
-  // Verhaeltnis von unendlich.
-  if (e.touches.length > 0 || _gesteAnfang < 20) { _gesteAnfang = 0; return; }
+document.addEventListener('touchend', () => {
+  // Ausgewertet wird, sobald der ERSTE Finger geht — dann ist die Geste vorbei.
+  //
+  // Vorher stand hier "nur wenn beide Finger weg sind" (e.touches.length > 0
+  // → abbrechen und den Anfangsabstand verwerfen). Ein Mensch hebt die Finger
+  // aber nacheinander: beim ersten Loslassen ist noch einer da, der
+  // Anfangsabstand wurde weggeworfen, und beim zweiten war nichts mehr zum
+  // Rechnen da. Die Geste hat deshalb nie ausgelöst. Im Test fiel es nicht auf,
+  // weil der beide Finger gleichzeitig hob — was niemand tut.
+  if (_gesteAnfang < 20) { _gesteAnfang = 0; return; }
   const v = _gesteJetzt / _gesteAnfang;
   _gesteAnfang = 0;
   if (v >= _GESTE_SCHWELLE) _spaltenGeste(-1);          // auseinander → größer
   else if (v <= 1 / _GESTE_SCHWELLE) _spaltenGeste(+1); // zusammen → kleiner
 }, { passive: true });
+
+// Bricht das System die Berührung ab (Anruf, Benachrichtigung), soll nichts
+// hängenbleiben und beim nächsten Tippen losgehen.
+document.addEventListener('touchcancel', () => { _gesteAnfang = 0; }, { passive: true });
 
 function openDisplaySettings() {
   if (!_dsp) _dspLoad();

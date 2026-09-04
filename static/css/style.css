@@ -79,7 +79,7 @@
        Das eine Pixel obendrauf: sonst liegt der obere Rand des Feldes genau
        auf der Trennlinie der Kopfzeile, und beide verschmelzen zu einem
        dickeren Strich. */
-    .burger-menu { position: fixed; top: calc(var(--header-h) + 1px); right: 20px; z-index: 200;
+    .burger-menu { position: fixed; top: calc(var(--header-h) + 1px); right: 2px; z-index: 200;
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       padding: 6px; min-width: 160px; display: flex; flex-direction: column; gap: 2px;
       box-shadow: 0 8px 24px rgba(0,0,0,.4); }
@@ -2033,7 +2033,7 @@
       #topbarClock { display: none !important; }
       header { padding: 10px 12px 9px; }
       .header-right { gap: 6px; }
-      .burger-menu, .quelle-pop { right: 12px; }
+      .burger-menu, .quelle-pop { right: 2px; }
     }
 
     /* Back-arrow close button */
@@ -2154,7 +2154,7 @@
     @media (max-width: 620px) { .quelle-txt { display: none; } .quelle-chip { padding: 4px 6px; } }
 
     .quelle-pop {
-      position: fixed; top: calc(var(--header-h) + 1px); right: 20px; z-index: 130;
+      position: fixed; top: calc(var(--header-h) + 1px); right: 2px; z-index: 130;
       width: min(320px, calc(100vw - 24px));
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       box-shadow: 0 12px 32px rgba(0,0,0,.38); padding: 14px 15px;
@@ -2590,3 +2590,26 @@
     }
     .ov-reiter-knopf:hover { color: var(--text2); }
     .ov-reiter-knopf.an { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Das Kontofeld klappt nach links auf ──────────────────────────────── */
+    /* Das Menü steht am rechten Rand — ein Feld, das sich von dort nach rechts
+       öffnet, hätte keinen Platz. Feste Breite fürs Menü, damit die Kante des
+       Kontofeldes daneben ohne Messen stimmt. */
+    .burger-menu { width: 232px; min-width: 0; }
+    .burger-konto {
+      position: fixed; top: calc(var(--header-h) + 1px); right: 240px; z-index: 200;
+      width: 232px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 6px; display: flex; flex-direction: column; gap: 2px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    .burger-konto.hidden { display: none; }
+    .burger-item.bm-konto.an { background: var(--surface2); color: var(--text1); }
+
+    /* Schmal ist für zwei Felder nebeneinander kein Platz. Dann tritt die
+       Hauptliste zurück und das Konto nimmt ihren Platz ein — mit dem
+       Zurück-Pfeil oben bleibt der Weg derselbe. */
+    @media (max-width: 620px) {
+      .burger-konto { right: 2px; }
+      html.bm-konto-auf .burger-menu { display: none; }
+    }
