@@ -201,7 +201,7 @@ function seiteZeigen(name) {
   // Canvas-Groessen stimmen nur, wenn das Element sichtbar IST — auf einer
   // verborgenen Seite ist die Breite null und der Graph bliebe leer.
   if (name === 'messwerte' && _messDaten) requestAnimationFrame(zeichneMesswerte);
-  if (name === 'verfuegbarkeit') zeichneStreifen();
+  if (name === 'verfuegbarkeit') { zeichneLegende(); zeichneStreifen(); }
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
@@ -765,6 +765,18 @@ function zeichneZustand() {
 // nicht ein Balken je Tag: ein Ausfall von zwanzig Minuten soll auch wie
 // zwanzig Minuten aussehen und nicht wie ein ganzer Tag.
 
+/** Die Legende zum Verfügbarkeitsstreifen — aus derselben Tabelle wie die
+ *  Farben selbst. "verbunden" ist kein Eintrag in ART: es ist der Normalfall
+ *  und keine Ausfallart, steht aber im Streifen und gehört deshalb davor. */
+function zeichneLegende() {
+  const feld = $('legende');
+  if (!feld) return;
+  feld.innerHTML = '<span class="lg"><i class="lg-farbe an"></i>verbunden</span>'
+    + Object.entries(ART).map(([schluessel, a]) =>
+        `<span class="lg" title="${esc(a.satz)}"><i class="lg-farbe ${esc(schluessel)}"></i>${esc(a.wort)}</span>`
+      ).join('');
+}
+
 function zeichneStreifen() {
   _streifenBauen('streifen', 'streifenAchse', _tage);
 }
@@ -1262,7 +1274,6 @@ function zurueckFragen(hash) {
       Alles, was danach kam, ist anschließend nicht mehr aktiv. Die Daten auf
       dem Boot bleiben unberührt — nur der Programmstand geht zurück. Über
       "Einspielen" kommst du jederzeit wieder nach vorn.</p>
-    <div class="pop-fehler hidden" id="zrFehler"></div>
     <div class="pop-tat">
       <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
       <button class="knopf warn" onclick="zurueckJa('${esc(hash)}')">Zurückgehen</button>
@@ -1344,18 +1355,6 @@ function zeichneWartung() {
       <button class="knopf stumm" ${da ? '' : 'disabled'} onclick="fernZeit()">Stellen</button>
     </div>
     ${da ? '' : '<div class="leerlauf">Das Boot ist nicht verbunden — Fernwartung geht erst wieder, wenn es sich meldet.</div>'}`;
-}
-
-async function fernUpdate() {
-  popZeigen(`
-    <div class="pop-titel">Bordrechner aktualisieren?</div>
-    <p style="color:var(--text2);font-size:13px;margin:0 0 18px">
-      Die Anwendung an Bord startet dabei neu. Wer gerade davor sitzt, sieht
-      für etwa eine halbe Minute nichts.</p>
-    <div class="pop-tat">
-      <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
-      <button class="knopf" onclick="fernUpdateJa()">Aktualisieren</button>
-    </div>`);
 }
 
 async function fernUpdateJa() {

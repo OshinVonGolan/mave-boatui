@@ -216,7 +216,7 @@
           <button class="knopf stumm" onclick="exportOeffnen()">Daten holen</button>
         </div>
       </div>
-      <section class="tafel breit">
+      <section class="tafel">
         <div class="reihen-kopf">
           <span class="hinweis" id="messStand"></span>
           <div class="gruppenwahl" id="gruppenwahl"></div>
@@ -237,17 +237,14 @@
         </div>
       </div>
 
-      <section class="tafel breit">
+      <section class="tafel">
         <div class="streifen" id="streifen"></div>
         <div class="streifen-achse" id="streifenAchse"></div>
-        <div class="legende">
-          <span class="lg"><i class="lg-farbe an"></i>verbunden</span>
-          <span class="lg"><i class="lg-farbe funkloch"></i>kein Netz</span>
-          <span class="lg"><i class="lg-farbe stromlos"></i>stromlos</span>
-          <span class="lg"><i class="lg-farbe neustart"></i>Neustart</span>
-          <span class="lg"><i class="lg-farbe dienst"></i>nur der Dienst</span>
-          <span class="lg"><i class="lg-farbe unbekannt"></i>unklar</span>
-        </div>
+        <!-- Die Legende wird aus ART in diagnose.js gebaut. Sie stand hier
+             einmal von Hand, und beides ist auseinandergelaufen: "erster
+             Start" fehlte, obwohl der Streifen die Farbe zeigt. Eine Farbe
+             ohne Erklaerung ist schlimmer als keine Farbe. -->
+        <div class="legende" id="legende"></div>
       </section>
 
       <div class="zahlen" id="zahlen"></div>
@@ -271,7 +268,7 @@
         <h1>Konten</h1>
         <button class="knopf" onclick="kontoNeuOeffnen()">Konto anlegen</button>
       </div>
-      <section class="tafel breit">
+      <section class="tafel">
         <div class="konten" id="konten"></div>
       </section>
     </section>
@@ -319,7 +316,7 @@
           <button class="knopf stumm" onclick="mitschnittLaden()">Neu laden</button>
         </div>
       </div>
-      <section class="tafel breit">
+      <section class="tafel">
         <div class="tafel-kopf">
           <h2>Was passiert ist</h2>
           <span class="hinweis" id="msStand"></span>
