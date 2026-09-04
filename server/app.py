@@ -15,6 +15,7 @@ davon nichts.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -546,6 +547,119 @@ def verbindung(k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
 def meine_rechte(k: dict = Depends(konto)) -> JSONResponse:
     """Was das angemeldete Konto darf. Die Oberflaeche blendet danach aus."""
     return JSONResponse(r.uebersicht(k))
+
+
+# ── Messwerte fuers Logbuch ─────────────────────────────────────────────────
+
+_REIHEN_MAX = 1500      # mehr Punkte kann kein Bildschirm zeigen
+
+
+@app.get('/api/verlauf/reihen')
+def verlauf_reihen(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
+                   punkte: int = Query(600, ge=50, le=_REIHEN_MAX),
+                   k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
+    """Zeitreihen fuer die Graphen, auf eine anzeigbare Menge eingedampft.
+
+    Neunzig Tage sind rund 130.000 Minutenwerte. Die alle in den Browser zu
+    schicken waere sinnlos — ein Bildschirm hat keine 130.000 Spalten — und auf
+    einem Handy schlicht zu viel.
+
+    Eingedampft wird in Eimer gleicher Breite, und je Eimer gehen MITTELWERT,
+    KLEINSTER und GROESSTER Wert mit. Nur den Mittelwert zu nehmen waere
+    bequemer, wuerde aber genau das verschlucken, weswegen man in ein
+    Diagnosewerkzeug schaut: die kurze Spitze, den Einbruch, den Ausreisser.
+    Der Graph zeichnet deshalb ein Band zwischen klein und gross und die
+    Mittellinie hinein.
+    """
+    jetzt = time.time()
+    bis = bis or jetzt
+    von = von or (bis - 24 * 3600)
+    if bis <= von:
+        raise HTTPException(400, detail='Der Zeitraum ist leer.')
+    if bis - von > 400 * 86400:
+        raise HTTPException(400, detail='Mehr als 400 Tage gibt der Verlauf nicht her.')
+
+    roh = speicher.verlauf(seit=von, grenze=200000)
+    roh = [e for e in roh if e.get('zeit') and von <= e['zeit'] <= bis]
+    if not roh:
+        return JSONResponse({'von': von, 'bis': bis, 'punkte': [], 'felder': [],
+                             'roh_anzahl': 0})
+
+    breite = (bis - von) / punkte
+    eimer: dict = {}
+    felder: set = set()
+    for e in roh:
+        i = min(int((e['zeit'] - von) / breite), punkte - 1)
+        fach = eimer.setdefault(i, {})
+        for feld, wert in e.items():
+            if feld in ('folge', 'zeit', 'mono') or not isinstance(wert, (int, float)) \
+                    or isinstance(wert, bool):
+                continue
+            felder.add(feld)
+            w = fach.setdefault(feld, [0.0, 0, None, None])   # summe, anzahl, min, max
+            w[0] += wert
+            w[1] += 1
+            w[2] = wert if w[2] is None else min(w[2], wert)
+            w[3] = wert if w[3] is None else max(w[3], wert)
+
+    punkte_raus = []
+    for i in sorted(eimer):
+        p_ = {'t': round(von + (i + 0.5) * breite, 1)}
+        for feld, (summe, anzahl, klein, gross) in eimer[i].items():
+            if not anzahl:
+                continue
+            p_[feld] = [round(summe / anzahl, 4), round(klein, 4), round(gross, 4)]
+        punkte_raus.append(p_)
+
+    return JSONResponse({
+        'von': von, 'bis': bis,
+        'felder': sorted(felder),
+        'punkte': punkte_raus,
+        'roh_anzahl': len(roh),
+        'eimer_s': round(breite, 1),
+    })
+
+
+@app.get('/api/verlauf/export')
+def verlauf_export(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
+                   k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))):
+    """Der Verlauf als CSV — ungefiltert, ungerundet, alle Messwerte.
+
+    Bewusst NICHT eingedampft: fuer die Anzeige ist das richtig, fuer einen
+    Export waere es Datenverlust. Wer exportiert, will die Zahlen selbst
+    auswerten und nicht das, was gerade auf einen Bildschirm passte.
+
+    Semikolon als Trenner und Komma als Dezimalzeichen: so oeffnet eine
+    deutsche Tabellenkalkulation die Datei ohne Nachfragen.
+    """
+    import csv
+    import io
+    jetzt = time.time()
+    bis = bis or jetzt
+    von = von or (bis - 7 * 86400)
+    roh = [e for e in speicher.verlauf(seit=von, grenze=400000)
+           if e.get('zeit') and von <= e['zeit'] <= bis]
+
+    felder = sorted({f for e in roh for f, w in e.items()
+                     if f not in ('folge', 'zeit', 'mono')
+                     and isinstance(w, (int, float)) and not isinstance(w, bool)})
+    puffer = io.StringIO()
+    schreiber = csv.writer(puffer, delimiter=';', lineterminator='\n')
+    schreiber.writerow(['Zeit', 'Zeitstempel'] + felder)
+    for e in roh:
+        zeile = [datetime.datetime.fromtimestamp(e['zeit']).strftime('%Y-%m-%d %H:%M:%S'),
+                 f"{e['zeit']:.0f}"]
+        for f in felder:
+            w = e.get(f)
+            zeile.append(f'{w}'.replace('.', ',') if isinstance(w, (int, float)) else '')
+        schreiber.writerow(zeile)
+
+    name = 'mave-verlauf-{}.csv'.format(
+        datetime.datetime.fromtimestamp(bis).strftime('%Y%m%d-%H%M'))
+    return Response(
+        content=puffer.getvalue().encode('utf-8-sig'),   # BOM, sonst verhunzt Excel Umlaute
+        media_type='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename="{name}"'})
 
 
 # ── Das Diagnosewerkzeug ────────────────────────────────────────────────────

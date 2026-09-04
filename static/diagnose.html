@@ -60,10 +60,34 @@
   <!-- Kennzahlen -->
   <section class="zahlen" id="zahlen"></section>
 
+  <!-- Messwerte: der eigentliche Diagnoseteil -->
+  <section class="tafel breit">
+    <div class="tafel-kopf">
+      <h2>Messwerte</h2>
+      <div class="werkzeug">
+        <div class="zeitwahl" id="messZeit">
+          <button class="zw-knopf" data-std="6">6 Std</button>
+          <button class="zw-knopf an" data-std="24">24 Std</button>
+          <button class="zw-knopf" data-std="168">7 Tage</button>
+          <button class="zw-knopf" data-std="720">30 Tage</button>
+        </div>
+        <button class="knopf stumm" onclick="exportOeffnen()">Daten holen</button>
+      </div>
+    </div>
+    <div class="reihen-kopf">
+      <span class="hinweis" id="messStand"></span>
+      <div class="gruppenwahl" id="gruppenwahl"></div>
+    </div>
+    <div class="reihen" id="reihen"></div>
+    <div class="zeitachse" id="zeitachse"></div>
+  </section>
+
   <!-- Ausfälle im Klartext -->
   <section class="tafel">
     <div class="tafel-kopf"><h2>Ausfälle</h2><span class="hinweis" id="ausfaelleZahl"></span></div>
     <div class="liste" id="ausfaelle"></div>
+    <button class="knopf stumm mehr" id="ausfaelleMehr" hidden
+            onclick="ausfaelleAlle()">Alle zeigen</button>
   </section>
 
   <!-- Ereignisse -->

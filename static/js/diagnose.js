@@ -11,6 +11,7 @@ const $ = id => document.getElementById(id);
 
 let _konto = null;
 let _tage = 7;
+let _alleAusfaelle = false;
 let _daten = { verbindung: null, diagnose: null, konten: null };
 
 // ── Formate ────────────────────────────────────────────────────────────────
@@ -84,12 +85,34 @@ async function start() {
     const k = e.target.closest('.zw-knopf');
     if (!k) return;
     _tage = Number(k.dataset.tage);
-    document.querySelectorAll('.zw-knopf').forEach(b => b.classList.toggle('an', b === k));
+    // Nur die Knöpfe DIESER Auswahl umschalten. Ein
+    // document.querySelectorAll('.zw-knopf') träfe auch die Zeitwahl der
+    // Messwerte weiter unten und würde sie stillschweigend mit zurücksetzen.
+    $('zeitwahl').querySelectorAll('.zw-knopf').forEach(b => b.classList.toggle('an', b === k));
     zeichneStreifen();
+    zeichneZahlen();
+    zeichneAusfaelle();
+  });
+
+  $('messZeit').addEventListener('click', e => {
+    const k = e.target.closest('.zw-knopf');
+    if (!k) return;
+    _messStd = Number(k.dataset.std);
+    $('messZeit').querySelectorAll('.zw-knopf').forEach(b => b.classList.toggle('an', b === k));
+    messwerteLaden();
+  });
+  // Beim Drehen oder Größenändern neu zeichnen: Canvas skaliert nicht mit.
+  let umbau;
+  window.addEventListener('resize', () => {
+    clearTimeout(umbau);
+    umbau = setTimeout(() => _messDaten && zeichneMesswerte(), 250);
   });
 
   await laden();
+  await messwerteLaden();
   setInterval(laden, 30000);
+  // Messwerte seltener: sie ändern sich langsam und kosten mehr.
+  setInterval(messwerteLaden, 120000);
 }
 
 async function laden() {
@@ -215,7 +238,16 @@ function zeichneAusfaelle() {
       `<div class="leerlauf">Keine Unterbrechung in den letzten ${_tage} Tagen.</div>`;
     return;
   }
-  $('ausfaelle').innerHTML = luecken.map(l => {
+  // Nur die jüngsten zeigen. Bei einem Update-Abend stehen hier schnell zwanzig
+  // Einträge, und die drängen alles Wichtige aus dem Blick — gesucht wird meist
+  // der letzte Ausfall, nicht der vorletzte Monat.
+  const zeigen = _alleAusfaelle ? luecken : luecken.slice(0, 6);
+  const mehr = $('ausfaelleMehr');
+  if (mehr) {
+    mehr.hidden = luecken.length <= 6 || _alleAusfaelle;
+    mehr.textContent = `Alle ${luecken.length} zeigen`;
+  }
+  $('ausfaelle').innerHTML = zeigen.map(l => {
     const a = ART[l.art] || ART.unbekannt;
     return `<div class="zeile">
       <div class="z-zeit">${esc(zeitpunkt(l.ab))}</div>
@@ -226,6 +258,11 @@ function zeichneAusfaelle() {
       <div class="z-dauer">${esc(dauer(l.dauer_s))}</div>
     </div>`;
   }).join('');
+}
+
+function ausfaelleAlle() {
+  _alleAusfaelle = true;
+  zeichneAusfaelle();
 }
 
 function zeichneEreignisse() {
@@ -466,3 +503,238 @@ async function abmelden() {
 }
 
 start();
+
+// ── Messwerte ──────────────────────────────────────────────────────────────
+// Mehrere Graphen untereinander an EINER Zeitachse. Das ist der Unterschied zur
+// Bordansicht: dort liest man einen Wert im Vorbeigehen ab, hier sucht man
+// Zusammenhänge — dass die Spannung einbricht, WÄHREND der Strom steigt, sieht
+// man nur, wenn beide übereinanderliegen und dieselbe Achse teilen.
+//
+// Gezeichnet wird je Reihe ein Band zwischen kleinstem und größtem Wert des
+// Zeitfensters und die Mittellinie hinein. Nur den Mittelwert zu zeichnen wäre
+// glatter, würde aber genau das verschlucken, weswegen man hier hinschaut: die
+// kurze Spitze, den Einbruch, den Ausreißer.
+
+const GRUPPEN = [
+  { schluessel: 'ladung',   name: 'Ladestand',  einheit: '%',
+    felder: [{ f: 'soc', n: 'Ladestand', farbe: '#34d399' }] },
+  { schluessel: 'spannung', name: 'Spannung',   einheit: 'V',
+    felder: [{ f: 'voltage', n: 'Bordspannung', farbe: '#60a5fa' }] },
+  { schluessel: 'strom',    name: 'Strom',      einheit: 'A',
+    felder: [{ f: 'current', n: 'Bilanz', farbe: '#22d3ee' },
+             { f: 'current_charge', n: 'Zufluss', farbe: '#34d399' },
+             { f: 'current_discharge', n: 'Verbrauch', farbe: '#f87171' }] },
+  { schluessel: 'quellen',  name: 'Ladequellen', einheit: 'W',
+    felder: [{ f: 'charger', n: 'Ladegerät', farbe: '#fbbf24' },
+             { f: 'solar1', n: 'Solar', farbe: '#a78bfa' },
+             { f: 'orion', n: 'Lichtmaschine', farbe: '#fb923c' }] },
+  { schluessel: 'tanks',    name: 'Tanks',      einheit: '%',
+    felder: [{ f: 'tank1', n: 'Wasser', farbe: '#60a5fa' },
+             { f: 'tank2', n: 'Diesel', farbe: '#fbbf24' }] },
+  { schluessel: 'zellen',   name: 'Zellabweichung', einheit: 'V',
+    felder: [{ f: 'zelldiff', n: 'Größte Abweichung', farbe: '#a78bfa' }] },
+];
+
+let _messStd = 24;
+let _messDaten = null;
+let _aus = new Set();          // abgewählte Gruppen
+
+async function messwerteLaden() {
+  const bis = Date.now() / 1000;
+  const von = bis - _messStd * 3600;
+  const feld = $('reihen');
+  feld.innerHTML = '<div class="mess-leer">wird geladen…</div>';
+  const d = await hole(`/api/verlauf/reihen?von=${Math.floor(von)}&bis=${Math.ceil(bis)}&punkte=700`);
+  if (!d) { feld.innerHTML = '<div class="mess-leer">Keine Daten abrufbar.</div>'; return; }
+  _messDaten = d;
+  zeichneMesswerte();
+}
+
+function zeichneMesswerte() {
+  const d = _messDaten;
+  const feld = $('reihen');
+  if (!d || !d.punkte.length) {
+    feld.innerHTML = '<div class="mess-leer">Für diesen Zeitraum liegt nichts vor.</div>';
+    $('messStand').textContent = '';
+    $('zeitachse').innerHTML = '';
+    $('gruppenwahl').innerHTML = '';
+    return;
+  }
+
+  const stunden = (d.bis - d.von) / 3600;
+  $('messStand').textContent =
+    `${d.roh_anzahl.toLocaleString('de-DE')} Messwerte, zusammengefasst zu ${d.punkte.length} `
+    + `Punkten à ${dauer(d.eimer_s)}`;
+
+  // Nur Gruppen zeigen, für die es Daten gibt
+  const da = GRUPPEN.filter(g => g.felder.some(x => d.felder.includes(x.f)));
+  $('gruppenwahl').innerHTML = da.map(g => `
+    <button class="gw-knopf${_aus.has(g.schluessel) ? '' : ' an'}"
+            onclick="gruppeUmschalten('${g.schluessel}')">
+      <span class="gw-punkt" style="background:${g.felder[0].farbe}"></span>${esc(g.name)}
+    </button>`).join('');
+
+  const sichtbar = da.filter(g => !_aus.has(g.schluessel));
+  feld.innerHTML = sichtbar.map(g => `
+    <div class="reihe" data-gruppe="${g.schluessel}">
+      <div class="reihe-kopf">
+        <span class="reihe-name">${esc(g.name)}</span>
+        <span class="reihe-jetzt" id="jetzt-${g.schluessel}"></span>
+      </div>
+      <div class="reihe-bild">
+        <canvas id="cv-${g.schluessel}"></canvas>
+        <span class="reihe-spanne" id="oben-${g.schluessel}"></span>
+        <span class="reihe-spanne unten" id="unten-${g.schluessel}"></span>
+      </div>
+    </div>`).join('') + '<div class="faden" id="faden"><span class="faden-zeit" id="fadenZeit"></span></div>';
+
+  for (const g of sichtbar) zeichneReihe(g, d);
+  zeichneZeitachse(d);
+  fadenVerdrahten(d, sichtbar);
+}
+
+function zeichneReihe(g, d) {
+  const cv = $('cv-' + g.schluessel);
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const b = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.round(b.width * dpr));
+  cv.height = Math.max(1, Math.round(b.height * dpr));
+  const c = cv.getContext('2d');
+  c.scale(dpr, dpr);
+  const B = b.width, H = b.height;
+
+  const felder = g.felder.filter(x => d.felder.includes(x.f));
+  // Gemeinsame Skala je Gruppe: nur so sind Zufluss und Verbrauch vergleichbar.
+  let lo = Infinity, hi = -Infinity;
+  for (const p of d.punkte) {
+    for (const x of felder) {
+      const w = p[x.f];
+      if (!w) continue;
+      lo = Math.min(lo, w[1]); hi = Math.max(hi, w[2]);
+    }
+  }
+  if (!isFinite(lo)) return;
+  if (hi - lo < 1e-9) { hi = lo + 1; lo -= 0; }
+  const luft = (hi - lo) * 0.08;
+  lo -= luft; hi += luft;
+
+  const x = t => (t - d.von) / (d.bis - d.von) * B;
+  const y = w => H - (w - lo) / (hi - lo) * H;
+
+  // Nulllinie, wo sie in den Ausschnitt fällt — bei Strömen die wichtigste
+  // Orientierung: darüber fließt hinein, darunter hinaus.
+  if (lo < 0 && hi > 0) {
+    c.strokeStyle = 'rgba(148,163,184,.35)';
+    c.lineWidth = 1;
+    c.setLineDash([3, 3]);
+    c.beginPath(); c.moveTo(0, y(0)); c.lineTo(B, y(0)); c.stroke();
+    c.setLineDash([]);
+  }
+
+  for (const x_ of felder) {
+    // Erst das Band zwischen kleinstem und größtem Wert…
+    c.fillStyle = x_.farbe + '26';
+    c.beginPath();
+    let auf = false;
+    for (const p of d.punkte) {
+      const w = p[x_.f]; if (!w) continue;
+      const px = x(p.t);
+      if (!auf) { c.moveTo(px, y(w[2])); auf = true; } else c.lineTo(px, y(w[2]));
+    }
+    for (let i = d.punkte.length - 1; i >= 0; i--) {
+      const w = d.punkte[i][x_.f]; if (!w) continue;
+      c.lineTo(x(d.punkte[i].t), y(w[1]));
+    }
+    if (auf) { c.closePath(); c.fill(); }
+
+    // …dann die Mittellinie hinein
+    c.strokeStyle = x_.farbe;
+    c.lineWidth = 1.6;
+    c.lineJoin = 'round';
+    c.beginPath();
+    auf = false;
+    for (const p of d.punkte) {
+      const w = p[x_.f]; if (!w) continue;
+      const px = x(p.t), py = y(w[0]);
+      if (!auf) { c.moveTo(px, py); auf = true; } else c.lineTo(px, py);
+    }
+    c.stroke();
+  }
+
+  const k = (hi - lo) < 2 ? 2 : ((hi - lo) < 20 ? 1 : 0);
+  $('oben-' + g.schluessel).textContent = hi.toFixed(k) + ' ' + g.einheit;
+  $('unten-' + g.schluessel).textContent = lo.toFixed(k) + ' ' + g.einheit;
+  werteZeigen(g, d, d.punkte.length - 1);
+}
+
+function werteZeigen(g, d, i) {
+  const ziel = $('jetzt-' + g.schluessel);
+  if (!ziel) return;
+  const p = d.punkte[i];
+  if (!p) return;
+  const felder = g.felder.filter(x => d.felder.includes(x.f) && p[x.f]);
+  const k = g.einheit === 'V' ? 2 : (g.einheit === 'W' ? 0 : 1);
+  ziel.innerHTML = felder.map(x => `
+    <span class="rj-wert">
+      <span class="rj-punkt" style="background:${x.farbe}"></span>
+      <span class="rj-zahl">${p[x.f][0].toFixed(k)}</span>
+      <span class="rj-einheit">${esc(g.einheit)} ${esc(x.n)}</span>
+    </span>`).join('');
+}
+
+function zeichneZeitachse(d) {
+  const n = 6;
+  let h = '';
+  for (let i = 0; i <= n; i++) {
+    const t = new Date((d.von + (d.bis - d.von) * i / n) * 1000);
+    const lang = (d.bis - d.von) > 3 * 86400;
+    h += `<span>${t.toLocaleString('de-DE', lang
+      ? { day: '2-digit', month: '2-digit' }
+      : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>`;
+  }
+  $('zeitachse').innerHTML = h;
+}
+
+function fadenVerdrahten(d, sichtbar) {
+  const feld = $('reihen'), faden = $('faden');
+  if (!feld || !faden) return;
+  feld.onmousemove = e => {
+    const b = feld.getBoundingClientRect();
+    const rel = (e.clientX - b.left) / b.width;
+    if (rel < 0 || rel > 1) return;
+    const i = Math.min(d.punkte.length - 1, Math.max(0, Math.round(rel * (d.punkte.length - 1))));
+    faden.classList.add('an');
+    faden.style.left = (d.punkte[i].t - d.von) / (d.bis - d.von) * b.width + 'px';
+    $('fadenZeit').textContent = new Date(d.punkte[i].t * 1000)
+      .toLocaleString('de-DE', { day: '2-digit', month: '2-digit',
+                                 hour: '2-digit', minute: '2-digit' });
+    for (const g of sichtbar) werteZeigen(g, d, i);
+  };
+  feld.onmouseleave = () => {
+    faden.classList.remove('an');
+    for (const g of sichtbar) werteZeigen(g, d, d.punkte.length - 1);
+  };
+}
+
+function gruppeUmschalten(schluessel) {
+  if (_aus.has(schluessel)) _aus.delete(schluessel); else _aus.add(schluessel);
+  zeichneMesswerte();
+}
+
+function exportOeffnen() {
+  const bis = Math.ceil(Date.now() / 1000);
+  const von = Math.floor(bis - _messStd * 3600);
+  popZeigen(`
+    <div class="pop-titel">Daten holen</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 16px">
+      Der angezeigte Zeitraum als CSV — <b>ungekürzt</b>, also jeder einzelne
+      Messwert und nicht die zusammengefassten Punkte des Graphen.
+      Semikolon als Trenner, Komma als Dezimalzeichen: so öffnet eine deutsche
+      Tabellenkalkulation die Datei ohne Nachfragen.</p>
+    <div class="pop-tat">
+      <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
+      <a class="knopf" href="/api/verlauf/export?von=${von}&bis=${bis}"
+         onclick="setTimeout(popSchliessen, 400)">Herunterladen</a>
+    </div>`);
+}
