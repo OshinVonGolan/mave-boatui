@@ -467,3 +467,9 @@ main {
 .mess-leer { padding: 40px 0; text-align: center; color: var(--text3); font-size: 13px; }
 
 .knopf.mehr { margin-top: 12px; width: 100%; }
+
+.pop-hinweis {
+  font-size: 11px; line-height: 1.45; color: var(--text2);
+  background: var(--bg); border-radius: 8px; padding: 9px 11px; margin-bottom: 12px;
+}
+.pop-feld input:disabled, .pop-feld select:disabled { opacity: .5; }

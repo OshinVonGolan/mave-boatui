@@ -383,6 +383,8 @@ class NeuesKonto(BaseModel):
     name: str
     passwort: str
     rolle: str
+    person: str = ''
+    spitzname: str = ''
 
 
 class KontoAenderung(BaseModel):
@@ -390,6 +392,8 @@ class KontoAenderung(BaseModel):
     gesperrt: bool | None = None
     passwort: str | None = None
     laeuft_ab: float | None = None
+    person: str | None = None
+    spitzname: str | None = None
 
 
 def _sitzung_setzen(antwort: JSONResponse, request: Request, token: str) -> None:
@@ -508,7 +512,8 @@ def konten_liste(k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
 @app.post('/api/konten')
 async def konto_anlegen(neu: NeuesKonto, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
     try:
-        angelegt = konten.anlegen(neu.name, neu.passwort, neu.rolle)
+        angelegt = konten.anlegen(neu.name, neu.passwort, neu.rolle,
+                                  person=neu.person, spitzname=neu.spitzname)
     except KontoFehler as e:
         raise HTTPException(400, detail=str(e)) from None
     await _konten_zum_boot()
@@ -522,10 +527,13 @@ async def konto_aendern(name: str, aenderung: KontoAenderung,
     # auszusperren. Der Server laesst es nicht zu — es gibt hier niemanden, der
     # es wieder geradeziehen koennte.
     if name == k.get('name') and (aenderung.gesperrt or aenderung.rolle):
-        raise HTTPException(400, detail='Das eigene Konto lässt sich so nicht ändern.')
+        # Namen und Passwort darf man am eigenen Konto sehr wohl aendern —
+        # gesperrt wird nur die Selbstentmachtung.
+        raise HTTPException(400, detail='Die eigene Rolle und Sperre lassen sich nicht ändern.')
     try:
         stand = konten.aendern(name, rolle=aenderung.rolle, gesperrt=aenderung.gesperrt,
-                               passwort=aenderung.passwort, laeuft_ab=aenderung.laeuft_ab)
+                               passwort=aenderung.passwort, laeuft_ab=aenderung.laeuft_ab,
+                               person=aenderung.person, spitzname=aenderung.spitzname)
     except KontoFehler as e:
         raise HTTPException(400, detail=str(e)) from None
     await _konten_zum_boot()

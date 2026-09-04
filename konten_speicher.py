@@ -77,22 +77,27 @@ class Konten:
     def liste(self) -> list[dict]:
         """Alle Konten OHNE Hashes — fuer die Verwaltungsansicht."""
         return [{'name': n, 'rolle': kt.get('rolle'), 'gesperrt': bool(kt.get('gesperrt')),
+                 'person': kt.get('person') or '', 'spitzname': kt.get('spitzname') or '',
+                 'anzeigename': k.anzeigename(kt),
                  'gueltig_bis': kt.get('gueltig_bis'), 'angelegt': kt.get('angelegt')}
                 for n, kt in sorted(self._konten.items())]
 
     # ── Konten ──────────────────────────────────────────────────────────────
 
-    def anlegen(self, name: str, passwort: str, rolle: str) -> dict:
+    def anlegen(self, name: str, passwort: str, rolle: str,
+                person: str = '', spitzname: str = '') -> dict:
         if rolle not in r.ROLLEN:
             raise k.KontoFehler(f'Unbekannte Rolle: {rolle!r}')
-        konto = k.konto_anlegen(name, passwort, rolle, angelegt=time.time())
+        konto = k.konto_anlegen(name, passwort, rolle, angelegt=time.time(),
+                                person=person, spitzname=spitzname)
         with self._lock:
             if konto['name'] in self._konten:
                 raise k.KontoFehler(f'Den Namen {konto["name"]!r} gibt es schon.')
             self._konten[konto['name']] = konto
             self._sichern_konten()
         log.info('Konto %r angelegt (%s)', konto['name'], rolle)
-        return {'name': konto['name'], 'rolle': rolle}
+        return {'name': konto['name'], 'rolle': rolle,
+                'anzeigename': k.anzeigename(konto)}
 
     def ersetzen(self, konten: dict) -> int:
         """Die Kopie vom Server uebernehmen.
@@ -240,7 +245,7 @@ class Konten:
         return dict(konto)
 
     def aendern(self, name: str, *, rolle=None, gesperrt=None,
-                passwort=None, laeuft_ab=None) -> dict:
+                passwort=None, laeuft_ab=None, person=None, spitzname=None) -> dict:
         """Rolle, Sperre, Passwort oder Ablauf eines Kontos aendern.
 
         Wird ein Konto gesperrt oder sein Passwort gewechselt, verfallen SEINE
@@ -259,6 +264,10 @@ class Konten:
                 konto['gesperrt'] = bool(gesperrt)
             if laeuft_ab is not None:
                 konto['laeuft_ab'] = float(laeuft_ab) if laeuft_ab else None
+            if person is not None:
+                konto['person'] = str(person).strip()[:80]
+            if spitzname is not None:
+                konto['spitzname'] = str(spitzname).strip()[:40]
             if passwort:
                 konto['hash'] = k.hash_erzeugen(passwort)
             if gesperrt or passwort:
@@ -272,6 +281,9 @@ class Konten:
             self._sichern_konten()
         log.info('Konto %r geändert', konto['name'])
         return {'name': konto['name'], 'rolle': konto.get('rolle'),
+                'person': konto.get('person') or '',
+                'spitzname': konto.get('spitzname') or '',
+                'anzeigename': k.anzeigename(konto),
                 'gesperrt': bool(konto.get('gesperrt')),
                 'laeuft_ab': konto.get('laeuft_ab')}
 
@@ -301,6 +313,7 @@ class Konten:
         with self._lock:
             liste = [
                 {'name': kt['name'], 'hash': kt.get('hash'), 'rolle': kt.get('rolle'),
+                 'person': kt.get('person') or '', 'spitzname': kt.get('spitzname') or '',
                  'gesperrt': bool(kt.get('gesperrt')), 'laeuft_ab': kt.get('laeuft_ab'),
                  # Die Uebersteuerungen MUESSEN mit: sonst gilt an Bord wieder
                  # die blosse Rolle, und ein einzeln entzogenes Recht waere

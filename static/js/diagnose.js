@@ -82,7 +82,7 @@ async function start() {
     $('zurBordansicht').href =
       location.protocol + '//' + location.hostname.replace(/^logbuch\./, 'mave.') + '/';
   }
-  $('wer').textContent = _konto.rolle_name;
+  $('wer').textContent = (_konto.anzeigename || '') + ' · ' + _konto.rolle_name;
   $('inhalt').hidden = false;
   const darf = _konto.handlungen || [];
   $('slKonten').hidden = !darf.includes('verwalten');
@@ -230,7 +230,7 @@ function zeichneAnwesend() {
     return `<div class="aw-zeile">
       <span class="aw-punkt ${still ? 'still' : art}"></span>
       <span>
-        <div class="aw-wer">${esc(s.konto)}${s.kiosk ? ' <span class="hinweis">(Kiosk)</span>' : ''}</div>
+        <div class="aw-wer">${esc(s.anzeigename || s.konto)}${s.kiosk ? ' <span class="hinweis">(Kiosk)</span>' : ''}</div>
         <div class="aw-was">${esc(s.geraet || 'unbekanntes Gerät')}${s.herkunft ? ' · ' + esc(s.herkunft) : ''}</div>
       </span>
       <span class="aw-wann">${still ? 'zuletzt vor ' + dauer(seit) : 'gerade aktiv'}</span>
@@ -459,13 +459,20 @@ function zeichneKonten() {
   $('konten').innerHTML = (k.konten || []).map(c => {
     const r = rollen[c.rolle] || {};
     const ich = c.name === (_konto && _konto.name);
+    // Angezeigt wird der Spitzname; der Anmeldename steht klein daneben. An
+    // Bord ruft niemand die Steuerfrau bei ihrem Anmeldenamen — beim Anmelden
+    // braucht man ihn aber, deshalb verschwindet er nicht.
+    const zeigen = c.anzeigename || c.name;
     return `<div class="konto">
       <div>
-        <div class="k-name ${c.gesperrt ? 'gesperrt' : ''}">${esc(c.name)}${ich ? ' <span class="hinweis">(du)</span>' : ''}</div>
-        <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}</div>
+        <div class="k-name ${c.gesperrt ? 'gesperrt' : ''}">${esc(zeigen)}${ich ? ' <span class="hinweis">(du)</span>' : ''}</div>
+        <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}
+          ${zeigen !== c.name ? '· meldet sich an als <b>' + esc(c.name) + '</b>' : ''}
+          ${c.person && c.person !== zeigen ? '· ' + esc(c.person) : ''}</div>
         <div class="k-darf">${esc((r.handlungen || []).join(' · '))}</div>
       </div>
       <div class="k-tat">
+        <button class="knopf stumm" onclick="kontoBearbeiten('${esc(c.name)}')">Bearbeiten</button>
         ${ich ? '' : `<button class="knopf stumm" onclick="kontoSperren('${esc(c.name)}', ${!c.gesperrt})">${c.gesperrt ? 'Entsperren' : 'Sperren'}</button>`}
         ${ich ? '' : `<button class="knopf warn" onclick="kontoLoeschen('${esc(c.name)}')">Löschen</button>`}
       </div>
@@ -473,18 +480,27 @@ function zeichneKonten() {
   }).join('') || '<div class="leerlauf">Noch kein Konto.</div>';
 }
 
-function kontoNeuOeffnen() {
+function _rollenWahl(gewaehlt) {
   const rollen = (_daten.konten && _daten.konten.rollen) || [];
+  return rollen.map(r =>
+    `<option value="${esc(r.schluessel)}"${r.schluessel === gewaehlt ? ' selected' : ''}>`
+    + `${esc(r.name)} — ${esc(r.handlungen.join(', '))}</option>`).join('');
+}
+
+function kontoNeuOeffnen() {
   popZeigen(`
     <div class="pop-titel">Konto anlegen</div>
-    <label class="pop-feld"><span>Name</span>
-      <input id="nkName" type="text" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+    <label class="pop-feld"><span>Anmeldename</span>
+      <input id="nkName" type="text" autocapitalize="none" autocorrect="off" spellcheck="false"
+             placeholder="kurz und eindeutig"></label>
+    <label class="pop-feld"><span>Name der Person</span>
+      <input id="nkPerson" type="text" placeholder="optional"></label>
+    <label class="pop-feld"><span>Spitzname (wird angezeigt)</span>
+      <input id="nkSpitz" type="text" placeholder="optional"></label>
     <label class="pop-feld"><span>Passwort (mindestens 8 Zeichen)</span>
       <input id="nkPw" type="text"></label>
     <label class="pop-feld"><span>Rolle</span>
-      <select id="nkRolle">
-        ${rollen.map(r => `<option value="${esc(r.schluessel)}">${esc(r.name)} — ${esc(r.handlungen.join(', '))}</option>`).join('')}
-      </select></label>
+      <select id="nkRolle">${_rollenWahl('crew')}</select></label>
     <div class="pop-fehler hidden" id="nkFehler"></div>
     <div class="pop-tat">
       <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
@@ -492,12 +508,60 @@ function kontoNeuOeffnen() {
     </div>`);
 }
 
+function kontoBearbeiten(name) {
+  const c = ((_daten.konten && _daten.konten.konten) || []).find(x => x.name === name);
+  if (!c) return;
+  const ich = c.name === (_konto && _konto.name);
+  popZeigen(`
+    <div class="pop-titel">${esc(c.anzeigename || c.name)} bearbeiten</div>
+    <label class="pop-feld"><span>Name der Person</span>
+      <input id="bkPerson" type="text" value="${esc(c.person || '')}"></label>
+    <label class="pop-feld"><span>Spitzname (wird angezeigt)</span>
+      <input id="bkSpitz" type="text" value="${esc(c.spitzname || '')}"
+             placeholder="${esc(c.name)}"></label>
+    <label class="pop-feld"><span>Rolle</span>
+      <select id="bkRolle"${ich ? ' disabled' : ''}>${_rollenWahl(c.rolle)}</select></label>
+    <label class="pop-feld"><span>Neues Passwort (leer lassen = unverändert)</span>
+      <input id="bkPw" type="text" placeholder="mindestens 8 Zeichen"></label>
+    ${ich ? '<div class="pop-hinweis">Die eigene Rolle lässt sich nicht ändern — sonst könnte man sich '
+          + 'selbst aussperren, und hier ist niemand, der es wieder geradezieht.</div>' : ''}
+    <div class="pop-fehler hidden" id="bkFehler"></div>
+    <div class="pop-tat">
+      <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
+      <button class="knopf" onclick="kontoSpeichern('${esc(name)}', ${ich})">Speichern</button>
+    </div>`);
+}
+
+async function kontoSpeichern(name, ich) {
+  const rumpf = {
+    person: $('bkPerson').value,
+    spitzname: $('bkSpitz').value,
+  };
+  if (!ich) rumpf.rolle = $('bkRolle').value;
+  const pw = $('bkPw').value.trim();
+  if (pw) rumpf.passwort = pw;
+  const r = await fetch('/api/konten/' + encodeURIComponent(name), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rumpf),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    const f = $('bkFehler');
+    f.textContent = d.detail || 'Das hat nicht geklappt.';
+    f.classList.remove('hidden');
+    return;
+  }
+  popSchliessen();
+  laden();
+}
+
 async function kontoAnlegen() {
   const name = $('nkName').value.trim(), pw = $('nkPw').value, rolle = $('nkRolle').value;
   const fehler = $('nkFehler');
   const r = await fetch('/api/konten', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, passwort: pw, rolle }),
+    body: JSON.stringify({ name, passwort: pw, rolle,
+                           person: $('nkPerson').value, spitzname: $('nkSpitz').value }),
   });
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));

@@ -132,7 +132,10 @@ def uebersicht(konto) -> dict:
     Die PWA blendet damit aus, was ohnehin abgewiesen wuerde — als Bequemlichkeit,
     nicht als Schutz.
     """
+    from sync.konten import anzeigename
     return {
+        'name': (konto or {}).get('name'),
+        'anzeigename': anzeigename(konto),
         'rolle': (konto or {}).get('rolle') or VORGABE_ROLLE,
         'rolle_name': rolle((konto or {}).get('rolle'))['name'],
         'gesperrt': _gesperrt(konto),

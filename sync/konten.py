@@ -178,13 +178,30 @@ def konto_anlegen(name: str, passwort: str, rolle: str, **weiteres) -> dict:
     if not name or len(name) > 64:
         raise KontoFehler('Der Anmeldename fehlt oder ist zu lang.')
     return {
+        # Drei Namen, drei Aufgaben, und sie sollten nicht vermischt werden:
+        #   name       womit man sich ANMELDET. Kurz, eindeutig, aendert sich nie.
+        #   person     wie die Person heisst. Fuer die Frage "wer ist das?".
+        #   spitzname  wie sie ANGEZEIGT wird. An Bord ruft niemand die
+        #              Steuerfrau bei ihrem Anmeldenamen.
         'name': name,
+        'person': (weiteres.get('person') or '').strip()[:80],
+        'spitzname': (weiteres.get('spitzname') or '').strip()[:40],
         'hash': hash_erzeugen(passwort),
         'rolle': rolle,
         'gesperrt': False,
         'gueltig_bis': weiteres.get('gueltig_bis'),   # None = unbefristet
         'angelegt': weiteres.get('angelegt'),
     }
+
+
+def anzeigename(konto) -> str:
+    """Wie ein Konto genannt wird: Spitzname, sonst Person, sonst Anmeldename.
+
+    Eine Stelle dafuer, weil sonst jede Anzeige ihre eigene Reihenfolge waehlt
+    und dieselbe Person je nach Ansicht anders heisst.
+    """
+    k = konto or {}
+    return (k.get('spitzname') or k.get('person') or k.get('name') or '').strip()
 
 
 def abgelaufen(konto: dict, jetzt: float | None) -> bool:
