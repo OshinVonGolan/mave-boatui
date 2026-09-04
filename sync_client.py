@@ -276,6 +276,19 @@ class SyncClient:
             # Betrieb nicht verdraengen.
             await asyncio.sleep(0.5)
 
+    async def sitzung_melden(self, kennung: str, daten: dict) -> None:
+        """Eine an Bord entstandene Anmeldung zum Server tragen.
+
+        Ohne Verbindung passiert nichts, und das ist richtig: die Sitzung gilt
+        an Bord trotzdem, und beim naechsten Verbinden gleicht sich beides ab.
+        """
+        if self._ws is None:
+            return
+        try:
+            await self._senden(p.sitzung(kennung, daten))
+        except Exception as e:
+            log.debug('Sitzung nicht gemeldet: %s', e)
+
     async def ereignis(self, art: str, daten: dict, folge: int) -> None:
         """Alarme und Stoerungen. Gehen in JEDER Betriebsart sofort hinaus —
         sie sind der Grund, warum das System nach draussen spricht."""

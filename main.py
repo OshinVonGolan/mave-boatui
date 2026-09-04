@@ -332,7 +332,15 @@ def _konten_stand() -> str:
 
 
 def _konten_uebernehmen(daten: dict) -> int:
-    return konten.ersetzen({k['name']: k for k in (daten.get('konten') or [])})
+    anzahl = konten.ersetzen({k['name']: k for k in (daten.get('konten') or [])})
+    # Und die offenen Sitzungen des Servers dazu: die Anlage hat drei Namen,
+    # und wer sich unter einem anmeldet, soll unter den anderen angemeldet
+    # SEIN. Das Cookie gilt fuer alle drei — es nuetzt aber nichts, wenn diese
+    # Seite die Sitzung nicht kennt.
+    dazu = konten.sitzungen_uebernehmen(daten.get('sitzungen') or {})
+    if dazu:
+        log.info('%d Sitzungen vom Server übernommen', dazu)
+    return anzahl
 
 
 sync = sync_client.SyncClient(
@@ -664,10 +672,27 @@ async def login(request: Request):
     except Exception as e:
         log.warning('Anmeldung an Bord gescheitert für %r', daten.get('name'))
         return JSONResponse({'detail': str(e)}, status_code=401)
+    # Dem Server melden, damit dieselbe Anmeldung auch dort gilt — sonst steht
+    # man beim Wechsel ins Logbuch wieder vor der Anmeldemaske. Scheitert es
+    # (kein Internet), ist das kein Fehler: die Sitzung gilt an Bord trotzdem,
+    # und beim naechsten Verbinden gleicht sich beides ab.
+    try:
+        kennung = konten_speicher.k.sitzung_kennung(token)
+        asyncio.create_task(sync.sitzung_melden(kennung, {
+            'konto': k['name'], 'seit': time.time(), 'zuletzt': time.time(),
+            'kiosk': bool(daten.get('kiosk')),
+            'herkunft': (request.client.host if request.client else ''),
+            'geraet': zg.geraet_aus_ua(request.headers.get('user-agent', '')),
+        }))
+    except Exception as e:
+        log.debug('Sitzung nicht gemeldet: %s', e)
+
     antwort = JSONResponse(rechte_modul.uebersicht(k))
     antwort.set_cookie(zg.SITZUNG_COOKIE, token, max_age=int(konten_speicher.SITZUNG_DAUER_S),
                        httponly=True, secure=(request.url.scheme == 'https'),
-                       samesite='lax', path='/')
+                       samesite='lax', path='/',
+                       # Gilt fuer alle drei Namen — siehe sync/zugang.py.
+                       domain=zg.keks_bereich(request.headers.get('host', '')))
     return antwort
 
 
@@ -675,7 +700,8 @@ async def login(request: Request):
 async def logout(request: Request):
     konten.abmelden(zg.token_aus(request))
     antwort = JSONResponse({'ok': True})
-    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/',
+                          domain=zg.keks_bereich(request.headers.get('host', '')))
     return antwort
 
 

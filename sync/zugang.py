@@ -91,6 +91,34 @@ def herkunft_erlaubt(origin: str, gastgeber: str) -> bool:
     return o.hostname.lower() == eigener
 
 
+def keks_bereich(gastgeber: str) -> str | None:
+    """Fuer welche Adressen das Sitzungscookie gelten soll.
+
+    Die Anlage hat drei Namen unter einer gemeinsamen Wurzel:
+    mave.…, pi.mave.… und logbuch.… . Ohne diese Angabe gilt ein Cookie nur
+    fuer den Namen, unter dem es gesetzt wurde — und man muss sich beim Wechsel
+    zwischen Bordansicht und Logbuch jedes Mal neu anmelden. Genau das ist
+    passiert: in der Bordansicht war der Eigner angemeldet, im Logbuch ein
+    Gast, und die Abweisung sah aus wie ein Rechtefehler.
+
+    Zurueck kommt None, wenn der Gastgeber keine solche Adresse ist (eine
+    IP, "localhost", ein anderer Name). Eine Domain auf eine IP zu setzen wird
+    vom Browser ohnehin verworfen — dann lieber gar nicht erst.
+    """
+    h = (gastgeber or '').split(':')[0].strip().lower()
+    if not h or h == 'localhost':
+        return None
+    if all(t.isdigit() for t in h.split('.')):      # IPv4
+        return None
+    teile = h.split('.')
+    if len(teile) < 2:
+        return None
+    # Die gemeinsame Wurzel ist der Name mit seiner Endung — also
+    # "circuit-sailor.com" fuer alle drei. Weiter hinauf zu gehen waere falsch
+    # und wuerde vom Browser abgelehnt.
+    return '.' + '.'.join(teile[-2:])
+
+
 def token_aus(request) -> str:
     """Die Sitzung aus einer Anfrage holen — Cookie zuerst, dann Kopfzeile.
 

@@ -8,6 +8,7 @@ Aufruf:
 Die Tests prüfen bewusst die Fälle, in denen ein Fehler jemanden aussperrt oder
 jemanden hereinlässt — nicht den Normalweg, der ohnehin täglich läuft.
 """
+import json
 import tempfile
 import time
 import unittest
@@ -562,3 +563,60 @@ class Selbstbedienung(Basis):
         self.konten.einladung_zuruecknehmen('gast')
         self.assertIn('gast', self.konten._konten)
         self.assertIsNone(self.konten.offene_einladung('gast'))
+
+
+class SitzungenTeilen(Basis):
+    """Die Anlage hat drei Namen. Wer sich unter einem anmeldet, soll unter den
+    anderen angemeldet SEIN.
+
+    Der Fehler, den das behebt: In der Bordansicht war der Eigner angemeldet,
+    im Logbuch ein Gast — zwei Adressen, zwei Cookie-Speicher, zwei getrennte
+    Sitzungslisten. Die Abweisung sah aus wie ein Rechtefehler.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.konten.anlegen('eigner', 'ein gutes Passwort 1', 'eigner')
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        pfad = Path(tmp.name)
+        self.pi = Konten(pfad / 'konten.json', pfad / 'sitzungen.json')
+        self.pi.ersetzen({c['name']: c for c in self.konten.zum_verteilen()['konten']})
+
+    def test_sitzung_vom_server_gilt_auch_an_bord(self):
+        token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        self.assertIsNone(self.pi.konto_zu_token(token), 'vor dem Abgleich noch nicht')
+        v = self.konten.zum_verteilen()
+        self.pi.sitzungen_uebernehmen(v['sitzungen'])
+        self.assertIsNotNone(self.pi.konto_zu_token(token),
+                             'nach dem Abgleich muss dieselbe Sitzung an Bord gelten')
+
+    def test_sitzung_von_bord_gilt_auch_beim_server(self):
+        token, _ = self.pi.anmelden('eigner', 'ein gutes Passwort 1')
+        kennung = k.sitzung_kennung(token)
+        self.konten.sitzungen_uebernehmen({kennung: {'konto': 'eigner',
+                                                     'seit': time.time(), 'zuletzt': time.time()}})
+        self.assertIsNotNone(self.konten.konto_zu_token(token))
+
+    def test_uebernehmen_verwirft_die_eigenen_nicht(self):
+        """An Bord kann sich jemand angemeldet haben, während das Boot ohne
+        Internet war. Diese Sitzung darf nicht verschwinden."""
+        bord, _ = self.pi.anmelden('eigner', 'ein gutes Passwort 1')
+        server, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        self.pi.sitzungen_uebernehmen(self.konten.zum_verteilen()['sitzungen'])
+        self.assertIsNotNone(self.pi.konto_zu_token(bord), 'die eigene bleibt')
+        self.assertIsNotNone(self.pi.konto_zu_token(server), 'die fremde kommt dazu')
+
+    def test_sitzung_zu_unbekanntem_konto_wird_verworfen(self):
+        """Sonst ließe sich ein gelöschtes Konto über eine alte Sitzung
+        weiterbenutzen."""
+        dazu = self.pi.sitzungen_uebernehmen({'irgendeine': {'konto': 'gibtesnicht',
+                                                            'zuletzt': time.time()}})
+        self.assertEqual(dazu, 0)
+
+    def test_das_token_selbst_faehrt_nie_mit(self):
+        """Übertragen wird nur die Kennung — wer mitliest, kann damit keine
+        Sitzung übernehmen."""
+        token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        roh = json.dumps(self.konten.zum_verteilen())
+        self.assertNotIn(token, roh)

@@ -32,6 +32,7 @@ ZUSTAND  = 'zustand'    # der Live-Stand, gedrosselt (wie /api/status)
 VERLAUF  = 'verlauf'    # ein Buendel Verlaufseintraege, mit Folgenummern
 EREIGNIS = 'ereignis'   # Alarm, Stoerung, Systemereignis — sofort
 QUITTUNG = 'quittung'   # Ergebnis eines Befehls
+SITZUNG  = 'sitzung'     # eine neue Anmeldung an Bord, damit der Server sie kennt
 
 # Server -> Pi
 STAND    = 'stand'      # "ich habe Verlauf bis Folge N", dazu Kontenrevision
@@ -42,7 +43,7 @@ KONTEN   = 'konten'     # die Kontenkopie, damit der Pi ohne Internet anmelden k
 PING     = 'ping'
 PONG     = 'pong'
 
-_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, PING, PONG})
+_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, SITZUNG, PING, PONG})
 _VOM_SERVER  = frozenset({STAND, BEFEHL, KONTEN, PING, PONG})
 _MIT_FOLGE   = frozenset({VERLAUF, EREIGNIS})
 
@@ -94,6 +95,15 @@ def stand(verlauf_bis: int, konten_stand: str = '') -> dict:
     """
     return umschlag(STAND, {'verlauf_bis': int(verlauf_bis),
                             'konten_stand': str(konten_stand or '')})
+
+
+def sitzung(kennung: str, daten: dict) -> dict:
+    """Eine an Bord entstandene Anmeldung, damit der Server sie auch kennt.
+
+    Uebertragen wird nur die KENNUNG (der SHA-256 des Tokens), nie das Token
+    selbst — wer die Verbindung mitliest, kann damit keine Sitzung uebernehmen.
+    """
+    return umschlag(SITZUNG, {'kennung': kennung, 'sitzung': daten})
 
 
 def konten(daten: dict) -> dict:

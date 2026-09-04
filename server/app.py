@@ -226,6 +226,13 @@ async def sync(ws: WebSocket) -> None:
                 weiter['alter_s'] = 0
                 weiter['boot_verbunden'] = True
                 await _an_zuschauer(weiter)
+            elif typ == p.SITZUNG:
+                # Eine Anmeldung, die an Bord entstanden ist. Uebernommen wird
+                # sie nur, wenn das Konto hier bekannt ist — der Server bleibt
+                # die Wahrheit darueber, WER es gibt.
+                d = n['daten'] or {}
+                if konten and d.get('kennung'):
+                    konten.sitzungen_uebernehmen({d['kennung']: d.get('sitzung') or {}})
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
             elif typ == p.EREIGNIS:
@@ -418,6 +425,9 @@ def _sitzung_setzen(antwort: JSONResponse, request: Request, token: str) -> None
         zg.SITZUNG_COOKIE, token,
         max_age=int(SITZUNG_DAUER_S), httponly=True,
         secure=(request.url.scheme == 'https'), samesite='lax', path='/',
+        # Gilt fuer alle drei Namen der Anlage. Ohne das muesste man sich beim
+        # Wechsel zwischen Bordansicht und Logbuch jedes Mal neu anmelden.
+        domain=zg.keks_bereich(request.headers.get('host', '')),
     )
 
 
@@ -460,7 +470,8 @@ def login(daten: Anmeldung, request: Request) -> JSONResponse:
 def logout(request: Request) -> JSONResponse:
     konten.abmelden(zg.token_aus(request))
     antwort = JSONResponse({'ok': True})
-    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/',
+                          domain=zg.keks_bereich(request.headers.get('host', '')))
     return antwort
 
 

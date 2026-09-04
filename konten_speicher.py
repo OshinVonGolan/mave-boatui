@@ -494,7 +494,46 @@ class Konten:
                 for kt in sorted(self._konten.values(), key=lambda x: x['name'])
             ]
         roh = json.dumps(liste, sort_keys=True, ensure_ascii=False).encode()
-        return {'konten': liste, 'stand': hashlib.sha256(roh).hexdigest()[:16]}
+        # Die offenen Sitzungen fahren mit. Der Grund ist handfest: die Anlage
+        # hat drei Namen, und wer sich unter einem anmeldet, soll unter den
+        # anderen angemeldet SEIN. Das Cookie gilt inzwischen fuer alle drei —
+        # aber es nuetzt nichts, wenn die Gegenseite die Sitzung nicht kennt.
+        #
+        # Uebertragen wird nur die KENNUNG (der SHA-256), nie das Token selbst.
+        # Wer die Uebertragung mitliest, kann damit keine Sitzung uebernehmen.
+        with self._lock:
+            sitzungen = {kn: dict(si) for kn, si in self._sitzungen.items()}
+        return {'konten': liste, 'stand': hashlib.sha256(roh).hexdigest()[:16],
+                'sitzungen': sitzungen}
+
+    def sitzungen_uebernehmen(self, fremde: dict) -> int:
+        """Sitzungen der Gegenseite aufnehmen, ohne die eigenen zu verlieren.
+
+        Zusammengefuehrt, nicht ersetzt: an Bord kann sich jemand angemeldet
+        haben, waehrend das Boot ohne Internet war. Diese Sitzung soll nicht
+        verschwinden, nur weil der Server sie nicht kennt.
+
+        Sitzungen zu Konten, die es nicht (mehr) gibt, fallen weg — sonst
+        liesse sich ein geloeschtes Konto ueber eine alte Sitzung
+        weiterbenutzen.
+        """
+        if not isinstance(fremde, dict):
+            return 0
+        dazu = 0
+        with self._lock:
+            for kennung, si in fremde.items():
+                if not isinstance(si, dict) or si.get('konto') not in self._konten:
+                    continue
+                da = self._sitzungen.get(kennung)
+                if da is None:
+                    self._sitzungen[kennung] = dict(si)
+                    dazu += 1
+                elif si.get('zuletzt', 0) > da.get('zuletzt', 0):
+                    da.update(si)
+            if dazu:
+                self._aufraeumen()
+                self._sichern_sitzungen()
+        return dazu
 
     def _aufraeumen(self) -> None:
         jetzt = time.time()
