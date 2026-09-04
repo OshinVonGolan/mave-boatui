@@ -93,21 +93,25 @@ async function _wartungSave() {
 }
 
 function updateWartungTopbar() {
-  const btn = $('wartungTopBtn');
-  if (!btn) return;
+  // Der Wartungsknopf stand in der Kopfzeile und faerbte sich, wenn etwas
+  // faellig war. Die Kopfzeile traegt jetzt nur noch drei Dinge — der Hinweis
+  // wandert deshalb an den Burger (ein Punkt daran) und an den Menueeintrag.
+  // Er darf nicht verlorengehen: eine ueberfaellige Wartung, die man erst beim
+  // Oeffnen des Menues bemerkt, ist keine Warnung.
   const allTasks = WARTUNG_DATA.flatMap(c => c.tasks);
   const overdue  = allTasks.filter(t => getWartungStatus(t).status === 'overdue').length;
   const dueSoon  = allTasks.filter(t => getWartungStatus(t).status === 'due_soon').length;
-  if (overdue > 0) {
-    btn.style.color = '#ef4444';
-    btn.classList.add('w-blink');
-  } else if (dueSoon > 0) {
-    btn.style.color = '#f59e0b';
-    btn.classList.remove('w-blink');
-  } else {
-    btn.style.color = 'var(--text3)';
-    btn.classList.remove('w-blink');
+  const farbe = overdue > 0 ? '#ef4444' : dueSoon > 0 ? '#f59e0b' : '';
+  for (const id of ['burgerPunkt', 'bmWartungPunkt']) {
+    const el = $(id);
+    if (!el) continue;
+    el.classList.toggle('hidden', !farbe);
+    if (farbe) el.style.background = farbe;
+    el.classList.toggle('w-blink', overdue > 0);
   }
+  const knopf = $('burgerBtn');
+  if (knopf) knopf.title = overdue > 0 ? 'Menü — Wartung überfällig'
+           : dueSoon > 0 ? 'Menü — Wartung steht an' : 'Menü';
 }
 
 // Gerade Fortschrittsleiste: grün = aktuell, gelb = demnächst, rot = überfällig.
@@ -185,7 +189,6 @@ async function openWartung() {
   _closeAllOverlays();
   history.pushState({ overlay: 'wartung' }, '', '#wartung');
   $('wartungOverlay').classList.remove('hidden');
-  _navActive('wartungTopBtn');
   await _wartungLoad();
   renderWartung();
 }

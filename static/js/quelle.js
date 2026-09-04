@@ -96,15 +96,28 @@ function quelleAusDaten(d) {
   renderQuelle();
 }
 
+// Wie gut die Leitung nach draussen ist. Kommt aus connectivity.js, wo der
+// Router seinen Uplink meldet. Frueher trug das ein eigenes Antennensymbol
+// mit eigenem Punkt in der Kopfzeile — drei Zeichen fuer eine Frage. Jetzt
+// sagt EIN Zeichen woher die Daten kommen, und sein Punkt wie gut die Leitung
+// dafuer ist.
+let _guete = { farbe: 'var(--text3)', wort: 'Uplink unbekannt' };
+
+function quelleGuete(farbe, wort) {
+  _guete = { farbe, wort };
+  renderQuelle();
+}
+
 function renderQuelle() {
   const chip = $('quelleChip');
   if (!chip) return;
   const a = _QUELLE_ART[_quelle.art] || _QUELLE_ART.unbekannt;
   chip.className = 'quelle-chip ' + a.ton;
-  chip.title = a.titel;
-  chip.setAttribute('aria-label', a.titel);
+  chip.title = a.titel + ' — ' + _guete.wort;
+  chip.setAttribute('aria-label', chip.title);
   const sym = _quelle.art === 'direkt' ? _QUELLE_SVG.chip : _QUELLE_SVG.wolke;
-  chip.innerHTML = sym + '<span class="quelle-txt">' + a.kurz + '</span>';
+  chip.innerHTML = sym + '<span class="quelle-txt">' + a.kurz + '</span>'
+    + `<i class="quelle-guete" style="background:${_guete.farbe}"></i>`;
   const s = _quelle.alter_s == null ? null
           : _quelle.alter_s + (Date.now() - _quelle.stand) / 1000;
   _kopieSetzen(_quelle.art === 'server_kopie', _quelleAlterText(s));
@@ -125,6 +138,8 @@ function renderQuellePop() {
   ).join('<div class="qw-strich"></div>');
   pop.innerHTML =
     `<div class="qp-kopf">${a.titel}</div>` +
+    `<div class="qp-guete"><i style="background:${_guete.farbe}"></i>${_guete.wort}` +
+    `<button class="qp-mehr" onclick="closeQuelle();openConnectivity()">Einzelheiten</button></div>` +
     // Ueberschrift, damit die drei Kaesten als WEG lesbar sind. Ohne sie sahen
     // sie aus wie weitere Zustaende neben "Direkt" und "Server" — der erste
     // Kasten wurde fuer eine dritte Quellenart gehalten.

@@ -27,6 +27,9 @@ async function zugangPruefen() {
     else anmeldungSchliessen();
     if (ohneKonten) _hinweisOhneKonten();
     _rechteAnwenden(_zugangStand.konto);
+    // Das Menü zeigt oben, wer angemeldet ist. Ändert sich das, muss es neu
+    // gebaut werden — sonst steht dort der Stand von vor der Anmeldung.
+    if (typeof burgerBauen === 'function') burgerBauen();
     return _zugangStand;
   } catch (_) {
     return null;   // kein Netz: die Oberflaeche laeuft mit dem, was sie hat
@@ -146,80 +149,12 @@ function _sitzungVerloren() {
   anmeldungZeigen('Die Sitzung ist abgelaufen. Bitte erneut anmelden.');
 }
 
-// ── Kontomenü ──────────────────────────────────────────────────────────────
-// In der Bordansicht stand nirgends, mit welchem Konto man unterwegs ist, und
-// sein Passwort ändern konnte man gar nicht — dafür musste man den Eigner
-// fragen. Beides gehört dorthin, wo man es erwartet: hinter das eigene Symbol.
-
-function kontoMenue(ev) {
-  ev?.stopPropagation();
-  const pop = $('kontoPop');
-  if (!pop) return;
-  if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }
-
-  const k = _zugangStand && _zugangStand.konto;
-  // Vollbild steht in BEIDEN Zweigen: es blendet die Statusleiste des Geraets
-  // aus und haengt nicht am Konto — auch ohne Anmeldung soll man es erreichen.
-  const vollbildKnopf = (typeof vollbildUmschalten === 'function')
-    ? `<button class="kp-knopf" id="kpVollbild" onclick="vollbildAusMenue()">${
-        (typeof _vollbildAktiv === 'function' && _vollbildAktiv())
-          ? 'Vollbild verlassen' : 'Vollbild'}</button>`
-    : '';
-
-  if (!k) {
-    // Zwei sehr verschiedene Zustaende, die hier lange denselben Satz bekamen:
-    // "es gibt noch kein Konto" (die Anlage ist offen) und "es gibt Konten,
-    // du bist nur nicht angemeldet". Der zweite ist der haeufige, und der Satz
-    // vom ersten war dort schlicht falsch — er behauptete eine offene Anlage,
-    // wo in Wahrheit nur die Anmeldung fehlte.
-    const ohneKonten = !!(_zugangStand && (_zugangStand.offen || _zugangStand.ersteinrichtung));
-    pop.innerHTML = ohneKonten ? `
-      <div class="kp-kopf">Nicht angemeldet</div>
-      <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>
-      ${vollbildKnopf ? `<div class="kp-tat">${vollbildKnopf}</div>` : ''}` : `
-      <div class="kp-kopf">Nicht angemeldet</div>
-      <div class="kp-text">Melde dich an, um zu schalten und ins Logbuch zu kommen.</div>
-      <div class="kp-tat">
-        <button class="kp-knopf" onclick="kontoMenueZu(); anmeldungZeigen('')">Anmelden</button>
-        ${vollbildKnopf}
-      </div>`;
-  } else {
-    const h = k.handlungen || [];
-    const zeigen = k.anzeigename || k.name || '';
-    // Der Anzeigename ist oft ein Spitzname. Wer das Konto verwaltet, will
-    // aber auch wissen, WER das ist — und unter welchem Namen sich die Person
-    // anmeldet.
-    const darunter = (k.name && k.name !== zeigen) ? 'meldet sich an als ' + k.name : '';
-    const darfLogbuch = (k.oberflaechen || []).includes('diagnose');
-    pop.innerHTML = `
-      <div class="kp-kopf">${_esc(zeigen)}</div>
-      ${darunter ? `<div class="kp-person">${_esc(darunter)}</div>` : ''}
-      <div class="kp-rolle">${_esc(k.rolle_name || '')}</div>
-      <div class="kp-darf">${_esc(h.join(' · '))}</div>
-      <div class="kp-tat">
-        ${darfLogbuch ? `<a class="kp-knopf" href="${_logbuchAdresse()}">Zum Logbuch</a>` : ''}
-        ${vollbildKnopf}
-        <button class="kp-knopf" onclick="passwortAendernOeffnen()">Passwort ändern</button>
-        <button class="kp-knopf warn" onclick="abmelden()">Abmelden</button>
-      </div>`;
-  }
-  pop.classList.remove('hidden');
-}
-
-/** Vollbild aus dem Konto-Menue heraus: umschalten und das Menue zumachen.
- *
- *  Der Griff MUSS aus dieser Berührung kommen — ein Browser laesst den
- *  Vollbild nur direkt aus einem Nutzergriff heraus zu. Deshalb wird erst
- *  umgeschaltet und danach geschlossen, nicht umgekehrt.
- */
-function kontoMenueZu() {
-  $('kontoPop')?.classList.add('hidden');
-}
-
-function vollbildAusMenue() {
-  if (typeof vollbildUmschalten === 'function') vollbildUmschalten();
-  $('kontoPop')?.classList.add('hidden');
-}
+// ── Konto ──────────────────────────────────────────────────────────────────
+// Das Kontomenü war ein eigenes Klappfeld neben dem Burger. Beide konnten
+// gleichzeitig offen sein und lagen dann übereinander — genau der Fehler, den
+// der Eigner gemeldet hat. Sein Inhalt ist jetzt die zweite ANSICHT des einen
+// Menüs (core.js, _burgerKonto). Was hier bleibt, ist der Weg zum Logbuch und
+// das Ändern des eigenen Passworts.
 
 /** Wo das Logbuch liegt — von hier aus gesehen.
  *
@@ -233,14 +168,6 @@ function _logbuchAdresse() {
   if (h.startsWith('pi.mave.')) return location.protocol + '//' + h.replace(/^pi\.mave\./, 'logbuch.') + '/';
   return '/diagnose';      // eigenständige Aufstellung ohne die drei Namen
 }
-
-document.addEventListener('click', e => {
-  const pop = $('kontoPop');
-  if (pop && !pop.classList.contains('hidden')
-      && !pop.contains(e.target) && !e.target.closest('#kontoBtn')) {
-    pop.classList.add('hidden');
-  }
-});
 
 // Dieselben Regeln wie auf dem Server (sync/konten.py) und auf der
 // Einladungsseite. Sie stehen hier ein drittes Mal, weil die Rückmeldung beim
@@ -259,7 +186,6 @@ function _pwRegeln(p, name) {
 }
 
 function passwortAendernOeffnen() {
-  $('kontoPop')?.classList.add('hidden');
   let feld = $('pwDialog');
   if (!feld) {
     feld = document.createElement('div');

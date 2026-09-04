@@ -852,13 +852,13 @@ async function vollbildUmschalten() {
 }
 
 function _vollbildKnopfSetzen() {
-  // Der Schalter sitzt im Konto-Menue (anmeldung.js). Das Menue baut seinen
-  // Inhalt bei jedem Oeffnen neu, die Beschriftung stimmt dort also von
-  // selbst — hier wird sie nur nachgezogen, falls das Menue offen steht,
-  // waehrend der Vollbild anders beendet wird (Zurueck-Geste, Escape).
-  const b = document.getElementById('kpVollbild');
-  if (!b) return;
-  b.textContent = _vollbildAktiv() ? 'Vollbild verlassen' : 'Vollbild';
+  // Der Schalter sitzt im Menue (core.js). Das baut seinen Inhalt bei jedem
+  // Oeffnen neu, die Beschriftung stimmt dort also von selbst — hier wird sie
+  // nur nachgezogen, falls das Menue offen steht, waehrend der Vollbild anders
+  // beendet wird (Zurueck-Geste, Escape).
+  const menue = document.getElementById('burgerMenu');
+  if (!menue || menue.classList.contains('hidden')) return;
+  if (typeof burgerBauen === 'function') burgerBauen();
 }
 
 /** Nach einem Neuladen den Wunsch wieder herstellen — auf Nachfrage.
@@ -901,6 +901,63 @@ function vollbildNichtMehr() {
   localStorage.setItem(_VOLLBILD_KEY, '0');
   _vollbildPilleSetzen();
 }
+
+// ── Zwei Finger: Spalten statt Zoom ────────────────────────────────────────
+// Der Browser-Zoom ist abgeschaltet (siehe viewport in index.html) — auf einem
+// fest montierten Tablet ist er ein Ärgernis, nicht ein Werkzeug. Die Geste
+// selbst bleibt aber sinnvoll, sie meint ja "größer" und "kleiner". Genau das
+// tut sie jetzt: auseinander = weniger Spalten (größere Kacheln), zusammen =
+// mehr Spalten.
+//
+// Die Wahl landet in derselben Einstellung wie unter "Anzeige" — es gibt also
+// nur EINEN Ort, an dem die Spaltenzahl steht, und die Geste ist eine
+// Abkürzung dorthin.
+
+const _GESTE_SCHWELLE = 1.25;   // ab 25 % Abstandsänderung ist es gemeint
+
+// Der Abstand beim Aufsetzen und der zuletzt gemessene. Ausgewertet wird erst
+// beim Loslassen — waehrend des Spreizens wuerde es sonst mehrfach schalten.
+let _gesteAnfang = 0, _gesteJetzt = 0;
+
+function _fingerAbstand(t) {
+  return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+}
+
+function _spaltenGeste(richtung) {
+  if (!_dsp) _dspLoad();
+  const jetzt = _cols();
+  const ziel = Math.max(1, Math.min(4, jetzt + richtung));
+  if (ziel === jetzt) {
+    _toast(richtung > 0 ? 'Mehr Spalten gehen nicht' : 'Weniger Spalten gehen nicht');
+    return;
+  }
+  _dsp.spalten = String(ziel);
+  _dspSave();
+  applyDisplayConfig();
+  _toast(ziel === 1 ? 'Eine Spalte' : ziel + ' Spalten');
+}
+
+document.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    _gesteAnfang = _fingerAbstand(e.touches);
+    _gesteJetzt = _gesteAnfang;
+  }
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && _gesteAnfang) _gesteJetzt = _fingerAbstand(e.touches);
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+  // Erst wenn beide Finger weg sind. Und nur, wenn der Anfangsabstand
+  // brauchbar war — zwei Finger, die sich beruehren, ergeben sonst ein
+  // Verhaeltnis von unendlich.
+  if (e.touches.length > 0 || _gesteAnfang < 20) { _gesteAnfang = 0; return; }
+  const v = _gesteJetzt / _gesteAnfang;
+  _gesteAnfang = 0;
+  if (v >= _GESTE_SCHWELLE) _spaltenGeste(-1);          // auseinander → größer
+  else if (v <= 1 / _GESTE_SCHWELLE) _spaltenGeste(+1); // zusammen → kleiner
+}, { passive: true });
 
 function openDisplaySettings() {
   if (!_dsp) _dspLoad();

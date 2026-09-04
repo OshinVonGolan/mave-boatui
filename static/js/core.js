@@ -196,12 +196,133 @@ _clockPoller.start();
 
 // ── Burger-Menü (Mobile) ───────────────────────────────────────────────────
 
+// ── Das Menü ───────────────────────────────────────────────────────────────
+// EIN Klappmenü, nicht zwei. Vorher gab es den Burger und daneben ein eigenes
+// Kontomenü — beide konnten gleichzeitig offen sein und lagen dann übereinander.
+//
+// Das Konto ist jetzt eine zweite ANSICHT desselben Menüs: oben steht in einer
+// Zeile, wer angemeldet ist, darunter führt ein Knopf hinein. Dadurch bleibt es
+// bei einem Menü, und der Weg zurück ist ein Pfeil statt eines zweiten Fensters.
+
+let _burgerAnsicht = 'haupt';
+
+const _BM_SVG = {
+  konto:    '<circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  zurueck:  '<path d="M15 18l-6-6 6-6"/>',
+  internet: '<path d="M1.5 9a14 14 0 0 1 21 0"/><path d="M5 12.5a10 10 0 0 1 14 0"/>'
+            + '<path d="M8.5 16a6 6 0 0 1 7 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/>',
+  wartung:  '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94'
+            + 'l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  stauplan: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  aufgaben: '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>'
+            + '<rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/>',
+  geraete:  '<path d="M7 7h10v10H7z"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
+  ordnen:   '<path d="M4 6h6v6H4zM14 6h6v6h-6zM4 16h6v4H4zM14 16h6v4h-6z"/>',
+  einst:    '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83'
+            + 'l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4'
+            + 'a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3'
+            + 'a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06'
+            + 'A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33'
+            + 'l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09'
+            + 'a1.65 1.65 0 0 0-1.51 1z"/>',
+  vollbild: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  logbuch:  '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>'
+            + '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  schluss:  '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+};
+
+const _bmIcon = d => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"`
+  + ` stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const _bmEsc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 function toggleBurger(e) {
   e?.stopPropagation();
-  $('burgerMenu')?.classList.toggle('hidden');
+  const m = $('burgerMenu');
+  if (!m) return;
+  const oeffnet = m.classList.contains('hidden');
+  if (oeffnet) {
+    // Nur EIN Menü darf offen stehen. Genau das war der Fehler: Burger und
+    // Kontomenü klappten unabhängig auf und lagen übereinander.
+    if (typeof closeQuelle === 'function') closeQuelle();
+    _burgerAnsicht = 'haupt';
+    burgerBauen();
+  }
+  m.classList.toggle('hidden');
 }
+
 function closeBurger() {
   $('burgerMenu')?.classList.add('hidden');
+  _burgerAnsicht = 'haupt';
+}
+
+function burgerKontoAnsicht() { _burgerAnsicht = 'konto'; burgerBauen(); }
+function burgerZurueck()      { _burgerAnsicht = 'haupt'; burgerBauen(); }
+
+function burgerBauen() {
+  const m = $('burgerMenu');
+  if (!m) return;
+  m.innerHTML = _burgerAnsicht === 'konto' ? _burgerKonto() : _burgerHaupt();
+}
+
+function _burgerHaupt() {
+  const k = (typeof _zugangStand !== 'undefined' && _zugangStand) ? _zugangStand.konto : null;
+  const zeile = k
+    ? `<div class="bm-wer"><b>${_bmEsc(k.anzeigename || k.name)}</b>`
+      + `<span>${_bmEsc(k.rolle_name || '')}</span></div>`
+    : '<div class="bm-wer bm-wer-leer">Nicht angemeldet</div>';
+  const kontoKnopf = k
+    ? `<button class="burger-item bm-konto" onclick="burgerKontoAnsicht()">
+         ${_bmIcon(_BM_SVG.konto)}Konto
+         <span class="bm-pfeil">${_bmIcon('<path d="M9 6l6 6-6 6"/>')}</span>
+       </button>`
+    : `<button class="burger-item bm-konto" onclick="closeBurger();anmeldungZeigen('')">
+         ${_bmIcon(_BM_SVG.konto)}Anmelden</button>`;
+
+  const eintrag = (svg, text, ruf, extra = '') =>
+    `<button class="burger-item" onclick="closeBurger();${ruf}">${_bmIcon(svg)}${text}${extra}</button>`;
+
+  // Die Alarme stehen bewusst NICHT hier: sie haben ihren Platz in der
+  // Kopfzeile und wären hier ein zweiter Weg zur selben Sache.
+  return zeile + kontoKnopf
+    + '<div class="burger-trenner"></div>'
+    + eintrag(_BM_SVG.internet, 'Internet', 'openConnectivity()')
+    + eintrag(_BM_SVG.wartung, 'Wartungsplan', 'openWartung()',
+              '<span id="bmWartungPunkt" class="bm-punkt hidden"></span>')
+    + eintrag(_BM_SVG.stauplan, 'Stauplan', 'openStauplan()')
+    + eintrag(_BM_SVG.aufgaben, 'Boot-Aufgaben', 'openMonday()')
+    + eintrag(_BM_SVG.geraete, 'Geräte', 'openGeraete()')
+    + '<div class="burger-trenner"></div>'
+    + eintrag(_BM_SVG.ordnen, 'Kacheln anordnen', 'kachelnOrdnenAn(true)')
+    + eintrag(_BM_SVG.vollbild,
+              (typeof _vollbildAktiv === 'function' && _vollbildAktiv()) ? 'Vollbild verlassen' : 'Vollbild',
+              'vollbildUmschalten()')
+    + eintrag(_BM_SVG.einst, 'Einstellungen', 'openSettings()');
+}
+
+function _burgerKonto() {
+  const k = (typeof _zugangStand !== 'undefined' && _zugangStand) ? _zugangStand.konto : null;
+  if (!k) { _burgerAnsicht = 'haupt'; return _burgerHaupt(); }
+  const handlungen = k.handlungen || [];
+  const zeigen = k.anzeigename || k.name || '';
+  const darunter = (k.name && k.name !== zeigen) ? 'meldet sich an als ' + k.name : '';
+  const darfLogbuch = (k.oberflaechen || []).includes('diagnose');
+  return `<button class="burger-item bm-zurueck" onclick="burgerZurueck()">`
+    + `${_bmIcon(_BM_SVG.zurueck)}Zurück</button>`
+    + '<div class="burger-trenner"></div>'
+    + `<div class="bm-konto-kopf">${_bmEsc(zeigen)}</div>`
+    + (darunter ? `<div class="bm-konto-neben">${_bmEsc(darunter)}</div>` : '')
+    + `<div class="bm-konto-rolle">${_bmEsc(k.rolle_name || '')}</div>`
+    + `<div class="bm-konto-darf">${_bmEsc(handlungen.join(' · '))}</div>`
+    + '<div class="burger-trenner"></div>'
+    + (darfLogbuch
+       ? `<a class="burger-item" href="${typeof _logbuchAdresse === 'function' ? _logbuchAdresse() : '/diagnose'}">`
+         + `${_bmIcon(_BM_SVG.logbuch)}Zum Logbuch</a>` : '')
+    + `<button class="burger-item" onclick="closeBurger();passwortAendernOeffnen()">`
+    + `${_bmIcon('<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>')}`
+    + 'Passwort ändern</button>'
+    + `<button class="burger-item bm-warn" onclick="closeBurger();abmelden()">`
+    + `${_bmIcon(_BM_SVG.schluss)}Abmelden</button>`;
 }
 // Außerhalb klicken schließt das Menü
 document.addEventListener('click', e => {

@@ -39,7 +39,6 @@ function openConnectivity() {
   _closeAllOverlays();
   history.pushState({ overlay: 'connectivity' }, '', '#connectivity');
   $('connInetOverlay').classList.remove('hidden');
-  _navActive('connInetBtn');
   renderConnectivity(_connData);
   // Kein eigener Intervall-Timer: der globale Poller (init.js) ruft
   // fetchConnectivity() auf und rendert das offene Overlay gleich mit.
@@ -63,35 +62,26 @@ function _connSvg(paths, size = 22) {
 }
 
 function updateConnectivityIcon(d) {
-  const dot   = $('connInetDot');
-  const svgEl = document.querySelector('#connInetBtn svg');
-  if (!dot || !svgEl) return;
+  // Frueher fuetterte das ein eigenes Antennensymbol samt Punkt in der
+  // Kopfzeile. Das gibt es nicht mehr: die Guete des Uplinks faerbt jetzt das
+  // eine Verbindungszeichen (quelle.js). Gleiche Schwellen wie vorher.
+  if (typeof quelleGuete !== 'function') return;
+  const r = d && d.router;
+  if (!r) return quelleGuete('var(--text3)', 'Router meldet sich nicht');
 
-  if (!d.router) {
-    svgEl.innerHTML = _SVG_WIFI;
-    svgEl.style.color = '';
-    dot.style.background = 'var(--text3)';
-    return;
-  }
-  const r  = d.router;
   const sl = d.starlink ?? {};
-
   if (r.active_type === 'wired') {
-    const color = sl.state === 'CONNECTED' ? 'var(--green)' : 'var(--yellow)';
-    svgEl.innerHTML = _SVG_SATELLITE;
-    svgEl.style.color = color;
-    dot.style.background = color;
-  } else if (r.mobile_up) {
-    const sig   = r.mobile?.signal_pct ?? 0;
-    const color = sig >= 60 ? 'var(--green)' : sig >= 30 ? 'var(--yellow)' : 'var(--red)';
-    svgEl.innerHTML = _SVG_MOBILE;
-    svgEl.style.color = color;
-    dot.style.background = color;
-  } else {
-    svgEl.innerHTML = _SVG_WIFI;
-    svgEl.style.color = 'var(--red)';
-    dot.style.background = 'var(--red)';
+    const gut = sl.state === 'CONNECTED';
+    return quelleGuete(gut ? 'var(--green)' : 'var(--yellow)',
+                       gut ? 'Starlink verbunden' : 'Starlink gestört');
   }
+  if (r.mobile_up) {
+    const sig = r.mobile?.signal_pct ?? 0;
+    const farbe = sig >= 60 ? 'var(--green)' : sig >= 30 ? 'var(--yellow)' : 'var(--red)';
+    const wort = sig >= 60 ? 'Mobilfunk gut' : sig >= 30 ? 'Mobilfunk mäßig' : 'Mobilfunk schwach';
+    return quelleGuete(farbe, `${wort} (${sig} %)`);
+  }
+  quelleGuete('var(--red)', 'Kein Uplink');
 }
 
 function renderConnectivity(d) {
