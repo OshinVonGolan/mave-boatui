@@ -545,7 +545,7 @@ function zeichneKonten() {
         <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}${
           c.eingeladen ? ' · <span style="color:var(--yellow)">eingeladen, Passwort noch nicht gesetzt</span>' : ''}
           ${zeigen !== c.name ? '· meldet sich an als <b>' + esc(c.name) + '</b>' : ''}
-          ${c.person && c.person !== zeigen ? '· ' + esc(c.person) : ''}${
+          ${
           c.gueltig_bis ? ' · <span style="color:var(--yellow)">befristet bis '
             + esc(new Date(c.gueltig_bis * 1000).toLocaleDateString('de-DE')) + '</span>' : ''}</div>
         <div class="k-darf">${esc((r.handlungen || []).join(' · '))}</div>
@@ -569,12 +569,14 @@ function _rollenWahl(gewaehlt) {
 function kontoNeuOeffnen() {
   popZeigen(`
     <div class="pop-titel">Konto anlegen</div>
-    <label class="pop-feld"><span>Anmeldename</span>
+    <!-- EIN Name. Vorher standen hier Anmeldename UND Name der Person — für
+         eine Handvoll Leute auf einem Boot ist das eine Unterscheidung ohne
+         Unterschied. Der Spitzname bleibt: er ist das, was in der Anzeige
+         steht, und der ist oft ein anderer als der zum Anmelden. -->
+    <label class="pop-feld"><span>Name</span>
       <input id="nkName" type="text" autocapitalize="none" autocorrect="off" spellcheck="false"
-             placeholder="kurz und eindeutig"></label>
-    <label class="pop-feld"><span>Name der Person</span>
-      <input id="nkPerson" type="text" placeholder="optional"></label>
-    <label class="pop-feld"><span>Spitzname (wird angezeigt)</span>
+             placeholder="damit meldet sich die Person an"></label>
+    <label class="pop-feld"><span>Anzeigename (wenn abweichend)</span>
       <input id="nkSpitz" type="text" placeholder="optional"></label>
     <label class="pop-feld"><span>Rolle</span>
       <select id="nkRolle">${_rollenWahl('crew')}</select></label>
@@ -652,9 +654,7 @@ function kontoBearbeiten(name) {
   const ich = c.name === (_konto && _konto.name);
   popZeigen(`
     <div class="pop-titel">${esc(c.anzeigename || c.name)} bearbeiten</div>
-    <label class="pop-feld"><span>Name der Person</span>
-      <input id="bkPerson" type="text" value="${esc(c.person || '')}"></label>
-    <label class="pop-feld"><span>Spitzname (wird angezeigt)</span>
+    <label class="pop-feld"><span>Anzeigename (wenn abweichend)</span>
       <input id="bkSpitz" type="text" value="${esc(c.spitzname || '')}"
              placeholder="${esc(c.name)}"></label>
     <label class="pop-feld"><span>Rolle</span>
@@ -685,10 +685,7 @@ function kontoBearbeiten(name) {
 }
 
 async function kontoSpeichern(name, ich) {
-  const rumpf = {
-    person: $('bkPerson').value,
-    spitzname: $('bkSpitz').value,
-  };
+  const rumpf = { spitzname: $('bkSpitz').value };
   const bis = $('bkBis').value;
   // Ende des gewählten Tages, nicht sein Anfang: wer "bis 5. September" wählt,
   // meint diesen Tag noch mit.
@@ -719,7 +716,7 @@ async function kontoAnlegen() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, rolle, einladen,
                            passwort: einladen ? '' : $('nkPw').value,
-                           person: $('nkPerson').value, spitzname: $('nkSpitz').value }),
+                           spitzname: $('nkSpitz').value }),
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) {

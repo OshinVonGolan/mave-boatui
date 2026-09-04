@@ -167,19 +167,29 @@ function kontoMenue(ev) {
     : '';
 
   if (!k) {
-    pop.innerHTML = `
+    // Zwei sehr verschiedene Zustaende, die hier lange denselben Satz bekamen:
+    // "es gibt noch kein Konto" (die Anlage ist offen) und "es gibt Konten,
+    // du bist nur nicht angemeldet". Der zweite ist der haeufige, und der Satz
+    // vom ersten war dort schlicht falsch — er behauptete eine offene Anlage,
+    // wo in Wahrheit nur die Anmeldung fehlte.
+    const ohneKonten = !!(_zugangStand && (_zugangStand.offen || _zugangStand.ersteinrichtung));
+    pop.innerHTML = ohneKonten ? `
       <div class="kp-kopf">Nicht angemeldet</div>
       <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>
-      ${vollbildKnopf ? `<div class="kp-tat">${vollbildKnopf}</div>` : ''}`;
+      ${vollbildKnopf ? `<div class="kp-tat">${vollbildKnopf}</div>` : ''}` : `
+      <div class="kp-kopf">Nicht angemeldet</div>
+      <div class="kp-text">Melde dich an, um zu schalten und ins Logbuch zu kommen.</div>
+      <div class="kp-tat">
+        <button class="kp-knopf" onclick="kontoMenueZu(); anmeldungZeigen('')">Anmelden</button>
+        ${vollbildKnopf}
+      </div>`;
   } else {
     const h = k.handlungen || [];
     const zeigen = k.anzeigename || k.name || '';
     // Der Anzeigename ist oft ein Spitzname. Wer das Konto verwaltet, will
     // aber auch wissen, WER das ist — und unter welchem Namen sich die Person
     // anmeldet.
-    const darunter = [k.person && k.person !== zeigen ? k.person : '',
-                      k.name && k.name !== zeigen ? 'meldet sich an als ' + k.name : '']
-                     .filter(Boolean).join(' · ');
+    const darunter = (k.name && k.name !== zeigen) ? 'meldet sich an als ' + k.name : '';
     const darfLogbuch = (k.oberflaechen || []).includes('diagnose');
     pop.innerHTML = `
       <div class="kp-kopf">${_esc(zeigen)}</div>
@@ -202,6 +212,10 @@ function kontoMenue(ev) {
  *  Vollbild nur direkt aus einem Nutzergriff heraus zu. Deshalb wird erst
  *  umgeschaltet und danach geschlossen, nicht umgekehrt.
  */
+function kontoMenueZu() {
+  $('kontoPop')?.classList.add('hidden');
+}
+
 function vollbildAusMenue() {
   if (typeof vollbildUmschalten === 'function') vollbildUmschalten();
   $('kontoPop')?.classList.add('hidden');
