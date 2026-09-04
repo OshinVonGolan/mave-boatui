@@ -14,21 +14,30 @@ let _quelle = { art: 'unbekannt', alter_s: null, boot: null, stand: 0 };
 let _quelleTimer = null;
 
 const _QUELLE_ART = {
+  // Drei Zustaende. Der Unterschied zwischen den letzten beiden ist der
+  // wichtige: ueber den Server kann das Boot ANGEMELDET sein (dann sind die
+  // Werte live, sie nehmen nur einen Umweg) oder eben nicht (dann sieht man
+  // einen gespeicherten Stand).
+  //
+  // Die Kurzform im Chip traegt nur ein Wort — sie steht in einer Kopfzeile
+  // neben sieben anderen Schaltflaechen. Die vollstaendige Aussage steht im
+  // Fenster darunter, und die Farbe sagt schon das Wichtigste: gruen heisst
+  // direkt, gelb heisst "diese Zahlen sind nicht von jetzt".
   direkt: {
-    kurz: 'Direkt', ton: 'ok',
-    titel: 'Direkt mit dem Boot',
+    kurz: 'Bord', ton: 'ok',
+    titel: 'Direkte Verbindung zum Bordsystem',
     text: 'Dein Gerät spricht ohne Umweg mit dem Rechner an Bord. Alle Werte sind live, Schalter wirken sofort.',
     weg: ['Dein Browser', 'Bordnetz', 'Pi an Bord'],
   },
   server_live: {
     kurz: 'Server', ton: 'neutral',
-    titel: 'Über den Server',
-    text: 'Du bist nicht im Bordnetz. Die Daten laufen über den Server — das Boot ist dort gerade angemeldet, die Werte sind aktuell.',
-    weg: ['Dein Browser', 'Internet', 'Pi an Bord'],
+    titel: 'Über den Server, Daten live vom Boot',
+    text: 'Du bist nicht im Bordnetz. Die Daten nehmen den Umweg über den Server, kommen aber live vom Boot — es ist dort gerade angemeldet. Schalten geht.',
+    weg: ['Dein Browser', 'Server', 'Pi an Bord'],
   },
   server_kopie: {
-    kurz: 'Kopie', ton: 'warn',
-    titel: 'Gespeicherte Kopie',
+    kurz: 'Gespeichert', ton: 'warn',
+    titel: 'Über den Server, gespeicherte Daten',
     text: 'Das Boot ist beim Server gerade nicht angemeldet. Ladestand, Tanks, '
         + 'Strom und Heizung zeigen den zuletzt übertragenen Stand. Alles, was '
         + 'der Server nur durchreicht — Internet, Wartung, Geräteliste — gibt es '
@@ -36,8 +45,8 @@ const _QUELLE_ART = {
     weg: ['Dein Browser', 'Server', 'Boot ist weg'],
   },
   unbekannt: {
-    kurz: '—', ton: 'neutral',
-    titel: 'Quelle wird ermittelt',
+    kurz: '…', ton: 'neutral',
+    titel: 'Verbindung wird ermittelt',
     text: 'Noch sind keine Daten eingetroffen.',
     weg: ['Dein Browser', '…', '…'],
   },
@@ -187,7 +196,7 @@ function _kopieSetzen(an, alterText) {
     // halten.
     banner.innerHTML =
       '<span class="kb-mark">Keine Live-Daten</span>'
-      + '<span class="kb-txt">Das Boot ist offline. Ladestand, Tanks, Strom und Heizung '
+      + '<span class="kb-txt">Das Boot ist beim Server nicht angemeldet. Ladestand, Tanks, Strom und Heizung '
       + 'zeigen den zuletzt übertragenen Stand'
       + (alterText ? ' von <b>' + alterText + '</b>' : '')
       + '. Internet, Wartung und Geräteliste werden nicht gespeichert und '

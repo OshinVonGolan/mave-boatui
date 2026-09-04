@@ -2136,7 +2136,9 @@
     .quelle-chip.warn  { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 55%, transparent);
                          background: color-mix(in srgb, var(--yellow) 12%, transparent); }
     .quelle-chip svg { flex: 0 0 auto; }
-    @media (max-width: 560px) { .quelle-txt { display: none; } .quelle-chip { padding: 4px 6px; } }
+    /* Auf schmalen Geraeten bleibt nur das Symbol — die Farbe sagt ohnehin das
+       Wichtigste, und die volle Aussage steht im Fenster darunter. */
+    @media (max-width: 620px) { .quelle-txt { display: none; } .quelle-chip { padding: 4px 6px; } }
 
     .quelle-pop {
       position: fixed; top: calc(var(--header-basis) - 4px); right: 12px; z-index: 130;
