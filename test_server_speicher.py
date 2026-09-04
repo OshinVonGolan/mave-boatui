@@ -193,9 +193,64 @@ class LueckenDeutung(Basis):
         self.assertIn('nicht Buch', l['grund'])
 
 
-if __name__ == '__main__':
-    unittest.main()
+class MerkerUndAlarme(Basis):
+    """Die Ablage hinter dem Alarmvorhang im Logbuch.
+
+    Der Vorhang beantwortet: was war, waehrend ich nicht hingesehen habe. Dazu
+    braucht er zwei Dinge, die es vorher nicht gab — einen Stand je Konto und
+    einen Weg, den Ereignisstrom AB diesem Stand vorwaerts zu lesen.
+    """
+
+    def _ereignis(self, folge, art, kennung, **rest):
+        self.s.ereignis_anhaengen(folge, art, {'art': art, 'kennung': kennung, **rest},
+                                  JETZT + folge)
+
+    def test_merker_je_konto_getrennt(self):
+        # Zwei Leute schauen unabhaengig voneinander ins Logbuch. Haette der
+        # Merker nur einen Stand, naehme der erste dem zweiten die Meldung weg.
+        self.s.merker_setzen('alarme_gesehen', 12, konto='joshy')
+        self.s.merker_setzen('alarme_gesehen', 3, konto='gast')
+        self.assertEqual(self.s.merker('alarme_gesehen', konto='joshy'), 12)
+        self.assertEqual(self.s.merker('alarme_gesehen', konto='gast'), 3)
+        # Der bootweite Merker (leeres Konto) ist wieder ein anderer.
+        self.assertIsNone(self.s.merker('alarme_gesehen'))
+
+    def test_merker_gibt_vorgabe_wenn_nichts_dasteht(self):
+        self.assertEqual(self.s.merker('wetter_modell', vorgabe='icon_seamless'),
+                         'icon_seamless')
+        self.s.merker_setzen('wetter_modell', 'ecmwf_ifs025')
+        self.assertEqual(self.s.merker('wetter_modell', vorgabe='icon_seamless'),
+                         'ecmwf_ifs025')
+
+    def test_merker_ueberschreibt_statt_zu_doppeln(self):
+        self.s.merker_setzen('alarme_gesehen', 1, konto='joshy')
+        self.s.merker_setzen('alarme_gesehen', 99, konto='joshy')
+        self.assertEqual(self.s.merker('alarme_gesehen', konto='joshy'), 99)
+
+    def test_ereignisse_ab_liest_vorwaerts_und_filtert(self):
+        self._ereignis(1, 'betriebsart', None)
+        self._ereignis(2, 'alarm', 'batt_low')
+        self._ereignis(3, 'alarm_quittiert', 'batt_low')
+        self._ereignis(4, 'alarm_weg', 'batt_low')
+        # Ab 1: alles Spaetere, in der Reihenfolge des Geschehens — nur so
+        # laesst sich "erst ausgeloest, dann quittiert" ueberhaupt erkennen.
+        raus = self.s.ereignisse_ab(1, ('alarm', 'alarm_quittiert', 'alarm_weg'))
+        self.assertEqual([e['folge'] for e in raus], [2, 3, 4])
+        self.assertEqual([e['art'] for e in raus],
+                         ['alarm', 'alarm_quittiert', 'alarm_weg'])
+
+    def test_ereignisse_ab_laesst_gesehenes_weg(self):
+        self._ereignis(1, 'alarm', 'alt')
+        self._ereignis(2, 'alarm', 'neu')
+        self.assertEqual([e['daten']['kennung'] for e in self.s.ereignisse_ab(1)], ['neu'])
+
+    def test_ereignis_stand_ist_die_hoechste_folge(self):
+        self.assertEqual(self.s.ereignis_stand(), 0)      # leer ist nicht None
+        self._ereignis(7, 'alarm', 'x')
+        self._ereignis(3, 'alarm', 'y')                   # aelter, nachtraeglich
+        self.assertEqual(self.s.ereignis_stand(), 7)
 
 
 if __name__ == '__main__':
     unittest.main()
+

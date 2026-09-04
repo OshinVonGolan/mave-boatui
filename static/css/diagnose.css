@@ -196,31 +196,6 @@ main {
   margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.01em;
 }
 
-/* ── Anwesenheit ─────────────────────────────────────────────────────────── */
-/* Wer an Bord ist, faellt nebenbei ab: im Bordnetz zeigt der Name auf den Pi,
-   wer DORT eine Sitzung hat, sitzt also im Bordnetz. Zuverlaessiger als jede
-   Adressauswertung — und es muss nirgends mitgeschrieben werden, wer sich wo
-   aufhaelt. */
-.anwesend { display: flex; flex-direction: column; }
-.aw-gruppe {
-  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--text3); margin: 14px 0 8px; padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.aw-gruppe:first-child { margin-top: 0; padding-top: 0; border-top: none; }
-.aw-zeile {
-  display: flex; align-items: center; gap: 11px; padding: 8px 0;
-}
-.aw-punkt {
-  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
-  background: var(--green);
-}
-.aw-punkt.fern { background: var(--blau); }
-.aw-punkt.still { background: var(--text3); }
-.aw-wer { font-size: 13px; font-weight: 600; }
-.aw-was { font-size: 11px; color: var(--text2); }
-.aw-wann { margin-left: auto; font-size: 11px; color: var(--text3); white-space: nowrap; }
-
 /* ── Schmalbild: die Schiene faehrt ueber den Inhalt ─────────────────────── */
 /* Vorher wurde sie hier zu einer Reiterleiste quer oben. Das ging, kostete aber
    dauerhaft Hoehe — auf einem Telefon im Querformat blieb fuer den Inhalt kaum
@@ -732,7 +707,12 @@ main {
   height: var(--ueberblick-h, auto);
   min-height: 0;
 }
-@media (max-height: 620px), (max-width: 760px) {
+/* Die feste Hoehe gilt NUR, solange das Raster zweispaltig ist. Sobald die
+   Karten untereinander stehen, sind es fuenf Reihen statt drei — die passen
+   nicht mehr auf einen Bildschirm, und der Versuch, sie hineinzuzwingen,
+   quetscht die mittleren auf null. Dann wird gerollt, und das ist richtig so:
+   lieber rollen als fuenf Karten, in denen nichts mehr zu lesen ist. */
+@media (max-height: 620px), (max-width: 1180px) {
   .seite[data-seite="ueberblick"] { height: auto; }
 }
 
@@ -753,7 +733,7 @@ main {
   min-height: 0; overflow: hidden;
   padding: 14px 16px 15px;
 }
-@media (max-height: 620px), (max-width: 760px) {
+@media (max-height: 620px), (max-width: 1180px) {
   .seite[data-seite="ueberblick"] .db { grid-template-rows: none; }
   .seite[data-seite="ueberblick"] .db-karte { overflow: visible; }
 }
@@ -765,21 +745,18 @@ main {
 
 .sp12 { grid-column: span 12; }
 .sp7 { grid-column: span 7; }
-.sp6 { grid-column: span 6; }
 .sp5 { grid-column: span 5; }
-.sp4 { grid-column: span 4; }
-.sp3 { grid-column: span 3; }
 
 /* Zwei Stufen, nicht fuenf. Bei 1180 wird aus 7+5 ein 12+12; darunter steht
    ohnehin alles untereinander. Mehr Stufen sehen im Entwurf klug aus und
    fuehren im Betrieb dazu, dass niemand mehr weiss, warum eine Karte gerade so
    breit ist. */
 @media (max-width: 1180px) {
-  .sp7, .sp6, .sp5, .sp4, .sp3 { grid-column: 1 / -1; }
+  .sp7, .sp5 { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
   .db { gap: 12px; }
-  .sp12, .sp7, .sp6, .sp5, .sp4, .sp3 { grid-column: 1 / -1; }
+  .sp12, .sp7, .sp5 { grid-column: 1 / -1; }
 }
 
 /* Der Balken ganz oben, wenn der ganze Schnappschuss alt ist. */
@@ -820,12 +797,21 @@ main {
 /* Farbe vor Zahl. Aus zwei Metern soll erkennbar sein, ob etwas nicht stimmt;
    die Zahl steht daneben, fuer den zweiten Blick. */
 .ampeln {
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 1px; background: var(--border);
   border: 1px solid var(--border); border-radius: 11px; overflow: hidden;
 }
-@media (max-width: 1180px) { .ampeln { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 620px)  { .ampeln { grid-template-columns: repeat(2, 1fr); } }
+/* Fünf Ampeln gehen in drei oder zwei Spalten nicht auf — die letzte Reihe
+   bliebe halb leer, und die leere Zelle sähe aus wie eine Kachel, in der etwas
+   fehlt. Die letzte Ampel nimmt den Rest der Reihe mit. */
+@media (max-width: 1180px) {
+  .ampeln { grid-template-columns: repeat(3, 1fr); }
+  .ampel:last-child { grid-column: span 2; }
+}
+@media (max-width: 620px) {
+  .ampeln { grid-template-columns: repeat(2, 1fr); }
+  .ampel:last-child { grid-column: span 2; }
+}
 .ampel {
   background: var(--surface2); padding: 10px 13px 11px;
   display: flex; flex-direction: column; gap: 3px; min-width: 0;
@@ -870,7 +856,7 @@ main {
 /* Leaflet setzt seine Kacheln absolut; ohne eigene Hoehe faellt das Feld auf
    null zusammen und die Karte bleibt unsichtbar. Im Ueberblick kommt die Hoehe
    aus dem Raster, auf schmalen Schirmen braucht es eine feste. */
-.kartenfeld .db-karte-karte { position: absolute; inset: 0; }
+@media (max-height: 620px), (max-width: 1180px) { .kartenfeld { height: 240px; } }
 @media (max-width: 760px) { .kartenfeld { height: 210px; } }
 .karten-warte {
   position: absolute; inset: 0; display: grid; place-items: center;
@@ -898,7 +884,10 @@ main {
 .wetter-quelle { font-size: 9.5px; color: var(--text3); letter-spacing: .03em; }
 
 /* ── Zeile 2 rechts: Strom ──────────────────────────────────────────────── */
-.quellen { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-height: 0; }
+.quellen {
+  display: flex; flex-direction: column; gap: 1px;
+  flex: 1 1 auto; min-height: 0; justify-content: space-between;
+}
 .quelle {
   display: grid; grid-template-columns: 3px minmax(0, 1fr) auto;
   align-items: center; gap: 9px; padding: 7px 0;
@@ -947,7 +936,7 @@ main {
 .raum-ist { font-weight: 700; font-variant-numeric: tabular-nums; }
 .raum-soll { font-size: 11.5px; color: var(--text3); font-variant-numeric: tabular-nums; }
 .heiz-hinweis {
-  margin-top: 11px; font-size: 11.5px; color: var(--yellow);
+  margin-top: auto; padding-top: 11px; font-size: 11.5px; color: var(--yellow);
   display: flex; align-items: center; gap: 7px;
 }
 .heiz-hinweis.still { color: var(--text3); }
@@ -976,16 +965,66 @@ main {
   margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase; color: var(--text3);
 }
+.dk-frische {
+  margin-left: auto; font-size: 10.5px; color: var(--text3); white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.dk-punkt { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: 0 0 auto; }
+.dk-punkt.alt { background: var(--yellow); }
+.dk-punkt.aus { background: var(--text3); }
 .dk-satz { font-size: 15px; font-weight: 600; line-height: 1.35; }
 .dk-satz.leer { color: var(--text2); font-weight: 500; }
 .dk-neben { font-size: 12px; color: var(--text2); }
+
+/* Die Belegzeile: Name links, Wert rechts. Immer dasselbe Muster, damit das
+   Auge an derselben Stelle sucht. */
+.dk-liste { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; }
+.dk-zeile {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 6px 0; border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.dk-zeile:first-child { border-top: none; }
+.dk-name { color: var(--text2); }
+.dk-wert { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+.dk-wert.still { color: var(--text3); font-weight: 500; }
+.dk-wert.gut { color: var(--green); }
+.dk-wert.mau { color: var(--yellow); }
+.dk-wert.schlecht { color: var(--red); }
+.dk-grund { font-size: 11.5px; color: var(--text3); margin-top: -2px; padding-bottom: 6px; }
+
+/* ── Einstellungen ──────────────────────────────────────────────────────── */
+/* Eine Wahl je Zeile, die Begruendung gleich daneben. Ein Auswahlfeld waere
+   kuerzer und wuerde verschweigen, WARUM man das eine oder das andere nimmt —
+   und genau daran haengt hier alles: welches Modell ueber der Ostsee taugt,
+   weiss man nicht aus dem Namen. */
+.es-text {
+  margin: 0 0 16px; font-size: 13px; line-height: 1.6; color: var(--text2);
+  max-width: 62ch;
+}
+.es-wahl { display: flex; flex-direction: column; gap: 1px; }
+.es-zeile {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px;
+  align-items: start; padding: 11px 12px; border-radius: 9px;
+  border: 1px solid transparent; cursor: pointer;
+}
+.es-zeile:hover { background: var(--surface2); }
+.es-zeile.an { background: var(--surface2); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.es-zeile input { accent-color: var(--accent); margin-top: 2px; }
+.es-zeile b { font-size: 13.5px; font-weight: 600; }
+.es-neben { display: block; font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+.es-zeile input:disabled { cursor: default; }
+.es-zeile:has(input:disabled) { cursor: default; opacity: .7; }
 
 /* ── Alarme seit dem letzten Blick ──────────────────────────────────────── */
 /* Ueber allem, weil ein uebersehener Alarm der teuerste Fehler dieser
    Oberflaeche waere. Deshalb auch kein stiller Streifen am Rand, sondern etwas,
    das man wegklicken MUSS — und dabei liest, was war. */
 .alarmvorhang {
-  position: fixed; inset: 0; z-index: 90;
+  /* Ueber ALLEM heisst auch: ueber der Karte. Leaflet legt seine Ebenen auf
+     z-index 200 bis 700 und stand mit einer kleineren Zahl mitten im Vorhang.
+     1200 liegt darueber und unter nichts, was es hier sonst gaebe. */
+  position: fixed; inset: 0; z-index: 1200;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(3px);
   display: grid; place-items: center; padding: 24px;

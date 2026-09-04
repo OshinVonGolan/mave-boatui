@@ -85,6 +85,18 @@ und `websockets` sind im Haus, und es geht um ein Boot.
 | Nachliefern | der Server nennt beim Verbinden seinen Stand, der Pi schickt ab dort weiter |
 | Ereignisse | Alarme sofort, sie sind der Grund für Push |
 
+Drei Ereignisarten gehören zu einem Alarm, und alle drei müssen hinaus:
+`alarm` (er tritt auf), `alarm_quittiert` (jemand an Bord hat ihn zur Kenntnis
+genommen), `alarm_weg` (er ist vorbei). Die mittlere ist die, an die man zuerst
+nicht denkt — und ohne sie kann auswärts niemand unterscheiden, ob ein Alarm
+gesehen wurde oder ob er nur stundenlang unbemerkt lief. Genau diese
+Unterscheidung ist der Grund, aus dem man von unterwegs ins Logbuch schaut.
+
+Abgeleitet wird das Quittieren aus einem Vergleich gegen den letzten Stand,
+nicht an den Endpunkten gemeldet: quittiert wird an mehreren Stellen (einzeln,
+alle auf einmal, künftig vielleicht aus einer Benachrichtigung heraus), und
+jede davon müsste sonst daran denken.
+
 **Datenvolumen** ist zu messen, nicht zu schätzen: der Zustand ist grob 2 KB
 JSON, komprimiert deutlich weniger. Erst nach einer Woche Messung wird der Takt
 festgelegt — ein zu enger Takt kostet Mobilfunkvolumen, ein zu weiter macht die
@@ -434,3 +446,77 @@ warum das System überhaupt nach draußen spricht.
 1. **IONOS-API-Schlüssel** (Public Prefix und Secret) für die DNS-Prüfung des
    Pi-Zertifikats. Blockiert die Umschaltung der PWA, sonst nichts.
 2. **DHCP-Reservierung im RUTX50** für den Pi, damit seine Adresse fest ist.
+
+---
+
+## Das Dashboard des Logbuchs
+
+Der Überblick beantwortet **eine** Frage: wie steht es gerade? Er füllt genau
+einen Bildschirm, ohne Rollen, und trägt bewusst **keine Diagramme** — ein
+Verlauf beantwortet "wie war es", und dafür gibt es Messwerte und Mitschnitt.
+
+Fünf Karten in fester Anordnung. Eine Karte, die Sorgen macht, färbt sich; sie
+wandert nicht nach oben. Eine Oberfläche, die ihre Reihenfolge ändert, muss man
+jedes Mal neu lesen.
+
+| Karte | beantwortet |
+|---|---|
+| **Ampeln** (Batterie, GPS, Internet, Pi, Wartung) | ist etwas nicht in Ordnung? |
+| **Ort und Wetter** | wo liegt das Boot, und was ist dort los? |
+| **Strom** | was kommt herein, was geht hinaus? |
+| **Heizung** | läuft sie, und wie warm ist es drinnen? |
+| **Geräte an Bord** | wer ist gerade angemeldet, und womit? |
+
+Hinter vier der fünf Ampeln liegt der Verlauf der letzten 24 Stunden als halb
+durchsichtige Fläche — dieselbe Sprache wie in der Statusleiste der
+Bordansicht. Sie beantwortet nebenbei "war das schon länger so?", ohne dass ein
+Diagramm Platz kostet. Die Wartung bekommt keine: ein Wartungsplan hat keinen
+Tagesverlauf, und eine Fläche wäre dort reine Dekoration.
+
+### Alarme seit dem letzten Blick
+
+Über allem liegt ein Vorhang mit allem, was seit dem letzten Besuch an Alarmen
+war — und ob es quittiert wurde. Ein Alarm, der um drei Uhr nachts kam und um
+vier von selbst wieder ging, taucht in keinem Zustand mehr auf und ist trotzdem
+genau das, was man wissen will. Ein stiller Streifen am Rand wäre höflicher und
+würde übersehen; ein übersehener Alarm ist der teuerste Fehler, den diese
+Oberfläche machen kann.
+
+Der Stand liegt **je Konto** (`merker`-Tabelle): zwei Leute schauen unabhängig
+voneinander ins Logbuch, ein gemeinsamer Stand nähme dem zweiten die Meldung
+weg. Beim allerersten Besuch gilt der jetzige Stand als gesehen — der Vorhang
+soll melden, was seit dem letzten Blick war, und nicht bei der Einführung mit
+dreihundert alten Alarmen aufschlagen.
+
+### Wetter
+
+Geholt wird es **vom Server**, nicht vom Boot: der Pi hängt am teuersten
+Datenweg dieses Systems, und das Wetter interessiert nur den, der gerade ins
+Logbuch schaut. Quelle ist Open-Meteo (kein Schlüssel nötig), zwischen­
+gespeichert für zehn Minuten und auf zwei Nachkommastellen der Position
+gerundet — das sind gut zwei Kilometer, und innerhalb davon rechnet kein Modell
+etwas anderes.
+
+Das **Modell** steht in den Einstellungen des Logbuchs und gilt bootweit: über
+Nord- und Ostsee rechnet ICON des DWD deutlich feiner als ein globales Modell,
+im Mittelmeer kann eine andere Wahl besser sein. Das ist eine Erkenntnis über
+das Revier und keine Geschmacksfrage — deshalb bootweit und nicht je Konto.
+
+### Warum der Wartungsstand mitfährt
+
+Der Wartungsplan wäre über den Fernabruf zu haben — aber genau dann nicht, wenn
+man ihn braucht: wer von unterwegs ins Logbuch schaut, tut das üblicherweise,
+**weil** das Boot allein liegt, und ein Abruf über die Vermittlung setzt voraus,
+dass es antwortet. Drei Zahlen (überfällig, bald fällig, gesamt) kosten nichts
+und stehen auch nach Tagen Funkstille noch da.
+
+### Gerätekennung statt Browserkennung
+
+In der Anwesenheitsliste stand, was der Browser über sich verrät — "Chrome auf
+Android". Das beschreibt eine Software und kein Gerät: an Bord melden zwei
+Geräte dasselbe. Der Pi legt die Adresse der Sitzung gegen die Geräteliste des
+Routers und liefert den Namen mit, den das Gerät selbst angibt.
+
+Die Zuordnung passiert **nur an Bord**. Die IP einer Sitzung ist eine Adresse im
+Bordnetz; auf dem Server zeigt sie ins Internet und bedeutet dort nichts —
+dieselbe Verknüpfung wäre dort schlicht falsch.

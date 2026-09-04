@@ -369,7 +369,7 @@ function _wasch(werte, farbe, unten, oben) {
       <stop offset="1" stop-color="${farbe}" stop-opacity="0"/>
     </linearGradient></defs>
     <path d="M0,100 L${pkt.join(' L')} L100,100 Z" fill="url(#${kennung})"/>
-    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-opacity=".42"
+    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-opacity=".3"
       stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
   </svg></div>`;
 }
@@ -466,8 +466,12 @@ function _ampelnBauen(z, v) {
              ping != null ? 'ms' : '',
              [traegerWort, 'Antwortzeit'].filter(Boolean).join(' · '),
              _wasch(_reihe('ping_ms'), 'var(--yellow)'))
+    // Nicht bis zur Oberkante: die Erreichbarkeit kennt nur null und eins, und
+    // eine Fläche, die zwischen leer und randvoll springt, sieht aus wie ein
+    // Fehler in der Anzeige. Auf 40 Prozent gedeckelt wird daraus ein ruhiges
+    // Band mit Kerben — und die Kerben sind genau das, was zu sehen sein soll.
     + _ampel('Pi', piStufe, piWert, '', piNeben,
-             spurPi ? _wasch(spurPi, 'var(--accent)', 0, 1) : '')
+             spurPi ? _wasch(spurPi, 'var(--accent)', 0, 2.5) : '')
     + _ampel('Wartung', wStufe, wWert, '', wNeben)
     + '</div>';
 }
