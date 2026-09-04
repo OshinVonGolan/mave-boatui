@@ -421,6 +421,12 @@ def _sitzung_setzen(antwort: JSONResponse, request: Request, token: str) -> None
     es dann gar nicht erst speichern — die Anmeldung wuerde dort still
     scheitern. Sobald der Pi TLS spricht, gilt auch dort die strenge Fassung.
     """
+    # Das alte, nur fuer DIESEN Namen gueltige Cookie loeschen. Sonst hat der
+    # Browser zwei mit demselben Namen — eines fuer "logbuch.circuit-sailor.com"
+    # und eines fuer ".circuit-sailor.com" — und schickt bei jeder Anfrage
+    # beide. Welches der Server dann sieht, ist Glueckssache, und das falsche
+    # gehoert zur alten, laengst beendeten Sitzung.
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
     antwort.set_cookie(
         zg.SITZUNG_COOKIE, token,
         max_age=int(SITZUNG_DAUER_S), httponly=True,

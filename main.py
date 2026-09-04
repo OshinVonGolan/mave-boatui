@@ -688,6 +688,9 @@ async def login(request: Request):
         log.debug('Sitzung nicht gemeldet: %s', e)
 
     antwort = JSONResponse(rechte_modul.uebersicht(k))
+    # Siehe server/app.py: das alte, nur fuer diesen Namen gueltige Cookie muss
+    # weg, sonst schickt der Browser zwei und das falsche gewinnt.
+    antwort.delete_cookie(zg.SITZUNG_COOKIE, path='/')
     antwort.set_cookie(zg.SITZUNG_COOKIE, token, max_age=int(konten_speicher.SITZUNG_DAUER_S),
                        httponly=True, secure=(request.url.scheme == 'https'),
                        samesite='lax', path='/',
