@@ -23,22 +23,26 @@
   und will direkt dorthin, nicht an allem anderen vorbeiscrollen.
 -->
 
-<header class="kopf">
-  <div class="marke"><span class="marke-mave">Mave</span> <span>Logbuch</span></div>
-  <div class="kopf-mitte" id="bootZustand">
-    <span class="zust-punkt" id="zustPunkt"></span>
-    <span id="zustText">wird geladen…</span>
-  </div>
-  <div class="kopf-rechts">
-    <span class="wer" id="wer"></span>
-    <button class="knopf-schlicht" onclick="abmelden()">Abmelden</button>
-    <a class="knopf-schlicht" id="zurBordansicht" href="/">Bordansicht</a>
-  </div>
-</header>
-
+<!--
+  Der Aufbau ist ein Vollbild-Werkzeug, kein Dokument: die Schiene links steht
+  ueber die ganze Hoehe und rollt fuer sich, die Kopfzeile sitzt NUR ueber der
+  Inhaltsspalte, und der Inhalt fuellt den Bildschirm statt in einer Spalte in
+  der Mitte zu stehen. Vorher lief eine Kopfzeile ueber die volle Breite und
+  darunter stand ein 1260 px breites, zentriertes Blatt — das las sich wie eine
+  Webseite, und dies hier ist keine.
+-->
 <div class="rahmen" id="inhalt" hidden>
 
-  <nav class="seitenleiste" id="seitenleiste">
+  <nav class="schiene" id="seitenleiste">
+
+    <!-- Die Marke steht in der Schiene und nicht mehr in der Kopfzeile: sie
+         gehoert zur Navigation, nicht zum Inhalt. Und sie fuehrt zurueck auf
+         den Ueberblick, wie man es von einer Marke erwartet. -->
+    <a class="schiene-marke" href="#ueberblick">
+      <span class="marke-mave">Mave</span>
+      <span class="sm-zusatz">Logbuch</span>
+    </a>
+
     <!-- Gruppiert und mit Symbolen. Eine flache Liste aus fuenf Punkten
          funktioniert; sobald es acht werden, sucht man. Die Ueberschriften
          beantworten "wo ungefaehr?" bevor man liest. -->
@@ -105,9 +109,39 @@
       <span class="sl-text"><span class="sl-name">Konten</span>
         <span class="sl-neben">Zugänge verwalten</span></span>
     </button>
+
+    <div class="schiene-fuss">
+      <!-- Der Weg zurueck gehoert nach unten in die Schiene: er ist eine
+           Navigation, keine Handlung am Inhalt. -->
+      <a class="sf-weg" id="zurBordansicht" href="/">
+        <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12l9-8 9 8"/><path d="M5 10.5V20h14v-9.5"/><path d="M10 20v-6h4v6"/>
+        </svg></span>
+        <span class="sf-weg-text">Zur Bordansicht</span>
+      </a>
+    </div>
   </nav>
 
-  <main>
+  <div class="haupt">
+
+    <header class="kopf">
+      <button class="schiene-schalter" id="schieneSchalter" type="button"
+              aria-label="Navigation ein- und ausblenden" onclick="schieneUmschalten()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="kopf-mitte" id="bootZustand">
+        <span class="zust-punkt" id="zustPunkt"></span>
+        <span id="zustText">wird geladen…</span>
+      </div>
+      <div class="kopf-rechts">
+        <span class="wer" id="wer"></span>
+        <button class="knopf-schlicht" onclick="abmelden()">Abmelden</button>
+      </div>
+    </header>
+
+    <main>
 
     <!-- Überblick -->
     <section class="seite" data-seite="ueberblick">
@@ -283,7 +317,12 @@
       </section>
     </section>
 
-  </main>
+    </main>
+  </div>
+
+  <!-- Im Schmalbild faehrt die Schiene ueber den Inhalt; der Schleier darunter
+       faengt den Griff daneben ab und macht sie wieder zu. -->
+  <div class="schiene-schleier" id="schieneSchleier" onclick="schieneZu()"></div>
 </div>
 
 <div class="sperre" id="sperre" hidden>

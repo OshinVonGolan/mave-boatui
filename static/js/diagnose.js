@@ -137,17 +137,51 @@ async function start() {
     messwerteLaden();
   });
   // Beim Drehen oder Größenändern neu zeichnen: Canvas skaliert nicht mit.
+  //
+  // Der resize-Horcher allein reicht seit dem Umbau nicht mehr. Die Breite des
+  // Inhalts haengt jetzt nicht nur am Fenster: die Schiene faehrt im Schmalbild
+  // herein und heraus, und ein Rollbalken kann auftauchen oder verschwinden.
+  // Beides aendert die Breite, ohne dass das Fenster sich ruehrt — der Graph
+  // bliebe dann in der alten Breite stehen und waere gestaucht oder abgeschnitten.
+  // Deshalb zusaetzlich ein Beobachter am Behaelter selbst.
   let umbau;
-  window.addEventListener('resize', () => {
+  const neuZeichnen = () => {
     clearTimeout(umbau);
     umbau = setTimeout(() => _messDaten && zeichneMesswerte(), 250);
-  });
+  };
+  window.addEventListener('resize', neuZeichnen);
+  if (window.ResizeObserver) {
+    const behaelter = $('reihen');
+    if (behaelter) {
+      let ersteMeldung = true;
+      new ResizeObserver(() => {
+        // Die erste Meldung kommt sofort beim Beobachten und beschreibt den
+        // Zustand, den wir gerade gezeichnet haben. Ein Neuzeichnen darauf
+        // waere Arbeit fuer nichts.
+        if (ersteMeldung) { ersteMeldung = false; return; }
+        neuZeichnen();
+      }).observe(behaelter);
+    }
+  }
 
   await laden();
   await messwerteLaden();
   setInterval(laden, 30000);
   // Messwerte seltener: sie ändern sich langsam und kosten mehr.
   setInterval(messwerteLaden, 120000);
+}
+
+// ── Die Schiene im Schmalbild ──────────────────────────────────────────────
+// Auf dem Schreibtisch steht sie immer da und dieser Schalter ist unsichtbar.
+// Schmal faehrt sie ueber den Inhalt und geht wieder zu, sobald man eine Seite
+// gewaehlt hat — sonst muesste man nach jeder Wahl noch einmal danebentippen.
+
+function schieneUmschalten() {
+  document.documentElement.classList.toggle('schiene-offen');
+}
+
+function schieneZu() {
+  document.documentElement.classList.remove('schiene-offen');
 }
 
 let _seite = 'ueberblick';
@@ -168,6 +202,7 @@ function seiteZeigen(name) {
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
   if (name === 'mitschnitt') mitschnittLaden();
+  schieneZu();
   window.scrollTo(0, 0);
 }
 
@@ -1001,7 +1036,7 @@ function anmeldungZeigen(meldung) {
   }
   f.innerHTML = `
     <form class="anm-karte" onsubmit="return anmelden(event)">
-      <div class="anm-marke">MAVE <span>Logbuch</span></div>
+      <div class="anm-marke"><span class="marke-mave">Mave</span> <span>Logbuch</span></div>
       <div class="anm-wohin">Diagnose und Fernwartung</div>
       <label class="anm-feld"><span>Name</span>
         <input id="anmName" type="text" autocomplete="username" autocapitalize="none"

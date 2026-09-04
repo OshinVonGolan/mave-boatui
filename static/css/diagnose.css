@@ -22,6 +22,7 @@
   --violet: #a78bfa;
   --blau: #60a5fa;
   --kopf-h: 58px;
+  --schiene-b: 232px;
 }
 
 * { box-sizing: border-box; }
@@ -36,23 +37,20 @@ body {
   margin: 0; background: var(--bg); color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px; line-height: 1.5;
-  padding-top: var(--kopf-h);
 }
 
 /* ── Kopfzeile ───────────────────────────────────────────────────────────── */
+/* Sie sitzt jetzt IN der Inhaltsspalte, nicht mehr quer ueber die ganze Seite:
+   die Schiene links reicht bis oben durch, wie in einem Programm. Und sie ist
+   nicht mehr position:fixed, sondern klebt oben in ihrer Spalte — dadurch
+   braucht der Body keinen Platzhalter mehr, und nichts verrutscht, wenn die
+   Kopfzeile einmal hoeher wird. */
 .kopf {
-  position: fixed; top: 0; left: 0; right: 0; height: var(--kopf-h); z-index: 50;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 22px; gap: 16px;
+  position: sticky; top: 0; z-index: 30;
+  min-height: var(--kopf-h);
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 24px; flex: 0 0 auto;
   background: var(--surface); border-bottom: 1px solid var(--border);
-}
-.marke {
-  font-size: 17px; font-weight: 700; letter-spacing: .17em;
-  color: var(--accent); text-transform: uppercase; white-space: nowrap;
-}
-.marke span {
-  color: var(--text3); font-size: 10px; font-weight: 500; letter-spacing: .15em;
-  margin-left: 7px;
 }
 .kopf-mitte {
   display: flex; align-items: center; gap: 9px;
@@ -64,7 +62,7 @@ body {
 }
 .zust-punkt.an   { background: var(--green); }
 .zust-punkt.weg  { background: var(--red); }
-.kopf-rechts { display: flex; align-items: center; gap: 10px; }
+.kopf-rechts { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .wer { font-size: 12px; color: var(--text3); }
 .knopf-schlicht {
   background: none; border: 1px solid var(--border); border-radius: 7px;
@@ -73,19 +71,71 @@ body {
 }
 .knopf-schlicht:hover { border-color: var(--text3); color: var(--text); }
 
-/* ── Aufbau: Seitenleiste und Inhalt ─────────────────────────────────────── */
-/* Eine lange Rolle waere hier falsch. Man kommt mit einer Frage her — "war das
-   Boot heute Nacht offline?", "wie lief die Heizung letzte Woche?" — und will
-   direkt dorthin, nicht an allem anderen vorbei. */
+/* ── Aufbau: ein Vollbild-Werkzeug ───────────────────────────────────────── */
+/* Zwei Spalten ueber die ganze Flaeche: die Schiene links steht fest und rollt
+   fuer sich, rechts liegen Kopfzeile und Inhalt uebereinander.
+   Vorher stand hier ein 1260 px breites, zentriertes Blatt mit einer Kopfzeile
+   quer darueber. Das las sich wie eine Webseite; hier arbeitet aber jemand, und
+   auf einem breiten Bildschirm blieb links und rechts Flaeche liegen, waehrend
+   die Graphen in der Mitte gequetscht standen.
+   Das Dokument scrollt weiterhin als Ganzes — genau wie im Schwesterprojekt.
+   Ein eigener Rollbereich fuer den Inhalt saehe gleich aus, braechte aber zwei
+   Rollbalken, eine zweite Stelle fuer "nach oben" und Aerger mit den Canvas-
+   Breiten. Die Schiene klebt stattdessen oben und bleibt damit stehen. */
 .rahmen {
-  display: grid; grid-template-columns: 216px minmax(0, 1fr);
-  max-width: 1260px; margin: 0 auto; align-items: start;
+  display: grid; grid-template-columns: var(--schiene-b) minmax(0, 1fr);
+  align-items: stretch; min-height: 100vh; min-height: 100dvh;
 }
-.seitenleiste {
-  position: sticky; top: calc(var(--kopf-h) + 16px);
+
+.schiene {
+  position: sticky; top: 0;
+  height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 2px;
-  padding: 18px 10px 40px 18px;
+  padding: 14px 10px max(14px, env(safe-area-inset-bottom)) 10px;
+  background: var(--surface); border-right: 1px solid var(--border);
+  z-index: 40;
 }
+/* Die Marke oben in der Schiene, wie der Name auf einem Programmfenster. */
+.schiene-marke {
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 6px 12px 16px; text-decoration: none; color: var(--accent);
+  font-size: 17px; white-space: nowrap;
+}
+.schiene-marke .sm-zusatz {
+  font-size: 10px; font-weight: 600; letter-spacing: .15em;
+  text-transform: uppercase; color: var(--text3);
+}
+.schiene-marke:hover .sm-zusatz { color: var(--text2); }
+
+/* Der Fuss wird nach unten gedrueckt, damit er auch bei kurzer Liste unten
+   steht — und nicht in der Mitte in der Luft haengt. */
+.schiene-fuss {
+  margin-top: auto; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.sf-weg {
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 12px; border-radius: 9px;
+  color: var(--text2); font-size: 13px; text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.sf-weg:hover { background: var(--surface2); color: var(--text); }
+
+/* Der Griff fuer die Schiene taucht erst im Schmalbild auf. */
+.schiene-schalter {
+  display: none; flex: 0 0 auto;
+  width: 38px; height: 38px; margin-left: -6px;
+  align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--text2); cursor: pointer;
+}
+.schiene-schalter svg { width: 19px; height: 19px; }
+.schiene-schleier { display: none; }
+
+.haupt {
+  display: flex; flex-direction: column; min-width: 0;
+}
+
 .sl-gruppe {
   font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
   color: var(--text3); padding: 0 12px; margin: 16px 0 7px;
@@ -121,7 +171,8 @@ body {
 @media (max-width: 1000px) { .raster { grid-template-columns: 1fr; } }
 
 main {
-  min-width: 0; padding: 22px 22px 60px 10px;
+  min-width: 0; flex: 1 1 auto;
+  padding: 24px 28px 64px;
   display: flex; flex-direction: column; gap: 20px;
 }
 .seite { display: flex; flex-direction: column; gap: 20px; }
@@ -158,22 +209,44 @@ main {
 .aw-was { font-size: 11px; color: var(--text2); }
 .aw-wann { margin-left: auto; font-size: 11px; color: var(--text3); white-space: nowrap; }
 
-@media (max-width: 860px) {
+/* ── Schmalbild: die Schiene faehrt ueber den Inhalt ─────────────────────── */
+/* Vorher wurde sie hier zu einer Reiterleiste quer oben. Das ging, kostete aber
+   dauerhaft Hoehe — auf einem Telefon im Querformat blieb fuer den Inhalt kaum
+   etwas uebrig — und die Gruppenueberschriften mussten weg, womit die Ordnung
+   verlorenging, die sie ueberhaupt erst rechtfertigt.
+   Jetzt liegt sie daneben und kommt auf Griff herein. Die Ordnung bleibt, die
+   Hoehe bleibt dem Inhalt. */
+@media (max-width: 900px) {
   .rahmen { grid-template-columns: 1fr; }
-  .seitenleiste {
-    position: static; flex-direction: row; overflow-x: auto;
-    padding: 12px 13px 0; gap: 6px;
+  .schiene {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: min(280px, 84vw); height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 0 0 40px rgba(0, 0, 0, .5);
   }
-  /* Quer nebeneinander tragen die Ueberschriften nichts mehr — sie wuerden
-     die Leiste nur laenger machen. */
-  .sl-gruppe { display: none; }
-  .sl-knopf {
-    border-bottom: 2px solid transparent;
-    border-radius: 8px 8px 0 0; padding: 8px 11px; white-space: nowrap;
+  html.schiene-offen .schiene { transform: none; }
+  .schiene-schalter { display: flex; }
+  .schiene-schleier {
+    display: block; position: fixed; inset: 0; z-index: 35;
+    background: rgba(3, 7, 18, .6);
+    opacity: 0; pointer-events: none; transition: opacity .22s;
   }
-  .sl-knopf.an { border-bottom-color: var(--accent); background: var(--surface2); }
-  .sl-neben { display: none; }
-  main { padding: 14px 13px 50px; }
+  html.schiene-offen .schiene-schleier { opacity: 1; pointer-events: auto; }
+  /* Solange sie offen liegt, soll der Inhalt darunter nicht mitrollen. */
+  html.schiene-offen body { overflow: hidden; }
+  main { padding: 16px 15px 54px; }
+  .kopf { padding: 0 15px; gap: 10px; }
+  /* Eine Zeile bleibt eine Zeile. Der Zustandssatz ist der einzige Text hier,
+     der wirklich gebraucht wird — er darf kuerzen, aber nicht umbrechen und
+     die Kopfzeile doppelt so hoch machen. */
+  .kopf-mitte { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (max-width: 620px) {
+  /* Wer angemeldet ist, steht in der Schiene ohnehin nicht — aber auf einem
+     Telefon nimmt der Name den Platz weg, den der Zustandssatz braucht.
+     Abmelden bleibt: das ist eine Handlung, kein Schmuck. */
+  .wer { display: none; }
 }
 .tafel {
   background: var(--surface); border: 1px solid var(--border);
@@ -391,6 +464,13 @@ main {
   display: block; font-size: 10px; font-weight: 500; letter-spacing: .16em;
   color: var(--text3); margin-top: 4px;
 }
+/* Der Schriftzug ist selbst ein span und wuerde sonst die Regel darueber
+   erben — also klein, grau und unter sich selbst. Er traegt hier die
+   Akzentfarbe und steht mittig, wie es der Marke zusteht. */
+.anm-marke .marke-mave {
+  display: block; margin: 0 auto 2px; color: var(--accent);
+  height: 2.1em; font-size: inherit; letter-spacing: normal;
+}
 .anm-wohin {
   text-align: center; font-size: 12px; color: var(--text2);
   margin: -6px 0 4px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
@@ -422,7 +502,6 @@ main {
 @media (max-width: 680px) {
   .kopf { padding: 0 13px; gap: 9px; }
   .kopf-mitte { font-size: 12px; }
-  .marke span { display: none; }
   main { padding: 16px 13px 50px; gap: 15px; }
   .zeile { grid-template-columns: 1fr auto; }
   .z-zeit { grid-column: 1 / -1; }
