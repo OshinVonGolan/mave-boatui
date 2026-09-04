@@ -50,6 +50,11 @@ _BEFEHL_FRIST_S = 12.0
 _BUENDEL = 200
 
 
+# Wie lange gewartet wird, wenn gerade nichts nachzuliefern ist. Eine
+# Verlaufszeile entsteht je Minute — zwanzig Sekunden sind prompt genug.
+_NACHLIEFERN_RUHE_S = 20
+
+
 class SyncClient:
     """Haelt die Verbindung zum Server und bedient sie."""
 
@@ -254,19 +259,33 @@ class SyncClient:
             await asyncio.sleep(1)
 
     async def _nachliefern(self, ab: int) -> None:
-        """Verlauf ab der genannten Folgenummer schicken, in Buendeln.
+        """Verlauf ab der genannten Folgenummer schicken — und weiter schicken.
 
-        Der Server nennt seinen Stand, hier wird ab dort weitergeschickt — das
-        ist die ganze Logik. Kein Zustandsabgleich, keine Zustandsmaschine.
+        Der Server nennt beim Verbinden seinen Stand, hier wird ab dort
+        weitergeschickt. Das war frueher die ganze Logik: aufholen und fertig.
+
+        Damit stand der Verlauf auf dem Server still, SOLANGE DIE VERBINDUNG
+        HIELT. Jede Minute entsteht an Bord eine neue Zeile, aber keine ging
+        hinaus; erst der naechste Verbindungsaufbau holte sie nach. Ein Boot,
+        das eine Woche durchgehend online ist, lieferte eine Woche lang keinen
+        Verlauf — und im Logbuch sah es aus, als sei nichts gemessen worden.
+        Aufgefallen ist es, als die Position dazukam und die Spur einfach nicht
+        wuchs.
+
+        Jetzt bleibt die Schleife stehen und sieht in Ruhe nach, ob etwas Neues
+        da ist. Ist nichts da, geht auch nichts hinaus — das Nachsehen selbst
+        kostet nur einen Griff in den lokalen Speicher, kein Byte auf der
+        Leitung.
         """
         while True:
             roh = await asyncio.to_thread(self._verlauf_holen, ab, _BUENDEL)
-            if not roh:
-                return
-            eintraege = [_verlaufspaket(e) for e in roh]
-            eintraege = [e for e in eintraege if e is not None]
+            eintraege = [e for e in (_verlaufspaket(r) for r in (roh or []))
+                         if e is not None]
             if not eintraege:
-                return
+                # Nichts Neues. Eine Zeile entsteht je Minute; alle zwanzig
+                # Sekunden nachzusehen ist prompt genug und belastet nichts.
+                await asyncio.sleep(_NACHLIEFERN_RUHE_S)
+                continue
             hoechste = max(int(e['folge']) for e in eintraege)
             await self._senden(p.umschlag(p.VERLAUF, eintraege, folge=hoechste,
                                           **self._jetzt()))

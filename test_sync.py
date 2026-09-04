@@ -157,6 +157,84 @@ class Betriebsarten(unittest.TestCase):
                 self.assertIn(art, p.BETRIEBSARTEN)
 
 
+class Nachliefern(unittest.IsolatedAsyncioTestCase):
+    """Der Verlauf muss FORTLAUFEND hinausgehen, nicht nur beim Verbinden.
+
+    Der Fehler, der das hier nötig macht: `_nachliefern` holte einmal auf und
+    kehrte zurück. Solange die Verbindung hielt, ging danach keine einzige
+    Verlaufszeile mehr hinaus — an Bord entstand jede Minute eine, beim Server
+    kam nichts an. Ein Boot, das eine Woche durchgehend online ist, lieferte
+    eine Woche lang keinen Verlauf, und im Logbuch sah es aus, als sei nichts
+    gemessen worden.
+    """
+
+    def _client(self, vorrat):
+        import sync_client
+
+        def holen(ab, grenze):
+            return [e for e in vorrat if e['n'] >= ab][:grenze]
+
+        c = sync_client.SyncClient(
+            adresse='ws://beispiel/sync', token='x', geraet='pruef', version='0',
+            zustand_holen=lambda: {}, verlauf_holen=holen,
+            verlauf_stand=lambda: (vorrat[-1]['n'] if vorrat else 0),
+            conn_status=lambda: {})
+        self.gesendet = []
+
+        async def senden(nachricht):
+            self.gesendet.append(nachricht)
+
+        c._senden = senden
+        return c
+
+    async def test_holt_auf_und_bleibt_dann_stehen(self):
+        """Erst aufholen — und danach NICHT zurückkehren, sondern warten."""
+        import asyncio
+        import sync_client
+        vorrat = [{'n': i, 'ts': 1700000000 + i * 60, 'soc': 50.0} for i in range(1, 6)]
+        c = self._client(vorrat)
+        # Kurze Ruhe, damit der Test nicht zwanzig Sekunden dauert.
+        alt = sync_client._NACHLIEFERN_RUHE_S
+        sync_client._NACHLIEFERN_RUHE_S = 0.02
+        try:
+            aufgabe = asyncio.create_task(c._nachliefern(1))
+            await asyncio.sleep(0.1)
+            self.assertFalse(aufgabe.done(),
+                             'Die Schleife darf nicht zurückkehren — sonst geht '
+                             'nach dem Aufholen nie wieder etwas hinaus.')
+            self.assertEqual(len(self.gesendet), 1)
+            self.assertEqual(len(self.gesendet[0]['daten']), 5)
+
+            # Jetzt entsteht an Bord eine neue Zeile. Sie MUSS von selbst gehen.
+            # Etwas mehr Geduld: nach jedem Bündel legt die Schleife bewusst
+            # eine halbe Sekunde Pause ein, damit das Nachliefern über
+            # Mobilfunk den laufenden Betrieb nicht verdrängt.
+            vorrat.append({'n': 6, 'ts': 1700000360, 'soc': 51.0})
+            await asyncio.sleep(0.8)
+            self.assertEqual(len(self.gesendet), 2,
+                             'Eine neue Verlaufszeile muss ohne Neuverbinden hinausgehen.')
+            self.assertEqual(self.gesendet[1]['daten'][0]['folge'], 6)
+        finally:
+            sync_client._NACHLIEFERN_RUHE_S = alt
+            aufgabe.cancel()
+
+    async def test_ohne_neues_geht_nichts_hinaus(self):
+        """Nachsehen kostet nichts — senden schon. Ohne neue Zeile bleibt die
+        Leitung still."""
+        import asyncio
+        import sync_client
+        c = self._client([])
+        alt = sync_client._NACHLIEFERN_RUHE_S
+        sync_client._NACHLIEFERN_RUHE_S = 0.02
+        try:
+            aufgabe = asyncio.create_task(c._nachliefern(1))
+            await asyncio.sleep(0.15)
+            self.assertEqual(self.gesendet, [])
+        finally:
+            sync_client._NACHLIEFERN_RUHE_S = alt
+            aufgabe.cancel()
+
+
 if __name__ == '__main__':
     unittest.main()
 
