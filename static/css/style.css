@@ -1045,7 +1045,13 @@
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px;
       display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
-    .card--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 1px var(--red)33; transition: border-color .3s; }
+    /* Zwei Fehler auf einmal: der Ring lag aussen (siehe oben), UND
+       `var(--red)33` ist kein gueltiger Farbwert — so haengt man keine
+       Deckkraft an eine Variable. Der Browser hat die ganze Zeile verworfen,
+       der Alarmring war also nie zu sehen. */
+    .card--alarm { border-color: var(--red) !important;
+      box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 55%, transparent);
+      transition: border-color .3s; }
     .tank-bar-wrap--alarm { border-color: var(--red) !important; box-shadow: 0 0 0 2px var(--red)55; }
 
     /* ── Wetter tile ── */
@@ -1107,7 +1113,11 @@
       cursor: pointer; transition: border-color .2s, box-shadow .2s;
       -webkit-tap-highlight-color: transparent; user-select: none;
     }
-    .card-battery:hover { border-color: var(--accent2); box-shadow: 0 0 0 1px var(--accent2); }
+    /* Ring nach INNEN. Aussen liegt er ausserhalb der Kachel und wird vom
+       Nachbarn ueberdeckt — in der obersten Reihe vom Halter der Statusleiste,
+       der direkt darueber sitzt. Deshalb sah er dort schmaler aus als
+       ringsherum, und nur dort. Innen kann ihm das nicht passieren. */
+    .card-battery:hover { border-color: var(--accent2); box-shadow: inset 0 0 0 1px var(--accent2); }
 
 
     /* ── SOC Gauge ── */
@@ -1209,7 +1219,8 @@
     .card[onclick] { cursor: pointer; }
     .card[onclick]:hover {
       border-color: var(--accent2);
-      box-shadow: 0 0 0 1px var(--accent2);
+      /* Nach innen — siehe .card-battery:hover. */
+      box-shadow: inset 0 0 0 1px var(--accent2);
     }
     @media (hover: none) { .card[onclick]:hover { box-shadow: none; } }
     .tanks-row { display: flex; gap: 16px; flex: 1; }
