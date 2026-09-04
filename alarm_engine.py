@@ -22,7 +22,7 @@ _PRUNE_INTERVAL_S = 60           # nicht bei jedem Broadcast aufräumen
 # Aus dem PATCH-Endpunkt übernehmbare Regelfelder. name/field/op/unit/step/bounds
 # beschreiben die Regel selbst und kommen ausschließlich aus alarms.json — sonst
 # könnte ein Patch die Regel strukturell zerlegen.
-_PATCHABLE_FIELDS = ('enabled', 'threshold', 'min', 'max', 'severity')
+_PATCHABLE_FIELDS = ('enabled', 'threshold', 'min', 'max', 'severity', 'hysterese')
 
 # Regeln, die es einmal gab und die bewusst abgeschafft wurden.
 #
@@ -85,8 +85,36 @@ def _rule_bounds(rule: dict) -> tuple[float, float]:
     return _FALLBACK_BOUNDS
 
 
-def _evaluate(rule: dict, val) -> bool | None:
+def _hysterese(rule: dict, spanne: float | None = None) -> float:
+    """Wieviel sich ein Wert erholen muss, damit ein Alarm wieder verschwindet.
+
+    Ohne das flattert jeder Alarm, dessen Wert auf der Schwelle steht. Genau das
+    ist am Wassertank passiert: er steht bei rund 20 %, die Schwelle liegt bei
+    20 — quittieren half nichts, der Alarm loeste sich beim naechsten Messwert
+    auf und feuerte beim uebernaechsten wieder. Ein Alarm, den man nicht
+    wegbekommt, wird ignoriert, und dann sind alle Alarme wertlos.
+
+    Der Wert steht in der Regel (`hysterese`), damit er zur Einheit passt: drei
+    Prozentpunkte sind bei einem Tank richtig, bei einer Spannung absurd. Fehlt
+    er, sind es fuenf Prozent der Schwelle — bei einer Flag-Regel (`> 0`) also
+    null, und das ist auch richtig: ein Flag flattert nicht, es steht oder
+    steht nicht.
+    """
+    h = _as_number(rule.get('hysterese'))
+    if h is not None and h >= 0:
+        return h
+    if spanne is not None:
+        return abs(spanne) * 0.03
+    thr = _as_number(rule.get('threshold'))
+    return abs(thr) * 0.05 if thr is not None else 0.0
+
+
+def _evaluate(rule: dict, val, aktiv: bool = False) -> bool | None:
     """True/False = Bedingung (nicht) erfüllt, None = Regel nicht auswertbar.
+
+    `aktiv` sagt, ob der Alarm gerade steht. Dann gilt eine WEITERE Schwelle:
+    ausgeloest wird bei 20, aufgehoben erst bei 23. Sonst schaltet ein Wert, der
+    auf der Grenze liegt, bei jedem Messwert hin und her.
 
     Eine unbrauchbare Regel darf die Prüfung nicht abbrechen: check() läuft bei
     jedem Broadcast, eine Ausnahme hier würde den kompletten Broadcast mitreißen.
@@ -100,12 +128,16 @@ def _evaluate(rule: dict, val) -> bool | None:
         hi = _as_number(rule.get('max'))
         if lo is None or hi is None:
             return None
-        return num < lo or num > hi
+        h = _hysterese(rule, hi - lo) if aktiv else 0.0
+        # Steht der Alarm, muss der Wert ein Stueck WEIT ins Gute hinein, bevor
+        # er als in Ordnung gilt — die Grenzen ruecken dafuer nach innen.
+        return num < (lo + h) or num > (hi - h)
     if op in ('<', '>'):
         thr = _as_number(rule.get('threshold'))
         if thr is None:
             return None
-        return num < thr if op == '<' else num > thr
+        h = _hysterese(rule) if aktiv else 0.0
+        return num < (thr + h) if op == '<' else num > (thr - h)
     return None
 
 
@@ -116,29 +148,29 @@ def _evaluate(rule: dict, val) -> bool | None:
 # Datei fehlt. Was drinsteht, gewinnt immer — vom Eigner geaenderte Schwellen
 # oder abgeschaltete Regeln bleiben ueber Updates hinweg erhalten.
 _VORGABE_REGELN: dict = {
-    'bat_soc_warn':    {"name": "SOC niedrig", "field": "battery.soc", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
-    'bat_soc_crit':    {"name": "SOC kritisch", "field": "battery.soc", "op": "<", "threshold": 10, "severity": "critical", "enabled": True},
-    'bat_voltage':     {"name": "Batterie Spannung", "field": "battery.voltage", "op": "range", "min": 11.8, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning", "enabled": True},
-    'starter_voltage': {"name": "Starterbatterie", "field": "battery.starter_voltage", "op": "range", "min": 11.5, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "severity": "warning", "enabled": True},
-    'bat_temp_high':   {"name": "Batterietemperatur", "field": "battery.temperature", "op": ">", "threshold": 45, "severity": "warning", "enabled": True},
+    'bat_soc_warn':    {"name": "SOC niedrig", "field": "battery.soc", "op": "<", "threshold": 20, "hysterese": 3, "severity": "warning", "enabled": True},
+    'bat_soc_crit':    {"name": "SOC kritisch", "field": "battery.soc", "op": "<", "threshold": 10, "hysterese": 3, "severity": "critical", "enabled": True},
+    'bat_voltage':     {"name": "Batterie Spannung", "field": "battery.voltage", "op": "range", "min": 11.8, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "hysterese": 0.2, "severity": "warning", "enabled": True},
+    'starter_voltage': {"name": "Starterbatterie", "field": "battery.starter_voltage", "op": "range", "min": 11.5, "max": 14.6, "step": 0.1, "bounds": [10.0, 16.0], "unit": "V", "hysterese": 0.2, "severity": "warning", "enabled": True},
+    'bat_temp_high':   {"name": "Batterietemperatur", "field": "battery.temperature", "op": ">", "threshold": 45, "hysterese": 2, "severity": "warning", "enabled": True},
     'bms_comm_err':    {"name": "BMS Kommunikation", "field": "bms.comm_error", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
     'bms_min_v':       {"name": "BMS Zellspannung min", "field": "bms.alarm_min_volt", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
     'bms_max_v':       {"name": "BMS Zellspannung max", "field": "bms.alarm_max_volt", "op": ">", "threshold": 0, "severity": "critical", "enabled": True},
     'bms_min_t':       {"name": "BMS Temperatur min", "field": "bms.alarm_min_temp", "op": ">", "threshold": 0, "severity": "warning", "enabled": True},
     'bms_max_t':       {"name": "BMS Temperatur max", "field": "bms.alarm_max_temp", "op": ">", "threshold": 0, "severity": "warning", "enabled": True},
-    'tank1_low':       {"name": "Tank 1 niedrig", "field": "tanks.tank1", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
-    'tank2_low':       {"name": "Tank 2 niedrig", "field": "tanks.tank2", "op": "<", "threshold": 20, "severity": "warning", "enabled": True},
-    'network_error':   {"name": "CAN-Bus Fehler", "field": "_network_age", "op": ">", "threshold": 30, "severity": "critical", "enabled": True},
+    'tank1_low':       {"name": "Tank 1 niedrig", "field": "tanks.tank1", "op": "<", "threshold": 20, "hysterese": 4, "severity": "warning", "enabled": True},
+    'tank2_low':       {"name": "Tank 2 niedrig", "field": "tanks.tank2", "op": "<", "threshold": 20, "hysterese": 4, "severity": "warning", "enabled": True},
+    'network_error':   {"name": "CAN-Bus Fehler", "field": "_network_age", "op": ">", "threshold": 30, "hysterese": 10, "severity": "critical", "enabled": True},
 
     # Heizung. Die Felder sind serverseitig entprellt und gegatet
     # (heating._alarm_felder) — sie sind None, solange die Anlage nicht
     # verbaut oder der Zustand nicht beurteilbar ist, und die Engine
     # ueberspringt None. Deshalb zeigt keine dieser Regeln auf einen Rohwert.
-    'hz_offline':    {"name": "Heizung ohne Verbindung", "field": "heizung.verbindung_weg_s", "op": ">", "threshold": 120, "step": 30, "bounds": [30, 1800], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_fehlercode': {"name": "Heizung Störung", "field": "heizung.fehler_s", "op": ">", "threshold": 60, "step": 30, "bounds": [0, 900], "unit": "s", "severity": "warning", "enabled": True},
-    'hz_frost_warn': {"name": "Kabine kühlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "severity": "warning", "enabled": True},
-    'hz_frost':      {"name": "Frostgefahr", "field": "heizung.frost_temp", "op": "<", "threshold": 4, "step": 0.5, "bounds": [0.0, 15.0], "unit": "\u00b0C", "severity": "critical", "enabled": True},
-    'hz_kein_raum':  {"name": "Kein Raumfühler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "severity": "warning", "enabled": True},
+    'hz_offline':    {"name": "Heizung ohne Verbindung", "field": "heizung.verbindung_weg_s", "op": ">", "threshold": 120, "step": 30, "bounds": [30, 1800], "unit": "s", "hysterese": 30, "severity": "warning", "enabled": True},
+    'hz_fehlercode': {"name": "Heizung Störung", "field": "heizung.fehler_s", "op": ">", "threshold": 60, "step": 30, "bounds": [0, 900], "unit": "s", "hysterese": 30, "severity": "warning", "enabled": True},
+    'hz_frost_warn': {"name": "Kabine kühlt aus", "field": "heizung.frost_temp", "op": "<", "threshold": 8, "step": 0.5, "bounds": [0.0, 20.0], "unit": "\u00b0C", "hysterese": 1, "severity": "warning", "enabled": True},
+    'hz_frost':      {"name": "Frostgefahr", "field": "heizung.frost_temp", "op": "<", "threshold": 4, "step": 0.5, "bounds": [0.0, 15.0], "unit": "\u00b0C", "hysterese": 1, "severity": "critical", "enabled": True},
+    'hz_kein_raum':  {"name": "Kein Raumfühler online", "field": "heizung.kein_raum_s", "op": ">", "threshold": 600, "step": 60, "bounds": [60, 3600], "unit": "s", "hysterese": 120, "severity": "warning", "enabled": True},
 }
 
 
@@ -251,7 +283,7 @@ class AlarmEngine:
             if val is None:
                 continue  # Datenlücke: aktiven Alarm nicht löschen
 
-            triggered = _evaluate(rule, val)
+            triggered = _evaluate(rule, val, aktiv=key in self._active)
             if triggered is None:
                 # Regel oder Wert unbrauchbar → Regel überspringen, nicht die Prüfung abbrechen
                 if key not in self._broken:
