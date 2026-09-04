@@ -319,3 +319,28 @@ Der Pi ermittelt die Gateway-Adresse dynamisch aus empfangenen PGN-130910-Frames
 
 - **mave-boatui** (dieser Pi-Code): `https://github.com/OshinVonGolan/mave-boatui`
 - **VE.Direct NMEA2K Gateway** (Teensy-Firmware): `https://github.com/OshinVonGolan/VEDirect-NMEA2K-Gateway`
+
+## Änderungsverzeichnis in Commit-Nachrichten
+
+Eine Commit-Nachricht hat **zwei Leser**: den Entwickler, der in einem Jahr
+wissen will, WARUM etwas so gebaut wurde, und den Eigner, der im Logbuch sehen
+will, WAS sich für ihn ändert. Beides in einen Text zu pressen macht ihn für
+beide schlecht.
+
+Deshalb trägt jeder Commit am Ende eine Kurzfassung — Zeilen, die mit `* `
+beginnen:
+
+```
+Konten: Person und Spitzname, und sie lassen sich bearbeiten
+
+[ausführliche Begründung für Entwickler, so lang wie nötig]
+
+* Konten haben jetzt einen Spitznamen, der überall angezeigt wird
+* Konten lassen sich bearbeiten, nicht nur sperren und löschen
+```
+
+Nur die `* `-Zeilen erscheinen im Logbuch unter „Änderungen". Sie sind für den
+Eigner geschrieben: ein Satz je Änderung, keine Dateinamen, keine Fachbegriffe,
+und sie sagen die Wirkung, nicht die Umsetzung.
+
+Fehlen sie, bleibt es bei der Überschrift — die ist ohnehin die Kurzfassung.

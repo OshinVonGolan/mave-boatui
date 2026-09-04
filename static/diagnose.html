@@ -51,9 +51,13 @@
       <span class="sl-name">Konten</span>
       <span class="sl-neben">Zugänge verwalten</span>
     </button>
+    <button class="sl-knopf" data-seite="aenderungen" id="slAenderungen" hidden>
+      <span class="sl-name">Änderungen</span>
+      <span class="sl-neben">Was neu ist, ein- und zurückspielen</span>
+    </button>
     <button class="sl-knopf" data-seite="wartung" id="slWartung" hidden>
       <span class="sl-name">Fernwartung</span>
-      <span class="sl-neben">Aktualisieren, Uhr stellen</span>
+      <span class="sl-neben">Uhr stellen, Zustand</span>
     </button>
   </nav>
 
@@ -162,6 +166,30 @@
       </div>
       <section class="tafel breit">
         <div class="konten" id="konten"></div>
+      </section>
+    </section>
+
+    <!-- Änderungen -->
+    <section class="seite" data-seite="aenderungen" hidden>
+      <div class="seiten-kopf">
+        <h1>Änderungen</h1>
+        <span class="hinweis" id="standJetzt"></span>
+      </div>
+
+      <section class="tafel" id="bereitTafel" hidden>
+        <div class="tafel-kopf">
+          <h2>Bereit zum Einspielen</h2>
+          <button class="knopf" onclick="einspielenFragen()">Einspielen</button>
+        </div>
+        <div class="aenderungen" id="bereit"></div>
+      </section>
+
+      <section class="tafel">
+        <div class="tafel-kopf">
+          <h2>Eingespielt</h2>
+          <span class="hinweis">die letzten acht Stände</span>
+        </div>
+        <div class="aenderungen" id="verlaufStaende"></div>
       </section>
     </section>
 

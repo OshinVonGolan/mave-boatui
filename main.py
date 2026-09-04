@@ -1231,6 +1231,14 @@ def _lauf(cmd: list[str], timeout: float):
 @app.post('/api/system/update')
 async def system_update():
     loop = asyncio.get_running_loop()
+    # Nach einem Zurückgehen steht HEAD losgelöst, und dann scheitert `git
+    # pull`. Erst zurück auf den Zweig — das ist zugleich der Weg, auf dem man
+    # ein Zurückgehen wieder rückgängig macht.
+    zweig = await loop.run_in_executor(
+        None, _lauf, ['git', 'rev-parse', '--abbrev-ref', 'HEAD'], 10)
+    if zweig.stdout.strip() == 'HEAD':
+        log.info('Losgelöster Stand — zurück auf master vor dem Aktualisieren')
+        await loop.run_in_executor(None, _lauf, ['git', 'checkout', '--quiet', 'master'], 30)
     before = _git_hash()
     # git pull dauert ueber Mobilfunk gut und gerne 10-30 s. Synchron im
     # Event-Loop stand solange der komplette Server.
@@ -1245,26 +1253,112 @@ async def system_update():
     log.info("git pull: %s", result.stdout.strip())
     changelog = []
     if changed:
-        try:
-            cl = await loop.run_in_executor(
-                None, _lauf,
-                ['git', 'log', 'ORIG_HEAD..HEAD', '--no-merges',
-                 '--pretty=format:ENTRY%n%s%n%b'], 10)
-            for block in cl.stdout.split('ENTRY\n'):
-                block = block.strip()
-                if not block:
-                    continue
-                lines = block.splitlines()
-                title = lines[0].strip()
-                items = [l.strip() for l in lines[1:]
-                         if l.strip() and not l.strip().startswith('Co-Authored')]
-                if title:
-                    changelog.append({'title': title, 'items': items})
-        except Exception:
-            pass
+        changelog = await loop.run_in_executor(None, _changelog, 'ORIG_HEAD..HEAD')
         asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
     return {'ok': True, 'changed': changed, 'output': result.stdout.strip(),
             'version_before': before, 'version_after': after, 'changelog': changelog}
+
+
+def _changelog(bereich: str, grenze: int = 40) -> list[dict]:
+    """Das Änderungsverzeichnis für einen Commit-Bereich.
+
+    Eine Commit-Nachricht hat ZWEI Leser mit verschiedenen Bedürfnissen: den
+    Entwickler, der in einem Jahr wissen will, WARUM etwas so gebaut wurde, und
+    den Eigner, der wissen will, WAS sich für ihn ändert. Beides in einen Text
+    zu pressen macht ihn für beide schlecht — vorher landete der ganze
+    Fliesstext im Änderungsverzeichnis.
+
+    Deshalb die Trennung: Zeilen, die mit "* " beginnen, sind die kurze Fassung
+    für den Eigner. Alles andere im Rumpf bleibt Begründung und wird hier nicht
+    gezeigt. Fehlen solche Zeilen (ältere Commits), bleibt es bei der
+    Überschrift — die ist ohnehin die Kurzfassung.
+    """
+    try:
+        erg = _lauf(['git', 'log', bereich, '--no-merges', f'-n{grenze}',
+                     '--pretty=format:EINTRAG%x00%H%x00%at%x00%s%x00%b'], 12)
+    except Exception:
+        return []
+    raus = []
+    for block in erg.stdout.split('EINTRAG\x00'):
+        if not block.strip():
+            continue
+        teile = block.split('\x00')
+        if len(teile) < 4:
+            continue
+        hash_, zeit, titel, rumpf = teile[0], teile[1], teile[2], (teile[3] if len(teile) > 3 else '')
+        punkte = [z.strip()[2:].strip() for z in rumpf.splitlines()
+                  if z.strip().startswith('* ')]
+        raus.append({
+            'hash': hash_.strip()[:10],
+            'zeit': float(zeit) if zeit.strip().isdigit() else None,
+            'titel': titel.strip(),
+            'punkte': punkte,
+        })
+    return raus
+
+
+@app.post('/api/system/zurueck')
+async def system_zurueck(body: dict):
+    """Auf eine frühere Fassung zurückgehen.
+
+    Erlaubt sind AUSSCHLIESSLICH die letzten acht Commits — nicht jeder
+    beliebige Stand. Zwei Gründe: je weiter zurück, desto weniger passt die
+    Fassung zu den Daten auf der Platte (Kontendatei, Verlaufsformat), und ein
+    Feld, in das man einen beliebigen Commit schreiben kann, ist ein Feld, über
+    das sich beliebiger Code starten lässt.
+
+    Gearbeitet wird mit `checkout`, nicht mit `reset --hard`: der Zweig master
+    bleibt dabei unangetastet, und "wieder aktuell machen" ist danach einfach
+    das gewöhnliche Aktualisieren.
+    """
+    ziel = str((body or {}).get('hash') or '').strip()
+    if not ziel or not all(c in '0123456789abcdef' for c in ziel.lower()):
+        raise HTTPException(400, detail='Kein brauchbarer Stand angegeben.')
+
+    loop = asyncio.get_running_loop()
+    erlaubt = await loop.run_in_executor(None, _changelog, 'HEAD -n8')
+    treffer = [e for e in erlaubt if e['hash'].startswith(ziel.lower()[:10])]
+    if not treffer:
+        raise HTTPException(
+            400, detail='Dieser Stand liegt zu weit zurück. Möglich sind die letzten acht.')
+
+    vorher = _git_hash()
+    erg = await loop.run_in_executor(None, _lauf, ['git', 'checkout', '--quiet', ziel], 30)
+    if erg.returncode != 0:
+        log.error('Zurückgehen fehlgeschlagen: %s', erg.stderr.strip())
+        raise HTTPException(500, detail='Zurückgehen fehlgeschlagen — Details im Log.')
+
+    log.warning('Auf Stand %s zurückgegangen (vorher %s): %s',
+                ziel[:10], vorher, treffer[0]['titel'])
+    # Wie beim Aktualisieren: der Dienst beendet sich, systemd startet ihn neu.
+    asyncio.get_event_loop().call_later(0.5, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    return {'ok': True, 'vorher': vorher, 'jetzt': ziel[:10],
+            'titel': treffer[0]['titel']}
+
+
+@app.get('/api/system/versionen')
+async def system_versionen():
+    """Was installiert ist, was bereitliegt, und wohin sich zurückgehen lässt.
+
+    `bereit` ist das Änderungsverzeichnis der Fassung, die noch NICHT
+    eingespielt ist — damit man vor dem Aktualisieren sieht, was kommt. Genau
+    dafür wird vorher `git fetch` gemacht, ohne etwas zu verändern.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        await loop.run_in_executor(None, _lauf, ['git', 'fetch', '--quiet'], 25)
+    except Exception as e:
+        log.warning('git fetch fehlgeschlagen: %s', e)
+    jetzt = await loop.run_in_executor(None, _changelog, 'HEAD -n8')
+    bereit = await loop.run_in_executor(None, _changelog, 'HEAD..origin/master')
+    return {
+        'installiert': _git_hash(),
+        'version': VERSION,
+        # Die jüngsten acht: mehr braucht niemand, und je weiter zurück, desto
+        # weniger passt die Fassung zu den Daten auf der Platte.
+        'verlauf': jetzt,
+        'bereit': bereit,
+    }
 
 
 @app.get('/api/pgn/{pgn}/{src}')

@@ -87,6 +87,7 @@ async function start() {
   const darf = _konto.handlungen || [];
   $('slKonten').hidden = !darf.includes('verwalten');
   $('slWartung').hidden = !darf.includes('fernwarten');
+  $('slAenderungen').hidden = !darf.includes('fernwarten');
 
   $('seitenleiste').addEventListener('click', e => {
     const k = e.target.closest('.sl-knopf');
@@ -145,6 +146,9 @@ function seiteZeigen(name) {
   // verborgenen Seite ist die Breite null und der Graph bliebe leer.
   if (name === 'messwerte' && _messDaten) requestAnimationFrame(zeichneMesswerte);
   if (name === 'verfuegbarkeit') zeichneStreifen();
+  // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
+  // Seite und nicht im Dauertakt.
+  if (name === 'aenderungen') staendeLaden();
   window.scrollTo(0, 0);
 }
 
@@ -224,6 +228,26 @@ function zeichneAnwesend() {
   if (!a) { feld.innerHTML = '<div class="leerlauf">wird geladen…</div>'; return; }
   const jetzt = Date.now() / 1000;
 
+  // Mehrere Sitzungen desselben Kontos auf demselben Gerät sind KEINE
+  // mehreren Anwesenden — sie entstehen bei jedem neuen Browserfenster und bei
+  // jedem Werkzeugaufruf. Zusammengefasst wird nach Konto und Gerät, gezeigt
+  // wird die jüngste; die Anzahl steht daneben, damit vergessene Anmeldungen
+  // trotzdem auffallen.
+  const buendeln = (liste) => {
+    const m = new Map();
+    for (const s of liste || []) {
+      const schluessel = (s.konto || '') + '|' + (s.geraet || '') + '|' + (s.herkunft || '');
+      const da = m.get(schluessel);
+      if (!da) m.set(schluessel, { ...s, anzahl: 1 });
+      else {
+        da.anzahl++;
+        if ((s.zuletzt || 0) > (da.zuletzt || 0)) { da.zuletzt = s.zuletzt; }
+        if ((s.seit || 0) < (da.seit || 0)) { da.seit = s.seit; }
+      }
+    }
+    return [...m.values()].sort((a, b) => (b.zuletzt || 0) - (a.zuletzt || 0));
+  };
+
   const zeile = (s, art) => {
     const seit = jetzt - (s.zuletzt || 0);
     const still = seit > 300;
@@ -231,7 +255,8 @@ function zeichneAnwesend() {
       <span class="aw-punkt ${still ? 'still' : art}"></span>
       <span>
         <div class="aw-wer">${esc(s.anzeigename || s.konto)}${s.kiosk ? ' <span class="hinweis">(Kiosk)</span>' : ''}</div>
-        <div class="aw-was">${esc(s.geraet || 'unbekanntes Gerät')}${s.herkunft ? ' · ' + esc(s.herkunft) : ''}</div>
+        <div class="aw-was">${esc(s.geraet || 'unbekanntes Gerät')}${s.herkunft ? ' · ' + esc(s.herkunft) : ''}${
+          s.anzahl > 1 ? ' · ' + s.anzahl + ' Anmeldungen' : ''}</div>
       </span>
       <span class="aw-wann">${still ? 'zuletzt vor ' + dauer(seit) : 'gerade aktiv'}</span>
     </div>`;
@@ -239,7 +264,7 @@ function zeichneAnwesend() {
 
   let h = '';
   if ((a.an_bord || []).length) {
-    h += '<div class="aw-gruppe">An Bord</div>' + a.an_bord.map(s => zeile(s, '')).join('');
+    h += '<div class="aw-gruppe">An Bord</div>' + buendeln(a.an_bord).map(s => zeile(s, '')).join('');
   } else if (a.boot_erreichbar) {
     h += '<div class="aw-gruppe">An Bord</div><div class="leerlauf">Niemand am Bordrechner angemeldet.</div>';
   } else {
@@ -247,7 +272,7 @@ function zeichneAnwesend() {
   }
   if ((a.ueber_server || []).length) {
     h += '<div class="aw-gruppe">Aus der Ferne</div>'
-       + a.ueber_server.map(s => zeile(s, 'fern')).join('');
+       + buendeln(a.ueber_server).map(s => zeile(s, 'fern')).join('');
   }
   feld.innerHTML = h;
 }
@@ -598,20 +623,111 @@ async function kontoLoeschenJa(name) {
   laden();
 }
 
+// ── Änderungen ─────────────────────────────────────────────────────────────
+// Was sich geändert hat, in der Sprache des Eigners. Die ausführliche
+// Begründung steht in derselben Commit-Nachricht, aber sie gehört nicht
+// hierher — hier zählt, was für IHN anders wird.
+
+let _staende = null;
+
+async function staendeLaden() {
+  const feld = $('verlaufStaende');
+  if (!_staende) feld.innerHTML = '<div class="leerlauf">wird abgefragt…</div>';
+  const d = await hole('/api/system/versionen');
+  if (!d) { feld.innerHTML = '<div class="leerlauf">Das Boot antwortet nicht.</div>'; return; }
+  _staende = d;
+  zeichneStaende();
+}
+
+function _standBlock(e, art, tat) {
+  const zeit = e.zeit ? zeitpunkt(e.zeit) : '';
+  return `<div class="ae-stand">
+    <div>
+      <div class="ae-kopf">
+        ${art ? `<span class="ae-marke ${art === 'neu' ? 'neu' : ''}">${art === 'neu' ? 'neu' : 'läuft'}</span>` : ''}
+        <span class="ae-zeit">${esc(zeit)}</span>
+        <span class="ae-hash">${esc(e.hash)}</span>
+      </div>
+      <div class="ae-titel">${esc(e.titel)}</div>
+      ${e.punkte && e.punkte.length
+        ? '<ul class="ae-punkte">' + e.punkte.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>'
+        : '<div class="ae-ohne">Ohne Kurzfassung — nur die Überschrift.</div>'}
+    </div>
+    <div class="ae-tat">${tat || ''}</div>
+  </div>`;
+}
+
+function zeichneStaende() {
+  const d = _staende;
+  if (!d) return;
+  $('standJetzt').textContent = `installiert: ${d.version || ''} (${d.installiert || '—'})`;
+
+  const bereit = d.bereit || [];
+  $('bereitTafel').hidden = !bereit.length;
+  if (bereit.length) {
+    $('bereit').innerHTML = bereit.map(e => _standBlock(e, 'neu', '')).join('');
+  }
+
+  const verlauf = d.verlauf || [];
+  $('verlaufStaende').innerHTML = verlauf.length
+    ? verlauf.map((e, i) => _standBlock(e, i === 0 ? 'jetzt' : '',
+        i === 0 ? '' : `<button class="knopf stumm" onclick="zurueckFragen('${esc(e.hash)}')">Hierhin zurück</button>`
+      )).join('')
+    : '<div class="leerlauf">Kein Verlauf abrufbar.</div>';
+}
+
+function einspielenFragen() {
+  const anzahl = (_staende?.bereit || []).length;
+  popZeigen(`
+    <div class="pop-titel">${anzahl} Änderung${anzahl === 1 ? '' : 'en'} einspielen?</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 18px">
+      Der Bordrechner holt den neuen Stand und startet die Anwendung neu. Wer
+      gerade davorsitzt, sieht für etwa eine halbe Minute nichts.
+      Zurückgehen ist danach jederzeit möglich.</p>
+    <div class="pop-tat">
+      <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
+      <button class="knopf" onclick="fernUpdateJa()">Einspielen</button>
+    </div>`);
+}
+
+function zurueckFragen(hash) {
+  const e = (_staende?.verlauf || []).find(x => x.hash === hash);
+  popZeigen(`
+    <div class="pop-titel">Auf diesen Stand zurückgehen?</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 8px">
+      <b>${esc(e?.titel || hash)}</b></p>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 18px">
+      Alles, was danach kam, ist anschließend nicht mehr aktiv. Die Daten auf
+      dem Boot bleiben unberührt — nur der Programmstand geht zurück. Über
+      "Einspielen" kommst du jederzeit wieder nach vorn.</p>
+    <div class="pop-fehler hidden" id="zrFehler"></div>
+    <div class="pop-tat">
+      <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
+      <button class="knopf warn" onclick="zurueckJa('${esc(hash)}')">Zurückgehen</button>
+    </div>`);
+}
+
+async function zurueckJa(hash) {
+  const k = $('popKarte');
+  k.innerHTML = '<div class="pop-titel">Läuft…</div><p style="color:var(--text2);font-size:13px">Das Boot arbeitet.</p>';
+  const r = await fetch('/api/system/zurueck', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hash }),
+  });
+  const d = await r.json().catch(() => ({}));
+  k.innerHTML = `<div class="pop-titel">${r.ok ? 'Zurückgegangen' : 'Nicht möglich'}</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5">${
+      esc(r.ok ? `Der Bordrechner läuft jetzt auf "${d.titel}" und startet neu.`
+               : (d.detail || 'Unbekannter Fehler'))}</p>
+    <div class="pop-tat"><button class="knopf" onclick="popSchliessen();setTimeout(staendeLaden, 20000)">Schließen</button></div>`;
+}
+
 // ── Fernwartung ────────────────────────────────────────────────────────────
 
 function zeichneWartung() {
   const v = _daten.verbindung;
   const da = v && v.verbunden;
   $('wartung').innerHTML = `
-    <div class="w-zeile">
-      <div>
-        <div class="w-text">Bordrechner aktualisieren</div>
-        <div class="w-neben">Holt den neuesten Stand und startet die Anwendung neu.
-          Dauert etwa eine halbe Minute, in der das Boot nicht antwortet.</div>
-      </div>
-      <button class="knopf" ${da ? '' : 'disabled'} onclick="fernUpdate()">Aktualisieren</button>
-    </div>
     <div class="w-zeile">
       <div>
         <div class="w-text">Uhr des Bordrechners stellen</div>

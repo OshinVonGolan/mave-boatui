@@ -122,6 +122,10 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     # (Methode oder '*', Muster, Recht)
     ('*',    r'^/api/konten',                r.VERWALTEN),
     ('POST', r'^/api/system/update$',        r.FERNWARTEN),
+    # Zurueckgehen ist ein Eingriff in den laufenden Code, keine Bedienung.
+    # Ohne diese Zeile fiele es unter die Vorgabe "Schalten" — und die hat
+    # jedes Crewmitglied.
+    ('POST', r'^/api/system/zurueck$',       r.FERNWARTEN),
     ('POST', r'^/api/system/time-sync$',     r.FERNWARTEN),
     ('POST', r'^/api/sync/',                 r.EINSTELLEN),
     ('*',    r'^/api/settings',              r.EINSTELLEN),

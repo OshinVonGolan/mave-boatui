@@ -257,6 +257,15 @@ class Zugangsregeln(unittest.TestCase):
         self.assertIsNone(zg.recht_fuer('GET', '/js-bundle.js'))
         self.assertIsNone(zg.recht_fuer('GET', '/static/css/style.css'))
 
+    def test_zurueckgehen_braucht_fernwartung(self):
+        """Ein Eingriff in den laufenden Code, keine Bedienung. Ohne eigene
+        Regel fiele er unter die Vorgabe 'Schalten' — die hat jede Crew."""
+        self.assertEqual(zg.recht_fuer('POST', '/api/system/zurueck'), r.FERNWARTEN)
+        crew = {'name': 'x', 'rolle': 'crew'}
+        erlaubt, code, _ = zg.pruefen(crew, 'POST', '/api/system/zurueck', schonfrist=False)
+        self.assertFalse(erlaubt)
+        self.assertEqual(code, 403)
+
     def test_unbekannte_methode_faellt_auf_das_strengste_recht(self):
         """Ein neuer Aufruf soll auffallen, indem er abgewiesen wird."""
         self.assertEqual(zg.recht_fuer('TRACE', '/api/irgendwas'), r.VERWALTEN)

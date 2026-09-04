@@ -68,6 +68,7 @@ DURCHLEITEN: tuple[tuple[str, str, str], ...] = (
     # laesst sich, falls etwas schiefgeht, an Bord wieder geradeziehen
     # (systemd startet den Dienst ohnehin neu).
     ('POST', '/api/system/update',             r.FERNWARTEN),
+    ('POST', '/api/system/zurueck',            r.FERNWARTEN),
 )
 
 # Befehle, die aus der Ferne standardmaessig GESPERRT sind, auch mit Recht.
