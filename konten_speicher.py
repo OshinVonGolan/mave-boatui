@@ -114,6 +114,12 @@ class Konten:
                 person: str = '', spitzname: str = '') -> dict:
         if rolle not in r.ROLLEN:
             raise k.KontoFehler(f'Unbekannte Rolle: {rolle!r}')
+        # Die Regeln galten bisher NUR beim Einloesen einer Einladung. Auf den
+        # drei anderen Wegen, ein Passwort zu setzen, standen sie in der
+        # Oberflaeche und wurden nirgends geprueft — angezeigte Regeln, die
+        # niemand durchsetzt, sind schlimmer als keine: sie erwecken den
+        # Eindruck, es sei jemand zustaendig.
+        k.passwort_pruefen(passwort, name)
         konto = k.konto_anlegen(name, passwort, rolle, angelegt=time.time(),
                                 person=person, spitzname=spitzname)
         with self._lock:
@@ -404,6 +410,7 @@ class Konten:
             if spitzname is not None:
                 konto['spitzname'] = str(spitzname).strip()[:40]
             if passwort:
+                k.passwort_pruefen(passwort, konto['name'])
                 konto['hash'] = k.hash_erzeugen(passwort)
             if gesperrt or passwort:
                 weg = [kn for kn, si in self._sitzungen.items()
@@ -435,6 +442,7 @@ class Konten:
         konto = self._konten.get((name or '').strip())
         if not konto or not k.hash_pruefen(altes or '', konto.get('hash') or _BLIND):
             raise k.KontoFehler('Das bisherige Passwort stimmt nicht.')
+        k.passwort_pruefen(neues, konto['name'])
         with self._lock:
             konto['hash'] = k.hash_erzeugen(neues)
             weg = [kn for kn, si in self._sitzungen.items() if si.get('konto') == konto['name']]

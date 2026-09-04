@@ -205,20 +205,17 @@ function formularZeigen(d) {
 // entstehen muss — der Server prüft sie TROTZDEM. Was nur der Browser prüft,
 // prüft niemand.
 //
-// Zur Auswahl: Länge schlägt Komplexität. "Passwort1!" erfüllt jede übliche
-// Zeichenregel und ist in Sekunden geraten; ein Satz aus vier Wörtern nicht.
-// Deshalb entfallen die Zeichenregeln ab 16 Zeichen — sonst erzwingt man genau
-// die "Sommer2026!"-Passwörter.
-const PW_MIN = 10, PW_SATZ = 16;
+// Fünf Regeln, die immer gelten. Eine Ausnahme für lange Sätze gab es hier
+// einmal; sie ist auf Wunsch des Eigners weg — dieselben Regeln stehen so auch
+// in sync/konten.py und static/js/anmeldung.js.
+const PW_MIN = 10;
 
 function regelnFuer(p, name) {
-  const satz = p.length >= PW_SATZ;
   return [
     { text: `mindestens ${PW_MIN} Zeichen`, ok: p.length >= PW_MIN },
-    { text: 'Groß- und Kleinbuchstaben', ok: satz || (/[a-zäöüß]/.test(p) && /[A-ZÄÖÜ]/.test(p)) },
-    { text: 'eine Ziffer oder ein Sonderzeichen', ok: satz || /[^a-zA-ZäöüÄÖÜß]/.test(p) },
-    { text: `oder ein ganzer Satz ab ${PW_SATZ} Zeichen — dann entfallen die beiden Regeln darüber`,
-      ok: satz, hinweis: true },
+    { text: 'Groß- und Kleinbuchstaben', ok: /\p{Ll}/u.test(p) && /\p{Lu}/u.test(p) },
+    { text: 'eine Ziffer', ok: /\p{Nd}/u.test(p) },
+    { text: 'ein Sonderzeichen', ok: /[^\p{L}\p{N}]/u.test(p) },
     { text: 'nicht dein Anmeldename', ok: p.length > 0 && (!name || !p.toLowerCase().includes(name.toLowerCase())) },
   ];
 }

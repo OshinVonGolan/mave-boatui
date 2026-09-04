@@ -23,8 +23,8 @@ TOKEN = os.environ['MAVE_GERAET_TOKEN']
 NOTZUGANG = os.environ['MAVE_PASSWORT']
 BASIS = f'http://127.0.0.1:{PORT}'
 
-EIGNER_PW = 'ein wirklich gutes Passwort'
-CREW_PW = 'auch ein gutes Passwort'
+EIGNER_PW = 'Ein wirklich gutes Passwort-1'
+CREW_PW = 'Auch ein gutes Passwort-2'
 
 fehler = []
 geprueft = 0

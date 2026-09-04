@@ -245,15 +245,14 @@ document.addEventListener('click', e => {
 // Dieselben Regeln wie auf dem Server (sync/konten.py) und auf der
 // Einladungsseite. Sie stehen hier ein drittes Mal, weil die Rückmeldung beim
 // Tippen im Browser entstehen muss — geprüft wird trotzdem serverseitig.
-const _PW_MIN = 10, _PW_SATZ = 16;
+const _PW_MIN = 10;
 
 function _pwRegeln(p, name) {
-  const satz = p.length >= _PW_SATZ;
   return [
     { text: `mindestens ${_PW_MIN} Zeichen`, ok: p.length >= _PW_MIN },
-    { text: 'Groß- und Kleinbuchstaben', ok: satz || (/[a-zäöüß]/.test(p) && /[A-ZÄÖÜ]/.test(p)) },
-    { text: 'eine Ziffer oder ein Sonderzeichen', ok: satz || /[^a-zA-ZäöüÄÖÜß]/.test(p) },
-    { text: `oder ein ganzer Satz ab ${_PW_SATZ} Zeichen`, ok: satz, hinweis: true },
+    { text: 'Groß- und Kleinbuchstaben', ok: /\p{Ll}/u.test(p) && /\p{Lu}/u.test(p) },
+    { text: 'eine Ziffer', ok: /\p{Nd}/u.test(p) },
+    { text: 'ein Sonderzeichen', ok: /[^\p{L}\p{N}]/u.test(p) },
     { text: 'nicht dein Anmeldename',
       ok: p.length > 0 && (!name || !p.toLowerCase().includes(name.toLowerCase())) },
   ];

@@ -748,6 +748,7 @@ async function vollbildUmschalten() {
     console.debug('Vollbild nicht moeglich:', e);
   }
   _vollbildKnopfSetzen();
+  _vollbildPilleSetzen();
 }
 
 function _vollbildKnopfSetzen() {
@@ -760,16 +761,45 @@ function _vollbildKnopfSetzen() {
   b.textContent = _vollbildAktiv() ? 'Vollbild verlassen' : 'Vollbild';
 }
 
-/** Nach einem Neuladen den Wunsch beim ersten Tippen wieder herstellen. */
+/** Nach einem Neuladen den Wunsch wieder herstellen — auf Nachfrage.
+ *
+ *  Vorher hing das am ersten Tippen IRGENDWO auf der Seite. Das war bequem
+ *  gedacht und in der Hand unangenehm: der erste Griff gilt fast immer einem
+ *  Knopf, und dann geschahen zwei Dinge auf einmal — der Knopf tat, was er
+ *  sollte, und darunter sprang die Seite in den Vollbild, wobei sich das
+ *  ganze Bild verschob. Wer nur das Konto-Menue oeffnen wollte, bekam einen
+ *  Vollbild dazu, den er nicht verlangt hatte.
+ *
+ *  Ein Griff darf nur eine Sache tun. Deshalb steht der Wunsch jetzt als
+ *  kleine Schaltflaeche da und wartet, statt sich den naechsten Griff zu
+ *  nehmen, der vorbeikommt.
+ */
 function _vollbildFuehren() {
   document.addEventListener('fullscreenchange', _vollbildKnopfSetzen);
-  if (localStorage.getItem(_VOLLBILD_KEY) !== '1') return;
-  const einmal = () => {
-    document.removeEventListener('pointerdown', einmal);
-    if (_vollbildAktiv()) return;
-    document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
-  };
-  document.addEventListener('pointerdown', einmal, { once: true });
+  document.addEventListener('fullscreenchange', _vollbildPilleSetzen);
+  _vollbildPilleSetzen();
+}
+
+function _vollbildPilleSetzen() {
+  const gewuenscht = localStorage.getItem(_VOLLBILD_KEY) === '1';
+  const zeigen = gewuenscht && !_vollbildAktiv();
+  let pille = document.getElementById('vollbildPille');
+  if (!zeigen) { pille?.remove(); return; }
+  if (pille) return;
+  pille = document.createElement('div');
+  pille.id = 'vollbildPille';
+  pille.innerHTML =
+    '<button type="button" class="vp-haupt" onclick="vollbildUmschalten()">'
+    + 'Vollbild wiederherstellen</button>'
+    + '<button type="button" class="vp-weg" onclick="vollbildNichtMehr()" '
+    + 'title="Nicht mehr danach fragen">Nicht mehr</button>';
+  document.body.appendChild(pille);
+}
+
+/** Der Wunsch war einmal da und ist es nicht mehr. */
+function vollbildNichtMehr() {
+  localStorage.setItem(_VOLLBILD_KEY, '0');
+  _vollbildPilleSetzen();
 }
 
 function openDisplaySettings() {

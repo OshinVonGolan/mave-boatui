@@ -74,7 +74,6 @@ class KontoFehler(ValueError):
 # einen ganzen Satz nimmt, muss keine Ziffer hineinquetschen. Genau diese
 # Quetscherei erzeugt sonst die "Sommer2026!"-Passwoerter.
 PW_MINDESTLAENGE = 10
-PW_SATZLAENGE = 16
 
 
 def passwort_regeln(passwort: str, name: str = '') -> list[dict]:
@@ -82,18 +81,21 @@ def passwort_regeln(passwort: str, name: str = '') -> list[dict]:
 
     Gibt eine Liste zurueck und kein blosses ja/nein, damit die Oberflaeche
     anzeigen kann, WAS noch fehlt — und beide Seiten dieselben Worte benutzen.
+
+    Es gab hier eine Ausnahme fuer lange Saetze: ab 16 Zeichen entfielen die
+    Zeichenregeln. Der Eigner will sie nicht — fuenf klare Regeln, die immer
+    gelten, statt vier Regeln und ein Schlupfloch.
     """
     p = passwort or ''
-    lang_genug = len(p) >= PW_MINDESTLAENGE
-    ist_satz = len(p) >= PW_SATZLAENGE
     return [
-        {'text': f'mindestens {PW_MINDESTLAENGE} Zeichen', 'erfuellt': lang_genug},
+        {'text': f'mindestens {PW_MINDESTLAENGE} Zeichen',
+         'erfuellt': len(p) >= PW_MINDESTLAENGE},
         {'text': 'Groß- und Kleinbuchstaben',
-         'erfuellt': ist_satz or (any(c.islower() for c in p) and any(c.isupper() for c in p))},
-        {'text': 'mindestens eine Ziffer oder ein Sonderzeichen',
-         'erfuellt': ist_satz or any(c.isdigit() or not c.isalnum() for c in p)},
-        {'text': f'oder einfach ein Satz ab {PW_SATZLAENGE} Zeichen — dann entfallen die beiden Regeln darüber',
-         'erfuellt': ist_satz, 'hinweis': True},
+         'erfuellt': any(c.islower() for c in p) and any(c.isupper() for c in p)},
+        {'text': 'eine Ziffer',
+         'erfuellt': any(c.isdigit() for c in p)},
+        {'text': 'ein Sonderzeichen',
+         'erfuellt': any(not c.isalnum() for c in p)},
         {'text': 'nicht der eigene Anmeldename',
          'erfuellt': bool(p) and (not name or name.lower() not in p.lower())},
     ]

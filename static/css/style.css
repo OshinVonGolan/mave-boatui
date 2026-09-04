@@ -2435,3 +2435,31 @@
       animation: lade-dreh .8s linear infinite;
     }
     .nh-txt { flex: 1 1 auto; }
+
+    /* ── Vollbild-Wunsch nach einem Neuladen ──────────────────────────────── */
+    /* Ein Neuladen verlaesst den Vollbild, und keine Seite darf ihn von selbst
+       zurueckholen — das muss ein Griff sein. Frueher nahm sich die Seite dafuer
+       den ersten Griff, der kam, egal worauf er zielte. Jetzt fragt sie. */
+    #vollbildPille {
+      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+      z-index: 900; display: flex; gap: 6px; align-items: center;
+      padding: 5px; border-radius: 999px;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      border: 1px solid var(--line);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, .28);
+      backdrop-filter: blur(6px);
+      font-size: 13px;
+    }
+    #vollbildPille button {
+      border: 0; border-radius: 999px; cursor: pointer;
+      font: inherit; padding: 7px 14px;
+    }
+    #vollbildPille .vp-haupt {
+      background: var(--accent); color: var(--paper); font-weight: 600;
+    }
+    #vollbildPille .vp-weg {
+      background: transparent; color: var(--ink-dim); padding: 7px 10px;
+    }
+    #vollbildPille .vp-weg:hover { color: var(--ink); }
+    /* Im Kiosk-Vollbild waere sie sinnlos — dort ist der Wunsch ja erfuellt. */
+    html.anmeldung-offen #vollbildPille { display: none; }

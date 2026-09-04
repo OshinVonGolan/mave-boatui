@@ -36,24 +36,24 @@ class Anmeldung(Basis):
 
     def test_leer_bis_zum_ersten_konto(self):
         self.assertTrue(self.konten.leer)
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
         self.assertFalse(self.konten.leer)
 
     def test_anmelden_und_sitzung(self):
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
-        token, konto = self.konten.anmelden('eigner', 'ein gutes Passwort')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
+        token, konto = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         self.assertTrue(token)
         self.assertEqual(konto['name'], 'eigner')
         self.assertEqual(self.konten.konto_zu_token(token)['name'], 'eigner')
 
     def test_falsches_passwort_gibt_keine_sitzung(self):
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
         with self.assertRaises(k.KontoFehler):
             self.konten.anmelden('eigner', 'falsch')
 
     def test_unbekannter_name_meldet_dasselbe_wie_falsches_passwort(self):
         """Sonst verrät die Meldung, welche Namen es gibt."""
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
         try:
             self.konten.anmelden('gibtesnicht', 'egal')
             self.fail('hätte scheitern müssen')
@@ -67,13 +67,13 @@ class Anmeldung(Basis):
         self.assertEqual(unbekannt, falsch)
 
     def test_abmelden_macht_die_sitzung_ungueltig(self):
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
-        token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
+        token, _ = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         self.konten.abmelden(token)
         self.assertIsNone(self.konten.konto_zu_token(token))
 
     def test_erfundenes_token_gilt_nicht(self):
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
         self.assertIsNone(self.konten.konto_zu_token('a' * 43))
         self.assertIsNone(self.konten.konto_zu_token(''))
 
@@ -83,11 +83,11 @@ class Sperren(Basis):
 
     def setUp(self):
         super().setUp()
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
-        self.konten.anlegen('crew', 'auch ein Passwort', 'crew')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
+        self.konten.anlegen('crew', 'Auch ein Passwort-2', 'crew')
 
     def test_sperren_beendet_laufende_sitzung(self):
-        token, _ = self.konten.anmelden('crew', 'auch ein Passwort')
+        token, _ = self.konten.anmelden('crew', 'Auch ein Passwort-2')
         self.assertIsNotNone(self.konten.konto_zu_token(token))
         self.konten.aendern('crew', gesperrt=True)
         self.assertIsNone(self.konten.konto_zu_token(token),
@@ -96,23 +96,23 @@ class Sperren(Basis):
     def test_gesperrt_kann_sich_nicht_neu_anmelden(self):
         self.konten.aendern('crew', gesperrt=True)
         with self.assertRaises(k.KontoFehler):
-            self.konten.anmelden('crew', 'auch ein Passwort')
+            self.konten.anmelden('crew', 'Auch ein Passwort-2')
 
     def test_passwortwechsel_beendet_alte_sitzungen(self):
         """Wer sein Passwort ändert, tut das oft, WEIL es abhanden kam."""
-        token, _ = self.konten.anmelden('crew', 'auch ein Passwort')
-        self.konten.aendern('crew', passwort='ein neues Passwort')
+        token, _ = self.konten.anmelden('crew', 'Auch ein Passwort-2')
+        self.konten.aendern('crew', passwort='Ein neues Passwort-6')
         self.assertIsNone(self.konten.konto_zu_token(token))
-        neu, _ = self.konten.anmelden('crew', 'ein neues Passwort')
+        neu, _ = self.konten.anmelden('crew', 'Ein neues Passwort-6')
         self.assertIsNotNone(self.konten.konto_zu_token(neu))
 
     def test_loeschen_beendet_sitzung(self):
-        token, _ = self.konten.anmelden('crew', 'auch ein Passwort')
+        token, _ = self.konten.anmelden('crew', 'Auch ein Passwort-2')
         self.konten.loeschen('crew')
         self.assertIsNone(self.konten.konto_zu_token(token))
 
     def test_sperren_beruehrt_andere_konten_nicht(self):
-        eigner_token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort')
+        eigner_token, _ = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         self.konten.aendern('crew', gesperrt=True)
         self.assertIsNotNone(self.konten.konto_zu_token(eigner_token))
 
@@ -122,8 +122,8 @@ class Kopie(Basis):
 
     def setUp(self):
         super().setUp()
-        self.konten.anlegen('eigner', 'ein gutes Passwort', 'eigner')
-        self.konten.anlegen('crew', 'auch ein Passwort', 'crew')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
+        self.konten.anlegen('crew', 'Auch ein Passwort-2', 'crew')
 
     def test_kopie_enthaelt_hashes(self):
         """Ohne Hash könnte an Bord ohne Internet niemand anmelden."""
@@ -151,7 +151,7 @@ class Kopie(Basis):
         self.assertTrue(pi.leer)
         pi.ersetzen({konto['name']: konto for konto in v['konten']})
         self.assertFalse(pi.leer)
-        token, konto = pi.anmelden('crew', 'auch ein Passwort')
+        token, konto = pi.anmelden('crew', 'Auch ein Passwort-2')
         self.assertEqual(konto['rolle'], 'crew')
         self.assertEqual(pi.zum_verteilen()['stand'], v['stand'],
                          'Beide Seiten müssen denselben Stand errechnen')
@@ -163,7 +163,7 @@ class Kopie(Basis):
         pfad = Path(tmp.name)
         pi = Konten(pfad / 'konten.json', pfad / 'sitzungen.json')
         pi.ersetzen({c['name']: c for c in self.konten.zum_verteilen()['konten']})
-        token, _ = pi.anmelden('crew', 'auch ein Passwort')
+        token, _ = pi.anmelden('crew', 'Auch ein Passwort-2')
         self.assertIsNotNone(pi.konto_zu_token(token))
 
         # Auf dem Server gesperrt, Kopie kommt an Bord an
@@ -178,7 +178,7 @@ class Kopie(Basis):
         pfad = Path(tmp.name)
         pi = Konten(pfad / 'konten.json', pfad / 'sitzungen.json')
         pi.ersetzen({c['name']: c for c in self.konten.zum_verteilen()['konten']})
-        token, _ = pi.anmelden('crew', 'auch ein Passwort')
+        token, _ = pi.anmelden('crew', 'Auch ein Passwort-2')
         self.konten.loeschen('crew')
         pi.ersetzen({c['name']: c for c in self.konten.zum_verteilen()['konten']})
         self.assertIsNone(pi.konto_zu_token(token))
@@ -347,6 +347,60 @@ class Passwoerter(unittest.TestCase):
         self.assertFalse(k.sitzung_gleich('anderes', kennung))
 
 
+class Passwortregeln(Basis):
+    """Die Regeln muessen ueberall gelten, wo ein Passwort gesetzt wird.
+
+    Sie galten lange nur beim Einloesen einer Einladung. In der Oberflaeche
+    standen sie trotzdem an allen vier Stellen — angezeigte Regeln, die
+    niemand durchsetzt, sind schlimmer als keine: sie erwecken den Eindruck,
+    es sei jemand zustaendig.
+    """
+
+    SCHWACH = 'schwach'                    # zu kurz, kein Gross, keine Ziffer
+    STARK = 'Ein gutes Passwort-1'
+
+    def test_regeln_benennen_was_fehlt(self):
+        offen = [r['text'] for r in k.passwort_regeln('schwach', 'crew')
+                 if not r['erfuellt']]
+        self.assertIn('mindestens 10 Zeichen', offen)
+        self.assertIn('Groß- und Kleinbuchstaben', offen)
+        self.assertIn('eine Ziffer', offen)
+        self.assertIn('ein Sonderzeichen', offen)
+
+    def test_ein_langer_satz_ist_keine_ausnahme_mehr(self):
+        """Frueher entfielen ab 16 Zeichen die Zeichenregeln. Auf Wunsch des
+        Eigners nicht mehr — fuenf Regeln, die immer gelten."""
+        offen = [r['text'] for r in k.passwort_regeln('ein ziemlich langer satz ohne alles')
+                 if not r['erfuellt']]
+        self.assertIn('Groß- und Kleinbuchstaben', offen)
+        self.assertIn('eine Ziffer', offen)
+
+    def test_anlegen_prueft(self):
+        with self.assertRaises(k.KontoFehler):
+            self.konten.anlegen('neu', self.SCHWACH, 'crew')
+
+    def test_verwaltung_prueft_beim_setzen(self):
+        self.konten.anlegen('crew', self.STARK, 'crew')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.aendern('crew', passwort=self.SCHWACH)
+        self.assertIsNotNone(self.konten.anmelden('crew', self.STARK))
+
+    def test_selbst_aendern_prueft(self):
+        self.konten.anlegen('crew', self.STARK, 'crew')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.passwort_selbst_aendern('crew', self.STARK, self.SCHWACH)
+        self.assertIsNotNone(self.konten.anmelden('crew', self.STARK))
+
+    def test_einladung_prueft(self):
+        token, _ = self.konten.einladen('crew', 'crew')
+        with self.assertRaises(k.KontoFehler):
+            self.konten.einladung_einloesen('crew', token, self.SCHWACH)
+
+    def test_der_eigene_name_darf_nicht_drinstehen(self):
+        with self.assertRaises(k.KontoFehler):
+            self.konten.anlegen('joshy', 'Joshy-ist-hier-1', 'eigner')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
 
@@ -410,20 +464,20 @@ class Einladungen(Basis):
     def test_einladung_einloesen_und_anmelden(self):
         token, _ = self.konten.einladen('crew', 'crew')
         self.assertIsNotNone(self.konten.einladung_pruefen('crew', token))
-        self.konten.einladung_einloesen('crew', token, 'ein selbst gewähltes')
-        sitzung, konto = self.konten.anmelden('crew', 'ein selbst gewähltes')
+        self.konten.einladung_einloesen('crew', token, 'Ein selbst gewähltes-1')
+        sitzung, konto = self.konten.anmelden('crew', 'Ein selbst gewähltes-1')
         self.assertEqual(konto['rolle'], 'crew')
 
     def test_link_gilt_nur_einmal(self):
         """Ein Link, der zweimal geht, ist ein Link, der weitergegeben werden
         kann."""
         token, _ = self.konten.einladen('crew', 'crew')
-        self.konten.einladung_einloesen('crew', token, 'erstes Passwort')
+        self.konten.einladung_einloesen('crew', token, 'Erstes Passwort-1')
         self.assertIsNone(self.konten.einladung_pruefen('crew', token))
         with self.assertRaises(k.KontoFehler):
-            self.konten.einladung_einloesen('crew', token, 'zweites Passwort')
+            self.konten.einladung_einloesen('crew', token, 'Zweites Passwort-2')
         # Und das erste Passwort gilt weiterhin
-        self.assertIsNotNone(self.konten.anmelden('crew', 'erstes Passwort'))
+        self.assertIsNotNone(self.konten.anmelden('crew', 'Erstes Passwort-1'))
 
     def test_falscher_token_gilt_nicht(self):
         self.konten.einladen('crew', 'crew')
@@ -437,7 +491,7 @@ class Einladungen(Basis):
         self.konten._konten['crew']['einladung']['bis'] = time.time() - 1
         self.assertIsNone(self.konten.einladung_pruefen('crew', token))
         with self.assertRaises(k.KontoFehler):
-            self.konten.einladung_einloesen('crew', token, 'zu spät gekommen')
+            self.konten.einladung_einloesen('crew', token, 'Zu spät gekommen-3')
 
     def test_token_steht_nicht_im_klartext_in_der_datei(self):
         """Wer die Kontendatei liest, darf damit kein Konto übernehmen können."""
@@ -456,17 +510,17 @@ class Einladungen(Basis):
     def test_neu_einladen_laesst_das_alte_passwort_gelten(self):
         """Ein Link, der nie ankommt, darf niemanden aussperren — und genau
         das ist der häufigste Grund für eine Neueinladung."""
-        self.konten.anlegen('vergesslich', 'Das alte Passwort 1', 'crew')
+        self.konten.anlegen('vergesslich', 'Das alte Passwort-1', 'crew')
         token = self.konten.neu_einladen('vergesslich')
-        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das alte Passwort 1'))
+        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das alte Passwort-1'))
         # Erst das Einlösen ersetzt es
-        self.konten.einladung_einloesen('vergesslich', token, 'Das neue Passwort 2')
+        self.konten.einladung_einloesen('vergesslich', token, 'Das neue Passwort-2')
         with self.assertRaises(k.KontoFehler):
-            self.konten.anmelden('vergesslich', 'Das alte Passwort 1')
-        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das neue Passwort 2'))
+            self.konten.anmelden('vergesslich', 'Das alte Passwort-1')
+        self.assertIsNotNone(self.konten.anmelden('vergesslich', 'Das neue Passwort-2'))
 
     def test_gesperrtes_konto_bekommt_keinen_link(self):
-        self.konten.anlegen('gesperrt', 'Ein Passwort 12', 'crew')
+        self.konten.anlegen('gesperrt', 'Ein Passwort-12', 'crew')
         self.konten.aendern('gesperrt', gesperrt=True)
         with self.assertRaises(k.KontoFehler):
             self.konten.neu_einladen('gesperrt')
@@ -494,7 +548,7 @@ class Befristung(Basis):
 
     def setUp(self):
         super().setUp()
-        self.konten.anlegen('techniker', 'ein Werkstattpasswort', 'techniker')
+        self.konten.anlegen('techniker', 'Ein Werkstattpasswort-4', 'techniker')
 
     def test_befristung_wird_gesetzt_und_gelesen(self):
         bis = time.time() + 3600
@@ -504,12 +558,12 @@ class Befristung(Basis):
         self.assertFalse(k.abgelaufen(konto, time.time()))
 
     def test_abgelaufener_zugang_kommt_nicht_mehr_herein(self):
-        token, _ = self.konten.anmelden('techniker', 'ein Werkstattpasswort')
+        token, _ = self.konten.anmelden('techniker', 'Ein Werkstattpasswort-4')
         self.konten.aendern('techniker', laeuft_ab=time.time() - 1)
         self.assertIsNone(self.konten.konto_zu_token(token),
                           'Eine laufende Sitzung muss mit dem Ablauf enden')
         with self.assertRaises(k.KontoFehler):
-            self.konten.anmelden('techniker', 'ein Werkstattpasswort')
+            self.konten.anmelden('techniker', 'Ein Werkstattpasswort-4')
 
     def test_befristung_faehrt_ans_boot_mit(self):
         """Sonst läuft der Zugang an Bord weiter — dort, wo er schalten kann."""
@@ -530,33 +584,33 @@ class Selbstbedienung(Basis):
 
     def setUp(self):
         super().setUp()
-        self.konten.anlegen('crew', 'das alte Passwort', 'crew')
+        self.konten.anlegen('crew', 'Das alte Passwort-3', 'crew')
 
     def test_eigenes_passwort_aendern(self):
-        self.konten.passwort_selbst_aendern('crew', 'das alte Passwort', 'das neue Passwort')
+        self.konten.passwort_selbst_aendern('crew', 'Das alte Passwort-3', 'Das neue Passwort-5')
         with self.assertRaises(k.KontoFehler):
-            self.konten.anmelden('crew', 'das alte Passwort')
-        self.assertIsNotNone(self.konten.anmelden('crew', 'das neue Passwort'))
+            self.konten.anmelden('crew', 'Das alte Passwort-3')
+        self.assertIsNotNone(self.konten.anmelden('crew', 'Das neue Passwort-5'))
 
     def test_ohne_das_alte_passwort_geht_es_nicht(self):
         """Eine Sitzung kann auf einem fremden offenen Gerät liegen."""
         with self.assertRaises(k.KontoFehler):
-            self.konten.passwort_selbst_aendern('crew', 'geraten', 'das neue Passwort')
-        self.assertIsNotNone(self.konten.anmelden('crew', 'das alte Passwort'))
+            self.konten.passwort_selbst_aendern('crew', 'geraten', 'Das neue Passwort-5')
+        self.assertIsNotNone(self.konten.anmelden('crew', 'Das alte Passwort-3'))
 
     def test_aendern_beendet_alle_sitzungen(self):
-        token, _ = self.konten.anmelden('crew', 'das alte Passwort')
-        self.konten.passwort_selbst_aendern('crew', 'das alte Passwort', 'das neue Passwort')
+        token, _ = self.konten.anmelden('crew', 'Das alte Passwort-3')
+        self.konten.passwort_selbst_aendern('crew', 'Das alte Passwort-3', 'Das neue Passwort-5')
         self.assertIsNone(self.konten.konto_zu_token(token))
 
     def test_sitzungen_beenden_ohne_passwortwechsel(self):
-        a, _ = self.konten.anmelden('crew', 'das alte Passwort')
-        b, _ = self.konten.anmelden('crew', 'das alte Passwort')
+        a, _ = self.konten.anmelden('crew', 'Das alte Passwort-3')
+        b, _ = self.konten.anmelden('crew', 'Das alte Passwort-3')
         self.assertEqual(self.konten.sitzungen_beenden('crew'), 2)
         self.assertIsNone(self.konten.konto_zu_token(a))
         self.assertIsNone(self.konten.konto_zu_token(b))
         # Das Passwort gilt weiter — man muss sich kein neues ausdenken
-        self.assertIsNotNone(self.konten.anmelden('crew', 'das alte Passwort'))
+        self.assertIsNotNone(self.konten.anmelden('crew', 'Das alte Passwort-3'))
 
     def test_einladung_zuruecknehmen_laesst_das_konto_stehen(self):
         self.konten.einladen('gast', 'gast')
@@ -576,7 +630,7 @@ class SitzungenTeilen(Basis):
 
     def setUp(self):
         super().setUp()
-        self.konten.anlegen('eigner', 'ein gutes Passwort 1', 'eigner')
+        self.konten.anlegen('eigner', 'Ein gutes Passwort-1', 'eigner')
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         pfad = Path(tmp.name)
@@ -584,7 +638,7 @@ class SitzungenTeilen(Basis):
         self.pi.ersetzen({c['name']: c for c in self.konten.zum_verteilen()['konten']})
 
     def test_sitzung_vom_server_gilt_auch_an_bord(self):
-        token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        token, _ = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         self.assertIsNone(self.pi.konto_zu_token(token), 'vor dem Abgleich noch nicht')
         v = self.konten.zum_verteilen()
         self.pi.sitzungen_uebernehmen(v['sitzungen'])
@@ -592,7 +646,7 @@ class SitzungenTeilen(Basis):
                              'nach dem Abgleich muss dieselbe Sitzung an Bord gelten')
 
     def test_sitzung_von_bord_gilt_auch_beim_server(self):
-        token, _ = self.pi.anmelden('eigner', 'ein gutes Passwort 1')
+        token, _ = self.pi.anmelden('eigner', 'Ein gutes Passwort-1')
         kennung = k.sitzung_kennung(token)
         self.konten.sitzungen_uebernehmen({kennung: {'konto': 'eigner',
                                                      'seit': time.time(), 'zuletzt': time.time()}})
@@ -601,8 +655,8 @@ class SitzungenTeilen(Basis):
     def test_uebernehmen_verwirft_die_eigenen_nicht(self):
         """An Bord kann sich jemand angemeldet haben, während das Boot ohne
         Internet war. Diese Sitzung darf nicht verschwinden."""
-        bord, _ = self.pi.anmelden('eigner', 'ein gutes Passwort 1')
-        server, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        bord, _ = self.pi.anmelden('eigner', 'Ein gutes Passwort-1')
+        server, _ = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         self.pi.sitzungen_uebernehmen(self.konten.zum_verteilen()['sitzungen'])
         self.assertIsNotNone(self.pi.konto_zu_token(bord), 'die eigene bleibt')
         self.assertIsNotNone(self.pi.konto_zu_token(server), 'die fremde kommt dazu')
@@ -617,6 +671,6 @@ class SitzungenTeilen(Basis):
     def test_das_token_selbst_faehrt_nie_mit(self):
         """Übertragen wird nur die Kennung — wer mitliest, kann damit keine
         Sitzung übernehmen."""
-        token, _ = self.konten.anmelden('eigner', 'ein gutes Passwort 1')
+        token, _ = self.konten.anmelden('eigner', 'Ein gutes Passwort-1')
         roh = json.dumps(self.konten.zum_verteilen())
         self.assertNotIn(token, roh)
