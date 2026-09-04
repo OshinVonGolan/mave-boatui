@@ -155,8 +155,14 @@ function toggleQuelle(ev) {
   const pop = $('quellePop');
   if (!pop) return;
   const zu = pop.classList.contains('hidden');
-  if (zu) { renderQuellePop(); pop.classList.remove('hidden'); }
-  else pop.classList.add('hidden');
+  if (zu) {
+    // Nur EIN Feld darf offen stehen — sonst liegen sie uebereinander, und
+    // genau das war der gemeldete Fehler. Das Menue macht es andersherum
+    // ebenso (core.js, toggleBurger).
+    if (typeof closeBurger === 'function') closeBurger();
+    renderQuellePop();
+    pop.classList.remove('hidden');
+  } else pop.classList.add('hidden');
 }
 
 function closeQuelle() { $('quellePop')?.classList.add('hidden'); }
