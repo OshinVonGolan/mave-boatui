@@ -30,6 +30,7 @@ from charge_control import ChargeController
 from connectivity import ConnectivityMonitor
 from daily_stats import _MAX_DAYS as DAILY_STATS_MAX_DAYS   # Aufbewahrung im Tracker
 import geraete
+from debug_log import DebugLog, RingHandler
 import konten_speicher
 from konten_speicher import Konten
 import sync_client
@@ -141,6 +142,7 @@ DEVICES_FILE  = BASE_DIR / 'devices.json'
 DEVICES_VORLAGE = BASE_DIR / 'devices.example.json'
 SYNC_FILE     = BASE_DIR / 'sync.json'
 KONTEN_FILE   = BASE_DIR / 'konten.json'
+DEBUG_FILE    = BASE_DIR / 'debug_log.json'
 SITZUNGEN_FILE = BASE_DIR / 'sitzungen.json'
 HISTORY_FILE  = BASE_DIR / 'history.ndjson'
 HISTORY_GROB_FILE = BASE_DIR / 'history_min.ndjson'
@@ -229,6 +231,14 @@ heizung = StokerClient(HEIZUNG_FILE)
 # sync/zugang.py und alles bleibt offen; das ist vertretbar, weil der Pi nur im
 # Bordnetz haengt. Sobald das erste Konto ankommt, greift die Pflicht.
 konten = Konten(KONTEN_FILE, SITZUNGEN_FILE)
+
+# Mitschnitt der letzten 24 Stunden. Er haengt sich in das Protokoll ein und
+# nimmt alles ab WARNUNG auf — dazu, was die Oberflaeche meldet. Der Anlass:
+# ein Fehler, den der Eigner sieht, ist eine Stunde spaeter nicht mehr da, und
+# dann bleibt nur Raten.
+debug_log = DebugLog(DEBUG_FILE)
+logging.getLogger().addHandler(RingHandler(debug_log))
+debug_log.merken('info', 'bord', f'Bordrechner gestartet, Fassung {VERSION}')
 
 hist_store = HistoryStore(HISTORY_FILE, retention_s=16 * 3600,
                           max_entries=history.maxlen or 10800)
@@ -1106,6 +1116,10 @@ async def post_jserror(request: Request):
         entry = await _json_body(request, _JS_ERROR_BYTES)
         if not isinstance(entry, dict):
             entry = {'msg': str(entry)[:500]}
+        # Auch in den Mitschnitt: ein Fehler im Browser des Eigners taucht
+        # sonst nirgends auf, wo man ihn spaeter noch findet.
+        debug_log.merken('fehler', 'oberflaeche', str(entry.get('msg') or entry)[:400],
+                         {'quelle': entry.get('src'), 'zeile': entry.get('line')})
         # Auf die Felder begrenzen, die core.js schickt (msg/src/line/col/
         # stack/ts) und jedes davon kappen: der Fehlermelder ist ungeschuetzt
         # erreichbar, das RAM-Log darf davon nicht beliebig gross werden.
@@ -1132,6 +1146,25 @@ async def post_jserror(request: Request):
     except Exception:
         pass
     return {'ok': True}
+
+@app.get('/api/debug/log')
+async def debug_log_holen(stunden: float = Query(24, gt=0, le=24),
+                          art: str = '', quelle: str = '',
+                          suche: str = '', grenze: int = Query(400, ge=1, le=2000)):
+    """Der Mitschnitt der letzten Stunden.
+
+    Zum Nachsehen gedacht, nicht zum Zuschauen: wer live mitlesen will, nimmt
+    journalctl auf dem Pi. Hierher kommt man, wenn etwas SCHON passiert ist.
+    """
+    debug_log.aufraeumen()
+    return {
+        'eintraege': debug_log.holen(seit=time.time() - stunden * 3600,
+                                     art=art, quelle=quelle, suche=suche, grenze=grenze),
+        'quellen': debug_log.quellen(),
+        'gesamt': debug_log.anzahl(),
+        'stunden': stunden,
+    }
+
 
 @app.get('/api/jserrors')
 async def get_jserrors():

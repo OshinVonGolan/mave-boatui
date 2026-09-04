@@ -3,7 +3,7 @@
 applyDisplayConfig();
 _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 _leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
-loadPresets();
+const _presetsFertig = Promise.resolve(loadPresets());
 
 // Service Worker anmelden. Erst dadurch bietet Chrome die Anwendung als
 // installierbar an (eigenes Fenster statt blosser Verknuepfung im Browser).
@@ -51,14 +51,54 @@ setInterval(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
  * in index.html (4 s) bleibt als zweite Ebene bestehen, falls dieses Bundle
  * gar nicht erst laeuft.
  */
-const _START_DECKEL_MS = 2000;
+// Acht Sekunden statt zwei. Der alte Deckel stammt aus der Zeit, als der Start
+// eine LEERE Seite zeigte — da war jede Sekunde Wartezeit eine Sekunde vor dem
+// Nichts, und Freigeben war das kleinere Übel. Mit dem Ladeschirm ist es
+// umgekehrt: man sieht, dass gearbeitet wird, und eine halb gefüllte Seite
+// wäre die schlechtere Antwort.
+//
+// Wichtig ist das geworden, seit die Oberfläche auch über den Server läuft:
+// dort wird die Heizung ans Boot durchgereicht und braucht ein Vielfaches der
+// Zeit. Bei zwei Sekunden erschien die Seite regelmäßig mit grauer
+// Heizungskachel — was aussah, als fehlten die Rechte.
+const _START_DECKEL_MS = 8000;
+
+const _QUELLEN = [
+  ['Zustand',    _pStatus],
+  ['Verbindung', _pConn],
+  ['Wartung',    _pWart],
+  ['Wasserstand', _pWl],
+  ['Wetter',     typeof fetchWeather === 'function' ? fetchWeather() : null],
+  ['Heizung',    typeof ladeHeizung === 'function' ? ladeHeizung(false) : null],
+  ['Beleuchtung', typeof loadPresets === 'function' ? _presetsFertig : null],
+];
+
 function _startFreigeben() {
   document.documentElement.classList.remove('startet');
 }
+
+// Im Ladeschirm steht, worauf noch gewartet wird. Das ist nicht Zierde: bleibt
+// eine Quelle hängen, sieht man beim nächsten Mal sofort welche, statt zu
+// raten.
+let _offeneQuellen = _QUELLEN.filter(([, p]) => p).map(([n]) => n);
+function _ladeStandZeigen() {
+  const feld = document.querySelector('.lade-text');
+  if (!feld) return;
+  feld.textContent = _offeneQuellen.length
+    ? 'Es fehlen noch: ' + _offeneQuellen.join(', ')
+    : 'Fertig';
+}
+_ladeStandZeigen();
+for (const [name, versprechen] of _QUELLEN) {
+  if (!versprechen) continue;
+  Promise.resolve(versprechen).finally(() => {
+    _offeneQuellen = _offeneQuellen.filter(n => n !== name);
+    _ladeStandZeigen();
+  });
+}
+
 Promise.race([
-  Promise.allSettled([_pStatus, _pConn, _pWart, _pWl,
-                      typeof fetchWeather === 'function' ? fetchWeather() : null,
-                      typeof ladeHeizung  === 'function' ? ladeHeizung(false) : null]),
+  Promise.allSettled(_QUELLEN.map(([, p]) => p)),
   new Promise(r => setTimeout(r, _START_DECKEL_MS)),
 ]).then(() => requestAnimationFrame(_startFreigeben));
 

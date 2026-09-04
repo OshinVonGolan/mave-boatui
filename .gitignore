@@ -27,3 +27,6 @@ sync_start.json
 # Gehoeren niemals ins Repo — auf jedem Geraet entstehen sie neu.
 konten.json
 sitzungen.json
+
+# Mitschnitt der letzten 24 Stunden — Laufzeitdatei, geraetespezifisch.
+debug_log.json

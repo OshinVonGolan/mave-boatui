@@ -503,3 +503,39 @@ main {
 .ae-punkte li { font-size: 12px; color: var(--text2); line-height: 1.55; margin-bottom: 2px; }
 .ae-ohne { font-size: 11px; color: var(--text3); margin-top: 5px; font-style: italic; }
 .ae-tat { display: flex; align-items: flex-start; }
+
+/* ── Mitschnitt ─────────────────────────────────────────────────────────────
+   Zum Nachsehen, nicht zum Zuschauen: dichte Zeilen, feste Spalten, damit sich
+   beim Überfliegen ein Muster zeigt. */
+.ms-wahl, .ms-suche {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text2); padding: 6px 10px; font-size: 12px; font-family: inherit;
+}
+.ms-wahl:focus, .ms-suche:focus { outline: none; border-color: var(--accent); color: var(--text); }
+.ms-suche { min-width: 160px; }
+
+.mitschnitt { display: flex; flex-direction: column; font-size: 12px; }
+.ms-zeile {
+  display: grid; grid-template-columns: 74px 88px 1fr; gap: 12px;
+  padding: 7px 0; border-top: 1px solid var(--border); align-items: baseline;
+}
+.ms-zeile:first-child { border-top: none; }
+.ms-zeit {
+  color: var(--text3); font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+}
+.ms-quelle {
+  font-size: 10px; font-weight: 600; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ms-text { color: var(--text); line-height: 1.45; word-break: break-word; }
+.ms-zeile.fehler .ms-text { color: var(--red); }
+.ms-zeile.warnung .ms-text { color: var(--yellow); }
+.ms-daten {
+  font-size: 10px; color: var(--text3); margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (max-width: 700px) {
+  .ms-zeile { grid-template-columns: 1fr; gap: 2px; }
+  .ms-quelle { color: var(--text3); }
+}

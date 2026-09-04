@@ -128,6 +128,9 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     ('POST', r'^/api/system/zurueck$',       r.FERNWARTEN),
     ('POST', r'^/api/system/time-sync$',     r.FERNWARTEN),
     ('POST', r'^/api/sync/',                 r.EINSTELLEN),
+    # Der Mitschnitt enthaelt Fehlermeldungen mitsamt Pfaden und Innereien.
+    # Lesen reicht dafuer nicht — das hat jeder Gast.
+    ('GET',  r'^/api/debug/',                r.FERNWARTEN),
     ('*',    r'^/api/settings',              r.EINSTELLEN),
     ('*',    r'^/api/alarms/rules',          r.EINSTELLEN),
     ('PUT',  r'^/api/(wartung|stauplan)$',   r.EINSTELLEN),

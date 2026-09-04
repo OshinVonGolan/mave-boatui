@@ -88,6 +88,7 @@ async function start() {
   $('slKonten').hidden = !darf.includes('verwalten');
   $('slWartung').hidden = !darf.includes('fernwarten');
   $('slAenderungen').hidden = !darf.includes('fernwarten');
+  $('slMitschnitt').hidden = !darf.includes('fernwarten');
 
   $('seitenleiste').addEventListener('click', e => {
     const k = e.target.closest('.sl-knopf');
@@ -149,6 +150,7 @@ function seiteZeigen(name) {
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
+  if (name === 'mitschnitt') mitschnittLaden();
   window.scrollTo(0, 0);
 }
 
@@ -720,6 +722,50 @@ async function zurueckJa(hash) {
       esc(r.ok ? `Der Bordrechner läuft jetzt auf "${d.titel}" und startet neu.`
                : (d.detail || 'Unbekannter Fehler'))}</p>
     <div class="pop-tat"><button class="knopf" onclick="popSchliessen();setTimeout(staendeLaden, 20000)">Schließen</button></div>`;
+}
+
+// ── Mitschnitt ─────────────────────────────────────────────────────────────
+// Der Anlass: "die Schaltflächen sind ausgegraut" — und eine Stunde später ist
+// der Fehler weg. Ohne Mitschnitt bleibt nur Raten.
+
+let _msSuchUhr = null;
+
+function mitschnittSuchen() {
+  // Nicht bei jedem Tastendruck fragen: das läuft über die Verbindung zum Boot.
+  clearTimeout(_msSuchUhr);
+  _msSuchUhr = setTimeout(mitschnittLaden, 400);
+}
+
+async function mitschnittLaden() {
+  const feld = $('mitschnitt');
+  const art = $('msArt').value, quelle = $('msQuelle').value, suche = $('msSuche').value.trim();
+  const p = new URLSearchParams({ stunden: '24', grenze: '400' });
+  if (art) p.set('art', art);
+  if (quelle) p.set('quelle', quelle);
+  if (suche) p.set('suche', suche);
+  const d = await hole('/api/debug/log?' + p);
+  if (!d) { feld.innerHTML = '<div class="leerlauf">Nicht abrufbar.</div>'; return; }
+
+  // Die Quellenauswahl aus dem füllen, was tatsächlich vorkommt — eine feste
+  // Liste liefe sonst der Wirklichkeit hinterher.
+  const wahl = $('msQuelle');
+  const jetzige = wahl.value;
+  wahl.innerHTML = '<option value="">alle Quellen</option>'
+    + (d.quellen || []).map(q => `<option value="${esc(q)}"${q === jetzige ? ' selected' : ''}>${esc(q)}</option>`).join('');
+
+  const e = d.eintraege || [];
+  $('msStand').textContent = `${e.length} von ${d.gesamt} Einträgen der letzten 24 Stunden`;
+  feld.innerHTML = e.length ? e.map(x => {
+    const t = new Date(x.zeit * 1000);
+    return `<div class="ms-zeile ${esc(x.art)}">
+      <span class="ms-zeit">${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+      <span class="ms-quelle">${esc(x.quelle)}</span>
+      <span>
+        <div class="ms-text">${esc(x.text)}</div>
+        ${x.daten ? `<div class="ms-daten">${esc(JSON.stringify(x.daten))}</div>` : ''}
+      </span>
+    </div>`;
+  }).join('') : '<div class="leerlauf">Nichts gefunden — was in diesem Fall eine gute Nachricht ist.</div>';
 }
 
 // ── Fernwartung ────────────────────────────────────────────────────────────

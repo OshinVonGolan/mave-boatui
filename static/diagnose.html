@@ -55,6 +55,10 @@
       <span class="sl-name">Änderungen</span>
       <span class="sl-neben">Was neu ist, ein- und zurückspielen</span>
     </button>
+    <button class="sl-knopf" data-seite="mitschnitt" id="slMitschnitt" hidden>
+      <span class="sl-name">Mitschnitt</span>
+      <span class="sl-neben">letzte 24 Stunden</span>
+    </button>
     <button class="sl-knopf" data-seite="wartung" id="slWartung" hidden>
       <span class="sl-name">Fernwartung</span>
       <span class="sl-neben">Uhr stellen, Zustand</span>
@@ -190,6 +194,34 @@
           <span class="hinweis">die letzten acht Stände</span>
         </div>
         <div class="aenderungen" id="verlaufStaende"></div>
+      </section>
+    </section>
+
+    <!-- Mitschnitt -->
+    <section class="seite" data-seite="mitschnitt" hidden>
+      <div class="seiten-kopf">
+        <h1>Mitschnitt</h1>
+        <div class="werkzeug">
+          <select class="ms-wahl" id="msArt" onchange="mitschnittLaden()">
+            <option value="">alle Stufen</option>
+            <option value="fehler">nur Fehler</option>
+            <option value="warnung">nur Warnungen</option>
+            <option value="info">nur Hinweise</option>
+          </select>
+          <select class="ms-wahl" id="msQuelle" onchange="mitschnittLaden()">
+            <option value="">alle Quellen</option>
+          </select>
+          <input class="ms-suche" id="msSuche" type="search" placeholder="suchen…"
+                 oninput="mitschnittSuchen()">
+          <button class="knopf stumm" onclick="mitschnittLaden()">Neu laden</button>
+        </div>
+      </div>
+      <section class="tafel breit">
+        <div class="tafel-kopf">
+          <h2>Was passiert ist</h2>
+          <span class="hinweis" id="msStand"></span>
+        </div>
+        <div class="mitschnitt" id="mitschnitt"></div>
       </section>
     </section>
 
