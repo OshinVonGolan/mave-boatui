@@ -37,9 +37,16 @@ _PATCHABLE_FIELDS = ('enabled', 'threshold', 'min', 'max', 'severity')
 #                  dauerhaft und hat die Glocke wertlos gemacht. Dass ein
 #                  einzelner Raum weg ist, steht ohnehin in der Heizungsseite
 #                  bei genau diesem Raum. Eigner-Entscheidung.
-#                  Der Fall "KEIN Raum mehr online" bleibt als hz_kein_raum:
-#                  dann kann die Anlage nicht mehr regeln.
-_ABGESCHAFFT = frozenset({'hz_raeume_weg'})
+#
+#   hz_kein_raum   Sollte den Fall abdecken, dass GAR KEIN Raum mehr online ist
+#                  — dann kann die Anlage nicht mehr regeln. In der Praxis ist
+#                  das auf der Mave der Dauerzustand: von fuenf Knoten sind
+#                  zwei geflasht, und der Alarm stand rund um die Uhr (zuletzt
+#                  acht Stunden am Stueck). Damit hat er dasselbe getan wie
+#                  hz_raeume_weg vorher: die Glocke wertlos gemacht, sodass man
+#                  auch die echten Alarme nicht mehr beachtet.
+#                  Zweite Eigner-Entscheidung, 04.09.2026.
+_ABGESCHAFFT = frozenset({'hz_raeume_weg', 'hz_kein_raum'})
 _SEVERITIES       = ('info', 'warning', 'critical')
 _FALLBACK_BOUNDS  = (-100000.0, 100000.0)   # wenn die Regel keine 'bounds' mitbringt
 

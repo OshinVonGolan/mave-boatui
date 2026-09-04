@@ -276,13 +276,39 @@ function _leisteUmschalten(kompakt) {
   document.body.classList.toggle('leiste-kompakt', kompakt);
 }
 
+// Ab dieser Breite bleibt die Statusleiste in voller Groesse stehen.
+// Das Zusammenschieben ist eine Massnahme gegen Platzmangel: auf einem Handy
+// frisst eine grosse Leiste beim Scrollen den halben Bildschirm. Auf einem
+// Monitor gibt es dieses Problem nicht — dort ist die schrumpfende Leiste nur
+// Unruhe, und die Werte springen beim Scrollen in andere Groessen.
+const _LEISTE_ENG_BIS = 1024;
+
 function _leisteKompaktFuehren() {
   const fuehler = document.querySelector('.statusbar-fuehler');
   if (!fuehler) return;
   if (typeof IntersectionObserver !== 'function') return;   // dann bleibt sie gross
-  new IntersectionObserver(([eintrag]) => {
+
+  let beobachtet = false;
+  const beobachter = new IntersectionObserver(([eintrag]) => {
     _leisteUmschalten(!eintrag.isIntersecting);
-  }, { threshold: 0 }).observe(fuehler);
+  }, { threshold: 0 });
+
+  const pruefen = () => {
+    const eng = window.innerWidth < _LEISTE_ENG_BIS;
+    if (eng && !beobachtet) {
+      beobachter.observe(fuehler);
+      beobachtet = true;
+    } else if (!eng && beobachtet) {
+      beobachter.unobserve(fuehler);
+      beobachtet = false;
+      // Den Beobachter abzuschalten allein genuegt nicht: war die Leiste im
+      // Moment des Umschaltens gerade eng, bliebe sie es fuer immer.
+      _leisteUmschalten(false);
+    }
+  };
+  pruefen();
+  window.addEventListener('resize', pruefen);
+  window.addEventListener('orientationchange', pruefen);
 }
 
 function _kopfhoeheFuehren() {
