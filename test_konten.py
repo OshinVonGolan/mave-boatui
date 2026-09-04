@@ -401,6 +401,56 @@ class Passwortregeln(Basis):
             self.konten.anlegen('joshy', 'Joshy-ist-hier-1', 'eigner')
 
 
+class WasEinGastNichtSieht(unittest.TestCase):
+    """Der Gast sieht die Werte des Bootes — nicht die Anlage dahinter.
+
+    Ausdrücklicher Wunsch des Eigners: Wartungsplan, Bootsaufgaben und die
+    Geräteübersicht gehen ihn nichts an. Sie sagen, was kaputt ist, was ansteht
+    und wer im Netz hängt — Aussagen über das Boot und über Menschen, nicht
+    über den Ladestand.
+    """
+
+    def _darf(self, rolle, methode, pfad):
+        return r.darf({'rolle': rolle}, zg.recht_fuer(methode, pfad))
+
+    def test_gast_sieht_die_werte(self):
+        for pfad in ('/api/status', '/api/history', '/api/tanks'):
+            with self.subTest(pfad=pfad):
+                self.assertTrue(self._darf('gast', 'GET', pfad))
+
+    def test_gast_kommt_nicht_an_wartung_und_aufgaben(self):
+        for pfad in ('/api/wartung', '/api/monday/board', '/api/monday/item/7'):
+            with self.subTest(pfad=pfad):
+                self.assertFalse(self._darf('gast', 'GET', pfad))
+
+    def test_gast_kommt_nicht_an_geraete_netz_und_internet(self):
+        for pfad in ('/api/devices', '/api/network', '/api/connectivity'):
+            with self.subTest(pfad=pfad):
+                self.assertFalse(self._darf('gast', 'GET', pfad))
+
+    def test_crew_sieht_wartung_und_aufgaben(self):
+        """Die Crew fährt das Boot — sie soll den Plan sehen und abhaken."""
+        for pfad in ('/api/wartung', '/api/monday/board'):
+            with self.subTest(pfad=pfad):
+                self.assertTrue(self._darf('crew', 'GET', pfad))
+
+    def test_crew_aendert_den_plan_aber_nicht(self):
+        """Lesen ja, umschreiben nein — das bleibt beim Eigner."""
+        self.assertFalse(self._darf('crew', 'PUT', '/api/wartung'))
+        self.assertTrue(self._darf('eigner', 'PUT', '/api/wartung'))
+
+    def test_crew_kommt_nicht_ans_netz(self):
+        for pfad in ('/api/devices', '/api/network', '/api/connectivity'):
+            with self.subTest(pfad=pfad):
+                self.assertFalse(self._darf('crew', 'GET', pfad))
+
+    def test_der_eigner_kommt_ueberall_hin(self):
+        for pfad in ('/api/wartung', '/api/monday/board', '/api/devices',
+                     '/api/network', '/api/connectivity', '/api/settings'):
+            with self.subTest(pfad=pfad):
+                self.assertTrue(self._darf('eigner', 'GET', pfad))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
 

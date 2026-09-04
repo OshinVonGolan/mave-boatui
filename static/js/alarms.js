@@ -9,6 +9,7 @@ function openNetwork() {
   $('networkOverlay').classList.remove('hidden');
   fetchNetwork();
   netTimer = setInterval(fetchNetwork, 5000);
+  _reiterSetzen('networkOverlay', 'netz', 'wlan');
 }
 function closeNetwork() {
   $('networkOverlay').classList.add('hidden');

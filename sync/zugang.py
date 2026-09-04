@@ -178,6 +178,21 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     ('*',    r'^/api/pgn/',                  r.EINSTELLEN),
     ('*',    r'^/api/alarms/rules',          r.EINSTELLEN),
     ('PUT',  r'^/api/(wartung|stauplan)$',   r.EINSTELLEN),
+    # Wartungsplan und Bootsaufgaben gehen einen Gast nichts an. Sie sagen,
+    # was an dieser Anlage kaputt ist, was ansteht und was sie gekostet hat —
+    # das ist eine Aussage ueber das BOOT und seinen Zustand, nicht ueber die
+    # Werte, die gerade anliegen. Ein Gast sieht den Ladestand, nicht die
+    # Mängelliste.
+    #
+    # Die Schwelle ist SCHALTEN und nicht EINSTELLEN: die Crew soll beides
+    # sehen und abhaken koennen, sie faehrt das Boot. Nur der Gast bleibt
+    # draussen — er ist der einzige, der nicht schalten darf.
+    ('*',    r'^/api/wartung',                r.SCHALTEN),
+    ('*',    r'^/api/monday',                 r.SCHALTEN),
+    # Und der Uplink zur selben Schwelle wie die Geraeteliste daneben: er nennt
+    # Anbieter, Signal, Adressen — wie die Anlage ans Netz kommt, nicht wie es
+    # dem Boot geht. Beides steht jetzt auf einer Seite, also gilt beides gleich.
+    ('*',    r'^/api/connectivity',           r.EINSTELLEN),
     ('PUT',  r'^/api/devices/registry$',     r.EINSTELLEN),
     ('PATCH', r'^/api/lights/preset/',       r.EINSTELLEN),   # Preset AENDERN
     # Alles andere Schreibende ist Bedienen. Das ist die VORGABE fuer neue

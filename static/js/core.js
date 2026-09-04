@@ -196,6 +196,41 @@ _clockPoller.start();
 
 // ── Burger-Menü (Mobile) ───────────────────────────────────────────────────
 
+// ── Seiten, die zusammengehören ────────────────────────────────────────────
+// Vier Einträge im Menü für zwei Fragen: "was ist am Boot zu tun" und "wie
+// hängt die Anlage am Netz". Sie stehen jetzt als Reiter auf zwei Seiten.
+//
+// Zusammengefasst wird über eine Leiste, nicht durch Zusammenlegen des Inhalts:
+// die vier Ansichten sind gewachsen und funktionieren. Sie in ein gemeinsames
+// Feld zu giessen hiesse, vier laufende Dinge gleichzeitig anzufassen — für
+// ein Ergebnis, das der Bediener nicht unterscheiden kann.
+
+const _SEITEN_GRUPPEN = {
+  wartung: [
+    { id: 'wartung', text: 'Plan',     ruf: 'openWartung' },
+    { id: 'monday',  text: 'Aufgaben', ruf: 'openMonday' },
+  ],
+  netz: [
+    { id: 'internet', text: 'Internet', ruf: 'openConnectivity' },
+    { id: 'geraete',  text: 'Geräte',   ruf: 'openGeraete' },
+    { id: 'wlan',     text: 'Im WLAN',  ruf: 'openNetwork' },
+  ],
+};
+
+function _reiterSetzen(overlayId, gruppe, aktiv) {
+  const ov = document.getElementById(overlayId);
+  const kopf = ov?.querySelector('.ov-header');
+  if (!kopf) return;
+  const html = '<div class="ov-reiter">' + _SEITEN_GRUPPEN[gruppe].map(x =>
+    `<button class="ov-reiter-knopf${x.id === aktiv ? ' an' : ''}"`
+    + ` onclick="${x.ruf}()">${x.text}</button>`).join('') + '</div>';
+  // NEBEN den Kopf, nicht hinein: die Seiten schreiben ihren Rumpf bei jedem
+  // Auffrischen neu und wuerden die Leiste sonst wegwischen.
+  const da = ov.querySelector(':scope > .ov-reiter');
+  if (da) da.outerHTML = html;
+  else kopf.insertAdjacentHTML('afterend', html);
+}
+
 // ── Das Menü ───────────────────────────────────────────────────────────────
 // EIN Klappmenü, nicht zwei. Vorher gab es den Burger und daneben ein eigenes
 // Kontomenü — beide konnten gleichzeitig offen sein und lagen dann übereinander.
@@ -286,16 +321,22 @@ function _burgerHaupt() {
   const eintrag = (svg, text, ruf, extra = '') =>
     `<button class="burger-item" onclick="closeBurger();${ruf}">${_bmIcon(svg)}${text}${extra}</button>`;
 
+  // Was jemand nicht darf, steht ihm hier nicht im Weg. Die Entscheidung
+  // faellt am Endpunkt (sync/zugang.py) — das hier ist Hoeflichkeit, kein
+  // Schutz. Ein Gast sieht die Werte des Bootes, nicht seine Maengelliste und
+  // nicht, wer im WLAN haengt.
+  const darf = (k && k.handlungen) || [];
+  const wartung = darf.includes('schalten');
+  const netz = darf.includes('einstellen');
+
   // Die Alarme stehen bewusst NICHT hier: sie haben ihren Platz in der
   // Kopfzeile und wären hier ein zweiter Weg zur selben Sache.
   return zeile + kontoKnopf
     + '<div class="burger-trenner"></div>'
-    + eintrag(_BM_SVG.internet, 'Internet', 'openConnectivity()')
-    + eintrag(_BM_SVG.wartung, 'Wartungsplan', 'openWartung()',
-              '<span id="bmWartungPunkt" class="bm-punkt hidden"></span>')
+    + (wartung ? eintrag(_BM_SVG.wartung, 'Wartung', 'openWartung()',
+                         '<span id="bmWartungPunkt" class="bm-punkt hidden"></span>') : '')
+    + (netz ? eintrag(_BM_SVG.internet, 'Netzwerk', 'openConnectivity()') : '')
     + eintrag(_BM_SVG.stauplan, 'Stauplan', 'openStauplan()')
-    + eintrag(_BM_SVG.aufgaben, 'Boot-Aufgaben', 'openMonday()')
-    + eintrag(_BM_SVG.geraete, 'Geräte', 'openGeraete()')
     + '<div class="burger-trenner"></div>'
     + eintrag(_BM_SVG.ordnen, 'Kacheln anordnen', 'kachelnOrdnenAn(true)')
     + eintrag(_BM_SVG.vollbild,

@@ -70,6 +70,7 @@ function _gerOverlayAnzeigen() {
     });
   }
   _gerPoller.start();
+  _reiterSetzen('geraeteOverlay', 'netz', 'geraete');
 }
 
 function closeGeraete() {

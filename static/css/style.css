@@ -2562,3 +2562,22 @@
       text-align: center; font-size: 10.5px; color: var(--text3);
       letter-spacing: .04em;
     }
+
+    /* ── Reiter auf zusammengehörenden Seiten ─────────────────────────────── */
+    /* "Wartung" und "Netzwerk" waren vier Einträge im Menü für zwei Fragen.
+       Jetzt sind es zwei Seiten mit Reitern — der Inhalt blieb, wo er war. */
+    .ov-reiter {
+      display: flex; gap: 4px; padding: 8px 16px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface); flex: 0 0 auto;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    .ov-reiter::-webkit-scrollbar { display: none; }
+    .ov-reiter-knopf {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--text3); font-family: inherit; font-size: 13px; font-weight: 600;
+      padding: 8px 12px 9px; cursor: pointer; white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .ov-reiter-knopf:hover { color: var(--text2); }
+    .ov-reiter-knopf.an { color: var(--accent); border-bottom-color: var(--accent); }

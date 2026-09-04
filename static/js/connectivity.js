@@ -43,6 +43,7 @@ function openConnectivity() {
   // Kein eigener Intervall-Timer: der globale Poller (init.js) ruft
   // fetchConnectivity() auf und rendert das offene Overlay gleich mit.
   fetchConnectivity();
+  _reiterSetzen('connInetOverlay', 'netz', 'internet');
 }
 function closeConnectivity() {
   $('connInetOverlay').classList.add('hidden');

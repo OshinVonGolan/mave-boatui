@@ -37,6 +37,7 @@ function openMonday() {
   _navActive('mondayBtn');
   if (!_mondayData) loadMondayBoard();
   else renderMondayBoard(_mondayData);
+  _reiterSetzen('mondayOverlay', 'wartung', 'monday');
 }
 
 function closeMonday() {

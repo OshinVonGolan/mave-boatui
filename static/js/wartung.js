@@ -191,6 +191,7 @@ async function openWartung() {
   $('wartungOverlay').classList.remove('hidden');
   await _wartungLoad();
   renderWartung();
+  _reiterSetzen('wartungOverlay', 'wartung', 'wartung');
 }
 
 function closeWartung() {
