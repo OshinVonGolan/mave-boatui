@@ -230,6 +230,14 @@ window.fetch = function (eingabe, optionen) {
   // Stelle, an der das auffallen MUSS — sonst zeigt die Oberflaeche leere
   // Kacheln und sagt nicht, warum.
   return _fetchEcht(eingabe, optionen).then(antwort => {
+    // 502/503/504 heisst hier fast immer: die Anlage startet gerade neu (ein
+    // Update dauert eine halbe Minute). Das als "Fehler" zu zeigen ist
+    // irrefuehrend — es ist ein Zustand, der von selbst vorbeigeht.
+    if (antwort && (antwort.status === 502 || antwort.status === 503 || antwort.status === 504)) {
+      _neustartVermuten();
+    } else if (antwort && antwort.ok) {
+      _neustartVorbei();
+    }
     if (antwort && antwort.status === 401 && typeof _sitzungVerloren === 'function') {
       try {
         const url = String(typeof eingabe === 'string' ? eingabe : (eingabe?.url || ''));
@@ -290,3 +298,46 @@ async function _neuLadenHart() {
 
 setTimeout(_standPruefen, 4000);
 setInterval(_standPruefen, 120000);
+
+
+// ── Neustart der Anlage ────────────────────────────────────────────────────
+// Ein Update dauert eine halbe Minute, in der der Dienst weg ist und nur der
+// Webserver mit 502 antwortet. Ohne Hinweis sieht das aus wie ein Ausfall, und
+// man laedt neu, sucht den Fehler oder ruft an — dabei ist in dreissig
+// Sekunden alles wieder da.
+
+let _neustartSeit = 0;
+let _neustartUhr = null;
+
+function _neustartVermuten() {
+  if (_neustartSeit) return;
+  _neustartSeit = Date.now();
+  // Erst nach ein paar Sekunden zeigen: ein einzelner Fehlschlag beim
+  // Umschalten des Netzes soll keinen Hinweis aufblenden lassen.
+  _neustartUhr = setTimeout(_neustartZeigen, 4000);
+}
+
+function _neustartVorbei() {
+  if (!_neustartSeit) return;
+  clearTimeout(_neustartUhr);
+  const balken = document.getElementById('neustartHinweis');
+  if (balken) {
+    balken.classList.add('fertig');
+    balken.querySelector('.nh-txt').textContent = 'Wieder da. Die Anzeige lädt neu…';
+    // Die Oberflaeche hat waehrenddessen Antworten verpasst — nach einem
+    // Update ist ausserdem eine neue Fassung da. Ein Neuladen ist beides.
+    setTimeout(() => location.reload(), 1200);
+  }
+  _neustartSeit = 0;
+}
+
+function _neustartZeigen() {
+  if (!_neustartSeit || document.getElementById('neustartHinweis')) return;
+  const b = document.createElement('div');
+  b.id = 'neustartHinweis';
+  b.className = 'neustart-hinweis';
+  b.innerHTML = '<span class="nh-kreis"></span>'
+    + '<span class="nh-txt">Die Anlage startet gerade neu — meist nach einer '
+    + 'Aktualisierung. Das dauert etwa eine halbe Minute.</span>';
+  document.body.appendChild(b);
+}
