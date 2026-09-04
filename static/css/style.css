@@ -75,8 +75,11 @@
        (top: 100% + 8px) — und weil der Knopf innerhalb der Kopfzeilenpolsterung
        sitzt, begann das Feld noch AUF der Kopfzeile und lag halb darüber.
        Jetzt haengt es an der gemessenen Kopfzeilenhoehe; liegt darunter das
-       Kopie-Band, rutscht es mit (--header-h enthaelt es). */
-    .burger-menu { position: fixed; top: var(--header-h); right: 20px; z-index: 200;
+       Kopie-Band, rutscht es mit (--header-h enthaelt es).
+       Das eine Pixel obendrauf: sonst liegt der obere Rand des Feldes genau
+       auf der Trennlinie der Kopfzeile, und beide verschmelzen zu einem
+       dickeren Strich. */
+    .burger-menu { position: fixed; top: calc(var(--header-h) + 1px); right: 20px; z-index: 200;
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       padding: 6px; min-width: 160px; display: flex; flex-direction: column; gap: 2px;
       box-shadow: 0 8px 24px rgba(0,0,0,.4); }
@@ -2151,7 +2154,7 @@
     @media (max-width: 620px) { .quelle-txt { display: none; } .quelle-chip { padding: 4px 6px; } }
 
     .quelle-pop {
-      position: fixed; top: var(--header-h); right: 20px; z-index: 130;
+      position: fixed; top: calc(var(--header-h) + 1px); right: 20px; z-index: 130;
       width: min(320px, calc(100vw - 24px));
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       box-shadow: 0 12px 32px rgba(0,0,0,.38); padding: 14px 15px;
