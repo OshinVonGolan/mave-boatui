@@ -137,8 +137,11 @@ async def main():
     print('\n— Grenzen —')
     code, a = await http('/api/heizung/heater', 'POST', {'mode': 'manual', 'command': 'on'})
     pruefe('Heizung fern gesperrt', code == 403, f"({a.get('detail','')[:40]}...)")
-    code, _ = await http('/api/system/update', 'POST', {})
-    pruefe('nicht gelisteter Pfad existiert nicht', code == 405 or code == 404)
+    # Ein Pfad, der auf der Weissliste NICHT steht, darf gar nicht erst
+    # hinausgehen. /api/jserror ist so einer: Fehlermeldungen aus dem Browser
+    # gehoeren nicht durch den Befehlskanal.
+    code, _ = await http('/api/jserror', 'POST', {'meldung': 'x'})
+    pruefe('nicht gelisteter Pfad existiert nicht', code in (404, 405))
     code, d = await http('/api/diagnose/uebersicht')
     pruefe('Diagnose fuer den Eigner offen', code == 200 and 'sitzungen' in d)
 

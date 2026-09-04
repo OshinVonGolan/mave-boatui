@@ -53,9 +53,11 @@ function _dspLoad() {
     const raw = localStorage.getItem(_DSP_KEY);
     let saved = raw ? JSON.parse(raw) : {};
     if ((saved.ver ?? 1) < _DSP_VER) saved = { activeProfile: saved.activeProfile,
-                                              spalten: saved.spalten };
+                                              spalten: saved.spalten,
+                                              wandschalter: saved.wandschalter };
     _dsp = { activeProfile: saved.activeProfile ?? _DSP_DEFAULTS.activeProfile,
-             spalten: saved.spalten ?? 'auto', tiles: {} };
+             spalten: saved.spalten ?? 'auto',
+             wandschalter: saved.wandschalter ?? 'auto', tiles: {} };
     // Die Kachelreihenfolge ueberlebt das Neuaufbauen: _dsp wird hier aus den
     // Vorgaben zusammengesetzt, alles Nichtgenannte ginge sonst verloren.
     if (Array.isArray(saved.reihenfolge)) _dsp.reihenfolge = saved.reihenfolge;
@@ -642,6 +644,10 @@ function applyDisplayConfig() {
     document.body.classList.remove('kiosk-mode');
   }
 
+  // Der Schalter „Bildschirm an" haengt am Profil und an der Uebersteuerung —
+  // beides kann sich hier gerade geaendert haben.
+  if (typeof _wandKnopfSetzen === 'function') _wandKnopfSetzen();
+
   // Größenabhängige Inhalte neu rendern
   requestAnimationFrame(() => {
     if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
@@ -1067,6 +1073,34 @@ function openDisplaySettings() {
         </select>
       </div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px" id="dspSpaltenHinweis"></div>
+
+      <div class="settings-row" style="margin-top:12px">
+        <label class="settings-label">Schalter „Bildschirm an"</label>
+        <select class="settings-input" id="dspWandSel" style="max-width:220px;cursor:pointer">
+          <option value="auto">Automatisch (fest montierte Geräte)</option>
+          <option value="immer">Immer zeigen</option>
+          <option value="nie">Nie zeigen</option>
+        </select>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">
+        Hält den Bildschirm wach, solange die Seite offen ist. Ein Tablet ist
+        vom Telefon technisch nicht zu unterscheiden — automatisch heißt daher:
+        Berührbildschirm ab 480&nbsp;px Breite oder Kiosk-Profil. Der Nachtmodus
+        steht immer in der Kopfzeile.
+      </div>
+    </div>
+
+    <div class="set-card">
+      <div class="set-card-hd">Vollbild am Wandtablet</div>
+      <div style="font-size:12px;color:var(--text3);line-height:1.55">
+        Der Vollbild-Schalter im Menü gilt bis zum nächsten Sperren des
+        Bildschirms — mehr darf eine Webseite nicht, den Vollbild gewährt nur
+        ein Fingergriff. Dauerhaft geht es über eine eigene Installation:
+        <a href="/wand" style="color:var(--accent)">/wand</a> aufrufen und von
+        dort zum Startbildschirm hinzufügen. Diese Fassung startet immer ohne
+        Browserleiste, auch nach dem Entsperren. Die bisherige Installation
+        bleibt daneben bestehen.
+      </div>
     </div>
 
     ${_PROFILES.map(p => `
@@ -1089,6 +1123,7 @@ function openDisplaySettings() {
 
   $('dspProfileSel').value = _dsp.activeProfile;
   $('dspSpaltenSel').value = _dsp.spalten || 'auto';
+  $('dspWandSel').value = _dsp.wandschalter || 'auto';
   _spaltenHinweis();
 }
 
@@ -1119,6 +1154,7 @@ function _spaltenHinweis() {
 function saveDisplaySettings(silent) {
   _dsp.activeProfile = $('dspProfileSel').value;
   _dsp.spalten = ($('dspSpaltenSel') || {}).value || 'auto';
+  _dsp.wandschalter = ($('dspWandSel') || {}).value || 'auto';
   for (const p of _PROFILES) {
     for (const t of _TILES) {
       const el = $(`dsp_${p.id}_${t.id}`);

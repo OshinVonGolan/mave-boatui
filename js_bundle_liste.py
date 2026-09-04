@@ -16,6 +16,11 @@ JS_FILES = [
     'core.js', 'quelle.js', 'anmeldung.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'alarmton.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
+    'wandbetrieb.js', 'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
     'orte.js', 'topologie.js', 'geraete.js', 'init.js',
 ]
+
+# Das Logbuch hat sein eigenes, kleines Buendel. wandbetrieb.js steht in beiden:
+# der Nachtmodus gilt fuer den Bildschirm, nicht fuer eine einzelne Seite —
+# wer nachts im Logbuch liest, will ihn genauso.
+DIAGNOSE_FILES = ['wandbetrieb.js', 'diagnose.js']

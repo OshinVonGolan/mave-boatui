@@ -38,7 +38,9 @@ FRIST_S = 10.0
 # ── Die Weissliste ──────────────────────────────────────────────────────────
 # Nur diese Pfade reicht der Server weiter, mit dem Recht, das sie verlangen.
 # Die Liste spiegelt die schreibenden Endpunkte des Pi — aber nicht alle:
-# /api/system/update und /api/jserror gehoeren nicht in die Ferne.
+# /api/jserror gehoert nicht in die Ferne. (/api/system/update stand hier
+# frueher auch; es ist inzwischen bewusst freigegeben, siehe die Begruendung
+# an der Zeile selbst.)
 DURCHLEITEN: tuple[tuple[str, str, str], ...] = (
     # Bedienen
     ('POST', '/api/lights/channels',           r.SCHALTEN),

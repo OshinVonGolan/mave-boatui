@@ -1451,7 +1451,7 @@ for _methode, _pfad, _recht in DURCHLEITEN:
 # das ist die einzige Doppelung im ganzen Aufbau: eine gemeinsame Liste haette
 # bedeutet, dass der Server den Pi-Code importiert, und der bringt CAN-Bus und
 # alles Uebrige mit.
-from js_bundle_liste import JS_FILES as _JS_FILES
+from js_bundle_liste import JS_FILES as _JS_FILES, DIAGNOSE_FILES as _DIAGNOSE_FILES
 _bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
 
 
@@ -1473,9 +1473,11 @@ async def diagnose_seite():
 
 @app.get('/js-diagnose.js', include_in_schema=False)
 async def diagnose_js():
-    return FileResponse(STATISCH / 'js' / 'diagnose.js',
-                        media_type='application/javascript',
-                        headers={'Cache-Control': 'no-cache'})
+    js = STATISCH / 'js'
+    text = '\n;// ---\n'.join(
+        (js / f).read_text(encoding='utf-8') for f in _DIAGNOSE_FILES if (js / f).exists())
+    return Response(text, media_type='application/javascript',
+                    headers={'Cache-Control': 'no-cache'})
 
 
 @app.get('/sw.js', include_in_schema=False)
@@ -1524,6 +1526,32 @@ def startseite(request: Request) -> HTMLResponse:
     # sagt der Server aus SEINEM Abbild — die Oberflaeche kommt schliesslich
     # von ihm.
     roh = seite.read_text(encoding='utf-8').replace('__STAND__', _abbild_stand())
+    return HTMLResponse(roh, headers={'Cache-Control': 'no-cache'})
+
+
+@app.get('/wand', include_in_schema=False)
+def wandseite() -> HTMLResponse:
+    """Dieselbe Seite, ein anderes Manifest.
+
+    Sperrt sich das Tablet, ist der ueber `requestFullscreen()` geholte Vollbild
+    danach weg — und die Seite darf ihn nicht selbst zurueckholen: das gewaehrt
+    nur ein Fingergriff. Eine Anwendung, die als `display: fullscreen`
+    INSTALLIERT ist, startet dagegen immer ohne Browserleiste, auch nach dem
+    Entsperren.
+
+    Deshalb ein eigenes Manifest statt einer Aenderung am bestehenden: das
+    Telefon in der Hosentasche soll weiter `standalone` bleiben. Die
+    Unterscheidung macht Chrome an der `id` — beide lassen sich nebeneinander
+    installieren. Wer das Wandtablet so haben will, ruft einmal /wand auf und
+    installiert von dort.
+    """
+    seite = STATISCH / 'index.html'
+    if not seite.exists():
+        raise HTTPException(500, detail='Oberfläche fehlt im Abbild')
+    roh = (seite.read_text(encoding='utf-8')
+           .replace('__STAND__', _abbild_stand())
+           .replace('href="/static/manifest.json"',
+                    'href="/static/manifest-wand.json"'))
     return HTMLResponse(roh, headers={'Cache-Control': 'no-cache'})
 
 

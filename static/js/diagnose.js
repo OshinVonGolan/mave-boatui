@@ -76,6 +76,8 @@ function _bordansicht() {
 }
 
 async function start() {
+  // Vor allem anderen: der Nachtmodus soll stehen, bevor irgendetwas leuchtet.
+  wandStart();
   const z = await (await fetch('/api/zugang', { cache: 'no-store' })).json().catch(() => null);
   if (!z) return;
   if (!z.angemeldet) { anmeldungZeigen(); return; }
@@ -1294,6 +1296,10 @@ async function laden() {
   if (d) _daten.diagnose = d;
   if (z) _daten.zustand = z;
   if (a) _daten.anwesend = a;
+  // Der Ort nur zum Rechnen: daraus kommt der echte Sonnenuntergang fuer die
+  // Nachtmodus-Automatik.
+  const _p = (_daten.zustand || {}).position;
+  if (_p && typeof _p.lat === 'number') wandOrtSetzen(_p.lat, _p.lon);
   zeichneZustand();
   zeichneUeberblick();
   if (_seite === 'position') { zeichnePosition(); if (_karte) karteZeichnen(); }

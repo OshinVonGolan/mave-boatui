@@ -66,6 +66,58 @@
     .icon-btn.nav-active { border-color: var(--accent2); color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent2); }
 
+    /* ── Wandbetrieb: Bildschirm anlassen, Nachtmodus ── */
+    .wand-knoepfe { display: flex; align-items: center; gap: 8px; }
+    .wand-knopf.an { border-color: var(--accent2); color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent2); }
+    /* „Gewollt, aber steht nicht": ein eigener Zustand, kein dritter Anstrich
+       von „an". Der Schalter steht auf an, die Sperre haelt gerade nicht —
+       wer das nicht sieht, wundert sich spaeter ueber einen dunklen Bildschirm. */
+    .wand-knopf.wartet { border-color: var(--yellow); color: var(--yellow); }
+
+    /* ── Nachtmodus ─────────────────────────────────────────────────────────
+       Zwei Ebenen, weil eine nicht reicht.
+
+       (1) Die Token drehen die Flaeche: Hintergrund, Karten, Schrift, Akzent —
+           das ist der weitaus groesste Teil des abgestrahlten Lichts. Statt
+           Cyan (#06b6d4, fast im Empfindlichkeitsmaximum der Staebchen und
+           damit das Schlechteste fuer die Dunkeladaption) steht hier Bernstein.
+
+       (2) Der Filter ueber der ganzen Seite faengt, was die Token nicht
+           erreichen: 62 fest kodierte Farben im Stylesheet und 141 in den
+           Skripten — Graphenlinien, Balken, Statuspunkte. Kein reines Rot:
+           gruen/gelb/rot muessen auf einem Alarmbildschirm unterscheidbar
+           bleiben. Der Filter drueckt den Blauanteil und waermt alles an,
+           statt die Bedeutung einzuebnen.
+
+       Der Filter steht bewusst am WURZELELEMENT. Auf jedem anderen Element
+       wuerde er einen Bezugsrahmen fuer fest positionierte Kinder aufspannen —
+       Kopfzeile und Kiosk-Leiste wuerden mitscrollen. Fuer die Wurzel nimmt
+       die Spezifikation das ausdruecklich aus. */
+    html.nachtmodus {
+      --bg:       #0b0704;
+      --surface:  #18100a;
+      --surface2: #24170e;
+      --border:   #4f2a15;
+      --text:     #ffcfa8;
+      --text2:    #cf9463;
+      --text3:    #96603c;
+      --accent:   #ff9248;
+      --accent2:  #c9591f;
+      filter: brightness(.8) sepia(.55) saturate(1.6) hue-rotate(-16deg);
+    }
+
+    /* Graphen bekommen eine staerkere Dosis.
+       Der Unterschied ist inhaltlich: In einem Graphen sagt die Farbe, WELCHE
+       Linie das ist — Violett, Cyan, Blau sind Namen, keine Bedeutung. Bei
+       gruen/gelb/rot sagt die Farbe, WIE ES STEHT, und dieser Unterschied darf
+       nachts nicht verschwinden. Deshalb bleibt der Seitenfilter mild und die
+       Leinwaende bekommen obendrauf, was die Skala kalt macht.
+       Gemessen: der Seitenfilter allein senkt den Blauanteil der Seite von 61
+       auf 11 (Blaukanal im Mittel ueber die ganze Seite) und laesst
+       gruen/gelb/rot trotzdem unterscheidbar. */
+    html.nachtmodus canvas { filter: sepia(.55) saturate(1.2); }
+
     /* ── Burger-Menü (nur Mobile) ── */
     /* Immer da. Vorher tauchte der Burger erst unter 900 px auf und die
        Kopfzeile trug daneben bis zu zehn einzelne Knoepfe. Jetzt gibt es genau

@@ -267,8 +267,11 @@ function _gerProblemeHtml(alle) {
         </span>
         <span class="ger-marke s-${_esc(g.status)}">${_esc(g.status_text)}</span>
       </button>`).join('');
+  // Nicht "Meldet sich nicht": in der Liste stehen auch traege Geraete, und die
+  // melden sich ja — nur zu selten. Eine Ueberschrift, die etwas anderes sagt
+  // als das, was darunter steht, ist eine kleine Luege.
   return `<div class="set-card ger-sorgen">
-    <div class="set-card-hd">Meldet sich nicht</div>
+    <div class="set-card-hd">Braucht einen Blick</div>
     <div class="ger-liste">${zeilen}</div>
   </div>`;
 }

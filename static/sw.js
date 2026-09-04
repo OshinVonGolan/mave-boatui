@@ -16,7 +16,7 @@
 // Die Nummer MUSS hoch, wenn sich eine Datei aus der Huelle aendert: der
 // activate-Schritt loescht jeden Speicher, der nicht so heisst. Ohne das
 // haette ein Geraet nach dem Icon-Wechsel noch wochenlang das alte Symbol.
-const SPEICHER = 'mave-huelle-v4';
+const SPEICHER = 'mave-huelle-v5';
 
 // Die Huelle: was die Oberflaeche zum Starten braucht. Bewusst kurz — alles
 // Weitere kommt beim ersten Besuch von selbst dazu.
@@ -26,6 +26,11 @@ const HUELLE = [
   '/static/css/style.css',
   '/static/css/geraete.css',
   '/static/manifest.json',
+  // Die Wandfassung: dieselbe Seite, aber als eigene Anwendung installierbar
+  // (Vollbild ohne Browserleiste). Beide gehoeren in die Huelle, sonst startet
+  // die eine oder die andere ohne Netz nicht.
+  '/wand',
+  '/static/manifest-wand.json',
   '/static/icon-192.png',
   '/static/icon-512.png',
   // Der Schriftzug in der Kopfzeile ist eine Maskendatei — fehlt sie, steht

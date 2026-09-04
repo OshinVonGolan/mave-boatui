@@ -391,6 +391,22 @@ def _wartung_stand() -> dict:
             'frist_tage': frist}
 
 
+def _nur_ort() -> dict | None:
+    """Breite und Laenge fuer den Nachtmodus — mehr nicht.
+
+    Bewusst nur diese zwei Zahlen: die Bordansicht ZEIGT die Position nicht,
+    sie rechnet damit. Satellitenzahl, Guete und Hoehe braucht sie dafuer nicht,
+    und was nicht mitfaehrt, kann auch nicht versehentlich irgendwo auftauchen.
+    """
+    try:
+        pos = ((conn_mon.get_status() if conn_mon else {}).get('router') or {}).get('gps')
+    except Exception:
+        return None
+    if not pos or not isinstance(pos.get('lat'), (int, float)):
+        return None
+    return {'lat': pos['lat'], 'lon': pos['lon']}
+
+
 def _konten_stand() -> str:
     return konten.zum_verteilen()['stand']
 
@@ -645,7 +661,11 @@ async def broadcast(data: dict):
         _grob_sammeln(entry)          # zusaetzlich ins Minutenmittel
         _hist_last_ts  = now
         _hist_last_mono = mono
-    payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count, 'version': VERSION}
+    # Die Position faehrt mit, wird aber NICHT angezeigt. Sie dient allein dem
+    # Nachtmodus: er rechnet daraus den echten Sonnenuntergang fuer diesen Ort.
+    # Ein starrer Zeitplan laege in der Ostsee im Juni um Stunden daneben.
+    payload = {**data, 'alarms': alarms.get_alarms(), 'unack_alarms': alarms.unack_count,
+               'position': _nur_ort(), 'version': VERSION}
     # Nur einreihen — der Sender-Task jedes Clients schickt selbststaendig.
     # Kein await auf einen einzelnen Client mehr, also auch kein Einfrieren.
     for client in list(ws_clients):
@@ -951,6 +971,10 @@ async def js_bundle(req: Request):
 
 _index_cache: dict = {'data': b'', 'etag': '', 'mtime': 0.0, 'stand': ''}
 
+# Die Wandfassung unterscheidet sich in genau einem Zeichenzug.
+_WAND_MANIFEST = ('href="/static/manifest.json"',
+                  'href="/static/manifest-wand.json"')
+
 
 @app.get('/', include_in_schema=False)
 async def root(req: Request):
@@ -992,6 +1016,31 @@ async def root(req: Request):
         media_type='text/html; charset=utf-8',
         headers={'Cache-Control': 'no-cache', 'ETag': _index_cache['etag']},
     )
+
+
+@app.get('/wand', include_in_schema=False)
+async def wandseite(req: Request):
+    """Dieselbe Seite, ein anderes Manifest.
+
+    Sperrt sich das Tablet, ist der ueber `requestFullscreen()` geholte Vollbild
+    danach weg — und die Seite darf ihn nicht selbst zurueckholen: das gewaehrt
+    nur ein Fingergriff. Eine Anwendung, die als `display: fullscreen`
+    INSTALLIERT ist, startet dagegen immer ohne Browserleiste, auch nach dem
+    Entsperren.
+
+    Deshalb ein eigenes Manifest statt einer Aenderung am bestehenden: das
+    Telefon in der Hosentasche soll weiter `standalone` bleiben. Die
+    Unterscheidung macht Chrome an der `id` — beide lassen sich nebeneinander
+    installieren. Wer das Wandtablet so haben will, ruft einmal /wand auf und
+    installiert von dort.
+    """
+    await root(req)                       # fuellt den Zwischenspeicher
+    daten = _index_cache['data'].decode('utf-8').replace(*_WAND_MANIFEST).encode()
+    etag = f'"wand-{_index_cache["etag"][1:-1]}"'
+    if req.headers.get('if-none-match') == etag:
+        return Response(status_code=304)
+    return Response(content=daten, media_type='text/html; charset=utf-8',
+                    headers={'Cache-Control': 'no-cache', 'ETag': etag})
 
 
 
