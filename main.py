@@ -1316,7 +1316,7 @@ async def system_zurueck(body: dict):
         raise HTTPException(400, detail='Kein brauchbarer Stand angegeben.')
 
     loop = asyncio.get_running_loop()
-    erlaubt = await loop.run_in_executor(None, _changelog, 'HEAD -n8')
+    erlaubt = await loop.run_in_executor(None, _changelog, 'HEAD', 8)
     treffer = [e for e in erlaubt if e['hash'].startswith(ziel.lower()[:10])]
     if not treffer:
         raise HTTPException(
@@ -1349,7 +1349,10 @@ async def system_versionen():
         await loop.run_in_executor(None, _lauf, ['git', 'fetch', '--quiet'], 25)
     except Exception as e:
         log.warning('git fetch fehlgeschlagen: %s', e)
-    jetzt = await loop.run_in_executor(None, _changelog, 'HEAD -n8')
+    # 'HEAD', nicht 'HEAD -n8': der Bereich ist EIN Argument fuer git, die
+    # Anzahl hat ihren eigenen Schalter. Zusammengeschrieben versteht git
+    # beides nicht und liefert stillschweigend nichts.
+    jetzt = await loop.run_in_executor(None, _changelog, 'HEAD', 8)
     bereit = await loop.run_in_executor(None, _changelog, 'HEAD..origin/master')
     return {
         'installiert': _git_hash(),
