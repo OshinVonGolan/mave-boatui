@@ -60,6 +60,21 @@ async function hole(pfad) {
   return r.json();
 }
 
+/** Wo die Bordansicht liegt — von hier aus gesehen.
+ *
+ *  Unter dem Logbuch-Namen fuehrt "/" wieder hierher. Ein Verweis darauf
+ *  drehte sich im Kreis, und von der Abweisung aus landete man wieder auf der
+ *  Abweisung. Deshalb EINE Stelle, die das ausrechnet — vorher stand sie
+ *  zweimal da, und die zweite war falsch.
+ */
+function _bordansicht() {
+  const h = location.hostname;
+  if (h.startsWith('logbuch.')) {
+    return location.protocol + '//' + h.replace(/^logbuch\./, 'mave.') + '/';
+  }
+  return '/';
+}
+
 async function start() {
   const z = await (await fetch('/api/zugang', { cache: 'no-store' })).json().catch(() => null);
   if (!z) return;
@@ -70,18 +85,16 @@ async function start() {
     // Das Tor steht am Endpunkt; hier wird es nur erklaert. Wer die Adresse
     // kennt, aber das Recht nicht hat, bekommt von den Daten nichts zu sehen.
     $('sperre').hidden = false;
+    // Dieselbe Rechnung wie beim Verweis in der Kopfzeile — sonst landet man
+    // von der Abweisung aus wieder auf der Abweisung.
+    $('sperreZurueck').href = _bordansicht();
     $('sperreText').textContent =
       `Angemeldet als ${_konto.rolle_name}. Das Logbuch ist dem Eigner und `
       + 'Technikern vorbehalten — die Bordansicht steht dir offen.';
     return;
   }
 
-  // Unter logbuch.… fuehrt "/" hierher zurueck — der Verweis muss auf den
-  // Namen der Bordansicht zeigen, sonst dreht er sich im Kreis.
-  if (location.hostname.startsWith('logbuch.')) {
-    $('zurBordansicht').href =
-      location.protocol + '//' + location.hostname.replace(/^logbuch\./, 'mave.') + '/';
-  }
+  $('zurBordansicht').href = _bordansicht();
   $('wer').textContent = (_konto.anzeigename || '') + ' · ' + _konto.rolle_name;
   $('inhalt').hidden = false;
   const darf = _konto.handlungen || [];
@@ -89,6 +102,10 @@ async function start() {
   $('slWartung').hidden = !darf.includes('fernwarten');
   $('slAenderungen').hidden = !darf.includes('fernwarten');
   $('slMitschnitt').hidden = !darf.includes('fernwarten');
+  // Eine Gruppenueberschrift ohne Punkte darunter ist eine Ueberschrift ueber
+  // nichts.
+  $('slGruppeSystem').hidden = !darf.includes('fernwarten');
+  $('slGruppeVerwaltung').hidden = !darf.includes('verwalten');
 
   $('seitenleiste').addEventListener('click', e => {
     const k = e.target.closest('.sl-knopf');
@@ -158,6 +175,19 @@ function seiteZeigen(name) {
 // Die Startseite beantwortet drei Fragen auf einen Blick: Wie steht es gerade?
 // Wer ist da? Und war zuletzt etwas los?
 
+// Ein Symbol je Kennzahl. Aus dem eigenen SVG-Satz, keine Schriftzeichen:
+// die Oberflaeche fuehrt keine Bildzeichen als Symbolersatz.
+const _svg = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ZAHL_ICON = {
+  'Ladestand': _svg('<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/><rect x="4" y="9" width="9" height="6" rx="1" fill="currentColor" stroke="none"/>'),
+  'Bilanz':    _svg('<path d="M13 2L4.5 13H11l-1 9 8.5-11H12l1-9z"/>'),
+  'Wasser':    _svg('<path d="M12 3s6 6.5 6 10.5A6 6 0 0 1 6 13.5C6 9.5 12 3 12 3z"/>'),
+  'Diesel':    _svg('<path d="M4 20V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14"/><path d="M3 20h13"/><path d="M17 9l3 2v7a1.5 1.5 0 0 1-3 0"/>'),
+  'Innen':     _svg('<path d="M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0z"/>'),
+  standard:    _svg('<circle cx="12" cy="12" r="9"/>'),
+};
+
 function zeichneUeberblick() {
   const z = _daten.zustand;
   const v = _daten.verbindung;
@@ -190,7 +220,8 @@ function zeichneUeberblick() {
                            : 'kein Raumfühler online' },
     ];
     $('jetztZahlen').innerHTML = zahlen.map(x => `
-      <div class="zahl">
+      <div class="zahl ${x.art || ''}">
+        <span class="zahl-icon">${ZAHL_ICON[x.lbl] || ZAHL_ICON.standard}</span>
         <div class="zahl-wert ${x.art || ''}">${esc(x.wert)}</div>
         <div class="zahl-lbl">${esc(x.lbl)}</div>
         <div class="zahl-neben">${esc(x.neben)}</div>

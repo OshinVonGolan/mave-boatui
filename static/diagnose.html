@@ -35,33 +35,71 @@
 <div class="rahmen" id="inhalt" hidden>
 
   <nav class="seitenleiste" id="seitenleiste">
+    <!-- Gruppiert und mit Symbolen. Eine flache Liste aus fuenf Punkten
+         funktioniert; sobald es acht werden, sucht man. Die Ueberschriften
+         beantworten "wo ungefaehr?" bevor man liest. -->
+    <div class="sl-gruppe">Übersicht</div>
     <button class="sl-knopf an" data-seite="ueberblick">
-      <span class="sl-name">Überblick</span>
-      <span class="sl-neben">Zustand und Anwesenheit</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/>
+        <rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Überblick</span>
+        <span class="sl-neben">Zustand und Anwesenheit</span></span>
     </button>
     <button class="sl-knopf" data-seite="messwerte">
-      <span class="sl-name">Messwerte</span>
-      <span class="sl-neben">Graphen und Ausgabe</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 17l5-6 4 4 4-7 5 5"/><path d="M3 21h18"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Messwerte</span>
+        <span class="sl-neben">Graphen und Ausgabe</span></span>
     </button>
     <button class="sl-knopf" data-seite="verfuegbarkeit">
-      <span class="sl-name">Verfügbarkeit</span>
-      <span class="sl-neben">Ausfälle und Ereignisse</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Verfügbarkeit</span>
+        <span class="sl-neben">Ausfälle und Ereignisse</span></span>
     </button>
-    <button class="sl-knopf" data-seite="konten" id="slKonten" hidden>
-      <span class="sl-name">Konten</span>
-      <span class="sl-neben">Zugänge verwalten</span>
-    </button>
+
+    <div class="sl-gruppe" id="slGruppeSystem" hidden>System</div>
     <button class="sl-knopf" data-seite="aenderungen" id="slAenderungen" hidden>
-      <span class="sl-name">Änderungen</span>
-      <span class="sl-neben">Was neu ist, ein- und zurückspielen</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Änderungen</span>
+        <span class="sl-neben">Was neu ist, ein- und zurückspielen</span></span>
     </button>
     <button class="sl-knopf" data-seite="mitschnitt" id="slMitschnitt" hidden>
-      <span class="sl-name">Mitschnitt</span>
-      <span class="sl-neben">letzte 24 Stunden</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 6h16M4 12h16M4 18h10"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Mitschnitt</span>
+        <span class="sl-neben">letzte 24 Stunden</span></span>
     </button>
     <button class="sl-knopf" data-seite="wartung" id="slWartung" hidden>
-      <span class="sl-name">Fernwartung</span>
-      <span class="sl-neben">Uhr stellen, Zustand</span>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2-2z"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Fernwartung</span>
+        <span class="sl-neben">Uhr stellen, Zustand</span></span>
+    </button>
+
+    <div class="sl-gruppe" id="slGruppeVerwaltung" hidden>Verwaltung</div>
+    <button class="sl-knopf" data-seite="konten" id="slKonten" hidden>
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/>
+        <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18 14.4a6.5 6.5 0 0 1 3.5 5.6"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Konten</span>
+        <span class="sl-neben">Zugänge verwalten</span></span>
     </button>
   </nav>
 
@@ -76,27 +114,35 @@
 
       <div class="zahlen" id="jetztZahlen"></div>
 
-      <section class="tafel">
-        <div class="tafel-kopf">
-          <h2>Wer ist da</h2>
-          <span class="hinweis">angemeldete Geräte</span>
-        </div>
-        <div class="anwesend" id="anwesend"></div>
-      </section>
+      <!-- Zwei Spalten: links das Breite (Verbindungsverlauf, Chronik), rechts
+           das Schmale (wer da ist). Untereinander wuerde die Anwesenheitsliste
+           eine ganze Bildschirmbreite fuer drei Zeilen beanspruchen. -->
+      <div class="raster">
+        <div class="raster-breit">
+          <section class="tafel">
+            <div class="tafel-kopf">
+              <h2>Verbindung</h2>
+              <span class="hinweis" id="verbKurz"></span>
+            </div>
+            <div class="streifen" id="streifenKurz"></div>
+            <div class="streifen-achse" id="streifenKurzAchse"></div>
+          </section>
 
-      <section class="tafel">
-        <div class="tafel-kopf">
-          <h2>Verbindung</h2>
-          <span class="hinweis" id="verbKurz"></span>
+          <section class="tafel">
+            <div class="tafel-kopf"><h2>Zuletzt geschehen</h2></div>
+            <div class="liste" id="letztes"></div>
+          </section>
         </div>
-        <div class="streifen" id="streifenKurz"></div>
-        <div class="streifen-achse" id="streifenKurzAchse"></div>
-      </section>
 
-      <section class="tafel">
-        <div class="tafel-kopf"><h2>Zuletzt geschehen</h2></div>
-        <div class="liste" id="letztes"></div>
-      </section>
+        <div class="raster-schmal">
+          <section class="tafel">
+            <div class="tafel-kopf">
+              <h2>Wer ist da</h2>
+            </div>
+            <div class="anwesend" id="anwesend"></div>
+          </section>
+        </div>
+      </div>
     </section>
 
     <!-- Messwerte -->
@@ -240,7 +286,9 @@
   <div class="sperre-karte">
     <div class="sperre-titel">Kein Zugang zum Logbuch</div>
     <p id="sperreText">Für diese Ansicht fehlt die Berechtigung.</p>
-    <a class="knopf" href="/">Zur Bordansicht</a>
+    <!-- Der Verweis wird beim Anzeigen gesetzt: "/" fuehrt unter dem
+         Logbuch-Namen wieder hierher, also im Kreis. -->
+    <a class="knopf" id="sperreZurueck" href="/">Zur Bordansicht</a>
   </div>
 </div>
 
