@@ -256,8 +256,12 @@ function closeBurger() {
   _burgerAnsicht = 'haupt';
 }
 
-function burgerKontoAnsicht() { _burgerAnsicht = 'konto'; burgerBauen(); }
-function burgerZurueck()      { _burgerAnsicht = 'haupt'; burgerBauen(); }
+// Beide MÜSSEN den Klick anhalten. Sie bauen das Menü neu, und danach steckt
+// der angeklickte Knopf nicht mehr im Dokument — der Wächter für Klicks
+// daneben hielt das für "außerhalb getippt" und machte das Menü sofort wieder
+// zu. Man kam so nie in die Kontoansicht.
+function burgerKontoAnsicht(e) { e?.stopPropagation(); _burgerAnsicht = 'konto'; burgerBauen(); }
+function burgerZurueck(e)      { e?.stopPropagation(); _burgerAnsicht = 'haupt'; burgerBauen(); }
 
 function burgerBauen() {
   const m = $('burgerMenu');
@@ -272,7 +276,7 @@ function _burgerHaupt() {
       + `<span>${_bmEsc(k.rolle_name || '')}</span></div>`
     : '<div class="bm-wer bm-wer-leer">Nicht angemeldet</div>';
   const kontoKnopf = k
-    ? `<button class="burger-item bm-konto" onclick="burgerKontoAnsicht()">
+    ? `<button class="burger-item bm-konto" onclick="burgerKontoAnsicht(event)">
          ${_bmIcon(_BM_SVG.konto)}Konto
          <span class="bm-pfeil">${_bmIcon('<path d="M9 6l6 6-6 6"/>')}</span>
        </button>`
@@ -307,7 +311,7 @@ function _burgerKonto() {
   const zeigen = k.anzeigename || k.name || '';
   const darunter = (k.name && k.name !== zeigen) ? 'meldet sich an als ' + k.name : '';
   const darfLogbuch = (k.oberflaechen || []).includes('diagnose');
-  return `<button class="burger-item bm-zurueck" onclick="burgerZurueck()">`
+  return `<button class="burger-item bm-zurueck" onclick="burgerZurueck(event)">`
     + `${_bmIcon(_BM_SVG.zurueck)}Zurück</button>`
     + '<div class="burger-trenner"></div>'
     + `<div class="bm-konto-kopf">${_bmEsc(zeigen)}</div>`
@@ -327,7 +331,12 @@ function _burgerKonto() {
 // Außerhalb klicken schließt das Menü
 document.addEventListener('click', e => {
   const wrap = $('burgerWrap');
-  if (wrap && !wrap.contains(e.target)) closeBurger();
+  if (!wrap) return;
+  // Ein Ziel, das nicht mehr im Dokument haengt, wurde gerade weggerendert —
+  // das ist kein Klick daneben. Ohne diese Zeile schliesst sich das Menue bei
+  // jedem Eintrag, der es neu aufbaut.
+  if (!e.target?.isConnected) return;
+  if (!wrap.contains(e.target)) closeBurger();
 });
 
 // ── Kopfzeilenhoehe ────────────────────────────────────────────────────────
