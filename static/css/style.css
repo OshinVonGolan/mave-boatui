@@ -529,8 +529,51 @@
        diese Sperre baut sich die Seite beim Neuladen stueckweise auf. Mit
        opacity statt display bleibt das Layout gerechnet — Canvas-Breiten
        stimmen also von Anfang an, was bei display:none nicht der Fall waere. */
+    /* Waehrend des Starts: die Oberflaeche liegt unscharf darunter, davor ein
+       Ladekreis. Vorher wurde sie schlicht ausgeblendet — das war ruhiger, aber
+       man sah eine leere Seite und wusste nicht, ob noch etwas kommt. Unscharf
+       zeigt, dass gleich etwas da ist, und verhindert trotzdem, dass man
+       halbfertige Zahlen abliest. */
     html.startet main,
-    html.startet .statusbar { opacity: 0; }
+    html.startet .statusbar {
+      filter: blur(7px);
+      opacity: .45;
+      pointer-events: none;
+      user-select: none;
+    }
+    main, .statusbar { transition: filter .35s ease, opacity .35s ease; }
+
+    .ladeschirm {
+      position: fixed; inset: 0; z-index: 250;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; pointer-events: none;
+      background: color-mix(in srgb, var(--bg) 45%, transparent);
+      transition: opacity .3s ease;
+    }
+    /* Sobald der Start freigegeben ist, ist die Klasse weg — dann auch der
+       Schirm. Kein eigener Zeitgeber: er haengt an derselben Entscheidung wie
+       die Kacheln, sonst laufen beide auseinander. */
+    html:not(.startet) .ladeschirm { opacity: 0; visibility: hidden; }
+    /* Steht die Anmeldung an, hat sie Vorrang — zwei uebereinanderliegende
+       Schirme waeren nur verwirrend. */
+    html.anmeldung-offen .ladeschirm { display: none; }
+
+    .lade-kreis {
+      width: 38px; height: 38px; border-radius: 50%;
+      border: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
+      border-top-color: var(--accent);
+      animation: lade-dreh .8s linear infinite;
+    }
+    @keyframes lade-dreh { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      /* Wer Bewegung abbestellt hat, bekommt ein Pulsieren statt der Drehung. */
+      .lade-kreis { animation: lade-puls 1.4s ease-in-out infinite; }
+      @keyframes lade-puls { 50% { opacity: .3; } }
+    }
+    .lade-text {
+      font-size: 12px; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--text2);
+    }
     main, .statusbar { opacity: 1; transition: opacity .18s ease; }
 
     /* ── Kacheln anordnen ─────────────────────────────────────────────────

@@ -51,6 +51,16 @@
 </head>
 <body>
 
+<!-- Ladeschirm. Steht direkt im HTML und nicht im Bundle: er soll da sein,
+     BEVOR irgendein Skript laeuft — sonst sieht man in der ersten Sekunde
+     genau das, was er verhindern soll. Er verschwindet mit der Klasse
+     `startet` am Wurzelelement, also zusammen mit der Freigabe der Kacheln. -->
+<div class="ladeschirm" id="ladeschirm">
+  <div class="lade-kreis"></div>
+  <div class="lade-text">Bordwerte werden geladen</div>
+</div>
+
+
 <header>
   <div class="logo" onclick="_closeAllOverlays();history.replaceState(null,'',location.pathname);" style="cursor:pointer">MAVE <span class="logo-sub">Bord Monitor</span> <span id="versionBadge" class="logo-ver" style="font-size:10px;font-weight:400;color:var(--text3);letter-spacing:0"></span></div>
 

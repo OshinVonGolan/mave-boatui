@@ -797,8 +797,19 @@ def js_bundle(req: Request) -> Response:
 
 
 @app.get('/', include_in_schema=False)
-def startseite() -> HTMLResponse:
-    seite = STATISCH / 'index.html'
+def startseite(request: Request) -> HTMLResponse:
+    """Welche Oberflaeche an der Wurzel steht, haengt am Namen.
+
+    Unter `logbuch.…` erwartet niemand die Bordansicht — der Name sagt, was
+    kommen soll. Umgekehrt liefert `mave.…` immer die Bordansicht, auch auf dem
+    Server; unterwegs ist genau das die Seite, die man aufmacht.
+
+    Das Logbuch bleibt zusaetzlich unter /diagnose erreichbar, damit ein alter
+    Verweis nicht ins Leere geht.
+    """
+    gastgeber = (request.headers.get('host') or '').split(':')[0].lower()
+    name = 'diagnose.html' if gastgeber.startswith('logbuch.') else 'index.html'
+    seite = STATISCH / name
     if not seite.exists():
         raise HTTPException(500, detail='Oberfläche fehlt im Abbild')
     return HTMLResponse(seite.read_text(encoding='utf-8'),

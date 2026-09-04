@@ -75,6 +75,12 @@ async function start() {
     return;
   }
 
+  // Unter logbuch.… fuehrt "/" hierher zurueck — der Verweis muss auf den
+  // Namen der Bordansicht zeigen, sonst dreht er sich im Kreis.
+  if (location.hostname.startsWith('logbuch.')) {
+    $('zurBordansicht').href =
+      location.protocol + '//' + location.hostname.replace(/^logbuch\./, 'mave.') + '/';
+  }
   $('wer').textContent = _konto.rolle_name;
   $('inhalt').hidden = false;
   const darf = _konto.handlungen || [];
