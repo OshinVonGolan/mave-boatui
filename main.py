@@ -478,6 +478,19 @@ async def broadcast(data: dict):
     hoch, tief = bms.get('highest_cell_v'), bms.get('lowest_cell_v')
     if hoch is not None and tief is not None:
         entry['zelldiff'] = round(hoch - tief, 4)
+
+    # Die Verbindung nach draussen gehoert in den Verlauf. Sie hing bisher an
+    # einem eigenen Poller und war nach fuenf Minuten vergessen — die Frage
+    # "war das Netz gestern Abend schon so schlecht?" liess sich nicht
+    # beantworten.
+    netz = conn_mon.get_status() if conn_mon else None
+    sl = (netz or {}).get('starlink') or {}
+    ping = sl.get('ping_ms')
+    if isinstance(ping, (int, float)) and not isinstance(ping, bool):
+        entry['ping_ms'] = round(ping, 1)
+    runter = sl.get('downlink_bps')
+    if isinstance(runter, (int, float)) and not isinstance(runter, bool):
+        entry['down_mbit'] = round(runter / 1e6, 2)
     mono = time.monotonic()
     if len(entry) > 1 and mono - _hist_last_mono >= 5.0:
         history.append(entry)
@@ -1998,6 +2011,10 @@ def _spark_bauen() -> dict:
     serien = {'soc': _reihe('soc'), 'laden': _ladeleistung(),
               'tank1': _reihe('tank1'), 'tank2': _reihe('tank2'),
               'raumtemp': _reihe('raumtemp'),
+              # Die Verbindung nach draussen. Ein hoher Ausschlag heisst hier
+              # SCHLECHT — bei der Latenz ist wenig gut. Das ist beim Ablesen
+              # richtig herum: was hochschlaegt, ist ein Problem.
+              'ping': _reihe('ping_ms'), 'down': _reihe('down_mbit'),
               # Je Quelle einzeln, damit das Laden-Feld durchschalten kann.
               'charger': _reihe('charger'), 'solar1': _reihe('solar1'),
               'orion': _reihe('orion')}

@@ -258,6 +258,13 @@
        Zustand: die Zahl ist die Antwortzeit, weil der Durchsatz im Leerlauf
        ohnehin bei null liegt und nichts ueber die Verbindung aussagt. -->
   <button type="button" class="sb-item" onclick="openConnectivity()">
+    <!-- Der Graph zeigt dieselbe Groesse wie die Zahl: die Antwortzeit ueber
+         24 Stunden. Hier schlaegt ein hoher Wert AUS, und das ist richtig
+         herum — bei der Latenz ist wenig gut, was hochgeht ist ein Problem.
+         Keine feste Skala: 15 ms sind normal, 300 ms auch schon vorgekommen.
+         Mindestens 20 ms Spanne, damit ein ruhiger Tag nicht wie ein
+         Erdbeben aussieht. -->
+    <span class="sb-spark" data-reihe="ping" data-tief="0" data-spanne="20" aria-hidden="true"></span>
     <span class="sb-lbl">Internet</span>
     <span class="sb-val"><b id="sbNet">--</b><i id="sbNetUnit">ms</i></span>
     <span class="sb-sub" id="sbNetSub">--</span>
