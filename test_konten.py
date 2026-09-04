@@ -270,6 +270,28 @@ class Zugangsregeln(unittest.TestCase):
         """Ein neuer Aufruf soll auffallen, indem er abgewiesen wird."""
         self.assertEqual(zg.recht_fuer('TRACE', '/api/irgendwas'), r.VERWALTEN)
 
+    def test_gast_sieht_die_werte_aber_nicht_die_anlage(self):
+        """Ein Gast soll den Ladestand sehen — nicht die Einstellungen und
+        nicht, wer sonst im Bord-WLAN hängt. Die Geräteübersicht ist eine
+        Aussage über die Anwesenheit von Menschen, nicht über das Boot."""
+        gast = {'name': 'g', 'rolle': 'gast'}
+        for pfad in ('/api/status', '/api/tanks', '/api/heizung', '/api/history'):
+            erlaubt, _, _ = zg.pruefen(gast, 'GET', pfad, schonfrist=False)
+            self.assertTrue(erlaubt, pfad)
+        for pfad in ('/api/settings', '/api/network', '/api/devices',
+                     '/api/devices/registry', '/api/pgn/127508/1'):
+            erlaubt, code, _ = zg.pruefen(gast, 'GET', pfad, schonfrist=False)
+            self.assertFalse(erlaubt, pfad)
+            self.assertEqual(code, 403, pfad)
+
+    def test_crew_darf_die_anlage_auch_nicht_einstellen(self):
+        crew = {'name': 'c', 'rolle': 'crew'}
+        erlaubt, _, _ = zg.pruefen(crew, 'GET', '/api/settings', schonfrist=False)
+        self.assertFalse(erlaubt)
+        # Bedienen aber schon
+        erlaubt, _, _ = zg.pruefen(crew, 'POST', '/api/lights/channels', schonfrist=False)
+        self.assertTrue(erlaubt)
+
     def test_schonfrist_oeffnet_alles(self):
         erlaubt, code, _ = zg.pruefen(None, 'POST', '/api/lights/channels', schonfrist=True)
         self.assertTrue(erlaubt)

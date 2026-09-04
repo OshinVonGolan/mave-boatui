@@ -1027,14 +1027,14 @@
     .inv-pill:not(.on) .inv-pill-label.left  { color: var(--text); }
 
     /* ── Cards ── */
-    /* Der Fokusrahmen einer Kachel lag AUSSERHALB ihrer Kante und wurde oben
-       von der klebenden Statusleiste abgeschnitten. Nach innen gelegt bleibt er
-       vollstaendig sichtbar. Das scroll-margin sorgt dafuer, dass eine
-       angesprungene Kachel unter der Leiste landet und nicht dahinter. */
-    .card:focus-visible, .card:focus-within {
-      outline: 2px solid var(--accent);
-      outline-offset: -2px;
-    }
+    /* KEIN Fokusrahmen an der Kachel. Er war der Versuch, ein abgeschnittenes
+       Rechteck zu retten — aber eine Kachel ist kein Bedienelement, und der
+       Rahmen brachte nichts ausser dem Problem: er wurde oben von der
+       klebenden Statusleiste ueberdeckt, egal wo man ihn hinlegte. Knoepfe und
+       Felder INNERHALB der Kachel haben weiterhin ihren eigenen, und dort
+       gehoert er auch hin.
+       Das scroll-margin bleibt: eine angesprungene Kachel soll unter der
+       Leiste landen und nicht dahinter. */
     .card { scroll-margin-top: calc(var(--header-h) + 62px);
       background: var(--surface); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 20px;
@@ -2398,3 +2398,19 @@
     .pw-regeln li.ok { color: var(--green); }
     .pw-regeln li.hinweis { opacity: .75; }
     .pw-regeln .regel-punkt { flex: 0 0 14px; text-align: center; font-weight: 700; }
+
+    .kp-person { font-size: 11px; color: var(--text2); margin-top: 3px; line-height: 1.4; }
+    a.kp-knopf { text-decoration: none; display: block; }
+
+    /* Was jemand nicht darf, steht ihm nicht im Weg. Einstellungen und
+       Geräteübersicht setzen das Recht `einstellen` voraus — die Übersicht
+       nennt jedes Gerät im Bord-WLAN mit Namen, und das ist eine Aussage über
+       die Anwesenheit von Menschen. `kein-konto` nimmt die Schonfrist aus:
+       solange keine Konten bestehen, ist absichtlich alles offen. */
+    html:not(.darf-einstellen):not(.kein-konto) #settingsBtn,
+    html:not(.darf-einstellen):not(.kein-konto) #geraeteBtn,
+    html:not(.darf-einstellen):not(.kein-konto) [onclick*="openGeraete"],
+    html:not(.darf-einstellen):not(.kein-konto) [onclick*="openNetwork"],
+    html:not(.darf-einstellen):not(.kein-konto) [onclick*="openSettings"] {
+      display: none !important;
+    }

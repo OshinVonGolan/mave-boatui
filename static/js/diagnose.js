@@ -496,7 +496,9 @@ function zeichneKonten() {
         <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}${
           c.eingeladen ? ' · <span style="color:var(--yellow)">eingeladen, Passwort noch nicht gesetzt</span>' : ''}
           ${zeigen !== c.name ? '· meldet sich an als <b>' + esc(c.name) + '</b>' : ''}
-          ${c.person && c.person !== zeigen ? '· ' + esc(c.person) : ''}</div>
+          ${c.person && c.person !== zeigen ? '· ' + esc(c.person) : ''}${
+          c.gueltig_bis ? ' · <span style="color:var(--yellow)">befristet bis '
+            + esc(new Date(c.gueltig_bis * 1000).toLocaleDateString('de-DE')) + '</span>' : ''}</div>
         <div class="k-darf">${esc((r.handlungen || []).join(' · '))}</div>
       </div>
       <div class="k-tat">
@@ -608,11 +610,25 @@ function kontoBearbeiten(name) {
              placeholder="${esc(c.name)}"></label>
     <label class="pop-feld"><span>Rolle</span>
       <select id="bkRolle"${ich ? ' disabled' : ''}>${_rollenWahl(c.rolle)}</select></label>
+    <label class="pop-feld"><span>Zugang befristen (leer = unbefristet)</span>
+      <input id="bkBis" type="date" value="${c.gueltig_bis
+        ? new Date(c.gueltig_bis * 1000).toISOString().slice(0, 10) : ''}"></label>
+    ${c.rolle === 'techniker' && !c.gueltig_bis
+      ? '<div class="pop-hinweis">Ein Technikerzugang sollte befristet sein — er ist der '
+        + 'einzige Fremde im System, und einer, den niemand zurückzieht, bleibt für immer offen.</div>'
+      : ''}
     <label class="pop-feld"><span>Neues Passwort (leer lassen = unverändert)</span>
-      <input id="bkPw" type="text" placeholder="mindestens 8 Zeichen"></label>
+      <input id="bkPw" type="text" placeholder="oder unten einen Link schicken"></label>
     ${ich ? '<div class="pop-hinweis">Die eigene Rolle lässt sich nicht ändern — sonst könnte man sich '
           + 'selbst aussperren, und hier ist niemand, der es wieder geradezieht.</div>' : ''}
     <div class="pop-fehler hidden" id="bkFehler"></div>
+    <div class="konto-weitere">
+      <button class="knopf stumm" onclick="linkErneuern('${esc(name)}')">
+        ${c.eingeladen ? 'Neuen Einladungslink' : 'Link zum Passwort-Zurücksetzen'}</button>
+      ${c.eingeladen
+        ? `<button class="knopf stumm" onclick="einladungZurueck('${esc(name)}')">Einladung zurücknehmen</button>`
+        : `<button class="knopf stumm" onclick="ueberallAbmelden('${esc(name)}')">Überall abmelden</button>`}
+    </div>
     <div class="pop-tat">
       <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
       <button class="knopf" onclick="kontoSpeichern('${esc(name)}', ${ich})">Speichern</button>
@@ -624,6 +640,10 @@ async function kontoSpeichern(name, ich) {
     person: $('bkPerson').value,
     spitzname: $('bkSpitz').value,
   };
+  const bis = $('bkBis').value;
+  // Ende des gewählten Tages, nicht sein Anfang: wer "bis 5. September" wählt,
+  // meint diesen Tag noch mit.
+  rumpf.laeuft_ab = bis ? (new Date(bis + 'T23:59:59').getTime() / 1000) : 0;
   if (!ich) rumpf.rolle = $('bkRolle').value;
   const pw = $('bkPw').value.trim();
   if (pw) rumpf.passwort = pw;
@@ -661,6 +681,33 @@ async function kontoAnlegen() {
   laden();
   if (d.einladungslink) _einladungZeigen(d.anzeigename || name, d.einladungslink);
   else popSchliessen();
+}
+
+async function linkErneuern(name) {
+  const r = await fetch(`/api/konten/${encodeURIComponent(name)}/einladung`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { popZeigen(`<div class="pop-titel">Nicht möglich</div>
+    <p style="color:var(--text2);font-size:13px">${esc(d.detail || 'Unbekannter Fehler')}</p>
+    <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Schließen</button></div>`); return; }
+  laden();
+  _einladungZeigen(name, d.einladungslink);
+}
+
+async function einladungZurueck(name) {
+  await fetch(`/api/konten/${encodeURIComponent(name)}/einladung`, { method: 'DELETE' });
+  popSchliessen();
+  laden();
+}
+
+async function ueberallAbmelden(name) {
+  const r = await fetch(`/api/konten/${encodeURIComponent(name)}/abmelden`, { method: 'POST' });
+  const d = await r.json().catch(() => ({}));
+  popZeigen(`<div class="pop-titel">Abgemeldet</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5">
+      ${d.beendet || 0} Anmeldung${d.beendet === 1 ? '' : 'en'} beendet. Das Passwort
+      gilt weiter — es muss also niemand ein neues suchen.</p>
+    <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Schließen</button></div>`);
+  laden();
 }
 
 async function kontoSperren(name, sperren) {

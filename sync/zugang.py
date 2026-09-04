@@ -136,7 +136,18 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     # Der Mitschnitt enthaelt Fehlermeldungen mitsamt Pfaden und Innereien.
     # Lesen reicht dafuer nicht — das hat jeder Gast.
     ('GET',  r'^/api/debug/',                r.FERNWARTEN),
+    # Auch LESEND: die Einstellungen zeigen, wie die Anlage aufgebaut ist —
+    # Grenzwerte, Geraete, Netzzugaenge. Ein Gast soll die Werte sehen, nicht
+    # die Anlage. Vorher fiel das GET unter die Vorgabe "Lesen", und die hat
+    # jeder.
     ('*',    r'^/api/settings',              r.EINSTELLEN),
+    # Wer im Netz haengt, geht einen Gast nichts an: die Geraeteuebersicht
+    # nennt jedes Geraet im Bord-WLAN mit Namen und Adresse. Das ist eine
+    # Aussage ueber ANWESENHEIT von Menschen, nicht ueber das Boot.
+    ('*',    r'^/api/network',               r.EINSTELLEN),
+    ('GET',  r'^/api/devices$',              r.EINSTELLEN),
+    ('*',    r'^/api/devices/',              r.EINSTELLEN),
+    ('*',    r'^/api/pgn/',                  r.EINSTELLEN),
     ('*',    r'^/api/alarms/rules',          r.EINSTELLEN),
     ('PUT',  r'^/api/(wartung|stauplan)$',   r.EINSTELLEN),
     ('PUT',  r'^/api/devices/registry$',     r.EINSTELLEN),

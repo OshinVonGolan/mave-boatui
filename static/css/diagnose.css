@@ -563,3 +563,9 @@ main {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent);
   user-select: all;
 }
+
+.konto-weitere {
+  display: flex; gap: 7px; flex-wrap: wrap;
+  margin: 4px 0 14px; padding-top: 13px; border-top: 1px solid var(--border);
+}
+.konto-weitere .knopf { font-size: 11px; padding: 6px 10px; }

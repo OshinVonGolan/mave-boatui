@@ -164,16 +164,39 @@ function kontoMenue(ev) {
       <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>`;
   } else {
     const h = k.handlungen || [];
+    const zeigen = k.anzeigename || k.name || '';
+    // Der Anzeigename ist oft ein Spitzname. Wer das Konto verwaltet, will
+    // aber auch wissen, WER das ist — und unter welchem Namen sich die Person
+    // anmeldet.
+    const darunter = [k.person && k.person !== zeigen ? k.person : '',
+                      k.name && k.name !== zeigen ? 'meldet sich an als ' + k.name : '']
+                     .filter(Boolean).join(' · ');
+    const darfLogbuch = (k.oberflaechen || []).includes('diagnose');
     pop.innerHTML = `
-      <div class="kp-kopf">${_esc(k.anzeigename || k.name || '')}</div>
+      <div class="kp-kopf">${_esc(zeigen)}</div>
+      ${darunter ? `<div class="kp-person">${_esc(darunter)}</div>` : ''}
       <div class="kp-rolle">${_esc(k.rolle_name || '')}</div>
       <div class="kp-darf">${_esc(h.join(' · '))}</div>
       <div class="kp-tat">
+        ${darfLogbuch ? `<a class="kp-knopf" href="${_logbuchAdresse()}">Zum Logbuch</a>` : ''}
         <button class="kp-knopf" onclick="passwortAendernOeffnen()">Passwort ändern</button>
         <button class="kp-knopf warn" onclick="abmelden()">Abmelden</button>
       </div>`;
   }
   pop.classList.remove('hidden');
+}
+
+/** Wo das Logbuch liegt — von hier aus gesehen.
+ *
+ *  Es hat einen EIGENEN Namen und liegt immer auf dem Server: im Bordnetz zeigt
+ *  `mave.…` auf den Pi, und dort gibt es kein Logbuch. Ein Verweis auf "/diagnose"
+ *  liefe deshalb genau dann ins Leere, wenn man an Bord ist.
+ */
+function _logbuchAdresse() {
+  const h = location.hostname;
+  if (h.startsWith('mave.')) return location.protocol + '//' + h.replace(/^mave\./, 'logbuch.') + '/';
+  if (h.startsWith('pi.mave.')) return location.protocol + '//' + h.replace(/^pi\.mave\./, 'logbuch.') + '/';
+  return '/diagnose';      // eigenständige Aufstellung ohne die drei Namen
 }
 
 document.addEventListener('click', e => {
