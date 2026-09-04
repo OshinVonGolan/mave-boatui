@@ -71,7 +71,12 @@
        Kopfzeile trug daneben bis zu zehn einzelne Knoepfe. Jetzt gibt es genau
        ein Menue — auf jedem Bildschirm dasselbe. */
     .burger-wrap { position: relative; display: block; }
-    .burger-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+    /* Kante auf Kante mit der Kopfzeile. Vorher hing es am Knopf
+       (top: 100% + 8px) — und weil der Knopf innerhalb der Kopfzeilenpolsterung
+       sitzt, begann das Feld noch AUF der Kopfzeile und lag halb darüber.
+       Jetzt haengt es an der gemessenen Kopfzeilenhoehe; liegt darunter das
+       Kopie-Band, rutscht es mit (--header-h enthaelt es). */
+    .burger-menu { position: fixed; top: var(--header-h); right: 20px; z-index: 200;
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       padding: 6px; min-width: 160px; display: flex; flex-direction: column; gap: 2px;
       box-shadow: 0 8px 24px rgba(0,0,0,.4); }
@@ -2019,6 +2024,7 @@
       #topbarClock { display: none !important; }
       header { padding: 10px 12px 9px; }
       .header-right { gap: 6px; }
+      .burger-menu, .quelle-pop { right: 12px; }
     }
 
     /* Back-arrow close button */
@@ -2139,7 +2145,7 @@
     @media (max-width: 620px) { .quelle-txt { display: none; } .quelle-chip { padding: 4px 6px; } }
 
     .quelle-pop {
-      position: fixed; top: calc(var(--header-basis) - 4px); right: 12px; z-index: 130;
+      position: fixed; top: var(--header-h); right: 20px; z-index: 130;
       width: min(320px, calc(100vw - 24px));
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
       box-shadow: 0 12px 32px rgba(0,0,0,.38); padding: 14px 15px;

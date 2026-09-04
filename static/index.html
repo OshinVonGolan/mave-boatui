@@ -86,6 +86,14 @@
          Einstellungen und der Burger — und zwei Menues, die sich gegenseitig
          ueberlagerten, wenn beide offen waren. -->
 
+    <!-- EINE Anzeige fuer die Verbindung, nicht drei. Vorher sagte der Chip
+         woher die Daten kommen, ein Punkt daneben ob der Draht steht und eine
+         Antenne wie gut das Internet ist — drei Zeichen fuer eine Frage.
+         Jetzt sagt das Zeichen WOHER und seine Farbe WIE GUT. -->
+    <button class="quelle-chip neutral" id="quelleChip" onclick="toggleQuelle(event)"
+            title="Verbindung"></button>
+    <div class="quelle-pop hidden" id="quellePop"></div>
+
     <!-- Die Alarme bleiben. Ein Alarm, den man erst in einem Menue findet,
          ist kein Alarm — deshalb steht er hier UND nicht im Menue. -->
     <button class="icon-btn alarm-btn" onclick="openAlarms()" title="Alarme" id="alarmBtn">
@@ -94,14 +102,6 @@
       </svg>
       <span class="alarm-badge hidden" id="alarmBadge">0</span>
     </button>
-
-    <!-- EINE Anzeige fuer die Verbindung, nicht drei. Vorher sagte der Chip
-         woher die Daten kommen, ein Punkt daneben ob der Draht steht und eine
-         Antenne wie gut das Internet ist — drei Zeichen fuer eine Frage.
-         Jetzt sagt das Zeichen WOHER und seine Farbe WIE GUT. -->
-    <button class="quelle-chip neutral" id="quelleChip" onclick="toggleQuelle(event)"
-            title="Verbindung"></button>
-    <div class="quelle-pop hidden" id="quellePop"></div>
 
     <div class="burger-wrap" id="burgerWrap">
       <button class="icon-btn" id="burgerBtn" onclick="toggleBurger(event)" title="Menü">

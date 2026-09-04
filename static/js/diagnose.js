@@ -685,6 +685,36 @@ let _leaflet = null;
  * uns und nicht in einem Verteilnetz: die Seite soll nicht davon abhängen,
  * dass ein fremder Server erreichbar ist.
  */
+/**
+ * Fuehrt --ueberblick-h an der Hoehe, die dem Ueberblick tatsaechlich bleibt.
+ *
+ * Nicht gerechnet, sondern gemessen: die Kopfzeile bricht auf schmalen
+ * Schirmen um, und der Innenabstand von <main> steht in der Gestaltung, nicht
+ * hier. Eine feste Zahl waere genau dann falsch, wenn es darauf ankommt.
+ */
+function _ueberblickHoeheFuehren() {
+  const haupt = document.querySelector('.haupt');
+  const kopf  = document.querySelector('header.kopf');
+  const haupt_ = document.querySelector('main');
+  if (!haupt || !kopf || !haupt_) return;
+  let letzte = -1;
+  const setzen = () => {
+    const cs = getComputedStyle(haupt_);
+    const innen = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const h = Math.round(window.innerHeight - kopf.getBoundingClientRect().height - innen);
+    if (h === letzte) return;
+    letzte = h;
+    document.documentElement.style.setProperty('--ueberblick-h', h + 'px');
+  };
+  setzen();
+  if (typeof ResizeObserver === 'function') {
+    const beo = new ResizeObserver(setzen);
+    beo.observe(kopf); beo.observe(haupt_);
+  }
+  window.addEventListener('resize', setzen);
+  window.addEventListener('orientationchange', setzen);
+}
+
 function leafletLaden() {
   if (_leaflet) return _leaflet;
   _leaflet = new Promise((fertig, schiefgegangen) => {

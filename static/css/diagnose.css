@@ -721,9 +721,36 @@ main {
    Die Baender tragen dieselben kleinen Ueberschriften wie die Schiene und die
    Anwesenheitsliste (.sl-gruppe, .aw-gruppe): dieselbe Sache, dieselbe
    Gestalt. */
+/* Der Ueberblick fuellt GENAU einen Bildschirm — man soll draufschauen und
+   fertig sein, nicht scrollen muessen, um zu wissen wie es dem Boot geht.
+   Die Hoehe kommt aus --ueberblick-h, das diagnose.js an der echten Hoehe von
+   Kopfzeile und Innenabstand fuehrt (die Kopfzeile bricht auf schmalen
+   Schirmen um, eine feste Zahl waere dort falsch).
+   Unter 560 px Hoehe wird nicht weiter gequetscht, dann darf es rollen:
+   lieber scrollen als sechs Karten, in denen nichts mehr zu lesen ist. */
+.seite[data-seite="ueberblick"] {
+  height: var(--ueberblick-h, auto);
+  min-height: 0;
+}
+@media (max-height: 560px) {
+  .seite[data-seite="ueberblick"] { height: auto; }
+}
+
 .db {
   display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 16px; align-items: stretch;
+}
+/* Im Ueberblick fuellt das Raster die verbleibende Hoehe. Die Karten bekommen
+   min-height:0, sonst wachsen sie ueber ihren Platz hinaus statt ihren Inhalt
+   zu kuerzen — die klassische Falle bei Rastern mit fester Hoehe. */
+.seite[data-seite="ueberblick"] .db {
+  flex: 1 1 auto; min-height: 0;
+  grid-auto-rows: minmax(0, 1fr);
+}
+.seite[data-seite="ueberblick"] .db-karte { min-height: 0; overflow: hidden; }
+@media (max-height: 560px) {
+  .seite[data-seite="ueberblick"] .db { grid-auto-rows: auto; }
+  .seite[data-seite="ueberblick"] .db-karte { overflow: visible; }
 }
 .db-band {
   grid-column: 1 / -1;
