@@ -66,6 +66,25 @@ logbuch.circuit-sailor.com    Diagnose und Fernwartung. Zeigt IMMER auf den
 Der eigene Name fuers Logbuch ist zugleich die sauberere Trennung: das
 maechtige Verwalter-Cookie kommt so nie am Bordrechner vorbei.
 
+### Die Falle beim umgebogenen Namen
+
+**Der Pi selbst steht im Bordnetz und fragt denselben Router.** Als
+`mave.circuit-sailor.com` dort auf 192.168.1.103 umgebogen wurde, versuchte
+der Pi, seine Serververbindung zu sich selbst aufzubauen — 24 Minuten lang,
+mit HTTP 403, ohne dass sonst etwas auffiel: die Bordansicht lief weiter, nur
+der Server bekam keine Daten mehr.
+
+Die Sync-Adresse in `sync.json` auf dem Pi muss deshalb einen Namen benutzen,
+der **nie** umgebogen wird:
+
+```
+"adresse": "wss://logbuch.circuit-sailor.com/sync"
+```
+
+Das gilt für jede Verbindung, die der Pi nach außen aufbaut. Wer hier
+`mave.circuit-sailor.com` einträgt, baut eine Schleife, die erst auffällt, wenn
+jemand nachsieht, wie alt die Daten auf dem Server sind.
+
 Beide Namen, die auf den Pi zeigen koennen, haben dort ein eigenes Zertifikat
 (`/etc/nginx/mave/`), beide werden von acme.sh erneuert.
 
