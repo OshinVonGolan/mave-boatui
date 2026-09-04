@@ -605,7 +605,7 @@ window.addEventListener('resize', () => {
   _resizeRaf = requestAnimationFrame(() => {
     _applyGrid();
     if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
-    if (typeof _renderBattWideChart === 'function') _renderBattWideChart();
+    if (typeof _renderBattWideChart === 'function') _renderBattWideChart(true);
   });
 });
 
@@ -651,7 +651,7 @@ function applyDisplayConfig() {
   // Größenabhängige Inhalte neu rendern
   requestAnimationFrame(() => {
     if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
-    if (typeof _renderBattWideChart === 'function') _renderBattWideChart();
+    if (typeof _renderBattWideChart === 'function') _renderBattWideChart(true);
   });
 }
 

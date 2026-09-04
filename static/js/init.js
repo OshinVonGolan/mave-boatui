@@ -29,16 +29,30 @@ const _pStatus = fetch('/api/status').then(r => r.ok ? r.json() : null)
   .then(d => { if (d) handleData(d); }).catch(() => {});
 
 connect();
+
+// Alle wiederkehrenden Abfragen ueber createPoller, nicht ueber ein blankes
+// setInterval.
+//
+// Der Unterschied ist nicht Kosmetik: createPoller haelt an, sobald die Seite
+// im Hintergrund liegt (_pollersPause), und nimmt danach von selbst wieder auf.
+// Diese fuenf hier liefen frueher weiter, waehrend das Telefon in der Tasche
+// steckte — Funkverkehr und Akku fuer Werte, die niemand ansieht. Der
+// Mechanismus dafuer stand schon da; sie gingen nur daran vorbei.
 const _pConn = fetchConnectivity();
-setInterval(fetchConnectivity, 25000);
+const _connPoller    = createPoller(fetchConnectivity, 25000);
 const _pWart = _wartungLoad();
 refreshVersion();
-setInterval(refreshVersion, 60000);   // Update-Status periodisch frisch halten
+const _versionPoller = createPoller(refreshVersion, 60000);   // Update-Stand frisch halten
 refreshChargerStatus();
-setInterval(refreshChargerStatus, 300000);  // Badge alle 5 min aktualisieren
+const _chargerPoller = createPoller(refreshChargerStatus, 300000);  // Badge alle 5 min
 
 const _pWl = fetchWaterLevel();
-setInterval(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
+const _wlPoller      = createPoller(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
+
+// fireNow=false: der erste Abruf steht direkt darueber schon. Sonst liefe jede
+// dieser Abfragen beim Start doppelt.
+for (const p of [_connPoller, _versionPoller, _chargerPoller, _wlPoller]) p.start(false);
+if (typeof _wartungTagPoller !== 'undefined' && _wartungTagPoller) _wartungTagPoller.start(false);
 
 /**
  * Gemeinsamer Start.

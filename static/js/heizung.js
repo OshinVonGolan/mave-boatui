@@ -142,7 +142,18 @@ async function ladeHeizung(fuerDetail) {
   if (fuerDetail || !$('heizungOverlay')?.classList.contains('hidden')) renderHeizungDetail();
 }
 
-const hzPoller = createPoller(() => ladeHeizung(false), 6000);
+// 15 s statt 6 s fuer die Kachel.
+//
+// Gemessen: die Heizungsabfrage war mit 10 Abrufen je Minute die haeufigste der
+// Seite — zwei Drittel des gesamten Leerlaufverkehrs. Ueber den Server laeuft
+// jeder dieser Abrufe bis ans Boot durch. Eine Standheizung aendert ihren
+// Zustand nicht in Sekundenbruchteilen; fuer eine Kachel, die Ist-Temperatur
+// und Betriebsart zeigt, sind 15 s reichlich.
+//
+// Der schnelle Takt bleibt, wo er hingehoert: in der geoeffneten
+// Heizungsansicht (hzDetailPoller, 3 s) — dort schaltet jemand gerade und will
+// die Antwort sehen. Und beim Schalten selbst wird ohnehin sofort geladen.
+const hzPoller = createPoller(() => ladeHeizung(false), 15000);
 const hzDetailPoller = createPoller(() => ladeHeizung(true), 3000);
 
 // ── Kachel ──────────────────────────────────────────────────────────────────

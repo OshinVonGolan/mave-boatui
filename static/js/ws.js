@@ -439,11 +439,25 @@ function handleData(data) {
   // Jeder Frame verraet, ob er vom Pi kam oder aus der Server-Kopie.
   if (typeof quelleAusDaten === 'function') quelleAusDaten(data);
   if (data.version) {
-    $('versionBadge').textContent = 'v' + data.version;
-    // Der Text aendert die Breite des Logos, aber nicht zwingend seine
-    // Rahmenmasse — der ResizeObserver feuert dann nicht. Also hier direkt
-    // pruefen, ob die Version noch neben den Schriftzug passt.
-    if (typeof _kopfLogoPruefen === 'function') _kopfLogoPruefen();
+    // NUR wenn sich der Text wirklich aendert.
+    //
+    // Gemessen: _kopfLogoPruefen kostete die Haelfte des gesamten Frames
+    // (3,8 von 7,7 ms auf einem gedrosselten Kern). Es setzt eine Klasse und
+    // liest danach scrollWidth — das erzwingt jedes Mal ein vollstaendiges
+    // Neuberechnen des Layouts. Bei bis zu 20 Datensaetzen je Sekunde wurde
+    // also zwanzigmal in der Sekunde nachgemessen, ob derselbe unveraenderte
+    // Text noch neben den Schriftzug passt.
+    //
+    // Der Grund, warum es ueberhaupt hier steht, gilt weiterhin: der Text
+    // aendert die Breite des Logos, aber nicht zwingend seine Rahmenmasse —
+    // der ResizeObserver feuert dann nicht. Er gilt nur eben genau dann, wenn
+    // der Text sich AENDERT.
+    const neuerStand = 'v' + data.version;
+    const feld = $('versionBadge');
+    if (feld && feld.textContent !== neuerStand) {
+      feld.textContent = neuerStand;
+      if (typeof _kopfLogoPruefen === 'function') _kopfLogoPruefen();
+    }
   }
   if (data.battery) updateBattery(data.battery);
   if (data.tanks)   updateTanks(data.tanks);
@@ -458,7 +472,6 @@ function handleData(data) {
   if (data.inverter) updateInverterCard(data.inverter, data.charger);
   if (data.bms) updateBms(data.bms);
   if (!$('battOverlay').classList.contains('hidden')) renderDeviceTiles(data);
-  _syncWartungHeight();
   updateStatusBar(data);   // dichte Kernwert-Zeile ueber den Kacheln
   if (data.alarms != null) {
     updateAlarmBadge(data.unack_alarms ?? 0);
@@ -473,12 +486,27 @@ function handleData(data) {
   }
 }
 
+/**
+ * Die Wartungskachel neu zeichnen — beim Groessenwechsel, nicht bei jedem Wert.
+ *
+ * Sie stand frueher mitten im Frame-Pfad und wurde damit bis zu zwanzigmal je
+ * Sekunde neu gebaut. Das war Arbeit ohne Anlass: der Wartungsplan kommt aus
+ * /api/wartung, nicht aus der Live-Verbindung — zwanzig Neubauten je Sekunde
+ * erzeugten zwanzigmal exakt dasselbe HTML. Gemessen 1,15 von 7,7 ms je Frame.
+ *
+ * Was sich mit der Zeit doch aendert, ist das DATUM: "in 3 Tagen faellig" wird
+ * irgendwann "ueberfaellig". Dafuer laeuft unten ein langsamer Takt — einmal je
+ * Minute genuegt fuer etwas, das sich um Mitternacht aendert.
+ */
 function _syncWartungHeight() {
-  const wart = document.getElementById('wartungCard');
-  if (wart) wart.style.maxHeight = '';
   if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
 }
 window.addEventListener('resize', _syncWartungHeight);
+
+// Der Tageswechsel, mehr nicht. Ueber createPoller und nicht ueber
+// setInterval, damit er stehen bleibt, solange die Seite im Hintergrund liegt.
+const _wartungTagPoller = (typeof createPoller === 'function')
+  ? createPoller(_syncWartungHeight, 60000) : null;
 
 let _histFetchPending = false;
 let _histFetchOk      = 0;      // Zeitpunkt des letzten ERFOLGREICHEN Abrufs

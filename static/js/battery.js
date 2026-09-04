@@ -208,9 +208,40 @@ function _setWideHeader(abgedecktS) {
       : `SOC-Verlauf · 6 h (Daten: ${timeSince(abgedecktS)})`;
 }
 
-function _renderBattWideChart() {
+// Wie lang histData beim letzten Zeichnen war. Siehe unten.
+let _wideStand = -1;
+
+/**
+ * @param {boolean} [erzwingen] Neu zeichnen, obwohl keine neuen Daten da sind —
+ *   fuer Groessenwechsel, bei denen sich die Leinwand aendert, nicht die Kurve.
+ */
+function _renderBattWideChart(erzwingen) {
   const canvas = $('battWideChart');
   if (!canvas) return;
+
+  // Nur zeichnen, wenn es etwas Neues gibt.
+  //
+  // Diese Kurve zeigt SECHS STUNDEN. histData bekommt hoechstens alle 5 s einen
+  // Punkt dazu (HIST_MIN_GAP_S) — bei bis zu 20 Datensaetzen je Sekunde wurde
+  // derselbe Verlauf also rund hundertmal je neuem Punkt neu gezeichnet.
+  //
+  // Teuer war daran dreierlei: `offsetWidth` erzwingt nach all den
+  // Textaenderungen darueber ein vollstaendiges Neuberechnen des Layouts, das
+  // Setzen von canvas.width legt den Bildspeicher jedes Mal neu an, und der
+  // Filter laeuft ueber mehrere tausend Punkte. Zusammen war updateBattery
+  // damit der teuerste Posten des ganzen Frames.
+  const stand = (typeof histData !== 'undefined') ? histData.length : 0;
+  if (!erzwingen && stand === _wideStand) return;
+  // Sofort merken, auch wenn gleich abgebrochen wird. Sonst greift die Bremse
+  // ausgerechnet im haeufigsten Fall nicht: steht die Kachel nicht im
+  // Breitformat, ist die Leinwand 0 Pixel breit, es wird nichts gezeichnet —
+  // und ohne diese Zeile liefe der teure `offsetWidth`-Zugriff trotzdem bei
+  // JEDEM Datensatz. Genau daran hing der groesste Posten des Frames.
+  //
+  // Wird die Kachel spaeter sichtbar, zeichnet applyDisplayConfig sie mit
+  // erzwingen=true; darauf ist hier Verlass.
+  _wideStand = stand;
+
   const W = canvas.offsetWidth, H = canvas.offsetHeight;
   if (!W || !H) return;                         // nicht sichtbar -> überspringen
   const src = (typeof histData !== 'undefined') ? histData : [];

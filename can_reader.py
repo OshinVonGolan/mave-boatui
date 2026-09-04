@@ -153,6 +153,29 @@ class BoatState:
         return out
 
 
+# ── Wie oft die Oberflaeche einen neuen Zustand bekommt ─────────────────────
+#
+# Gemessen am 04.09.2026 auf dem Pi Zero W: 318 CAN-Rahmen je Sekunde. Bei
+# einem Fenster von 50 ms hiess das 20 Rundrufe je Sekunde, und jeder kostet
+# 2,74 ms auf dem Pi (Zustand einsammeln, 17 Alarmregeln pruefen, JSON
+# schreiben) — zusammen 5,5 % des einzigen Kerns. Am anzeigenden Geraet kam
+# derselbe Takt noch einmal an und liess dort die ganze Oberflaeche 20-mal je
+# Sekunde neu zeichnen.
+#
+# Der alte Wert stand seit einer Zeit mit deutlich weniger Busverkehr da; der
+# Kommentar daneben begruendete ihn mit "rund 2,4 Nachrichten/s", was heute
+# nicht mehr zutrifft. 200 ms viertelt beides. Fuenf Bilder je Sekunde sind
+# fuer Messwerte reichlich — eine Spannung, die sich in der zweiten
+# Nachkommastelle bewegt, gewinnt nichts durch viermal haeufigeres Anzeigen.
+RUNDRUF_TAKT_S = 0.20
+
+# Wer gerade geschaltet hat, wartet auf genau diese eine Antwort — da waeren
+# 200 ms spuerbar. In den Sekunden nach einem Befehl gilt deshalb wieder das
+# alte, kurze Fenster (siehe CanInterface.eilig).
+EILFENSTER_TAKT_S = 0.05
+EILFENSTER_S      = 3.0
+
+
 class CanInterface:
     """Verwaltet den CAN-Bus in einem eigenen Thread und benachrichtigt asyncio."""
 
@@ -172,6 +195,7 @@ class CanInterface:
         self._on_change   = None   # async callback(data: dict)
         self._broadcast_pending = False
         self._broadcast_lock    = None   # asyncio.Lock, wird im Loop angelegt
+        self._eilig_bis         = 0.0    # monotone Zeit, bis zu der schnell gerundfunkt wird
         self._bms_corr_active   = False  # Hysterese der BMS-Stromkorrektur
         self._network:  dict = {}   # (pgn, src) → tracking entry
         self._last_raw: dict = {}   # pgn → {src, len, hex} (Debug)
@@ -200,6 +224,16 @@ class CanInterface:
     def on_change(self, coro_fn):
         """Setzt die async-Callback-Funktion, die bei Datenänderung aufgerufen wird."""
         self._on_change = coro_fn
+
+    def eilig(self, dauer_s: float = EILFENSTER_S) -> None:
+        """Für die nächsten Sekunden schnell rundrufen.
+
+        Zu rufen, wenn gerade jemand geschaltet hat. Der normale Takt von 200 ms
+        ist für Messwerte gedacht, die niemand erwartet; wer eben auf einen
+        Knopf gedrückt hat, wartet dagegen auf genau diese eine Antwort. In
+        diesem Fenster gilt wieder das alte, kurze Fenster.
+        """
+        self._eilig_bis = time.monotonic() + dauer_s
 
     # ── Senden ──────────────────────────────────────────────────────────────
 
@@ -235,6 +269,7 @@ class CanInterface:
         mode:     2=An, 4=Aus, 5=Eco
         instance: Geräte-Instanz des Inverters (Standard 0)
         """
+        self.eilig()
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
             return False
@@ -253,6 +288,7 @@ class CanInterface:
         """Setzt Absorptions- und Float-Spannung des IP43 via PGN 61184 (commandType=1).
         Benötigt aktualisierte VE.Direct-Gateway-Firmware um wirksam zu sein.
         """
+        self.eilig()
         if self._bus is None:
             log.warning("CAN nicht verbunden – Charger-Setpoints nicht gesendet")
             return False
@@ -274,6 +310,7 @@ class CanInterface:
         size=1 für 8-Bit-Register (z.B. DeviceMode 0x0200).
         size=2 für 16-Bit-Register (Standard).
         """
+        self.eilig()
         if self._bus is None:
             return
         dst = self._find_vedirect_gateway_src()
@@ -314,6 +351,7 @@ class CanInterface:
             log.warning("ISO Request Fehler: %s", e)
 
     def send_brightness(self, values: list[int]):
+        self.eilig()
         if self._bus is None:
             log.warning("CAN nicht verbunden – Senden nicht möglich")
             return False
@@ -784,12 +822,7 @@ class CanInterface:
         return p
 
     def _schedule_broadcast(self):
-        """Sendet state-Update an alle WS-Clients (debounced, max 20/s).
-
-        Das Debounce-Fenster von 50 ms bleibt bewusst so kurz — real kommen nur
-        rund 2,4 Nachrichten/s zustande, die Rate ist kein Engpass; ein größeres
-        Fenster würde nur die Reaktionszeit der Oberfläche verschlechtern.
-        """
+        """Sendet state-Update an alle WS-Clients (entprellt, siehe RUNDRUF_TAKT_S)."""
         if self._loop is None or self._on_change is None:
             return
         if not self._broadcast_pending:
@@ -804,7 +837,7 @@ class CanInterface:
                 log.warning("Broadcast konnte nicht eingereiht werden: %s", e)
 
     async def _delayed_broadcast(self):
-        """Wartet das Debounce-Fenster ab und sendet dann EINEN Zustand.
+        """Wartet das Entprellfenster ab und sendet dann EINEN Zustand.
 
         Dauert ein Sendevorgang länger als die 50 ms (viele oder langsame
         WS-Clients), war vorher ein zweiter Broadcast bereits unterwegs und
@@ -817,7 +850,8 @@ class CanInterface:
             # Läuft im Event-Loop, also ohne Nebenläufigkeit bis zum ersten await.
             self._broadcast_lock = asyncio.Lock()
         try:
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(EILFENSTER_TAKT_S if time.monotonic() < self._eilig_bis
+                                else RUNDRUF_TAKT_S)
             async with self._broadcast_lock:
                 self._broadcast_pending = False
                 await self._on_change(self.state.to_dict())

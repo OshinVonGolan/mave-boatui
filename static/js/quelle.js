@@ -318,7 +318,12 @@ async function _neuLadenHart() {
 }
 
 setTimeout(_standPruefen, 4000);
-setInterval(_standPruefen, 120000);
+// Ueber createPoller: haelt an, solange die Seite im Hintergrund liegt. Ein
+// blankes setInterval fragte auch dann weiter nach einem neuen Stand, wenn
+// niemand hinsah — und ein neuer Stand nuetzt nichts, solange keiner die Seite
+// vor sich hat.
+const _standPoller = createPoller(_standPruefen, 120000);
+_standPoller.start(false);
 
 
 // ── Neustart der Anlage ────────────────────────────────────────────────────

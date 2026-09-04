@@ -2,6 +2,7 @@
 import asyncio
 import functools
 import json
+import gzip
 import logging
 import math
 import os
@@ -942,34 +943,66 @@ async def service_worker():
 
 # JS files in dependency order — concatenated into one request on /js-bundle.js
 from js_bundle_liste import JS_FILES as _JS_FILES
-_js_bundle: dict = {'data': b'', 'etag': '', 'mtime': 0.0}
+_js_bundle: dict = {'data': b'', 'gz': b'', 'etag': '', 'mtime': 0.0}
+
+
+def _bundle_frisch(js_dir: Path) -> None:
+    """Baut das Buendel neu, sobald sich eine der Dateien geaendert hat.
+
+    Gepackt wird EINMAL und mitgespeichert. Vorher lag das Packen bei nginx,
+    das die 518 kB bei jedem kalten Abruf neu durch gzip schob — gemessen 0,54
+    bis 0,65 s bis zum ersten Byte, auf dem einzigen Kern des Pi und ohne jede
+    Beschleunigung im Prozessor. Das Ergebnis war dabei jedes Mal dasselbe.
+
+    Stufe 6 statt der nginx-Vorgabe 1: die Arbeit faellt jetzt einmal je Update
+    an, nicht je Abruf, also darf sie gruendlicher sein. Das spart nebenbei
+    noch ein paar Kilobyte auf dem Weg durchs Bordnetz.
+    """
+    latest = max((js_dir / f).stat().st_mtime for f in _JS_FILES if (js_dir / f).exists())
+    # `!=` statt `<`: siehe / weiter unten — nach einem Zuruecknehmen kann die
+    # Datei aelter sein als die im Speicher.
+    if _js_bundle['mtime'] == latest:
+        return
+    parts = []
+    for f in _JS_FILES:
+        p = js_dir / f
+        if p.exists():
+            parts.append(p.read_text(encoding='utf-8'))
+    roh = ('\n;// ---\n'.join(parts)).encode()
+    _js_bundle['data']    = roh
+    _js_bundle['gz']      = gzip.compress(roh, 6)
+    _js_bundle['mtime']   = latest
+    _js_bundle['etag']    = f'"{int(latest)}"'
+    log.info('JS-Buendel gebaut: %d kB roh, %d kB gepackt',
+             len(roh) // 1024, len(_js_bundle['gz']) // 1024)
 
 
 @app.get('/js-bundle.js', include_in_schema=False)
 async def js_bundle(req: Request):
-    js_dir = STATIC_DIR / 'js'
-    latest = max((js_dir / f).stat().st_mtime for f in _JS_FILES if (js_dir / f).exists())
-    # `!=` statt `<`: siehe / weiter unten — nach einem Zuruecknehmen kann die
-    # Datei aelter sein als die im Speicher.
-    if _js_bundle['mtime'] != latest:
-        parts = []
-        for f in _JS_FILES:
-            p = js_dir / f
-            if p.exists():
-                parts.append(p.read_text(encoding='utf-8'))
-        _js_bundle['data'] = ('\n;// ---\n'.join(parts)).encode()
-        _js_bundle['mtime'] = latest
-        _js_bundle['etag'] = f'"{int(latest)}"'
-    if req.headers.get('if-none-match') == _js_bundle['etag']:
-        return Response(status_code=304)
-    return Response(
-        content=_js_bundle['data'],
-        media_type='application/javascript',
-        headers={'Cache-Control': 'no-cache', 'ETag': _js_bundle['etag']},
-    )
+    _bundle_frisch(STATIC_DIR / 'js')
+    return _ausliefern(req, _js_bundle['data'], _js_bundle['gz'],
+                       _js_bundle['etag'], 'application/javascript')
 
 
-_index_cache: dict = {'data': b'', 'etag': '', 'mtime': 0.0, 'stand': ''}
+def _ausliefern(req: Request, daten: bytes, gz: bytes, etag: str, typ: str) -> Response:
+    """Fertige Bytes ausliefern, gepackt wenn der Browser das mag.
+
+    Gepackt wird nicht hier, sondern einmal beim Bauen. Der Pi hat einen Kern
+    ohne Beschleunigung im Prozessor; jedes Neu-Packen derselben Bytes ist
+    Rechenzeit, die keiner anderen Aufgabe zur Verfuegung steht.
+    """
+    gepackt = bool(gz) and 'gzip' in (req.headers.get('accept-encoding') or '')
+    marke = f'{etag[:-1]}-gz"' if gepackt else etag
+    kopf = {'Cache-Control': 'no-cache', 'ETag': marke, 'Vary': 'Accept-Encoding'}
+    if req.headers.get('if-none-match') == marke:
+        return Response(status_code=304, headers=kopf)
+    if gepackt:
+        kopf['Content-Encoding'] = 'gzip'
+    return Response(content=gz if gepackt else daten, media_type=typ, headers=kopf)
+
+
+_index_cache: dict = {'data': b'', 'gz': b'', 'etag': '', 'mtime': 0.0, 'stand': ''}
+_wand_cache:  dict = {'data': b'', 'gz': b'', 'etag': ''}
 
 # Die Wandfassung unterscheidet sich in genau einem Zeichenzug.
 _WAND_MANIFEST = ('href="/static/manifest.json"',
@@ -1004,18 +1037,20 @@ async def root(req: Request):
     if _index_cache['mtime'] != mtime or _index_cache['stand'] != stand:
         roh = pfad.read_text(encoding='utf-8').replace('__STAND__', stand)
         _index_cache['data']  = roh.encode()
+        _index_cache['gz']    = gzip.compress(_index_cache['data'], 6)
         _index_cache['mtime'] = mtime
         _index_cache['stand'] = stand
         # Der Stand gehoert in die Kennung: sonst bekommt ein Browser mit der
         # alten Kennung ein leeres 304 und behaelt die alte Seite.
         _index_cache['etag']  = f'"{int(mtime)}-{stand}-{len(_index_cache["data"])}"'
-    if req.headers.get('if-none-match') == _index_cache['etag']:
-        return Response(status_code=304)
-    return Response(
-        content=_index_cache['data'],
-        media_type='text/html; charset=utf-8',
-        headers={'Cache-Control': 'no-cache', 'ETag': _index_cache['etag']},
-    )
+        # Die Wandfassung haengt an derselben Datei — mitbauen, statt sie beim
+        # naechsten Abruf ein zweites Mal zu packen.
+        wand = _index_cache['data'].decode('utf-8').replace(*_WAND_MANIFEST).encode()
+        _wand_cache['data'] = wand
+        _wand_cache['gz']   = gzip.compress(wand, 6)
+        _wand_cache['etag'] = f'"wand-{_index_cache["etag"][1:-1]}"'
+    return _ausliefern(req, _index_cache['data'], _index_cache['gz'],
+                       _index_cache['etag'], 'text/html; charset=utf-8')
 
 
 @app.get('/wand', include_in_schema=False)
@@ -1034,13 +1069,9 @@ async def wandseite(req: Request):
     installieren. Wer das Wandtablet so haben will, ruft einmal /wand auf und
     installiert von dort.
     """
-    await root(req)                       # fuellt den Zwischenspeicher
-    daten = _index_cache['data'].decode('utf-8').replace(*_WAND_MANIFEST).encode()
-    etag = f'"wand-{_index_cache["etag"][1:-1]}"'
-    if req.headers.get('if-none-match') == etag:
-        return Response(status_code=304)
-    return Response(content=daten, media_type='text/html; charset=utf-8',
-                    headers={'Cache-Control': 'no-cache', 'ETag': etag})
+    await root(req)                       # fuellt beide Zwischenspeicher
+    return _ausliefern(req, _wand_cache['data'], _wand_cache['gz'],
+                       _wand_cache['etag'], 'text/html; charset=utf-8')
 
 
 
