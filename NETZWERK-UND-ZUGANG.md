@@ -135,23 +135,24 @@ Verschlüsselung bei nginx liegt und nicht in der Anwendung.
 braucht 55 ms. Ein RSA-Zertifikat würde den einen Kern bei jedem Handschlag
 für eine Zwanzigstelsekunde blockieren.
 
-### Was im Bordnetz noch fehlt
+### Die Auflösung im Bordnetz
 
-Der A-Eintrag `pi.mave.circuit-sailor.com → 192.168.1.103` ist gesetzt und
-öffentlich sichtbar (per DNS-over-HTTPS geprüft). **Im Bordnetz löst er
-trotzdem nicht auf**: der RUTX50 filtert private Adressen aus DNS-Antworten
-heraus — der übliche Schutz gegen DNS-Rebinding.
+Erledigt seit 04.09.2026. Der A-Eintrag `pi.mave.circuit-sailor.com →
+192.168.1.103` steht bei IONOS, aber im Bordnetz half er zunächst nicht: der
+RUTX50 filtert private Adressen aus DNS-Antworten heraus (Schutz gegen
+DNS-Rebinding).
 
-Zu tun (Verwaltungsoberfläche des Routers, Network → DNS):
+Gelöst über einen **statischen Eintrag im Router** (Network → DNS → *Static
+addresses*): Domain `pi.mave.circuit-sailor.com`, IP `192.168.1.103`.
 
-```
-rebind_domain = circuit-sailor.com      # Ausnahme vom Rebind-Schutz
-```
+Damit beantwortet der Router den Namen aus seiner eigenen Tabelle. Die
+Rebind-Sperre greift dabei nicht — sie filtert nur, was von außen
+hereinkommt. **Der Schutz bleibt deshalb eingeschaltet**, was die bessere
+Lösung ist als ihn abzuschalten: das hätte die Sperre für sämtliche Domains
+aufgehoben.
 
-Alternativ ein lokaler DNS-Eintrag, der denselben Namen direkt auf
-192.168.1.103 zeigt. Bis dahin ist der Pi über `http://192.168.1.103:8080`
-erreichbar wie bisher — nur eben ohne sicheren Kontext und damit ohne
-installierbare Anwendung.
+Der Weg über `http://192.168.1.103:8080` funktioniert weiterhin und bleibt der
+Rückweg, falls am Router oder am Zertifikat etwas klemmt.
 
 Zum Prüfen ohne Router-Änderung:
 
