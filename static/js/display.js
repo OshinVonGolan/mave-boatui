@@ -751,12 +751,13 @@ async function vollbildUmschalten() {
 }
 
 function _vollbildKnopfSetzen() {
-  const b = $('dspVollbild');
+  // Der Schalter sitzt im Konto-Menue (anmeldung.js). Das Menue baut seinen
+  // Inhalt bei jedem Oeffnen neu, die Beschriftung stimmt dort also von
+  // selbst — hier wird sie nur nachgezogen, falls das Menue offen steht,
+  // waehrend der Vollbild anders beendet wird (Zurueck-Geste, Escape).
+  const b = document.getElementById('kpVollbild');
   if (!b) return;
-  const an = _vollbildAktiv();
-  b.textContent = an ? 'Vollbild verlassen' : 'Vollbild einschalten';
-  b.classList.toggle('btn-primary', !an);
-  b.classList.toggle('btn-secondary', an);
+  b.textContent = _vollbildAktiv() ? 'Vollbild verlassen' : 'Vollbild';
 }
 
 /** Nach einem Neuladen den Wunsch beim ersten Tippen wieder herstellen. */
@@ -798,19 +799,6 @@ function openDisplaySettings() {
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Noch keine Konfiguration gespeichert.</div>';
 
   pane.innerHTML = `
-    <div class="set-card">
-      <div class="set-card-hd">Vollbild</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
-        Blendet die Statusleiste von Android aus. Gilt nur für dieses Gerät und
-        bleibt gespeichert — nach einem Neustart der App genügt eine Berührung,
-        dann ist der Vollbild wieder da. Wirkt auch im normalen Browser.
-      </div>
-      <div class="settings-row" style="align-items:center;border-bottom:none">
-        <label class="settings-label" style="min-width:0;flex:1">Statusleiste ausblenden</label>
-        <button class="btn-primary" id="dspVollbild" onclick="vollbildUmschalten()">Vollbild einschalten</button>
-      </div>
-    </div>
-
     <div class="set-card">
       <div class="set-card-hd">Kacheln anordnen</div>
       <div class="settings-row" style="align-items:center;border-bottom:none">

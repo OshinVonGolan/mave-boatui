@@ -158,10 +158,19 @@ function kontoMenue(ev) {
   if (!pop.classList.contains('hidden')) { pop.classList.add('hidden'); return; }
 
   const k = _zugangStand && _zugangStand.konto;
+  // Vollbild steht in BEIDEN Zweigen: es blendet die Statusleiste des Geraets
+  // aus und haengt nicht am Konto — auch ohne Anmeldung soll man es erreichen.
+  const vollbildKnopf = (typeof vollbildUmschalten === 'function')
+    ? `<button class="kp-knopf" id="kpVollbild" onclick="vollbildAusMenue()">${
+        (typeof _vollbildAktiv === 'function' && _vollbildAktiv())
+          ? 'Vollbild verlassen' : 'Vollbild'}</button>`
+    : '';
+
   if (!k) {
     pop.innerHTML = `
       <div class="kp-kopf">Nicht angemeldet</div>
-      <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>`;
+      <div class="kp-text">Diese Anlage ist noch offen — es besteht kein Konto.</div>
+      ${vollbildKnopf ? `<div class="kp-tat">${vollbildKnopf}</div>` : ''}`;
   } else {
     const h = k.handlungen || [];
     const zeigen = k.anzeigename || k.name || '';
@@ -179,11 +188,23 @@ function kontoMenue(ev) {
       <div class="kp-darf">${_esc(h.join(' · '))}</div>
       <div class="kp-tat">
         ${darfLogbuch ? `<a class="kp-knopf" href="${_logbuchAdresse()}">Zum Logbuch</a>` : ''}
+        ${vollbildKnopf}
         <button class="kp-knopf" onclick="passwortAendernOeffnen()">Passwort ändern</button>
         <button class="kp-knopf warn" onclick="abmelden()">Abmelden</button>
       </div>`;
   }
   pop.classList.remove('hidden');
+}
+
+/** Vollbild aus dem Konto-Menue heraus: umschalten und das Menue zumachen.
+ *
+ *  Der Griff MUSS aus dieser Berührung kommen — ein Browser laesst den
+ *  Vollbild nur direkt aus einem Nutzergriff heraus zu. Deshalb wird erst
+ *  umgeschaltet und danach geschlossen, nicht umgekehrt.
+ */
+function vollbildAusMenue() {
+  if (typeof vollbildUmschalten === 'function') vollbildUmschalten();
+  $('kontoPop')?.classList.add('hidden');
 }
 
 /** Wo das Logbuch liegt — von hier aus gesehen.
