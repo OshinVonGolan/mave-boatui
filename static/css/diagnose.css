@@ -612,8 +612,8 @@ main {
 .marke .marke-mave { color: var(--accent); }
 @supports ((-webkit-mask-image: url(#a)) or (mask-image: url(#a))) {
   .marke-mave {
-    display: inline-block; vertical-align: -.32em;
-    height: 1.45em; aspect-ratio: 2.469 / 1;
+    display: inline-block; vertical-align: -.5em;
+    height: 1.9em; aspect-ratio: 2.469 / 1;
     background: currentColor;
     -webkit-mask: url(/static/marke-mave.svg) no-repeat center / contain;
             mask: url(/static/marke-mave.svg) no-repeat center / contain;
