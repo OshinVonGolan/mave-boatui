@@ -204,6 +204,29 @@ def anzeigename(konto) -> str:
     return (k.get('spitzname') or k.get('person') or k.get('name') or '').strip()
 
 
+EINLADUNG_DAUER_S = 7 * 86400
+
+
+def einladung_erzeugen() -> tuple[str, str]:
+    """(Klartext-Kennwort fuer den Link, gespeicherte Kennung).
+
+    Dasselbe Muster wie bei Sitzungen: gespeichert wird nur der SHA-256. Wer
+    die Kontendatei liest, hat damit keinen gueltigen Einladungslink — er
+    koennte sonst jedes offene Konto uebernehmen.
+    """
+    return sitzung_erzeugen()
+
+
+def einladung_gueltig(konto: dict, token: str, jetzt: float) -> bool:
+    """Ob dieser Link zu diesem Konto passt und noch gilt."""
+    e = (konto or {}).get('einladung') or {}
+    if not e.get('kennung') or not token:
+        return False
+    if e.get('bis') and jetzt > float(e['bis']):
+        return False
+    return sitzung_gleich(token, e['kennung'])
+
+
 def abgelaufen(konto: dict, jetzt: float | None) -> bool:
     """Ob ein befristetes Konto abgelaufen ist.
 

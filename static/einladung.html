@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mave — Einladung</title>
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="/static/icon-192.png">
+<style>
+/* Eigenständig und ohne Abhängigkeiten: diese Seite sieht jemand, der das
+   System noch nie benutzt hat — sie muss auch dann tragen, wenn sonst etwas
+   klemmt. Deshalb kein Bundle, keine geteilten Dateien. */
+:root {
+  --bg: #0b1120; --surface: #131c2e; --surface2: #1a2438; --border: #253046;
+  --text: #e8edf6; --text2: #9aa8bf; --text3: #64748b;
+  --accent: #22d3ee; --green: #34d399; --red: #f87171;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px; line-height: 1.55;
+  display: flex; align-items: center; justify-content: center; padding: 22px;
+}
+.karte {
+  width: min(460px, 100%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 30px 28px 26px;
+}
+.marke {
+  font-size: 20px; font-weight: 700; letter-spacing: .18em; color: var(--accent);
+  text-transform: uppercase; text-align: center;
+}
+.marke span {
+  display: block; font-size: 10px; font-weight: 500; letter-spacing: .16em;
+  color: var(--text3); margin-top: 5px;
+}
+h1 { font-size: 19px; font-weight: 700; margin: 24px 0 6px; }
+.unter { color: var(--text2); font-size: 13px; margin: 0 0 22px; }
+
+.kann {
+  background: var(--bg); border-radius: 11px; padding: 15px 17px; margin-bottom: 22px;
+}
+.kann-titel {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 9px;
+}
+.kann ul { margin: 0; padding-left: 18px; }
+.kann li { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+
+.feld { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+.feld span {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text3);
+}
+.feld input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
+  padding: 12px; color: var(--text); font-size: 16px; font-family: inherit;
+}
+.feld input:focus { outline: none; border-color: var(--accent); }
+.hinweis-klein { font-size: 11px; color: var(--text3); margin-top: -8px; margin-bottom: 16px; }
+
+.knopf {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: var(--accent); color: var(--bg);
+  font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer;
+}
+.knopf:disabled { opacity: .5; cursor: default; }
+
+.fehler {
+  font-size: 12px; color: var(--red); margin-bottom: 14px;
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+  border-radius: 8px; padding: 10px 12px;
+}
+.fehler.hidden, .hidden { display: none; }
+
+.danach { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.danach-titel {
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 10px;
+}
+.danach p { font-size: 12px; color: var(--text2); margin: 0 0 9px; }
+.danach code {
+  background: var(--bg); padding: 2px 6px; border-radius: 5px;
+  font-size: 11px; color: var(--text);
+}
+.fertig { text-align: center; padding: 12px 0; }
+.fertig-haken {
+  width: 46px; height: 46px; border-radius: 50%; margin: 0 auto 16px;
+  background: color-mix(in srgb, var(--green) 20%, transparent);
+  display: flex; align-items: center; justify-content: center;
+}
+.fertig-haken svg { stroke: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="karte" id="karte">
+  <div class="marke">MAVE <span>Bord Monitor</span></div>
+  <div id="inhalt">
+    <p class="unter" style="margin-top:26px;text-align:center">Einladung wird geprüft…</p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function esc(t) { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+
+// Name und Kennwort stehen hinter dem Rautezeichen, nicht in der Adresse:
+// alles vor der Raute landet in Server-Protokollen und im Verlauf des
+// Browsers, alles dahinter wird nie mitgeschickt.
+const [_name, _token] = (location.hash.slice(1) || '').split(':');
+
+const WAS_KANN_MAN = {
+  eigner:    ['Alles sehen und bedienen', 'Zugänge verwalten', 'Das Logbuch mit Langzeitdaten öffnen'],
+  crew:      ['Alle Werte an Bord sehen', 'Licht, Heizung und Wechselrichter bedienen'],
+  gast:      ['Alle Werte an Bord sehen'],
+  techniker: ['Alles sehen und bedienen', 'Einstellungen ändern', 'Das Logbuch öffnen und aus der Ferne warten'],
+  kiosk:     ['Am Kartentisch anzeigen und bedienen'],
+};
+
+async function start() {
+  if (!_name || !_token) return fehlerSeite('Dieser Link ist unvollständig.');
+  let d;
+  try {
+    const r = await fetch(`/api/einladung?name=${encodeURIComponent(_name)}&token=${encodeURIComponent(_token)}`);
+    if (!r.ok) {
+      const f = await r.json().catch(() => ({}));
+      return fehlerSeite(f.detail || 'Dieser Link gilt nicht mehr.');
+    }
+    d = await r.json();
+  } catch (_) {
+    return fehlerSeite('Keine Verbindung. Bist du im Netz?');
+  }
+  formularZeigen(d);
+}
+
+function fehlerSeite(text) {
+  $('inhalt').innerHTML = `
+    <h1>Das hat nicht geklappt</h1>
+    <p class="unter">${esc(text)}</p>
+    <div class="danach">
+      <div class="danach-titel">Was tun</div>
+      <p>Einladungen gelten sieben Tage und lassen sich nur einmal einlösen.
+         Bitte den Eigner um einen neuen Link.</p>
+    </div>`;
+}
+
+function formularZeigen(d) {
+  const kann = WAS_KANN_MAN[d.rolle] || WAS_KANN_MAN.gast;
+  $('inhalt').innerHTML = `
+    <h1>Willkommen an Bord, ${esc(d.anzeigename || d.name)}</h1>
+    <p class="unter">Du wurdest als <b>${esc(d.rolle_name)}</b> für den Bordmonitor
+      der Mave eingetragen. Es fehlt nur noch dein Passwort — und das wählst du
+      selbst, niemand sonst kennt es.</p>
+
+    <div class="kann">
+      <div class="kann-titel">Was du damit kannst</div>
+      <ul>${kann.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    </div>
+
+    <form onsubmit="return setzen(event)">
+      <label class="feld"><span>Dein Anmeldename</span>
+        <input type="text" value="${esc(d.name)}" disabled></label>
+      <label class="feld"><span>Passwort wählen</span>
+        <input id="pw1" type="password" autocomplete="new-password" required minlength="8"></label>
+      <div class="hinweis-klein">Mindestens acht Zeichen. Ein Satz, den du dir
+        merken kannst, ist besser als ein kurzes kompliziertes Wort.</div>
+      <label class="feld"><span>Noch einmal</span>
+        <input id="pw2" type="password" autocomplete="new-password" required></label>
+      <div class="fehler hidden" id="fehler"></div>
+      <button class="knopf" type="submit" id="knopf">Passwort setzen und anmelden</button>
+    </form>
+
+    <div class="danach">
+      <div class="danach-titel">Danach</div>
+      <p>An Bord im Boots-WLAN und unterwegs erreichst du dieselbe Seite unter
+         <code>mave.circuit-sailor.com</code> — im Bordnetz spricht sie direkt
+         mit dem Boot, sonst über den Server.</p>
+      <p>Im Browsermenü lässt sie sich als App installieren. Dann liegt sie mit
+         eigenem Symbol auf dem Startbildschirm und öffnet ohne Adressleiste.</p>
+    </div>`;
+  setTimeout(() => $('pw1') && $('pw1').focus(), 80);
+}
+
+async function setzen(ev) {
+  ev.preventDefault();
+  const pw1 = $('pw1').value, pw2 = $('pw2').value;
+  const fehler = $('fehler'), knopf = $('knopf');
+  const zeigen = t => { fehler.textContent = t; fehler.classList.remove('hidden'); };
+  if (pw1.length < 8) return zeigen('Das Passwort braucht mindestens acht Zeichen.'), false;
+  if (pw1 !== pw2) return zeigen('Die beiden Eingaben sind nicht gleich.'), false;
+
+  knopf.disabled = true; knopf.textContent = 'Einen Moment…';
+  try {
+    const r = await fetch('/api/einladung', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: _name, token: _token, passwort: pw1 }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { zeigen(d.detail || 'Das hat nicht geklappt.'); return false; }
+    fertigZeigen();
+  } catch (_) {
+    zeigen('Keine Verbindung.');
+  } finally {
+    knopf.disabled = false; knopf.textContent = 'Passwort setzen und anmelden';
+  }
+  return false;
+}
+
+function fertigZeigen() {
+  $('inhalt').innerHTML = `
+    <div class="fertig">
+      <div class="fertig-haken">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <h1 style="margin-top:0">Fertig</h1>
+      <p class="unter">Du bist angemeldet. Die Bordansicht öffnet sich gleich.</p>
+    </div>`;
+  // Kurz stehen lassen: ein Sprung ohne Bestätigung fühlt sich an, als wäre
+  // etwas schiefgegangen.
+  setTimeout(() => { location.href = '/'; }, 1800);
+}
+
+start();
+</script>
+</body>
+</html>

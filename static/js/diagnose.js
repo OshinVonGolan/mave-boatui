@@ -493,7 +493,8 @@ function zeichneKonten() {
     return `<div class="konto">
       <div>
         <div class="k-name ${c.gesperrt ? 'gesperrt' : ''}">${esc(zeigen)}${ich ? ' <span class="hinweis">(du)</span>' : ''}</div>
-        <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}
+        <div class="k-rolle">${esc(r.name || c.rolle)}${c.gesperrt ? ' · gesperrt' : ''}${
+          c.eingeladen ? ' · <span style="color:var(--yellow)">eingeladen, Passwort noch nicht gesetzt</span>' : ''}
           ${zeigen !== c.name ? '· meldet sich an als <b>' + esc(c.name) + '</b>' : ''}
           ${c.person && c.person !== zeigen ? '· ' + esc(c.person) : ''}</div>
         <div class="k-darf">${esc((r.handlungen || []).join(' · '))}</div>
@@ -524,15 +525,74 @@ function kontoNeuOeffnen() {
       <input id="nkPerson" type="text" placeholder="optional"></label>
     <label class="pop-feld"><span>Spitzname (wird angezeigt)</span>
       <input id="nkSpitz" type="text" placeholder="optional"></label>
-    <label class="pop-feld"><span>Passwort (mindestens 8 Zeichen)</span>
-      <input id="nkPw" type="text"></label>
     <label class="pop-feld"><span>Rolle</span>
       <select id="nkRolle">${_rollenWahl('crew')}</select></label>
+
+    <div class="pop-feld"><span>Passwort</span>
+      <div class="wahl-zeile">
+        <label class="wahl"><input type="radio" name="pwArt" value="einladung" checked
+               onchange="_pwArtWechsel()"> Einladungslink schicken</label>
+        <label class="wahl"><input type="radio" name="pwArt" value="selbst"
+               onchange="_pwArtWechsel()"> selbst vergeben</label>
+      </div>
+    </div>
+    <div class="pop-hinweis" id="nkErklaerung">Die eingeladene Person setzt ihr
+      Passwort selbst — es wandert dann nie per Nachricht durch die Gegend, und
+      niemand sonst kennt es. Der Link gilt sieben Tage und lässt sich nur
+      einmal einlösen.</div>
+    <label class="pop-feld hidden" id="nkPwFeld"><span>Passwort (mindestens 8 Zeichen)</span>
+      <input id="nkPw" type="text"></label>
+
     <div class="pop-fehler hidden" id="nkFehler"></div>
     <div class="pop-tat">
       <button class="knopf stumm" onclick="popSchliessen()">Abbrechen</button>
       <button class="knopf" onclick="kontoAnlegen()">Anlegen</button>
     </div>`);
+}
+
+function _pwArtWechsel() {
+  const einladen = document.querySelector('input[name="pwArt"]:checked').value === 'einladung';
+  $('nkPwFeld').classList.toggle('hidden', einladen);
+  $('nkErklaerung').textContent = einladen
+    ? 'Die eingeladene Person setzt ihr Passwort selbst — es wandert dann nie '
+      + 'per Nachricht durch die Gegend, und niemand sonst kennt es. Der Link '
+      + 'gilt sieben Tage und lässt sich nur einmal einlösen.'
+    : 'Du vergibst das Passwort und musst es der Person mitteilen. Das ist der '
+      + 'schnellere, aber schwächere Weg — teile es nicht über einen Kanal, der '
+      + 'irgendwo mitgeschrieben wird.';
+}
+
+function _einladungZeigen(name, pfad) {
+  const link = location.origin + pfad;
+  popZeigen(`
+    <div class="pop-titel">Einladung für ${esc(name)}</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 14px">
+      Schick diesen Link an die Person. Sie setzt darüber ihr eigenes Passwort
+      und findet dort auch eine kurze Anleitung.</p>
+    <div class="link-kasten" id="einlLink">${esc(link)}</div>
+    <p style="color:var(--text3);font-size:11px;line-height:1.5;margin:12px 0 16px">
+      Der Link gilt sieben Tage und lässt sich nur einmal einlösen. Er wird
+      <b>nicht gespeichert</b> — geht er verloren, lade die Person neu ein.</p>
+    <div class="pop-tat">
+      <button class="knopf stumm" onclick="popSchliessen()">Schließen</button>
+      <button class="knopf" onclick="_linkKopieren()" id="kopierKnopf">Link kopieren</button>
+    </div>`);
+}
+
+async function _linkKopieren() {
+  const t = $('einlLink').textContent;
+  try {
+    await navigator.clipboard.writeText(t);
+    $('kopierKnopf').textContent = 'Kopiert';
+  } catch (_) {
+    // Ohne Zwischenablage (unsicherer Kontext, alte Browser): markieren, dann
+    // kann man von Hand kopieren.
+    const r = document.createRange();
+    r.selectNodeContents($('einlLink'));
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    $('kopierKnopf').textContent = 'Markiert — jetzt kopieren';
+  }
 }
 
 function kontoBearbeiten(name) {
@@ -583,21 +643,24 @@ async function kontoSpeichern(name, ich) {
 }
 
 async function kontoAnlegen() {
-  const name = $('nkName').value.trim(), pw = $('nkPw').value, rolle = $('nkRolle').value;
+  const name = $('nkName').value.trim(), rolle = $('nkRolle').value;
+  const einladen = document.querySelector('input[name="pwArt"]:checked').value === 'einladung';
   const fehler = $('nkFehler');
   const r = await fetch('/api/konten', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, passwort: pw, rolle,
+    body: JSON.stringify({ name, rolle, einladen,
+                           passwort: einladen ? '' : $('nkPw').value,
                            person: $('nkPerson').value, spitzname: $('nkSpitz').value }),
   });
+  const d = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
     fehler.textContent = d.detail || 'Das hat nicht geklappt.';
     fehler.classList.remove('hidden');
     return;
   }
-  popSchliessen();
   laden();
+  if (d.einladungslink) _einladungZeigen(d.anzeigename || name, d.einladungslink);
+  else popSchliessen();
 }
 
 async function kontoSperren(name, sperren) {

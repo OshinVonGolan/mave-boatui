@@ -381,10 +381,20 @@ class Anmeldung(BaseModel):
 
 class NeuesKonto(BaseModel):
     name: str
-    passwort: str
     rolle: str
+    passwort: str = ''
     person: str = ''
     spitzname: str = ''
+    # Statt eines vorgegebenen Passworts einen Einladungslink erzeugen. Der
+    # Eingeladene setzt es selbst — ein Passwort, das jemand anders vergeben
+    # hat, wandert per Nachricht durch die Gegend und wird selten geaendert.
+    einladen: bool = False
+
+
+class EinladungEinloesen(BaseModel):
+    name: str
+    token: str
+    passwort: str
 
 
 class KontoAenderung(BaseModel):
@@ -500,6 +510,68 @@ async def anwesend(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONRe
     })
 
 
+@app.get('/api/einladung')
+def einladung_pruefen(name: str = Query(''), token: str = Query(''),
+                      request: Request = None) -> JSONResponse:
+    """Ob ein Einladungslink gilt — und zu wem er gehoert.
+
+    Ohne Anmeldung erreichbar, denn genau das ist der Zweck: der Eingeladene
+    hat noch kein Passwort. Zurueck kommt nur, was die Einladungsseite anzeigen
+    soll — nichts ueber das Boot, nichts ueber andere Konten.
+
+    Ratenbegrenzt wie die Anmeldung: der Link ist ein Geheimnis, und was ein
+    Geheimnis ist, laesst sich probieren.
+    """
+    quelle = _herkunft(request) if request else 'unbekannt'
+    jetzt = time.time()
+    versuche = [t for t in _FEHLVERSUCHE.get(quelle, []) if jetzt - t < _SPERRE_S]
+    if len(versuche) >= _MAX_VERSUCHE:
+        raise HTTPException(429, detail='Zu viele Versuche. Bitte später erneut.')
+
+    k = konten.einladung_pruefen(name, token) if konten else None
+    if not k:
+        versuche.append(jetzt)
+        _FEHLVERSUCHE[quelle] = versuche
+        raise HTTPException(404, detail='Dieser Link gilt nicht mehr.')
+    return JSONResponse(k)
+
+
+@app.post('/api/einladung')
+async def einladung_einloesen(daten: EinladungEinloesen, request: Request) -> JSONResponse:
+    """Das selbstgewaehlte Passwort setzen und sich gleich anmelden.
+
+    Gleich anmelden, weil alles andere unfreundlich waere: wer sein Passwort
+    eben eingegeben hat, soll es nicht sofort noch einmal eintippen.
+    """
+    quelle = _herkunft(request)
+    jetzt = time.time()
+    versuche = [t for t in _FEHLVERSUCHE.get(quelle, []) if jetzt - t < _SPERRE_S]
+    if len(versuche) >= _MAX_VERSUCHE:
+        raise HTTPException(429, detail='Zu viele Versuche. Bitte später erneut.')
+    try:
+        konten.einladung_einloesen(daten.name, daten.token, daten.passwort)
+    except KontoFehler as e:
+        versuche.append(jetzt)
+        _FEHLVERSUCHE[quelle] = versuche
+        raise HTTPException(400, detail=str(e)) from None
+
+    _FEHLVERSUCHE.pop(quelle, None)
+    await _konten_zum_boot()
+    token, k = konten.anmelden(
+        daten.name, daten.passwort,
+        herkunft=_herkunft(request),
+        geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
+    antwort = JSONResponse(r.uebersicht(k))
+    _sitzung_setzen(antwort, request, token)
+    return antwort
+
+
+@app.get('/einladung', include_in_schema=False)
+async def einladungsseite():
+    return FileResponse(STATISCH / 'einladung.html', media_type='text/html',
+                        headers={'Cache-Control': 'no-cache'})
+
+
 @app.get('/api/konten')
 def konten_liste(k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
     return JSONResponse({'konten': konten.liste(), 'rollen': [
@@ -512,8 +584,19 @@ def konten_liste(k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
 @app.post('/api/konten')
 async def konto_anlegen(neu: NeuesKonto, k: dict = Depends(braucht(r.VERWALTEN))) -> JSONResponse:
     try:
-        angelegt = konten.anlegen(neu.name, neu.passwort, neu.rolle,
-                                  person=neu.person, spitzname=neu.spitzname)
+        if neu.einladen:
+            token, angelegt = konten.einladen(neu.name, neu.rolle,
+                                              person=neu.person, spitzname=neu.spitzname)
+            # Der Link wird EINMAL zurueckgegeben und nirgends gespeichert —
+            # in der Kontendatei liegt nur sein Hash. Wer ihn verliert, muss
+            # neu einladen; das ist der Preis dafuer, dass ein Blick in die
+            # Datei keine gueltigen Links liefert.
+            angelegt['einladungslink'] = f'/einladung#{neu.name}:{token}'
+        else:
+            if not neu.passwort:
+                raise HTTPException(400, detail='Ohne Passwort oder Einladung geht es nicht.')
+            angelegt = konten.anlegen(neu.name, neu.passwort, neu.rolle,
+                                      person=neu.person, spitzname=neu.spitzname)
     except KontoFehler as e:
         raise HTTPException(400, detail=str(e)) from None
     await _konten_zum_boot()

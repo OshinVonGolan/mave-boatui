@@ -79,6 +79,9 @@ class Konten:
         return [{'name': n, 'rolle': kt.get('rolle'), 'gesperrt': bool(kt.get('gesperrt')),
                  'person': kt.get('person') or '', 'spitzname': kt.get('spitzname') or '',
                  'anzeigename': k.anzeigename(kt),
+                 # Ein Konto ohne Hash wartet noch auf sein Passwort.
+                 'eingeladen': bool(kt.get('einladung')),
+                 'einladung_bis': (kt.get('einladung') or {}).get('bis'),
                  'gueltig_bis': kt.get('gueltig_bis'), 'angelegt': kt.get('angelegt')}
                 for n, kt in sorted(self._konten.items())]
 
@@ -244,6 +247,80 @@ class Konten:
             return None
         return dict(konto)
 
+    def einladen(self, name: str, rolle: str, person: str = '',
+                 spitzname: str = '') -> tuple[str, dict]:
+        """Ein Konto ohne Passwort anlegen und einen Einladungslink erzeugen.
+
+        Der Sinn: ein Passwort, das jemand anders vergeben hat, wandert per
+        Nachricht durch die Gegend und wird selten geaendert. Wer eingeladen
+        wird, setzt es selbst — und niemand sonst kennt es je.
+
+        Bis das geschehen ist, hat das Konto KEINEN Hash. Anmelden kann sich
+        damit niemand: die Pruefung faellt auf den Blindwert zurueck und
+        scheitert. Das gilt auch an Bord, wohin das Konto als Kopie geht.
+        """
+        if rolle not in r.ROLLEN:
+            raise k.KontoFehler(f'Unbekannte Rolle: {rolle!r}')
+        name = (name or '').strip()
+        if not name or len(name) > 64:
+            raise k.KontoFehler('Der Anmeldename fehlt oder ist zu lang.')
+        klartext, kennung = k.einladung_erzeugen()
+        jetzt = time.time()
+        konto = {
+            'name': name,
+            'person': (person or '').strip()[:80],
+            'spitzname': (spitzname or '').strip()[:40],
+            'hash': None,
+            'rolle': rolle,
+            'gesperrt': False,
+            'gueltig_bis': None,
+            'angelegt': jetzt,
+            'einladung': {'kennung': kennung, 'bis': jetzt + k.EINLADUNG_DAUER_S,
+                          'von': jetzt},
+        }
+        with self._lock:
+            if name in self._konten:
+                raise k.KontoFehler(f'Den Namen {name!r} gibt es schon.')
+            self._konten[name] = konto
+            self._sichern_konten()
+        log.info('Konto %r eingeladen (%s), Link gilt %d Tage',
+                 name, rolle, k.EINLADUNG_DAUER_S // 86400)
+        return klartext, {'name': name, 'rolle': rolle,
+                          'anzeigename': k.anzeigename(konto)}
+
+    def einladung_pruefen(self, name: str, token: str) -> dict | None:
+        """Zu welchem Konto ein Einladungslink gehoert — oder None.
+
+        Zurueck kommt NUR, was die Einladungsseite anzeigen soll: Name und
+        Rolle. Nichts ueber das Boot, nichts ueber andere Konten.
+        """
+        konto = self._konten.get((name or '').strip())
+        if not konto or not k.einladung_gueltig(konto, token, time.time()):
+            return None
+        return {'name': konto['name'], 'anzeigename': k.anzeigename(konto),
+                'rolle': konto.get('rolle'),
+                'rolle_name': r.rolle(konto.get('rolle'))['name'],
+                'handlungen': list(r.rolle(konto.get('rolle'))['handlungen'])}
+
+    def einladung_einloesen(self, name: str, token: str, passwort: str) -> dict:
+        """Das selbstgewaehlte Passwort setzen und die Einladung verbrauchen."""
+        with self._lock:
+            konto = self._konten.get((name or '').strip())
+            if not konto or not k.einladung_gueltig(konto, token, time.time()):
+                raise k.KontoFehler('Dieser Link gilt nicht mehr.')
+            konto['hash'] = k.hash_erzeugen(passwort)
+            # Verbraucht: ein Link, der zweimal geht, ist ein Link, der
+            # weitergegeben werden kann.
+            konto.pop('einladung', None)
+            self._sichern_konten()
+        log.info('Einladung von %r eingelöst', konto['name'])
+        return {'name': konto['name'], 'rolle': konto.get('rolle')}
+
+    def offene_einladung(self, name: str) -> dict | None:
+        konto = self._konten.get((name or '').strip())
+        e = (konto or {}).get('einladung')
+        return {'bis': e.get('bis')} if e else None
+
     def aendern(self, name: str, *, rolle=None, gesperrt=None,
                 passwort=None, laeuft_ab=None, person=None, spitzname=None) -> dict:
         """Rolle, Sperre, Passwort oder Ablauf eines Kontos aendern.
@@ -319,6 +396,9 @@ class Konten:
                  # die blosse Rolle, und ein einzeln entzogenes Recht waere
                  # ueber das Bord-WLAN wieder da.
                  'handlungen': kt.get('handlungen'),
+                 # Die Einladung selbst geht NICHT mit an Bord: eingeloest wird
+                 # sie beim Server, und der Pi braucht sie nie. Was nicht
+                 # mitfaehrt, kann unterwegs auch nicht abhandenkommen.
                  'oberflaechen': kt.get('oberflaechen')}
                 for kt in sorted(self._konten.values(), key=lambda x: x['name'])
             ]

@@ -115,6 +115,7 @@ OFFEN = (
     '/api/jserror',          # Fehlermeldungen entstehen VOR der Anmeldung
     '/api/zugang',           # sagt, ob ueberhaupt ein Konto existiert
     '/api/stand',            # sagt nur, ob die Oberflaeche veraltet ist
+    '/api/einladung',        # wer eingeladen ist, hat noch kein Passwort
 )
 
 # Welches Recht ein Pfad verlangt. Erster Treffer gewinnt, deshalb steht das

@@ -552,3 +552,14 @@ main {
 .ae-bereich.logbuch { background: color-mix(in srgb, var(--violet) 18%, transparent); color: var(--violet); }
 .ae-bereich.bordansicht { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .ae-bereich.server { background: color-mix(in srgb, var(--blau) 16%, transparent); color: var(--blau); }
+
+.wahl-zeile { display: flex; gap: 16px; flex-wrap: wrap; padding: 4px 0; }
+.wahl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); cursor: pointer; }
+.wahl input { accent-color: var(--accent); }
+.pop-feld.hidden { display: none; }
+.link-kasten {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 11px 12px; font-size: 12px; word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent);
+  user-select: all;
+}

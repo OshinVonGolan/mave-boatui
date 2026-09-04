@@ -365,3 +365,73 @@ class Herkunft(unittest.TestCase):
         for murks in ('kein-url', 'null', 'file://', '://'):
             with self.subTest(murks=murks):
                 self.assertFalse(zg.herkunft_erlaubt(murks, 'mave.circuit-sailor.com'))
+
+
+class Einladungen(Basis):
+    """Ein Konto, das auf sein Passwort wartet.
+
+    Der Sinn: ein Passwort, das jemand anders vergeben hat, wandert per
+    Nachricht durch die Gegend und wird selten geändert. Wer eingeladen wird,
+    setzt es selbst.
+    """
+
+    def test_eingeladenes_konto_kann_sich_nicht_anmelden(self):
+        """Der wichtigste Fall: bis das Passwort gesetzt ist, kommt niemand
+        herein — auch nicht mit einem leeren Passwort."""
+        self.konten.einladen('crew', 'crew')
+        for versuch in ('', 'irgendwas', None):
+            with self.subTest(versuch=versuch):
+                with self.assertRaises(k.KontoFehler):
+                    self.konten.anmelden('crew', versuch)
+
+    def test_einladung_einloesen_und_anmelden(self):
+        token, _ = self.konten.einladen('crew', 'crew')
+        self.assertIsNotNone(self.konten.einladung_pruefen('crew', token))
+        self.konten.einladung_einloesen('crew', token, 'ein selbst gewähltes')
+        sitzung, konto = self.konten.anmelden('crew', 'ein selbst gewähltes')
+        self.assertEqual(konto['rolle'], 'crew')
+
+    def test_link_gilt_nur_einmal(self):
+        """Ein Link, der zweimal geht, ist ein Link, der weitergegeben werden
+        kann."""
+        token, _ = self.konten.einladen('crew', 'crew')
+        self.konten.einladung_einloesen('crew', token, 'erstes Passwort')
+        self.assertIsNone(self.konten.einladung_pruefen('crew', token))
+        with self.assertRaises(k.KontoFehler):
+            self.konten.einladung_einloesen('crew', token, 'zweites Passwort')
+        # Und das erste Passwort gilt weiterhin
+        self.assertIsNotNone(self.konten.anmelden('crew', 'erstes Passwort'))
+
+    def test_falscher_token_gilt_nicht(self):
+        self.konten.einladen('crew', 'crew')
+        for falsch in ('', 'a' * 43, 'x'):
+            with self.subTest(falsch=falsch):
+                self.assertIsNone(self.konten.einladung_pruefen('crew', falsch))
+
+    def test_abgelaufene_einladung_gilt_nicht(self):
+        token, _ = self.konten.einladen('crew', 'crew')
+        # Ablauf vorziehen, statt sieben Tage zu warten
+        self.konten._konten['crew']['einladung']['bis'] = time.time() - 1
+        self.assertIsNone(self.konten.einladung_pruefen('crew', token))
+        with self.assertRaises(k.KontoFehler):
+            self.konten.einladung_einloesen('crew', token, 'zu spät gekommen')
+
+    def test_token_steht_nicht_im_klartext_in_der_datei(self):
+        """Wer die Kontendatei liest, darf damit kein Konto übernehmen können."""
+        token, _ = self.konten.einladen('crew', 'crew')
+        roh = self.konten._konten_datei.read_text()
+        self.assertNotIn(token, roh)
+
+    def test_einladung_faehrt_nicht_mit_ans_boot(self):
+        """Eingelöst wird beim Server. Was nicht mitfährt, kann unterwegs auch
+        nicht abhandenkommen."""
+        self.konten.einladen('crew', 'crew')
+        v = self.konten.zum_verteilen()
+        for c in v['konten']:
+            self.assertNotIn('einladung', c)
+
+    def test_offene_einladung_ist_in_der_liste_sichtbar(self):
+        self.konten.einladen('crew', 'crew')
+        (c,) = [x for x in self.konten.liste() if x['name'] == 'crew']
+        self.assertTrue(c['eingeladen'])
+        self.assertIsNotNone(c['einladung_bis'])
