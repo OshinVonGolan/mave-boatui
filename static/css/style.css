@@ -2683,3 +2683,104 @@
     .al-weg-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .al-weg-text b { font-size: 13.5px; font-weight: 650; }
     .al-weg-text span { font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+    /* ── Geräteseite ──────────────────────────────────────────────────────── */
+    /* Neu gebaut. Vorher erfand die Seite ein Dutzend eigener Bausteine
+       (ger-summary, ger-stat, ger-quelle, ger-toolbar, ger-seg, ger-tile …) und
+       sah dadurch aus wie aus einer anderen Anwendung. Jetzt trägt sie
+       .set-card wie die Einstellungen und die Farbtoken wie alles andere;
+       eigen ist nur, was es sonst nirgends gibt. */
+    #gerInhalt { max-width: 860px; margin: 0 auto; padding: 18px 16px 60px; }
+
+    /* Die Antwort zuerst. Zahlen sagen nicht, ob etwas in Ordnung ist. */
+    .ger-antwort {
+      padding: 16px 18px; border-radius: var(--radius);
+      background: var(--surface); border: 1px solid var(--border);
+      border-left: 3px solid var(--text3); margin-bottom: 14px;
+    }
+    .ger-antwort.gut      { border-left-color: var(--green); }
+    .ger-antwort.mau      { border-left-color: var(--yellow); }
+    .ger-antwort.schlecht { border-left-color: var(--red); }
+    .ger-antwort-satz { font-size: 17px; font-weight: 650; }
+    .ger-antwort.gut      .ger-antwort-satz { color: var(--green); }
+    .ger-antwort.mau      .ger-antwort-satz { color: var(--yellow); }
+    .ger-antwort.schlecht .ger-antwort-satz { color: var(--red); }
+    .ger-antwort-neben { font-size: 12.5px; color: var(--text2); margin-top: 3px; }
+
+    .ger-sorgen { border-left: 3px solid var(--red); }
+
+    /* Eine Zeile, überall dieselbe: Punkt, Name mit Nebenzeile, Wert, Marke. */
+    .ger-liste { display: flex; flex-direction: column; }
+    .ger-zeile {
+      display: flex; align-items: center; gap: 11px; width: 100%;
+      background: none; border: none; border-top: 1px solid var(--border);
+      padding: 10px 2px; text-align: left; color: var(--text);
+      font-family: inherit; font-size: 13.5px; cursor: pointer;
+    }
+    .ger-zeile:first-child { border-top: none; }
+    .ger-zeile:hover { background: var(--surface2); }
+    .ger-zeile-still { cursor: default; }
+    .ger-zeile-still:hover { background: none; }
+    .ger-punkt {
+      width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+      background: var(--text3);
+    }
+    .ger-punkt.s-online { background: var(--green); }
+    .ger-punkt.s-traege { background: var(--yellow); }
+    .ger-punkt.s-offline, .ger-punkt.s-unbekannt { background: var(--red); }
+    .ger-zeile-mitte { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+    .ger-zeile-name { font-weight: 600; }
+    .ger-zeile-sub  { font-size: 11.5px; color: var(--text3); }
+    .ger-zeile-wert {
+      font-size: 11.5px; color: var(--text3); white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .ger-zeile-wert b { color: var(--text2); font-weight: 600; }
+    .ger-marke {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+      padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+      color: var(--text3); border: 1px solid var(--border);
+    }
+    .ger-marke.s-online { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+    .ger-marke.s-traege { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
+    .ger-marke.s-offline, .ger-marke.s-unbekannt {
+      color: var(--red); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+    .ger-neu {
+      font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+      color: var(--accent); margin-left: 6px;
+    }
+    /* Zwischenüberschrift in der Liste — dieselbe Gestalt wie überall sonst. */
+    .ger-gruppe {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text3); margin: 16px 0 2px; padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .ger-gruppe:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+    .ger-gruppe span { margin-left: auto; letter-spacing: 0; font-weight: 600; }
+    .ger-leer { padding: 22px 4px; text-align: center; font-size: 13px; color: var(--text3); }
+
+    /* Suche und Ansichtswahl */
+    .ger-werkzeug { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 12px; }
+    .ger-suche {
+      flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 12px; color: var(--text3);
+    }
+    .ger-suche input {
+      flex: 1; min-width: 0; background: none; border: none; outline: none;
+      color: var(--text); font-family: inherit; font-size: 13.5px;
+    }
+    .ger-wahl { display: flex; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; }
+    .ger-wahl button {
+      background: none; border: none; color: var(--text3); font-family: inherit;
+      font-size: 12.5px; padding: 8px 12px; cursor: pointer;
+    }
+    .ger-wahl button.an { background: var(--surface2); color: var(--accent); font-weight: 600; }
+    .ger-nur {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      color: var(--text3); font-family: inherit; font-size: 12.5px; padding: 8px 12px;
+      cursor: pointer;
+    }
+    .ger-nur.an { border-color: var(--red); color: var(--red); }

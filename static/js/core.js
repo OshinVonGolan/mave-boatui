@@ -210,10 +210,12 @@ const _SEITEN_GRUPPEN = {
     { id: 'wartung', text: 'Plan',     ruf: 'openWartung' },
     { id: 'monday',  text: 'Aufgaben', ruf: 'openMonday' },
   ],
-  netz: [
-    { id: 'internet', text: 'Internet', ruf: 'openConnectivity' },
-    { id: 'geraete',  text: 'Geräte',   ruf: 'openGeraete' },
-    { id: 'wlan',     text: 'Im WLAN',  ruf: 'openNetwork' },
+  // "Im WLAN" hiess falsch: dort steht der Verkehr auf dem NMEA-2000-Bus,
+  // kein WLAN-Geraet. Es gehoert deshalb zu den Geraeten und nicht zum
+  // Internet — und heisst jetzt, was es ist.
+  geraete: [
+    { id: 'geraete', text: 'Geräte',      ruf: 'openGeraete' },
+    { id: 'bus',     text: 'Bus-Verkehr', ruf: 'openNetwork' },
   ],
 };
 
@@ -360,6 +362,7 @@ function _burgerHaupt() {
     + '<div class="burger-trenner"></div>'
     + (wartung ? eintrag(_BM_SVG.wartung, 'Wartung', 'openWartung()',
                          '<span id="bmWartungPunkt" class="bm-punkt hidden"></span>') : '')
+    + (netz ? eintrag(_BM_SVG.geraete, 'Geräte', 'openGeraete()') : '')
     + (netz ? eintrag(_BM_SVG.internet, 'Netzwerk', 'openConnectivity()') : '')
     + eintrag(_BM_SVG.stauplan, 'Stauplan', 'openStauplan()')
     + '<div class="burger-trenner"></div>'

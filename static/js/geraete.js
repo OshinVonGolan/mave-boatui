@@ -37,7 +37,6 @@ const GER_KAT_ALLE = [
 ];
 
 let _gerDaten     = null;     // letzter Snapshot von /api/devices
-let _gerGruppe    = null;     // gewählte Kachel (Kategorie- oder Netz-Schlüssel)
 let _gerModus     = 'kategorie';
 let _gerSuche     = '';
 let _gerProbleme  = false;
@@ -70,7 +69,7 @@ function _gerOverlayAnzeigen() {
     });
   }
   _gerPoller.start();
-  _reiterSetzen('geraeteOverlay', 'netz', 'geraete');
+  _reiterSetzen('geraeteOverlay', 'geraete', 'geraete');
 }
 
 function closeGeraete() {
@@ -177,6 +176,18 @@ function _gerGeraet(id) { return (_gerDaten?.geraete || []).find(g => g.id === i
 
 // ── Rendern ────────────────────────────────────────────────────────────────
 
+// Neu gebaut. Vorher standen hier vier Zahlenkacheln, drei Quellenzeilen, eine
+// Werkzeugleiste mit drei Ansichten und darunter Kategorie-Kacheln, in die man
+// erst hineinklicken musste, um Geräte zu sehen. Man bekam Zahlen, aber keine
+// Auskunft — und die Seite sah aus wie aus einer anderen Anwendung, weil sie
+// ein Dutzend eigener Bausteine erfunden hat statt der vorhandenen.
+//
+// Jetzt: die Antwort zuerst, dann was fehlt, dann woran alles hängt, dann die
+// vollständige Liste. Kein Hineinklicken — die Seite beantwortet die Frage
+// "ist alles da, was da sein soll" im Sitzen.
+//
+// Gebaut aus .set-card und den Farbtoken der Anwendung, damit sie dazugehört.
+
 function _gerRender() {
   const el = $('gerInhalt');
   if (!el || !_gerDaten) return;
@@ -184,170 +195,190 @@ function _gerRender() {
   // verliert es alle zehn Sekunden — mitten im Tippen — Fokus und Schreibmarke.
   const suchfeld = $('gerSuche');
   const marke = (document.activeElement === suchfeld) ? suchfeld.selectionStart : null;
+
   const alle = _gerDaten.geraete || [];
-  const zaehl = s => alle.filter(g => g.status === s).length;
-  const ohneMelder = alle.filter(g => g.status === 'stumm' || g.status === 'fremdnetz').length;
+  el.innerHTML = _gerModus === 'karte'
+    ? _gerAntwortHtml(alle) + _gerWerkzeugHtml(alle) + '<div id="gerKarte"></div>'
+    : _gerAntwortHtml(alle)
+      + _gerProblemeHtml(alle)
+      + _gerAnschluesseHtml(_gerDaten.quellen || {})
+      + _gerWerkzeugHtml(alle)
+      + _gerListeHtml(_gerGefiltert());
 
-  const q = _gerDaten.quellen || {};
-  const quelle = (name, an, text) => `
-    <div class="ger-quelle"><div class="ger-dot ${an ? 's-online' : 's-unbekannt'}"></div>
-      ${_esc(name)} <span style="color:var(--text3)">${_esc(text)}</span></div>`;
-
-  // Suche und Problemfilter arbeiten immer über alle Geräte — wer sucht, will
-  // nicht erst die richtige Kachel finden.
-  const flach = _gerSuche.trim() !== '' || _gerProbleme;
-  const gefiltert = _gerGefiltert();
-
-  el.innerHTML = `
-    <div class="ger-summary">
-      <div class="ger-stat" style="--stat-farbe:var(--accent)"><b>${alle.length}</b><span>Geräte erfasst</span></div>
-      <div class="ger-stat" style="--stat-farbe:var(--green)"><b>${zaehl('online')}</b><span>online</span></div>
-      <div class="ger-stat" style="--stat-farbe:var(--red)"><b>${zaehl('offline') + zaehl('unbekannt')}</b><span>offline oder unklar</span></div>
-      <div class="ger-stat" style="--stat-farbe:#475569"><b>${ohneMelder}</b><span>ohne eigene Meldung</span></div>
-    </div>
-    <div class="ger-quellen">
-      ${quelle('Bordbus', q.n2k?.verfuegbar, `${q.n2k?.geraete ?? 0} Geräte`)}
-      ${quelle('Netzwerk', q.lan?.verfuegbar, q.lan?.verfuegbar
-          ? `${q.lan.clients} im Funk · ${q.lan.adressen ?? 0} Adressen`
-          : 'Router antwortet nicht')}
-      ${quelle('Heizung', q.stoker?.verfuegbar && q.stoker?.hub === 'online', q.stoker?.verfuegbar ? `Hub ${q.stoker.hub}` : 'nicht eingerichtet')}
-    </div>
-
-    <div class="ger-toolbar">
-      <div class="ger-suche">
-        ${icon('search', { size: 15 })}
-        <input id="gerSuche" type="search" placeholder="Gerät, Hersteller, IP…"
-               value="${_esc(_gerSuche)}" oninput="gerSuchen(this.value)">
-      </div>
-      <div class="ger-seg">
-        <button class="${_gerModus === 'kategorie' ? 'active' : ''}" onclick="gerModus('kategorie')">Kategorie</button>
-        <button class="${_gerModus === 'netz' ? 'active' : ''}" onclick="gerModus('netz')">Netz</button>
-        <button class="${_gerModus === 'karte' ? 'active' : ''}" onclick="gerModus('karte')">Schaltbild</button>
-      </div>
-      <button class="ger-toggle ${_gerProbleme ? 'active' : ''}" onclick="gerProbleme()">
-        ${icon('warning', { size: 14 })} nur Probleme
-      </button>
-    </div>
-
-    ${_gerModus === 'karte'
-        ? gerKarteHtml(alle, _gerSuche, _gerProbleme, _gerNetzeAus)
-      : flach ? _gerListeHtml(gefiltert, _gerProbleme ? 'Geräte mit Problem' : 'Treffer', true)
-            : _gerGruppe === '*' ? _gerListeHtml(gefiltert, 'Alle Geräte', false)
-            : _gerGruppe ? _gerListeHtml(gefiltert.filter(g => _gerGruppeVon(g) === _gerGruppe),
-                                         _gerGruppenName(_gerGruppe), false)
-            : _gerKachelnHtml(gefiltert)}
-  `;
-
-  // Ein laufender Poll darf ein offenes Bearbeiten-Formular NICHT neu zeichnen —
-  // sonst waeren alle Eingaben nach zehn Sekunden weg.
-  if (marke !== null) {
-    const neuesFeld = $('gerSuche');
-    neuesFeld?.focus();
-    neuesFeld?.setSelectionRange(marke, marke);
+  if (_gerModus === 'karte' && typeof zeichneTopologie === 'function') {
+    zeichneTopologie($('gerKarte'), _gerDaten);
   }
-
-  if (_gerDetailId && !_gerBearbeiten) _gerModalRender();
+  if (marke !== null) {
+    const neu = $('gerSuche');
+    if (neu) { neu.focus(); neu.setSelectionRange(marke, marke); }
+  }
 }
 
-function _gerKachelnHtml(liste) {
+/** Die Antwort in einem Satz. Zahlen sagen nicht, ob etwas in Ordnung ist. */
+function _gerAntwortHtml(alle) {
+  const zaehl = s => alle.filter(g => g.status === s).length;
+  const still = zaehl('offline') + zaehl('unbekannt');
+  const traege = zaehl('traege');
+  // `stumm` und `fremdnetz` sind KEIN Fehler: das eine hat keinen Melder, das
+  // andere hängt in einem Netz, das der Bordrechner nicht mithört. Sie dürfen
+  // die Antwort nicht rot färben.
+  const ohneMelder = zaehl('stumm') + zaehl('fremdnetz');
+  const beobachtet = alle.length - ohneMelder;
+
+  let satz, art;
+  if (!alle.length) { satz = 'Noch keine Geräte erfasst'; art = 'leer'; }
+  else if (still) {
+    satz = still === 1 ? 'Ein Gerät meldet sich nicht'
+                       : `${still} Geräte melden sich nicht`;
+    art = 'schlecht';
+  } else if (traege) {
+    satz = traege === 1 ? 'Ein Gerät meldet sich träge'
+                        : `${traege} Geräte melden sich träge`;
+    art = 'mau';
+  } else {
+    satz = 'Alles da';
+    art = 'gut';
+  }
+  const neben = beobachtet > 0
+    ? `${beobachtet - still - traege} von ${beobachtet} beobachteten Geräten melden sich`
+      + (ohneMelder ? ` · ${ohneMelder} ohne eigene Meldung` : '')
+    : `${alle.length} erfasst, keines davon meldet sich selbst`;
+
+  return `<div class="ger-antwort ${art}">
+    <div class="ger-antwort-satz">${_esc(satz)}</div>
+    <div class="ger-antwort-neben">${_esc(neben)}</div>
+  </div>`;
+}
+
+/** Was fehlt — nur wenn es etwas gibt. Eine leere Sorgenliste ist keine Karte. */
+function _gerProblemeHtml(alle) {
+  const schlimm = alle.filter(g => g.status === 'offline' || g.status === 'unbekannt'
+                                || g.status === 'traege');
+  if (!schlimm.length) return '';
+  const zeilen = schlimm
+    .sort((a, b) => (a.status === 'traege') - (b.status === 'traege'))
+    .map(g => `
+      <button class="ger-zeile" onclick="gerDetail(${_jsAttr(g.id)})">
+        <span class="ger-punkt s-${_esc(g.status)}"></span>
+        <span class="ger-zeile-mitte">
+          <span class="ger-zeile-name">${_esc(g.name)}</span>
+          <span class="ger-zeile-sub">${_esc([_gerGruppenName(g.kategorie), g.netz_name]
+            .filter(Boolean).join(' · '))}</span>
+        </span>
+        <span class="ger-marke s-${_esc(g.status)}">${_esc(g.status_text)}</span>
+      </button>`).join('');
+  return `<div class="set-card ger-sorgen">
+    <div class="set-card-hd">Meldet sich nicht</div>
+    <div class="ger-liste">${zeilen}</div>
+  </div>`;
+}
+
+/**
+ * Woran alles hängt. Das ist der Überblick, der bisher fehlte: nicht
+ * vierundzwanzig Kacheln, sondern die Frage "welche meiner Netze leben".
+ */
+function _gerAnschluesseHtml(q) {
+  const zeile = (name, an, text, warum) => `
+    <div class="ger-zeile ger-zeile-still">
+      <span class="ger-punkt ${an ? 's-online' : 's-unbekannt'}"></span>
+      <span class="ger-zeile-mitte">
+        <span class="ger-zeile-name">${_esc(name)}</span>
+        ${warum ? `<span class="ger-zeile-sub">${_esc(warum)}</span>` : ''}
+      </span>
+      <span class="ger-zeile-wert">${_esc(text)}</span>
+    </div>`;
+
+  const teile = [];
+  teile.push(zeile('Bordbus (NMEA 2000)', !!q.n2k?.verfuegbar,
+    q.n2k?.verfuegbar ? `${q.n2k.geraete ?? 0} Geräte` : 'keine Daten',
+    q.n2k?.verfuegbar ? '' : 'Der Bordrechner hört gerade nichts vom Bus'));
+  teile.push(zeile('Bordnetzwerk (LAN/WLAN)', !!q.lan?.verfuegbar,
+    q.lan?.verfuegbar ? `${q.lan.clients ?? 0} im Funk` : 'Router antwortet nicht',
+    q.lan?.verfuegbar ? `${q.lan.adressen ?? 0} vergebene Adressen` : ''));
+  if (q.stoker?.verfuegbar !== undefined) {
+    teile.push(zeile('Heizung (Stoker)', q.stoker?.hub === 'online',
+      q.stoker?.verfuegbar ? `Hub ${q.stoker.hub}` : 'nicht eingerichtet', ''));
+  }
+  return `<div class="set-card">
+    <div class="set-card-hd">Anschlüsse</div>
+    <div class="ger-liste">${teile.join('')}</div>
+  </div>`;
+}
+
+function _gerWerkzeugHtml(alle) {
+  const probleme = alle.filter(g => g.status === 'offline' || g.status === 'unbekannt').length;
+  return `<div class="ger-werkzeug">
+    <div class="ger-suche">
+      ${icon('search', { size: 15 })}
+      <input id="gerSuche" type="search" placeholder="Gerät, Hersteller, Ort, IP…"
+             value="${_esc(_gerSuche)}" oninput="gerSuchen(this.value)">
+    </div>
+    <div class="ger-wahl">
+      <button class="${_gerModus === 'kategorie' ? 'an' : ''}" onclick="gerModus('kategorie')">Kategorie</button>
+      <button class="${_gerModus === 'netz' ? 'an' : ''}" onclick="gerModus('netz')">Netz</button>
+      <button class="${_gerModus === 'karte' ? 'an' : ''}" onclick="gerModus('karte')">Schaltbild</button>
+    </div>
+    ${probleme ? `<button class="ger-nur ${_gerProbleme ? 'an' : ''}" onclick="gerProbleme()">
+      nur Probleme</button>` : ''}
+  </div>`;
+}
+
+/**
+ * Die vollständige Liste, gruppiert und ohne Hineinklicken.
+ *
+ * Vorher musste man erst eine Kategoriekachel öffnen. Bei zwanzig Geräten auf
+ * einem Boot ist das ein Klick zu viel — die ganze Liste passt auf eine Seite,
+ * und wer sucht, tippt ins Suchfeld statt die richtige Kachel zu raten.
+ */
+function _gerListeHtml(liste) {
+  if (!liste.length) {
+    return '<div class="set-card"><div class="ger-leer">Nichts gefunden.</div></div>';
+  }
   const gruppen = {};
   liste.forEach(g => { (gruppen[_gerGruppeVon(g)] ||= []).push(g); });
-
-  // Reihenfolge: im Kategoriemodus die vom Server, im Netzmodus die der
-  // Netzliste — beides ist eine bewusste Sortierung, kein Zufall.
   const reihenfolge = _gerModus === 'netz'
     ? (_gerDaten.netze || []).map(n => n.key)
     : (_gerDaten.kategorien || []).map(k => k.key);
+  const bekannt = reihenfolge.filter(k => gruppen[k]);
+  const rest = Object.keys(gruppen).filter(k => !reihenfolge.includes(k));
 
-  const kacheln = reihenfolge.filter(k => gruppen[k]).map(key => {
-    const teil = gruppen[key];
-    const zaehl = s => teil.filter(g => g.status === s).length;
-    const anteil = n => (n / teil.length * 100).toFixed(2) + '%';
-    const kat = _gerModus === 'netz' ? null : key;
-    const farbe = GER_KAT_FARBE[kat] || 'var(--accent)';
-    const symbol = GER_KAT_ICON[kat] || 'chip';
-    const online = zaehl('online');
-    const problem = zaehl('offline') + zaehl('unbekannt');
-    const neutral = zaehl('stumm') + zaehl('fremdnetz');
-    const sub = problem ? `${problem} offline oder unklar`
-              : neutral === teil.length ? 'ohne eigene Meldung'
-              : `${online} von ${teil.length - neutral} online`;
-    return `
-      <button class="ger-tile" style="--kachel-farbe:${farbe}" onclick="gerGruppe(${_jsAttr(key)})">
-        <div class="ger-tile-head">${icon(symbol, { size: 17 })} <span>${_esc(_gerGruppenName(key))}</span></div>
-        <div class="ger-tile-zahl">${teil.length}<small>${teil.length === 1 ? 'Gerät' : 'Geräte'}</small></div>
-        <div class="ger-tile-sub">${_esc(sub)}</div>
-        <div class="ger-balken">
-          <i style="width:${anteil(online)};background:var(--green)"></i>
-          <i style="width:${anteil(zaehl('traege'))};background:var(--yellow)"></i>
-          <i style="width:${anteil(problem)};background:var(--red)"></i>
-          <i style="width:${anteil(neutral)};background:#475569"></i>
-        </div>
-      </button>`;
+  const bloecke = [...bekannt, ...rest].map(key => {
+    const teil = _gerSortiert(gruppen[key]);
+    const zeilen = _gerVerschachtelt(teil).map(({ g, tiefe }) => {
+      const kennzahl = (g.kennzahlen || [])[0];
+      const name_klein = (g.name || '').toLowerCase();
+      const sub = [[g.hersteller, g.modell].filter(Boolean).join(' '), ortName(g.ort)]
+        // "Raymarine ITC-5" unter "Raymarine ITC-5" sagt nichts — weg damit.
+        .filter(t => t && !name_klein.includes(t.toLowerCase())).join(' · ');
+      return `
+        <button class="ger-zeile" ${tiefe ? `style="padding-left:${14 + tiefe * 18}px"` : ''}
+                onclick="gerDetail(${_jsAttr(g.id)})">
+          <span class="ger-punkt s-${_esc(g.status)}"></span>
+          <span class="ger-zeile-mitte">
+            <span class="ger-zeile-name">${_esc(g.name)}${g.gepflegt ? ''
+              : ' <span class="ger-neu">neu erkannt</span>'}</span>
+            ${sub ? `<span class="ger-zeile-sub">${_esc(sub)}</span>` : ''}
+          </span>
+          ${kennzahl ? `<span class="ger-zeile-wert">${_esc(kennzahl.l)}
+            <b>${_esc(kennzahl.v)}</b></span>` : ''}
+          <span class="ger-marke s-${_esc(g.status)}">${_esc(g.status_text)}</span>
+        </button>`;
+    }).join('');
+    return `<div class="ger-gruppe">${_esc(_gerGruppenName(key))}
+        <span>${teil.length}</span></div>${zeilen}`;
   }).join('');
 
-  return `<div class="ger-grid">${kacheln}</div>
-    <div style="text-align:center;margin-top:16px">
-      <button class="ger-zurueck" onclick="gerGruppe('*')">
-        Alle ${liste.length} Geräte in einer Liste
-      </button>
-    </div>`;
-}
-
-function _gerListeHtml(liste, titel, flach) {
-  if (!liste.length) {
-    return `${flach ? '' : _gerKopfHtml(titel, 0)}<div class="ger-leer">Nichts gefunden.</div>`;
-  }
-  const zeilen = _gerVerschachtelt(liste).map(({ g, tiefe }) => {
-    const kennzahlen = (g.kennzahlen || []).slice(0, 2).map((k, i) =>
-      `<div class="ger-kennzahl ${i ? 'ger-weg-mobil' : ''}">${_esc(k.l)} <b>${_esc(k.v)}</b></div>`).join('');
-    const name_klein = (g.name || '').toLowerCase();
-    const untertitel = [
-      [g.hersteller, g.modell].filter(Boolean).join(' '),
-      ortName(g.ort),
-      flach ? _gerGruppenName(_gerGruppeVon(g)) : '',
-    ]
-      // "Raymarine ITC-5" unter "Raymarine ITC-5" sagt nichts — weg damit.
-      .filter(t => t && !name_klein.includes(t.toLowerCase()))
-      .join(' · ');
-    return `
-      <button class="ger-row ${tiefe ? 'ger-kind' : ''}"
-              ${tiefe ? `style="margin-left:${tiefe * 22}px"` : ''}
-              onclick="gerDetail(${_jsAttr(g.id)})">
-        <div class="ger-dot s-${_esc(g.status)}"></div>
-        <div class="ger-row-mitte">
-          <div class="ger-row-name">${_esc(g.name)}${g.gepflegt ? '' :
-            ' <span class="ger-tag">neu erkannt</span>'}</div>
-          <div class="ger-row-sub">${_esc(untertitel || g.netz_name || '')}</div>
-        </div>
-        <div class="ger-row-rechts">
-          ${kennzahlen}
-          <div class="ger-pill s-${_esc(g.status)}">${_esc(g.status_text)}</div>
-        </div>
-      </button>`;
-  }).join('');
-  return `${flach ? '' : _gerKopfHtml(titel, liste.length)}<div class="ger-liste">${zeilen}</div>`;
-}
-
-function _gerKopfHtml(titel, anzahl) {
-  return `
-    <div class="ger-kopf">
-      <button class="ger-zurueck" onclick="gerGruppe(null)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Alle Gruppen
-      </button>
-      <h3>${_esc(titel)}</h3>
-      <div class="ger-kopf-sub">${anzahl} ${anzahl === 1 ? 'Gerät' : 'Geräte'}</div>
-    </div>`;
+  return `<div class="set-card ger-alle">
+    <div class="set-card-hd">Alle Geräte</div>
+    <div class="ger-liste">${bloecke}</div>
+  </div>`;
 }
 
 // ── Bedienung ──────────────────────────────────────────────────────────────
 
 function gerSuchen(wert)  { _gerSuche = wert; _gerRender(); }
 function gerProbleme()    { _gerProbleme = !_gerProbleme; _gerRender(); }
-function gerGruppe(key)   { _gerGruppe = key; _gerRender(); }
-function gerModus(modus)  { _gerModus = modus; _gerGruppe = null; _gerRender(); }
+function gerModus(modus)  { _gerModus = modus; _gerRender(); }
 
 /** Netz im Schaltbild ein- oder ausblenden. */
 function gerNetzToggle(netz) {

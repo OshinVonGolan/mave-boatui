@@ -9,7 +9,7 @@ function openNetwork() {
   $('networkOverlay').classList.remove('hidden');
   fetchNetwork();
   netTimer = setInterval(fetchNetwork, 5000);
-  _reiterSetzen('networkOverlay', 'netz', 'wlan');
+  _reiterSetzen('networkOverlay', 'geraete', 'bus');
 }
 function closeNetwork() {
   $('networkOverlay').classList.add('hidden');
@@ -86,7 +86,7 @@ function renderNetworkInto(el, entries) {
   const active = entries.filter(e => e.age_s <= NET_STALE_S);
 
   if (!active.length) {
-    el.innerHTML = '<div class="net-empty">Noch keine Geräte erkannt — warte auf CAN-Daten…</div>';
+    el.innerHTML = '<div class="net-empty">Noch keine Meldungen — warte auf den Bus…</div>';
     return;
   }
 
