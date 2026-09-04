@@ -3,6 +3,7 @@
 applyDisplayConfig();
 _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 _leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
+_vollbildFuehren();       // Vollbild nach einem Neuladen wieder herstellen
 const _presetsFertig = Promise.resolve(loadPresets());
 
 // Service Worker anmelden. Erst dadurch bietet Chrome die Anwendung als

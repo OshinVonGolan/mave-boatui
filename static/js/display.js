@@ -714,6 +714,63 @@ const _SIZE_OPTS = [
   { value: 'wide',   label: 'Doppelte Breite' },
 ];
 
+// ── Vollbild ────────────────────────────────────────────────────────────────
+// Bewusst je GERAET und nicht im Manifest: display:fullscreen im Manifest
+// gaelte fuer jede neue Installation und fuer alle — das Wandtablet soll aber
+// Vollbild, das Telefon in der Hosentasche nicht. Deshalb steht das Manifest
+// weiter auf standalone, und hier entscheidet jedes Geraet fuer sich
+// (localStorage, wie die uebrigen Anzeige-Einstellungen auch).
+//
+// Die Umschaltung braucht eine Beruehrung: von sich aus darf keine Seite in
+// den Vollbild gehen. Der Wunsch wird gemerkt und beim naechsten Tippen
+// wieder hergestellt, weil ein Neuladen den Vollbild verlaesst und man ihn
+// nicht selbst zurueckholen darf.
+const _VOLLBILD_KEY = 'mave_vollbild';
+
+function _vollbildAktiv() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+async function vollbildUmschalten() {
+  try {
+    if (_vollbildAktiv()) {
+      localStorage.setItem(_VOLLBILD_KEY, '0');
+      await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
+    } else {
+      localStorage.setItem(_VOLLBILD_KEY, '1');
+      const el = document.documentElement;
+      await (el.requestFullscreen?.({ navigationUI: 'hide' })
+             ?? el.webkitRequestFullscreen?.());
+    }
+  } catch (e) {
+    // Manche Browser lehnen ab (kein Nutzergriff, in einem Rahmen, iOS).
+    // Dann bleibt es beim jetzigen Zustand — nur nicht behaupten, es klappte.
+    console.debug('Vollbild nicht moeglich:', e);
+  }
+  _vollbildKnopfSetzen();
+}
+
+function _vollbildKnopfSetzen() {
+  const b = $('dspVollbild');
+  if (!b) return;
+  const an = _vollbildAktiv();
+  b.textContent = an ? 'Vollbild verlassen' : 'Vollbild einschalten';
+  b.classList.toggle('btn-primary', !an);
+  b.classList.toggle('btn-secondary', an);
+}
+
+/** Nach einem Neuladen den Wunsch beim ersten Tippen wieder herstellen. */
+function _vollbildFuehren() {
+  document.addEventListener('fullscreenchange', _vollbildKnopfSetzen);
+  if (localStorage.getItem(_VOLLBILD_KEY) !== '1') return;
+  const einmal = () => {
+    document.removeEventListener('pointerdown', einmal);
+    if (_vollbildAktiv()) return;
+    document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
+  };
+  document.addEventListener('pointerdown', einmal, { once: true });
+}
+
 function openDisplaySettings() {
   if (!_dsp) _dspLoad();
   const pane = $('setPane-display');
@@ -741,6 +798,19 @@ function openDisplaySettings() {
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Noch keine Konfiguration gespeichert.</div>';
 
   pane.innerHTML = `
+    <div class="set-card">
+      <div class="set-card-hd">Vollbild</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Blendet die Statusleiste von Android aus. Gilt nur für dieses Gerät und
+        bleibt gespeichert — nach einem Neustart der App genügt eine Berührung,
+        dann ist der Vollbild wieder da. Wirkt auch im normalen Browser.
+      </div>
+      <div class="settings-row" style="align-items:center;border-bottom:none">
+        <label class="settings-label" style="min-width:0;flex:1">Statusleiste ausblenden</label>
+        <button class="btn-primary" id="dspVollbild" onclick="vollbildUmschalten()">Vollbild einschalten</button>
+      </div>
+    </div>
+
     <div class="set-card">
       <div class="set-card-hd">Kacheln anordnen</div>
       <div class="settings-row" style="align-items:center;border-bottom:none">
