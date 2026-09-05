@@ -74,7 +74,7 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-def _fassung(ref: str = 'HEAD') -> str:
+def _fassung(ref: str = 'HEAD', notfalls: str = '1.60.0') -> str:
     """Die laufende Fassung eines Standes, fortlaufend gezaehlt.
 
     Steht der Stand genau auf einem Fassungs-Tag, gilt der Tag. Sonst wird ab
@@ -88,6 +88,11 @@ def _fassung(ref: str = 'HEAD') -> str:
     `VERSION = _git_semver() or '1.59.0'`. Seit die Fassung aus Git kommt, gibt
     es diese Zeile nicht mehr — das Muster traf ins Leere und die Fernfassung
     blieb leer. Zweimal dasselbe auf zwei Wegen auszurechnen war der Fehler.
+
+    `notfalls` ist die Antwort, wenn Git nichts hergibt. Fuer den eigenen Stand
+    ist eine plausible Zahl besser als nichts: die Anwendung laeuft ja. Fuer die
+    Gegenstelle waere sie eine Luege — dort steht dann lieber gar nichts als
+    eine Fassung, die niemand geprueft hat.
     """
     genau = _git_semver(ref)
     if genau:
@@ -105,7 +110,7 @@ def _fassung(ref: str = 'HEAD') -> str:
             return f'{haupt}.{seit}'
     except Exception:
         pass
-    return '1.60.0'
+    return notfalls
 
 
 VERSION  = _fassung()
@@ -126,7 +131,7 @@ def _refresh_remote_version() -> bool:
         # Gegenstelle angewandt. Frueher wurde dafuer deren main.py geholt und
         # eine Zeichenkette herausgesucht — ein zweiter Weg zum selben Ergebnis,
         # und der eine ueberlebte die Umstellung auf Git-Fassungen nicht.
-        rver = _fassung('@{u}') if rhash else ''
+        rver = _fassung('@{u}', notfalls='') if rhash else ''
         _remote_ver.update(ts=time.time(), version=rver, hash=rhash,
                            up_to_date=((rhash == GIT_HASH) if rhash else None))
         return fetch.returncode == 0 and bool(rhash)
