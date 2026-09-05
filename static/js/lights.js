@@ -63,6 +63,11 @@ function chNamenPassend() {
   const reihe = $('channelsRow');
   const unten = $('channelsLabel');
   if (!reihe) return;
+  // Unsichtbar heisst nicht "passt nicht". Ist die Kachel gerade ausgeblendet
+  // (halbe Hoehe, geschlossene Ansicht), misst sich alles zu null, und die
+  // Namen fielen weg — bis zufaellig jemand die Groesse aendert. Dann lieber
+  // stehen lassen, was steht.
+  if (!reihe.clientHeight) return;
 
   // Erst hineinschreiben und nachmessen.
   let innen = true;
@@ -381,6 +386,11 @@ async function loadPresets() {
     $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
     $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';
     renderPresets();
+    // Die Namen der Lichtkreise stehen erst JETZT fest: buildChannelBars laeuft
+    // beim Laden des Buendels, also bevor diese Antwort da ist. Ohne diese
+    // Zeile blieben die Balken bis zum naechsten Groessenwechsel unbeschriftet
+    // — und genau so war es: die Namen waren "nicht immer da".
+    chNamenAuffrischen();
   } catch(e) { console.error('Presets nicht geladen:', e); }
 }
 

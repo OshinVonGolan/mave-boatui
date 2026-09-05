@@ -17,6 +17,7 @@ history_min.ndjson.tmp
 charger_state.json
 daily_stats.json
 stauplan.json
+grundriss.json
 wartung.json
 heizung.json
 devices.json

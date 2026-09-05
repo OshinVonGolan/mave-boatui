@@ -1,0 +1,1010 @@
+{
+ "name": "Mave",
+ "loa_m": 12.8,
+ "breite_m": 3.6,
+ "ansicht": {
+  "w": 200,
+  "h": 680
+ },
+ "rumpf": "M100,14 C122,26 144,68 150,114 C157,143 169,160 173,168 C180,190 185,232 186,274 L186,360 C185,412 181,452 174,487 C163,524 148,556 138,578 C134,598 132,622 132,644 L68,644 C68,622 66,598 62,578 C52,556 37,524 26,487 C19,452 15,412 14,360 L14,274 C15,232 20,190 27,168 C31,160 43,143 50,114 C56,68 78,26 100,14 Z",
+ "hintergrund": [
+  {
+   "t": "rect",
+   "x": 20.0,
+   "y": 30.0,
+   "w": 76.0,
+   "h": 130.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 20.0,
+   "y": 30.0,
+   "w": 76.0,
+   "h": 130.0,
+   "fill": "none",
+   "stroke": "#3a5570",
+   "sw": 0.6
+  },
+  {
+   "t": "rect",
+   "x": 104.0,
+   "y": 30.0,
+   "w": 76.0,
+   "h": 130.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 104.0,
+   "y": 30.0,
+   "w": 76.0,
+   "h": 130.0,
+   "fill": "none",
+   "stroke": "#3a5570",
+   "sw": 0.6
+  },
+  {
+   "t": "rect",
+   "x": 15.0,
+   "y": 165.0,
+   "w": 74.0,
+   "h": 117.0,
+   "fill": "#1c2d42"
+  },
+  {
+   "t": "rect",
+   "x": 15.0,
+   "y": 165.0,
+   "w": 30.0,
+   "h": 117.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 111.0,
+   "y": 165.0,
+   "w": 74.0,
+   "h": 117.0,
+   "fill": "#1c2d42"
+  },
+  {
+   "t": "rect",
+   "x": 155.0,
+   "y": 165.0,
+   "w": 30.0,
+   "h": 117.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 89.0,
+   "y": 165.0,
+   "w": 22.0,
+   "h": 117.0,
+   "fill": "#141f2e"
+  },
+  {
+   "t": "rect",
+   "x": 91.0,
+   "y": 195.0,
+   "w": 18.0,
+   "h": 52.0,
+   "rx": 2.0,
+   "fill": "#1e3040",
+   "stroke": "#3a5570",
+   "sw": 0.8
+  },
+  {
+   "t": "line",
+   "x1": 95.0,
+   "y1": 200.0,
+   "x2": 95.0,
+   "y2": 242.0,
+   "stroke": "#3a5570",
+   "sw": 0.5
+  },
+  {
+   "t": "line",
+   "x1": 100.0,
+   "y1": 200.0,
+   "x2": 100.0,
+   "y2": 242.0,
+   "stroke": "#3a5570",
+   "sw": 0.5
+  },
+  {
+   "t": "line",
+   "x1": 105.0,
+   "y1": 200.0,
+   "x2": 105.0,
+   "y2": 242.0,
+   "stroke": "#3a5570",
+   "sw": 0.5
+  },
+  {
+   "t": "path",
+   "d": "M 89,165 Q 79,175 89,185",
+   "fill": "none",
+   "stroke": "#4a6580",
+   "sw": 0.7,
+   "strich": "0"
+  },
+  {
+   "t": "line",
+   "x1": 89.0,
+   "y1": 165.0,
+   "x2": 89.0,
+   "y2": 185.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "path",
+   "d": "M 111,165 Q 121,175 111,185",
+   "fill": "none",
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 111.0,
+   "y1": 165.0,
+   "x2": 111.0,
+   "y2": 185.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 14.0,
+   "y": 287.0,
+   "w": 84.0,
+   "h": 74.0,
+   "fill": "#1a2b3e"
+  },
+  {
+   "t": "rect",
+   "x": 16.0,
+   "y": 298.0,
+   "w": 50.0,
+   "h": 22.0,
+   "rx": 1.0,
+   "fill": "#1e3248",
+   "stroke": "#3a5570",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 16.0,
+   "y": 323.0,
+   "w": 48.0,
+   "h": 14.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 102.0,
+   "y": 287.0,
+   "w": 84.0,
+   "h": 74.0,
+   "fill": "#1a2b3e"
+  },
+  {
+   "t": "rect",
+   "x": 140.0,
+   "y": 290.0,
+   "w": 44.0,
+   "h": 68.0,
+   "rx": 1.0,
+   "fill": "#1e3248",
+   "stroke": "#3a5570",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 143.0,
+   "y": 293.0,
+   "w": 20.0,
+   "h": 18.0,
+   "rx": 1.0,
+   "fill": "#141f2e",
+   "stroke": "#3a5570",
+   "sw": 0.6
+  },
+  {
+   "t": "circle",
+   "cx": 148.0,
+   "cy": 297.0,
+   "r": 3.0,
+   "fill": "#243650",
+   "stroke": "#4a6580",
+   "sw": 0.5
+  },
+  {
+   "t": "circle",
+   "cx": 158.0,
+   "cy": 297.0,
+   "r": 3.0,
+   "fill": "#243650",
+   "stroke": "#4a6580",
+   "sw": 0.5
+  },
+  {
+   "t": "circle",
+   "cx": 148.0,
+   "cy": 307.0,
+   "r": 3.0,
+   "fill": "#243650",
+   "stroke": "#4a6580",
+   "sw": 0.5
+  },
+  {
+   "t": "circle",
+   "cx": 158.0,
+   "cy": 307.0,
+   "r": 3.0,
+   "fill": "#243650",
+   "stroke": "#4a6580",
+   "sw": 0.5
+  },
+  {
+   "t": "rect",
+   "x": 143.0,
+   "y": 315.0,
+   "w": 16.0,
+   "h": 12.0,
+   "rx": 2.0,
+   "fill": "#141f2e",
+   "stroke": "#4a6580",
+   "sw": 0.6
+  },
+  {
+   "t": "path",
+   "d": "M 98,363 Q 88,353 98,343",
+   "fill": "none",
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 98.0,
+   "y1": 363.0,
+   "x2": 98.0,
+   "y2": 343.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 13.0,
+   "y": 366.0,
+   "w": 174.0,
+   "h": 116.0,
+   "fill": "#1b2c40"
+  },
+  {
+   "t": "rect",
+   "x": 14.0,
+   "y": 368.0,
+   "w": 30.0,
+   "h": 112.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 156.0,
+   "y": 368.0,
+   "w": 29.0,
+   "h": 112.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 66.0,
+   "y": 390.0,
+   "w": 68.0,
+   "h": 62.0,
+   "rx": 3.0,
+   "fill": "#1e3248",
+   "stroke": "#4a6580",
+   "sw": 0.8
+  },
+  {
+   "t": "circle",
+   "cx": 70.0,
+   "cy": 394.0,
+   "r": 2.5,
+   "fill": "#243650"
+  },
+  {
+   "t": "circle",
+   "cx": 130.0,
+   "cy": 394.0,
+   "r": 2.5,
+   "fill": "#243650"
+  },
+  {
+   "t": "circle",
+   "cx": 70.0,
+   "cy": 448.0,
+   "r": 2.5,
+   "fill": "#243650"
+  },
+  {
+   "t": "circle",
+   "cx": 130.0,
+   "cy": 448.0,
+   "r": 2.5,
+   "fill": "#243650"
+  },
+  {
+   "t": "rect",
+   "x": 14.0,
+   "y": 487.0,
+   "w": 84.0,
+   "h": 77.0,
+   "fill": "#1a2b3e"
+  },
+  {
+   "t": "rect",
+   "x": 14.0,
+   "y": 487.0,
+   "w": 84.0,
+   "h": 30.0,
+   "fill": "schraffur"
+  },
+  {
+   "t": "rect",
+   "x": 16.0,
+   "y": 520.0,
+   "w": 80.0,
+   "h": 18.0,
+   "rx": 1.0,
+   "fill": "#1e3248",
+   "stroke": "#3a5570",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 102.0,
+   "y": 487.0,
+   "w": 84.0,
+   "h": 77.0,
+   "fill": "#1a2b3e"
+  },
+  {
+   "t": "rect",
+   "x": 130.0,
+   "y": 492.0,
+   "w": 26.0,
+   "h": 20.0,
+   "rx": 2.0,
+   "fill": "#1e3248",
+   "stroke": "#3a5570",
+   "sw": 0.7
+  },
+  {
+   "t": "ellipse",
+   "cx": 143.0,
+   "cy": 502.0,
+   "rx": 10.0,
+   "ry": 8.0,
+   "fill": "#141f2e",
+   "stroke": "#4a6580",
+   "sw": 0.6
+  },
+  {
+   "t": "rect",
+   "x": 155.0,
+   "y": 518.0,
+   "w": 22.0,
+   "h": 18.0,
+   "rx": 3.0,
+   "fill": "#141f2e",
+   "stroke": "#4a6580",
+   "sw": 0.6
+  },
+  {
+   "t": "circle",
+   "cx": 166.0,
+   "cy": 527.0,
+   "r": 3.5,
+   "fill": "#243650",
+   "stroke": "#4a6580",
+   "sw": 0.5
+  },
+  {
+   "t": "path",
+   "d": "M 102,566 Q 112,556 102,546",
+   "fill": "none",
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 102.0,
+   "y1": 566.0,
+   "x2": 102.0,
+   "y2": 546.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 24.0,
+   "y": 569.0,
+   "w": 152.0,
+   "h": 72.0,
+   "fill": "#151e2d"
+  },
+  {
+   "t": "rect",
+   "x": 26.0,
+   "y": 572.0,
+   "w": 62.0,
+   "h": 55.0,
+   "rx": 1.0,
+   "fill": "#1c2d3e",
+   "stroke": "#2d3f57",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 112.0,
+   "y": 572.0,
+   "w": 62.0,
+   "h": 55.0,
+   "rx": 1.0,
+   "fill": "#1c2d3e",
+   "stroke": "#2d3f57",
+   "sw": 0.7
+  },
+  {
+   "t": "rect",
+   "x": 86.0,
+   "y": 572.0,
+   "w": 28.0,
+   "h": 22.0,
+   "rx": 1.0,
+   "fill": "#141f2e",
+   "stroke": "#4a6580",
+   "sw": 0.8
+  },
+  {
+   "t": "line",
+   "x1": 86.0,
+   "y1": 578.0,
+   "x2": 114.0,
+   "y2": 578.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 86.0,
+   "y1": 584.0,
+   "x2": 114.0,
+   "y2": 584.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 86.0,
+   "y1": 590.0,
+   "x2": 114.0,
+   "y2": 590.0,
+   "stroke": "#4a6580",
+   "sw": 0.7
+  },
+  {
+   "t": "line",
+   "x1": 20.0,
+   "y1": 162.0,
+   "x2": 180.0,
+   "y2": 162.0,
+   "stroke": "#7090a8",
+   "sw": 1.4
+  },
+  {
+   "t": "line",
+   "x1": 100.0,
+   "y1": 14.0,
+   "x2": 100.0,
+   "y2": 162.0,
+   "stroke": "#4a6070",
+   "sw": 0.8
+  },
+  {
+   "t": "line",
+   "x1": 14.0,
+   "y1": 284.0,
+   "x2": 186.0,
+   "y2": 284.0,
+   "stroke": "#7090a8",
+   "sw": 1.4
+  },
+  {
+   "t": "line",
+   "x1": 89.0,
+   "y1": 162.0,
+   "x2": 89.0,
+   "y2": 284.0,
+   "stroke": "#4a6070",
+   "sw": 0.9
+  },
+  {
+   "t": "line",
+   "x1": 111.0,
+   "y1": 162.0,
+   "x2": 111.0,
+   "y2": 284.0,
+   "stroke": "#4a6070",
+   "sw": 0.9
+  },
+  {
+   "t": "line",
+   "x1": 13.0,
+   "y1": 363.0,
+   "x2": 187.0,
+   "y2": 363.0,
+   "stroke": "#7090a8",
+   "sw": 1.4
+  },
+  {
+   "t": "line",
+   "x1": 98.0,
+   "y1": 284.0,
+   "x2": 98.0,
+   "y2": 363.0,
+   "stroke": "#4a6070",
+   "sw": 0.9
+  },
+  {
+   "t": "line",
+   "x1": 13.0,
+   "y1": 484.0,
+   "x2": 187.0,
+   "y2": 484.0,
+   "stroke": "#7090a8",
+   "sw": 1.4
+  },
+  {
+   "t": "line",
+   "x1": 18.0,
+   "y1": 566.0,
+   "x2": 182.0,
+   "y2": 566.0,
+   "stroke": "#7090a8",
+   "sw": 1.4
+  },
+  {
+   "t": "line",
+   "x1": 100.0,
+   "y1": 484.0,
+   "x2": 100.0,
+   "y2": 566.0,
+   "stroke": "#4a6070",
+   "sw": 0.9
+  },
+  {
+   "t": "text",
+   "x": 57.0,
+   "y": 87.0,
+   "fill": "#6888a0",
+   "s": "STOWAGE",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 57.0,
+   "y": 96.0,
+   "fill": "#6888a0",
+   "s": "BERTH BB",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 143.0,
+   "y": 87.0,
+   "fill": "#6888a0",
+   "s": "STOWAGE",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 143.0,
+   "y": 96.0,
+   "fill": "#6888a0",
+   "s": "BERTH SB",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 48.0,
+   "y": 220.0,
+   "fill": "#6888a0",
+   "s": "KABINE",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 48.0,
+   "y": 229.0,
+   "fill": "#6888a0",
+   "s": "BB",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 211.0,
+   "fill": "#6888a0",
+   "s": "MOTOR",
+   "fs": 5.5,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 152.0,
+   "y": 220.0,
+   "fill": "#6888a0",
+   "s": "KABINE",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 152.0,
+   "y": 229.0,
+   "fill": "#6888a0",
+   "s": "SB",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 46.0,
+   "y": 316.0,
+   "fill": "#6888a0",
+   "s": "KARTEN-",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 46.0,
+   "y": 325.0,
+   "fill": "#6888a0",
+   "s": "RAUM",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 118.0,
+   "y": 312.0,
+   "fill": "#6888a0",
+   "s": "KOM-",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 118.0,
+   "y": 321.0,
+   "fill": "#6888a0",
+   "s": "BÜSE",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 382.0,
+   "fill": "#6888a0",
+   "s": "SALON",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 426.0,
+   "fill": "#4a6070",
+   "s": "TISCH",
+   "fs": 6.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 47.0,
+   "y": 510.0,
+   "fill": "#6888a0",
+   "s": "WERKBANK",
+   "fs": 7.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 47.0,
+   "y": 519.0,
+   "fill": "#6888a0",
+   "s": "/ KOJE",
+   "fs": 5.5,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 107.0,
+   "y": 502.0,
+   "fill": "#6888a0",
+   "s": "WC",
+   "fs": 5.5,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 55.0,
+   "y": 604.0,
+   "fill": "#6888a0",
+   "s": "STAUKASTEN",
+   "fs": 6.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 145.0,
+   "y": 604.0,
+   "fill": "#6888a0",
+   "s": "STAUKASTEN",
+   "fs": 6.0,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 590.0,
+   "fill": "#6888a0",
+   "s": "NIEDERGANG",
+   "fs": 5.5,
+   "fw": "600",
+   "ls": "0.28",
+   "anker": "middle",
+   "ff": "-apple-system,BlinkMacSystemFont,sans-serif"
+  },
+  {
+   "t": "path",
+   "d": "M100,14 C122,26 144,68 150,114 C157,143 169,160 173,168 C180,190 185,232 186,274 L186,360 C185,412 181,452 174,487 C163,524 148,556 138,578 C134,598 132,622 132,644 L68,644 C68,622 66,598 62,578 C52,556 37,524 26,487 C19,452 15,412 14,360 L14,274 C15,232 20,190 27,168 C31,160 43,143 50,114 C56,68 78,26 100,14 Z",
+   "fill": "none",
+   "stroke": "#8aafc8",
+   "sw": 2.0,
+   "frei": true
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 9.0,
+   "fill": "#4a6070",
+   "s": "▲ BUG",
+   "fs": 6.0,
+   "fw": "600",
+   "anker": "middle",
+   "ff": "-apple-system,sans-serif",
+   "frei": true
+  },
+  {
+   "t": "text",
+   "x": 100.0,
+   "y": 663.0,
+   "fill": "#4a6070",
+   "s": "HECK ▼",
+   "fs": 6.0,
+   "fw": "600",
+   "anker": "middle",
+   "ff": "-apple-system,sans-serif",
+   "frei": true
+  }
+ ],
+ "raeume": [
+  {
+   "id": "bug-bb",
+   "name": "Bug Backbord",
+   "farbe": "#f59e0b",
+   "form": {
+    "t": "rechteck",
+    "x": 14.0,
+    "y": 14.0,
+    "w": 86.0,
+    "h": 148.0
+   }
+  },
+  {
+   "id": "bug-sb",
+   "name": "Bug Steuerbord",
+   "farbe": "#fbbf24",
+   "form": {
+    "t": "rechteck",
+    "x": 100.0,
+    "y": 14.0,
+    "w": 86.0,
+    "h": 148.0
+   }
+  },
+  {
+   "id": "kab-bb",
+   "name": "Kabine Backbord",
+   "farbe": "#60a5fa",
+   "form": {
+    "t": "rechteck",
+    "x": 14.0,
+    "y": 162.0,
+    "w": 75.0,
+    "h": 122.0
+   }
+  },
+  {
+   "id": "motor",
+   "name": "Motorraum",
+   "farbe": "#9ca3af",
+   "form": {
+    "t": "rechteck",
+    "x": 89.0,
+    "y": 162.0,
+    "w": 22.0,
+    "h": 122.0
+   }
+  },
+  {
+   "id": "kab-sb",
+   "name": "Kabine Steuerbord",
+   "farbe": "#93c5fd",
+   "form": {
+    "t": "rechteck",
+    "x": 111.0,
+    "y": 162.0,
+    "w": 75.0,
+    "h": 122.0
+   }
+  },
+  {
+   "id": "karten",
+   "name": "Kartenraum",
+   "farbe": "#34d399",
+   "form": {
+    "t": "rechteck",
+    "x": 14.0,
+    "y": 284.0,
+    "w": 84.0,
+    "h": 79.0
+   }
+  },
+  {
+   "id": "kombuese",
+   "name": "Kombüse",
+   "farbe": "#fb923c",
+   "form": {
+    "t": "rechteck",
+    "x": 98.0,
+    "y": 284.0,
+    "w": 90.0,
+    "h": 79.0
+   }
+  },
+  {
+   "id": "salon",
+   "name": "Salon",
+   "farbe": "#a78bfa",
+   "form": {
+    "t": "rechteck",
+    "x": 13.0,
+    "y": 363.0,
+    "w": 174.0,
+    "h": 121.0
+   }
+  },
+  {
+   "id": "werkbank",
+   "name": "Werkbank / Koje",
+   "farbe": "#f87171",
+   "form": {
+    "t": "rechteck",
+    "x": 14.0,
+    "y": 484.0,
+    "w": 86.0,
+    "h": 82.0
+   }
+  },
+  {
+   "id": "wc",
+   "name": "WC / Bad",
+   "farbe": "#22d3ee",
+   "form": {
+    "t": "rechteck",
+    "x": 100.0,
+    "y": 484.0,
+    "w": 87.0,
+    "h": 82.0
+   }
+  },
+  {
+   "id": "heck",
+   "name": "Heckstauraum",
+   "farbe": "#94a3b8",
+   "form": {
+    "t": "rechteck",
+    "x": 24.0,
+    "y": 566.0,
+    "w": 152.0,
+    "h": 84.0
+   }
+  }
+ ]
+}

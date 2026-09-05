@@ -48,6 +48,8 @@ connect();
 const _pConn = fetchConnectivity();
 const _connPoller    = createPoller(fetchConnectivity, 25000);
 const _pWart = _wartungLoad();
+// Der Grundriss: Raumnamen und -farben fuer Stauplan und Geraeteseite.
+const _pGrundriss = grundrissLaden();
 refreshVersion();
 const _versionPoller = createPoller(refreshVersion, 60000);   // Update-Stand frisch halten
 refreshChargerStatus();
@@ -90,6 +92,7 @@ const _QUELLEN = [
   ['Zustand',    _pStatus],
   ['Verbindung', _pConn],
   ['Wartung',    _pWart],
+  ['Grundriss',  _pGrundriss],
   ['Wasserstand', _pWl],
   ['Wetter',     typeof fetchWeather === 'function' ? fetchWeather() : null],
   ['Heizung',    typeof ladeHeizung === 'function' ? ladeHeizung(false) : null],

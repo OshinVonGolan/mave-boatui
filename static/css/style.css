@@ -802,6 +802,12 @@
 
     .sb-item {
       background: var(--surface); border: 0; margin: 0;
+      /* Halten heisst hier "Detailseite oeffnen". Ohne diese beiden Zeilen
+         faengt der Browser waehrenddessen an, Text zu markieren, und auf dem
+         Telefon springt zusaetzlich das Auswahlmenue auf — man haelt den Finger
+         drauf und bekommt blaue Bloecke statt einer Seite. */
+      user-select: none; -webkit-user-select: none;
+      -webkit-touch-callout: none;
       /* Aus dem Andock-Fortschritt gerechnet (--leiste-eng, siehe oben):
          beim Scrollen wird das Feld flacher, statt an einer Schwelle
          umzuklappen. */
@@ -1385,7 +1391,11 @@
       touch-action: none; }
     .ch-bar-wrap { flex: 1; height: 100%; background: var(--surface2); border-radius: 4px;
       position: relative; overflow: hidden; cursor: ns-resize;
-      -webkit-tap-highlight-color: transparent; }
+      -webkit-tap-highlight-color: transparent;
+      /* Dasselbe wie bei den Feldern der Statusleiste: Ziehen und Halten
+         duerfen nichts markieren. */
+      user-select: none; -webkit-user-select: none;
+      -webkit-touch-callout: none; }
     .ch-bar { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent);
       border-radius: 4px; transition: height .5s ease; opacity: .85; }
     /* Waehrend gezogen wird, darf die Fuellung dem Finger nicht hinterherlaufen —

@@ -33,7 +33,17 @@ function renderTank(idx, pct) {
 
   const clamped = Math.max(0, Math.min(100, pct));
   fill.style.height = clamped + '%';
-  fill.style.background = tanksConfig[`tank${idx}`]?.color || 'var(--green)';
+  // Ein Verlauf statt einer flachen Flaeche: unten satt, nach oben heller.
+  // Das gibt der Fuellung Tiefe und macht die Oberkante — den eigentlichen
+  // Messwert — deutlicher, weil dort der hellste Ton sitzt. Gerechnet wird er
+  // aus DER Farbe, die fuer den Tank eingestellt ist; ein zweiter Farbwert
+  // waere eine zweite Angabe, die jemand pflegen muesste.
+  const farbe = tanksConfig[`tank${idx}`]?.color || 'var(--green)';
+  fill.style.background =
+    `linear-gradient(to top,
+       color-mix(in srgb, ${farbe} 78%, #000) 0%,
+       ${farbe} 62%,
+       color-mix(in srgb, ${farbe} 82%, #fff) 100%)`;
 
   const cap = tanksConfig[`tank${idx}`]?.capacity_l ?? 100;
 

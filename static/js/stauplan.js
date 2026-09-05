@@ -1,18 +1,9 @@
 // ── Stauplan ───────────────────────────────────────────────────────────────
 
-const STAU_FAECHER = {
-  'bug-sb':   { name: 'Bug Steuerbord',     color: '#fbbf24' },
-  'bug-bb':   { name: 'Bug Backbord',       color: '#f59e0b' },
-  'kab-bb':   { name: 'Kabine Backbord',    color: '#60a5fa' },
-  'motor':    { name: 'Motorraum',          color: '#9ca3af' },
-  'kab-sb':   { name: 'Kabine Steuerbord',  color: '#93c5fd' },
-  'karten':   { name: 'Kartenraum',         color: '#34d399' },
-  'kombuese': { name: 'Kombüse',            color: '#fb923c' },
-  'salon':    { name: 'Salon',              color: '#a78bfa' },
-  'werkbank': { name: 'Werkbank / Koje',    color: '#f87171' },
-  'wc':       { name: 'WC / Bad',           color: '#22d3ee' },
-  'heck':     { name: 'Heckstauraum',       color: '#94a3b8' },
-};
+// STAU_FAECHER stand hier als dritte Kopie derselben Raumliste — neben ORTE in
+// orte.js und den elf Rechtecken im Markup. Es gibt jetzt eine Quelle: den
+// Grundriss aus /api/grundriss. ORTE traegt dieselben Felder (name, color),
+// deshalb bleibt der Zugriff im uebrigen Code, wie er war.
 
 // Beispieldaten — werden später über ein Formular befüllt
 // Startwerte — werden beim ersten Laden mit Server-Daten überschrieben
@@ -57,6 +48,9 @@ async function openStauplan() {
   $('stauplanOverlay').classList.remove('hidden');
   _navActive('stauplanBtn');
   await _stauLoad();
+  // Erst zeichnen, dann die Tabelle: die Raumnamen in der Tabelle kommen aus
+  // demselben Grundriss.
+  grundrissZeichnen($('grundrissSvg'), { klick: selectFach });
   renderStauTable('');
 }
 
@@ -68,7 +62,7 @@ function closeStauplan() {
 let _stauFachFilter = null;
 
 function selectFach(id) {
-  const fach = STAU_FAECHER[id];
+  const fach = ORTE[id];
   if (!fach) return;                       // unbekanntes Fach aus Fremddaten
   if (_stauFachFilter === id) { clearStauFilter(); return; }
   _stauFachFilter = id;
@@ -111,13 +105,13 @@ function renderStauTable(query) {
   let rows = _stauFachFilter ? STAU_ITEMS.filter(i => i.fach === _stauFachFilter) : STAU_ITEMS;
   if (q) rows = rows.filter(i =>
     String(i.name  ?? '').toLowerCase().includes(q) ||
-    (STAU_FAECHER[i.fach]?.name || '').toLowerCase().includes(q) ||
+    (ORTE[i.fach]?.name || '').toLowerCase().includes(q) ||
     String(i.notiz ?? '').toLowerCase().includes(q)
   );
   $('stauTableBody').innerHTML = rows.length
     ? rows.map(i => {
         const origIdx = STAU_ITEMS.indexOf(i);
-        const f = STAU_FAECHER[i.fach];
+        const f = ORTE[i.fach];
         return `<tr style="cursor:pointer"
           onmouseenter="hoverFach(${_jsAttr(i.fach)})"
           onmouseleave="unhoverFach(${_jsAttr(i.fach)})"
@@ -134,12 +128,12 @@ function renderStauTable(query) {
 // id kommt aus den Artikeldaten. Nur bekannte Fachkennungen weiterreichen —
 // ein freier Text darin würde den CSS-Selektor unten zerlegen.
 function hoverFach(id) {
-  if (_stauFachFilter === id || !STAU_FAECHER[id]) return;
+  if (_stauFachFilter === id || !ORTE[id]) return;
   const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
-  if (el) el.setAttribute('fill', STAU_FAECHER[id].color + '28');
+  if (el) el.setAttribute('fill', ORTE[id].color + '28');
 }
 function unhoverFach(id) {
-  if (_stauFachFilter === id || !STAU_FAECHER[id]) return;
+  if (_stauFachFilter === id || !ORTE[id]) return;
   const el = document.querySelector(`.stauplan-fach[data-fach="${id}"]`);
   if (el) el.setAttribute('fill', 'transparent');
 }
@@ -155,7 +149,7 @@ function openStauEdit(idx) {
   $('stauEditMenge').value = item.menge ?? '';
   $('stauEditNotiz').value = item.notiz ?? '';
   // Populate fach dropdown
-  $('stauEditFach').innerHTML = Object.entries(STAU_FAECHER).map(([k, f]) =>
+  $('stauEditFach').innerHTML = Object.entries(ORTE).map(([k, f]) =>
     `<option value="${_esc(k)}"${k === item.fach ? ' selected' : ''}>${_esc(f.name)}</option>`
   ).join('');
   $('stauDeleteBtn').style.display = '';
@@ -197,7 +191,7 @@ function openStauNew() {
   $('stauEditMenge').value = '';
   $('stauEditNotiz').value = '';
   const defaultFach = _stauFachFilter || 'salon';
-  $('stauEditFach').innerHTML = Object.entries(STAU_FAECHER).map(([k, f]) =>
+  $('stauEditFach').innerHTML = Object.entries(ORTE).map(([k, f]) =>
     `<option value="${_esc(k)}"${k === defaultFach ? ' selected' : ''}>${_esc(f.name)}</option>`
   ).join('');
   $('stauDeleteBtn').style.display = 'none';
