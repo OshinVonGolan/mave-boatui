@@ -552,12 +552,11 @@ function _ampelnBauen(z, v) {
              ping != null ? 'ms' : '',
              [traegerWort, 'Antwortzeit'].filter(Boolean).join(' · '),
              _wasch(_reihePunkte('ping_ms'), 'var(--yellow)'))
-    // Nicht bis zur Oberkante: die Erreichbarkeit kennt nur null und eins, und
-    // eine Fläche, die zwischen leer und randvoll springt, sieht aus wie ein
-    // Fehler in der Anzeige. Auf 40 Prozent gedeckelt wird daraus ein ruhiges
-    // Band mit Kerben — und die Kerben sind genau das, was zu sehen sein soll.
+    // Volle Höhe: seit die Reihe Anteile statt Ja/Nein enthält, springt sie
+    // nicht mehr zwischen leer und randvoll, sondern kerbt. Ein Deckel würde
+    // die kleinen Aussetzer jetzt nur unsichtbar machen.
     + _ampel('Pi', piStufe, piWert, '', piNeben,
-             spurPi ? _wasch(spurPi, 'var(--accent)', 0, 2.5) : '')
+             spurPi ? _wasch(spurPi, 'var(--accent)', 0, 1) : '')
     + _ampel('Wartung', wStufe, wWert, '', wNeben)
     + '</div>';
 }
@@ -570,6 +569,18 @@ function _ampelnBauen(z, v) {
  * auch die ehrlichere Quelle — während einer Lücke schreibt der Pi nichts auf,
  * eine Verlaufsreihe hätte dort gar keinen Wert und nicht etwa eine Null.
  *
+ * Je Abschnitt steht der ANTEIL der Zeit, in der die Verbindung stand — nicht
+ * ein Ja oder Nein. Das ist der Unterschied zwischen einer Aussage und einem
+ * Zerrbild: am laufenden System nachgemessen gab es an einem Tag 41 Lücken,
+ * davon 36 kürzer als zwei Minuten und die meisten zwischen neun und dreißig
+ * Sekunden — zusammen 7 % des Tages. Mit einem Ja/Nein je Viertelstunde färbte
+ * eine Lücke von sechzehn Sekunden fünfzehn Minuten schwarz, oft sogar dreißig,
+ * weil sie über eine Abschnittsgrenze fiel. Aus sieben Prozent wurde so
+ * optisch mehr als die Hälfte.
+ *
+ * Wie OFT es aussetzte, steht daneben in der Zeile unter der Ampel. Die Fläche
+ * beantwortet die andere Frage: wie viel Zeit dabei verloren ging.
+ *
  * Der Zeitraum ist derselbe wie der der übrigen Flächen. Nähme diese ihren
  * eigenen, lägen zwei Felder nebeneinander, die auf verschiedene Achsen
  * zeichnen — und eine Kerbe säße nicht dort, wo die Delle daneben sitzt.
@@ -578,18 +589,34 @@ function _piSpur(v) {
   if (!v || !_dbVerlauf) return null;
   const von = _dbVerlauf.von, bis = _dbVerlauf.bis;
   if (!(bis > von)) return null;
-  const N = 96;                                 // ein Punkt je Viertelstunde
+  // Ein Punkt je Minute. Bei 24 Stunden sind das 1440 — mehr, als das Feld
+  // Pixel hat, und genau darum geht es: bei einer Viertelstunde je Punkt
+  // verschwand eine Lücke von sechzehn Sekunden in einem Abschnitt, der zu
+  // 98 % gestanden hatte. Je Minute wird daraus eine schmale, aber TIEFE
+  // Kerbe — und sichtbar ist genau das, was gesucht wird. Gerechnet wird das
+  // im Browser aus einer Liste von Lücken; es kostet nichts, was der Rede wert
+  // wäre.
+  const N = Math.max(60, Math.min(2000, Math.round((bis - von) / 60)));
   const schritt = (bis - von) / N;
-  const reihe = Array.from({ length: N }, (_, i) => ({ t: von + i * schritt, v: 1 }));
+  const weg = new Array(N).fill(0);             // Sekunden ohne Verbindung
   for (const l of (v.luecken || [])) {
     const a = Math.max(von, l.ab || 0);
     const e = Math.min(bis, (l.ab || 0) + (l.dauer_s || 0));
     if (!(e > a)) continue;
+    // Auf die Abschnitte verteilen, anteilig. Eine Lücke, die über eine Grenze
+    // fällt, gehört beiden Seiten — jeder so viel, wie in ihr lag.
     const i0 = Math.max(0, Math.floor((a - von) / schritt));
-    const i1 = Math.min(N, Math.ceil((e - von) / schritt));
-    for (let i = i0; i < i1; i++) reihe[i].v = 0;
+    const i1 = Math.min(N - 1, Math.floor((e - von) / schritt));
+    for (let i = i0; i <= i1; i++) {
+      const links = von + i * schritt, rechts = links + schritt;
+      weg[i] += Math.min(e, rechts) - Math.max(a, links);
+    }
   }
-  return reihe.some(x => x.v === 0) ? reihe : null;   // eine gerade Linie sagt nichts
+  const reihe = weg.map((s_, i) => ({
+    t: von + i * schritt,
+    v: Math.max(0, 1 - s_ / schritt),
+  }));
+  return reihe.some(x => x.v < 0.999) ? reihe : null;  // eine gerade Linie sagt nichts
 }
 
 // ── Zeile 2 links: Ort und Wetter ──────────────────────────────────────────
@@ -2408,7 +2435,11 @@ function _messFenster() {
 async function messwerteLaden() {
   const { von, bis } = _messFenster();
   const feld = $('reihen');
-  feld.innerHTML = '<div class="mess-leer">wird geladen…</div>';
+  // Den Platzhalter NUR, wenn noch nichts dasteht. Vorher wurden bei jedem
+  // Laden alle Graphen weggeworfen und gleich darauf neu gebaut — das sah aus,
+  // als lade die ganze Seite neu, und zwar bei jedem Loslassen des Schiebers
+  // und alle zwei Minuten von selbst.
+  if (!_messDaten) feld.innerHTML = '<div class="mess-leer">wird geladen…</div>';
   const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=700`);
   if (!d) { feld.innerHTML = '<div class="mess-leer">Keine Daten abrufbar.</div>'; return; }
   _messDaten = d;
@@ -2474,6 +2505,10 @@ function zeichneReihe(g, d) {
   // Gemeinsame Skala je Gruppe: nur so sind Zufluss und Verbrauch vergleichbar.
   let lo = Infinity, hi = -Infinity;
   for (const p of d.punkte) {
+    // Nur was im Ausschnitt liegt. Beim Ziehen bleiben kurz Punkte von
+    // ausserhalb in den Daten stehen; wuerden sie die Skala bestimmen, spraenge
+    // sie in dem Moment zurecht, in dem die neuen Daten eintreffen.
+    if (p.t < d.von || p.t > d.bis) continue;
     for (const x of felder) {
       const w = p[x.f];
       if (!w) continue;
@@ -2653,7 +2688,7 @@ let _zieht = null;      // 'a' | 'b' | 'band' | null
 // von selbst daran, wie schnell der Server antwortet: heute misst er 19 ms
 // fuer einen Tag und 66 fuer sieben, also fluessig; wird der Verlauf in einem
 // Jahr traege, kommen eben weniger Bilder statt einer Warteschlange.
-const ZIEH_TAKT_MS = 120;
+const ZIEH_TAKT_MS = 70;
 let _ziehBedarf = false;
 let _ziehLaeuft = false;
 let _ziehZuletzt = 0;
@@ -2668,7 +2703,7 @@ async function _ziehNachladen() {
     const { von, bis } = _messFenster();
     // Weniger Punkte als sonst: waehrend des Ziehens sieht niemand 700
     // Stuetzstellen, und die Antwort wird spuerbar schneller.
-    const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=250`);
+    const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=200`);
     if (d && _zieht) { _messDaten = d; zeichneMesswerte(); }
   } finally {
     _ziehLaeuft = false;
@@ -2754,10 +2789,21 @@ function _schieneZieht(e) {
   _messFolgt = bis >= raum.bis - 60;
   zeichneSchiene();
   zeichneZeitleiste();
-  // Nebenlaeufig: das Ziehen darf nie auf die Leitung warten. Bis neue Daten
-  // da sind, bleibt das letzte Bild stehen — besser als ein leerer Rahmen.
+  // Sofort neu zeichnen, mit den Punkten, die schon da sind: nur die Achse
+  // wandert. Das kostet nichts und laeuft mit der Bildwiederholrate — die
+  // Kurve folgt dem Griff, statt in Stufen nachzurucken. Die neuen Daten
+  // ersetzen sie, sobald sie eintreffen.
+  _achseNachziehen();
   _ziehBedarf = true;
   _ziehNachladen();
+}
+
+/** Dieselben Punkte, neue Achse. Kein Netz, kein Warten. */
+function _achseNachziehen() {
+  if (!_messDaten) return;
+  const { von, bis } = _messFenster();
+  _messDaten = { ..._messDaten, von, bis };
+  zeichneMesswerte();
 }
 
 function _schieneEnde() {
