@@ -198,78 +198,104 @@ class HerkunftHinterDemWeiterreicher(unittest.TestCase):
 
 
 class RouterWerte(unittest.TestCase):
-    """Die vier Zahlen, mit denen sich der Router-Absturz aufklaeren laesst.
+    """Die Zahlen, mit denen sich der Router-Absturz aufklaeren laesst.
 
     Der Sinn der Auswahl ist, dass jede eine Erklaerung von einer anderen
-    TRENNT. Deshalb pruefen die Tests nicht nur, dass Zahlen herauskommen,
-    sondern auch, dass nichts Ueberfluessiges mitkommt — eine Datenhalde
-    beantwortet am Ende gar nichts.
+    TRENNT. Die Tests pruefen deshalb auch, dass nichts Ueberfluessiges
+    mitkommt — eine Datenhalde beantwortet am Ende gar nichts.
     """
 
-    def _werte(self, netz):
+    def setUp(self):
         import main
-        return main._router_werte(netz)
+        self.main = main
+        main._rt_letzte_lauf = None      # der Neustart-Vergleich ist zustandsbehaftet
 
-    def _voll(self, **abweichung):
-        """Der Status SO, wie er im Betrieb ankommt — mit der Ebene 'router'.
+    def _werte(self, netz):
+        return self.main._router_werte(netz)
 
-        Die erste Fassung dieser Tests baute ihn ohne diese Ebene, weil
+    def _voll(self, lauf=2589, **abweichung):
+        """Der Status SO, wie ihn `_loop` zusammensetzt — mit Ebene und Zeitstempel.
+
+        Die erste Fassung dieser Tests baute ihn ohne die Ebene 'router', weil
         `_fetch_router()` den inneren Teil zurueckgibt. Damit bestanden sie,
         waehrend im Verlauf nichts ankam: der Test glaubte demselben Irrtum wie
-        der Code. Ein Testaufbau, der die Form der echten Daten NICHT
+        der Code. Ein Testaufbau, der die Form der echten Daten nicht
         nachstellt, prueft nur die eigene Annahme.
         """
-        innen = {'gesundheit': {'uptime_s': 2589, 'ram_prozent': 55.31},
+        import time
+        innen = {'gesundheit': {'uptime_s': lauf, 'ram_prozent': 55.31,
+                                'cpu_prozent': 18.9},
                  'radios': [{'band': '2.4GHz', 'up': True, 'kanal': 11},
                             {'band': '5GHz', 'up': True, 'kanal': 157}]}
         innen.update(abweichung)
-        return {'router': innen, 'starlink': {}, 'ts': 1788600000.0}
+        return {'router': innen, 'starlink': {}, 'ts': time.time()}
 
-    def test_laufzeit_in_minuten(self):
-        # Minuten, weil man sie so liest. 2589 s sind 43,1 min.
-        self.assertEqual(self._werte(self._voll())['rt_lauf'], 43.1)
-
-    def test_die_vier_und_nichts_sonst(self):
+    def test_die_sechs_und_nichts_sonst(self):
         self.assertEqual(set(self._werte(self._voll())),
-                         {'rt_lauf', 'rt_ram', 'wl24', 'wl5'})
+                         {'rt_an', 'rt_neu', 'rt_ram', 'rt_cpu', 'wl24', 'wl5'})
+
+    def test_ein_neustart_wird_erkannt(self):
+        # Eine Laufzeit kann nur steigen. Faellt sie, lag ein Neustart dazwischen.
+        self.assertEqual(self._werte(self._voll(lauf=3000))['rt_neu'], 0)
+        self.assertEqual(self._werte(self._voll(lauf=3020))['rt_neu'], 0)
+        self.assertEqual(self._werte(self._voll(lauf=12))['rt_neu'], 1)
+        # Und danach ist wieder Ruhe, nicht dauerhaft Alarm.
+        self.assertEqual(self._werte(self._voll(lauf=32))['rt_neu'], 0)
+
+    def test_der_erste_wert_ist_kein_neustart(self):
+        # Ohne Vorgaenger laesst sich nichts vergleichen — dann eine Eins zu
+        # schreiben hiesse, beim Start des Bordrechners einen Router-Neustart
+        # zu erfinden.
+        self.assertEqual(self._werte(self._voll(lauf=99))['rt_neu'], 0)
+
+    def test_alter_stand_gilt_nicht_als_messung(self):
+        # Der Kern: der Poller BEHAELT seinen letzten Stand, wenn eine Abfrage
+        # scheitert. Ohne Frischepruefung wuerde ausgerechnet waehrend eines
+        # Ausfalls "alles gut" weitergeschrieben.
+        import time
+        alt = self._voll()
+        alt['ts'] = time.time() - 300
+        self.assertEqual(self._werte(alt), {'rt_an': 0})
+
+    def test_ohne_zeitstempel_kein_vertrauen(self):
+        for kaputt in (None, {}, {'router': {'gesundheit': {'uptime_s': 5}}},
+                       {'ts': 'gestern'}, {'ts': True}):
+            self.assertEqual(self._werte(kaputt), {'rt_an': 0})
+
+    def test_nach_einem_ausfall_kein_falscher_neustart(self):
+        # Waehrend des Ausfalls wird der Vergleichswert verworfen. Sonst
+        # meldete der erste Wert danach einen Neustart, den es nicht gab — der
+        # Router kann in der Zwischenzeit ja durchgelaufen sein.
+        import time
+        self._werte(self._voll(lauf=5000))
+        weg = self._voll(); weg['ts'] = time.time() - 300
+        self._werte(weg)
+        self.assertEqual(self._werte(self._voll(lauf=5300))['rt_neu'], 0)
 
     def test_baender_getrennt(self):
-        # Der entscheidende Fall: 2,4 GHz weg, 5 GHz laeuft weiter. Genau daran
-        # zeigt sich, ob EIN Radio ausfaellt oder der ganze Funkteil.
-        netz = self._voll(radios=[{'band': '2.4GHz', 'up': False},
-                                  {'band': '5GHz', 'up': True}])
-        w = self._werte(netz)
+        # Der entscheidende Fall: 2,4 GHz weg, 5 GHz laeuft weiter.
+        w = self._werte(self._voll(radios=[{'band': '2.4GHz', 'up': False},
+                                           {'band': '5GHz', 'up': True}]))
         self.assertEqual((w['wl24'], w['wl5']), (0, 1))
 
-    def test_ohne_router_kommt_nichts(self):
-        # Faellt der Router aus, entsteht im Verlauf eine LUECKE. Eine Null
-        # waere hier falsch: sie saehe aus wie eine Messung und behauptete,
-        # der Router habe geantwortet.
-        for leer in (None, {}, {'router': None},
-                     {'router': {'gesundheit': None, 'radios': []}}):
-            self.assertEqual(self._werte(leer), {})
-
     def test_teilausfall_liefert_was_da_ist(self):
-        # Die Gesundheit fehlt, die Radios antworten: dann fehlen eben zwei
-        # Felder und die anderen beiden stehen trotzdem da.
-        w = self._werte({'router': {'radios': [{'band': '2.4GHz', 'up': False}]}})
-        self.assertEqual(w, {'wl24': 0})
+        w = self._werte(self._voll(gesundheit=None,
+                                   radios=[{'band': '2.4GHz', 'up': False}]))
+        self.assertEqual(w, {'rt_an': 1, 'wl24': 0})
 
     def test_unfug_wird_nicht_uebernommen(self):
         # Der Router liefert seine Zahlen als Zeichenketten, wenn ihm danach
-        # ist. Eine Zeichenkette im Verlauf bringt den Reihen-Endpunkt des
-        # Servers nicht um, aber sie zaehlt dort auch nicht als Messwert —
+        # ist. Eine Zeichenkette zaehlt im Reihen-Endpunkt nicht als Messwert —
         # dann lieber gar nicht erst hineinschreiben.
-        w = self._werte({'router': {'gesundheit': {'uptime_s': 'viel', 'ram_prozent': None}}})
-        self.assertEqual(w, {})
-
-    def test_wahrheitswerte_gelten_nicht_als_zahl(self):
-        w = self._werte({'router': {'gesundheit': {'uptime_s': True, 'ram_prozent': False}}})
-        self.assertEqual(w, {})
+        w = self._werte(self._voll(gesundheit={'uptime_s': 'viel',
+                                               'ram_prozent': None,
+                                               'cpu_prozent': True}))
+        self.assertEqual(w, {'rt_an': 1, 'wl24': 1, 'wl5': 1})
 
     def test_unbekanntes_band_wird_uebergangen(self):
-        w = self._werte({'router': {'radios': [{'band': '6GHz', 'up': True}]}})
-        self.assertEqual(w, {})
+        w = self._werte(self._voll(gesundheit=None,
+                                   radios=[{'band': '6GHz', 'up': True}]))
+        self.assertEqual(w, {'rt_an': 1})
 
 
 class Wartungsstand(unittest.TestCase):

@@ -265,9 +265,16 @@ class ConnectivityMonitor:
         try:
             u = self._router_holen('/api/system/device/usage/status').get('data') or {}
             speicher = u.get('memory') or {}
+            last = (u.get('load') or {}).get('min1')
             gesundheit = {
                 'uptime_s':    u.get('uptime_seconds'),
                 'ram_prozent': speicher.get('ram_percentage'),
+                # Last als Prozent statt als Lastzahl: der RUTX50 hat vier
+                # Kerne (am Geraet nachgezaehlt), Last 4,0 heisst also
+                # ausgelastet. So steht sie neben dem Speicher auf derselben
+                # Achse — und niemand muss sich merken, ab wann 1,7 viel ist.
+                'cpu_prozent': (round(min(100.0, last / 4 * 100), 1)
+                                if isinstance(last, (int, float)) else None),
             }
         except Exception as e:
             if not getattr(self, '_gesund_warn_logged', False):

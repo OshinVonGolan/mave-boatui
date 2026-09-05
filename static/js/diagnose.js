@@ -2350,13 +2350,21 @@ const GRUPPEN = [
   // DANN geht die Laufzeit auf null, hat sich der Funkchip aufgehaengt und der
   // Watchdog hinterhergeraeumt. Klettert stattdessen der Speicher, ist es der
   // Speicher.
-  { schluessel: 'rtlauf',   name: 'Router-Laufzeit', einheit: 'min',
-    felder: [{ f: 'rt_lauf', n: 'seit dem Start', farbe: '#22d3ee' }] },
-  { schluessel: 'rtfunk',   name: 'Funkbänder', einheit: 'an',
-    felder: [{ f: 'wl24', n: '2,4 GHz', farbe: '#fb923c' },
-             { f: 'wl5', n: '5 GHz', farbe: '#60a5fa' }] },
-  { schluessel: 'rtram',    name: 'Router-Speicher', einheit: '%',
-    felder: [{ f: 'rt_ram', n: 'belegt', farbe: '#f87171' }] },
+  // Alles, was nur an oder aus sein kann, in EINE Kurve — sie teilen sich die
+  // Achse und, viel wichtiger, die Zeit. Die Reihenfolge ist die Antwort:
+  // faellt erst 2,4 GHz und geht ERST DANN der Router weg, hat sich der
+  // Funkchip aufgehängt und der Watchdog hinterhergeräumt. Geht der Router weg,
+  // während beide Bänder oben waren, war es etwas anderes.
+  { schluessel: 'rtfunk',   name: 'Router und Funk', einheit: 'an',
+    felder: [{ f: 'rt_an', n: 'Router antwortet', farbe: '#22d3ee' },
+             { f: 'wl24', n: '2,4 GHz', farbe: '#fb923c' },
+             { f: 'wl5', n: '5 GHz', farbe: '#60a5fa' },
+             { f: 'rt_neu', n: 'Neustart', farbe: '#f87171' }] },
+  // Die Gegenprobe. Last in Prozent statt als Lastzahl, damit sie neben dem
+  // Speicher auf derselben Achse steht.
+  { schluessel: 'rtlast',   name: 'Router-Auslastung', einheit: '%',
+    felder: [{ f: 'rt_ram', n: 'Speicher', farbe: '#f87171' },
+             { f: 'rt_cpu', n: 'Last', farbe: '#fbbf24' }] },
 ];
 
 let _messStd = 24;

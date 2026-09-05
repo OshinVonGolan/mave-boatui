@@ -556,45 +556,75 @@ def _ereignis_absetzen(art: str, daten: dict) -> None:
         log.debug('Ereignis %s nicht gesendet: %s', art, e)
 
 
+# Ab wann der zwischengespeicherte Router-Stand nicht mehr als frisch gilt.
+# Gepollt wird alle 20 s; nach zwei ausgefallenen Runden ist es keine
+# Schwankung mehr, sondern eine Aussage.
+_RT_FRIST_S = 50
+
+# Die Laufzeit des Routers beim letzten frischen Abruf. Nur dafuer da, einen
+# Neustart zu ERKENNEN — im Verlauf steht dann das Ergebnis und nicht die Zahl.
+_rt_letzte_lauf: float | None = None
+
+
 def _router_werte(netz: dict | None) -> dict:
-    """Vier Zahlen zum Router — und bewusst nur diese vier.
+    """Was der Router beisteuert — als Zahlen, die man zeichnen kann.
 
-    Jede beantwortet eine Frage, die sich sonst nicht beantworten laesst:
+    Die Auswahl folgt einer Regel: jeder Wert muss eine Erklaerung von einer
+    anderen TRENNEN. Alles andere waere Ballast, und die Zeilen gehen ueber
+    Mobilfunk.
 
-      rt_lauf   Wie oft startet er neu? Faellt die Laufzeit, war ein Neustart.
-                Zugleich das Mass dafuer, ob eine Aenderung geholfen hat.
-      wl24      Stirbt 2,4 GHz VOR dem Neustart oder mit ihm? Daran entscheidet
-                sich die Ursache — der Verdacht ist, dass sich die Firmware des
-                Funkchips aufhaengt und der Watchdog danach den ganzen Router
-                zurueckwirft.
-      wl5       Nur 2,4 GHz oder beide Baender? Trennt einen Fehler DIESES
-                Radios von einem des ganzen Funkteils.
-      rt_ram    Die Gegenprobe. Klettert der Speicher vor jedem Absturz gegen
-                hundert, ist es der Speicher und nicht das Radio.
+      rt_an    Antwortet er ueberhaupt? Null heisst: seit ueber einer Minute
+               nicht mehr.
+      rt_neu   Eins genau in dem Moment, in dem seine Laufzeit zurueckfaellt —
+               also bei einem Neustart. Hier steht bewusst das ERGEBNIS und
+               nicht die Laufzeit selbst: eine Kurve, die stundenlang steigt,
+               ist als Bild wertlos, und die Frage lautet ohnehin "wie oft" und
+               nicht "seit wann".
+      wl24     Stirbt 2,4 GHz VOR dem Neustart oder mit ihm? Daran entscheidet
+               sich die Ursache.
+      wl5      Nur 2,4 GHz oder beide Baender? Trennt einen Fehler DIESES
+               Radios von einem des ganzen Funkteils.
+      rt_cpu   Last in Prozent (vier Kerne).
+      rt_ram   Speicher in Prozent. Beide zusammen sind die Gegenprobe:
+               klettert eins davon vor jedem Absturz gegen hundert, liegt es
+               nicht am Radio.
 
-    Alles Weitere — Last, Sendeleistung, Zahl der Clients — waere Ballast: es
-    unterscheidet die Erklaerungen nicht und macht die Zeilen nur groesser, und
-    die gehen ueber Mobilfunk.
-
-    Faellt der Router aus, schlaegt seine Abfrage fehl und hier kommt nichts
-    zurueck. Genau richtig: im Verlauf entsteht dann eine Luecke, und danach
-    beginnt die Laufzeit wieder bei null. Diese beiden Zeichen zusammen SIND
-    der Neustart.
+    Die Frischepruefung ist keine Feinheit, sondern der Kern. Der Poller
+    BEHAELT seinen letzten Stand, wenn eine Abfrage scheitert — ohne sie wuerde
+    ausgerechnet waehrend eines Ausfalls die alte Laufzeit weitergeschrieben,
+    und der Mitschnitt behauptete "alles gut" genau dann, wenn nichts gut ist.
     """
-    raus: dict = {}
+    global _rt_letzte_lauf
+    status = netz or {}
+    ts = status.get('ts')
+    frisch = (isinstance(ts, (int, float)) and not isinstance(ts, bool)
+              and time.time() - ts < _RT_FRIST_S)
+    if not frisch:
+        # Kein Kontakt. Genau das wird geschrieben und sonst nichts — jeder
+        # weitere Wert waere von vorhin und saehe aus wie von jetzt.
+        _rt_letzte_lauf = None
+        return {'rt_an': 0}
+
+    raus: dict = {'rt_an': 1}
     # Eine Ebene tiefer, unter 'router'. `_fetch_router()` liefert den inneren
     # Teil, aber im Betrieb kommt hier der ganze Status an — und der packt ihn
-    # neben Starlink unter 'router'. Genau daran ist die erste Fassung
-    # gescheitert: gegen `_fetch_router()` geprueft sah alles richtig aus, im
-    # Verlauf stand nichts.
-    r_ = (netz or {}).get('router') or {}
+    # neben Starlink unter 'router'.
+    r_ = status.get('router') or {}
     gesund = r_.get('gesundheit') or {}
+
     lauf = gesund.get('uptime_s')
     if isinstance(lauf, (int, float)) and not isinstance(lauf, bool):
-        raus['rt_lauf'] = round(lauf / 60, 1)          # Minuten, wie man es liest
-    ram = gesund.get('ram_prozent')
-    if isinstance(ram, (int, float)) and not isinstance(ram, bool):
-        raus['rt_ram'] = round(ram, 1)
+        # Eine Laufzeit kann nur steigen. Faellt sie, lag ein Neustart
+        # dazwischen. Die kleine Toleranz faengt Rundung ab, nicht mehr.
+        raus['rt_neu'] = 1 if (_rt_letzte_lauf is not None
+                               and lauf < _rt_letzte_lauf - 5) else 0
+        _rt_letzte_lauf = lauf
+
+    for feld, schluessel in (('rt_ram', 'ram_prozent'), ('rt_cpu', 'cpu_prozent')):
+        wert = gesund.get(schluessel)
+        if isinstance(wert, (int, float)) and not isinstance(wert, bool):
+            raus[feld] = round(wert, 1)
+
     for r in (r_.get('radios') or []):
         feld = {'2.4GHz': 'wl24', '5GHz': 'wl5'}.get(r.get('band'))
         if feld:
