@@ -607,6 +607,12 @@ class HaltenOeffnetDetail(Pruefstand):
         self.halten(700)
         self.assertTrue(self.offen())
 
+    def test_kein_fuellstreifen_mehr(self):
+        """Bei einer Drittelsekunde ist er kaum zu sehen, und ein Balken, der
+        bei jedem Tippen aufblitzt, ist mehr Unruhe als Auskunft."""
+        self.halten(700)
+        self.assertIsNone(self.pg.query_selector('#sbBattItem .sb-halten'))
+
     def test_halten_schaltet_nicht_zusaetzlich_weiter(self):
         """Beides zugleich wäre Unsinn: man landet auf der Detailseite und
         hätte nebenbei die Auswahl darunter verstellt."""

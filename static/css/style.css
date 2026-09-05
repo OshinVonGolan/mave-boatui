@@ -26,7 +26,12 @@
       --header-h: calc(var(--header-basis) + var(--kopie-h));
     }
 
-    html { height: 100%; }
+    /* Kein Nachladen durch Ziehen und kein Ueberscrollen.
+       In der installierten Wandfassung loeste die Zwei-Finger-Geste beim
+       Umschalten der Spalten fast jedes Mal das Neuladen der Seite aus: zwei
+       Finger, die sich nach unten bewegen, sind fuer den Browser eine
+       Zieh-zum-Neuladen-Geste. */
+    html { height: 100%; overscroll-behavior-y: contain; }
     /* body MUSS mitwachsen duerfen. Mit height:100% war die Box exakt
        bildschirmhoch, waehrend der Inhalt darueber hinauslief — und ein
        haftendes Element (die Statusleiste) ist an die Box seines Elternteils
@@ -35,6 +40,25 @@
     body { min-height: 100%; background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       -webkit-font-smoothing: antialiased; }
+
+    /* ── Nichts markieren, wo bedient wird ───────────────────────────────
+       Das Armaturenbrett ist kein Text zum Lesen, sondern eine Flaeche zum
+       Anfassen — und seit Tippen, Ziehen und Halten dort verschiedene Dinge
+       bedeuten, faengt der Browser bei jedem Halten an, Text zu markieren.
+       Es reichte NICHT, das an den einzelnen Feldern zu setzen: eine Auswahl,
+       die auf einem nicht markierbaren Element beginnt, greift trotzdem auf
+       den Text daneben ueber.
+       Die Unterseiten sind ausgenommen: dort stehen Adressen, Seriennummern
+       und Notizen, die jemand herauskopieren will. Sie liegen ausserhalb von
+       <main>. */
+    main, .statusbar {
+      user-select: none; -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* Eingabefelder bleiben Eingabefelder. */
+    main input, main textarea, main [contenteditable] {
+      user-select: text; -webkit-user-select: text;
+    }
 
     /* ── Header ── */
     header {
@@ -832,6 +856,12 @@
       font-family: inherit; color: inherit; text-align: left;
       cursor: pointer; transition: background .15s;
       position: relative; overflow: hidden;   /* traegt den Hintergrundgraphen */
+      /* Beim Andocken aendern sich Polster und Schriftgroessen dieses Feldes
+         in jedem Bild. `contain` sagt dem Browser, dass davon nichts nach
+         aussen wirkt — er muss dann nicht das ganze Dokument nachrechnen.
+         Gemessen (vierfach gedrosselt, Schwung von unten nach oben): das
+         Andocken kostete p95 24 ms je Bild gegenueber 17 ms ohne. */
+      contain: layout style;
     }
     /* Verlauf der letzten 24 Stunden als Hintergrund. Er liegt hinter dem
        Text, nimmt keine Klicks an und faerbt sich mit dem Zustand des Feldes
@@ -849,17 +879,16 @@
     /* Waagerechter Balken: fuellt das Feld von links nach rechts. Anders als
        der Verlauf zeigt er keinen Weg, sondern den Stand — deshalb eine
        gleichmaessige Flaeche mit klarer Kante statt eines Verlaufs. */
-    /* Der Streifen fuers Halten. Er laeuft waagerecht voll, weil die Felder
-       breit und flach sind — senkrecht waere er nach zwei Pixeln fertig. */
-    .sb-halten {
-      position: absolute; inset: auto 0 0 0; height: 2px; width: 0;
-      background: var(--accent); z-index: 3;
-      pointer-events: none;
-    }
+    /* Ein Streifen fuers Halten stand hier. Er ist weg (Eignerwunsch): bei
+       einer Drittelsekunde ist er ohnehin kaum zu sehen, und ein Balken, der
+       bei jedem Tippen kurz aufblitzt, ist mehr Unruhe als Auskunft. */
     .sb-item[data-detail] { cursor: pointer; }
 
     .sb-balken {
       position: absolute; inset: 0 auto 0 0; width: 0;
+      /* Ohne eigene Tankfarbe: der Zustandsfarbton, dezent im Hintergrund.
+         MIT Farbverlauf (siehe _sbRenderTank) setzt JS ein eigenes Bild und
+         hebt die Deckkraft an — ein Verlauf bei 18 % waere keiner. */
       background: currentColor; opacity: .18;
       pointer-events: none; z-index: 0;
       color: var(--text3);
@@ -870,6 +899,17 @@
        genau die Warnung verloren, fuer die die Farben da sind. */
     .sb-item.sb-wasser.sb-ok .sb-val b,
     .sb-item.sb-wasser.sb-ok .sb-balken { color: var(--accent); }
+    .sb-balken.mit-verlauf { opacity: .42; }
+    .statusbar.eng .sb-balken.mit-verlauf { opacity: .34; }
+    /* Die Kante markiert den Stand — so, wie die Linie ueber der Flaeche eines
+       Verlaufsgraphen ihn markiert. Sie ist kraeftiger als die Flaeche
+       dahinter, sonst waere sie keine Kante. */
+    .sb-kante {
+      position: absolute; top: 0; bottom: 0; width: 2px; left: 0;
+      background: currentColor; opacity: 0;
+      pointer-events: none; z-index: 1;
+      transition: left .5s ease, opacity .3s;
+    }
 
     .sb-item.sb-ok   .sb-balken { color: var(--green); }
     .sb-item.sb-low  .sb-balken { color: var(--yellow); }
@@ -877,19 +917,28 @@
     .sb-item.sb-idle .sb-balken { color: var(--text3); }
     /* Der Inhalt gehoert ueber den Graphen. */
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
-    .sb-item:hover, .sb-item:active { background: var(--surface2); }
+    /* NUR beim Zeigen, nicht beim Anfassen.
+       `:hover` bleibt auf Beruehrgeraeten am zuletzt angetippten Feld haengen,
+       bis man woanders hintippt — das Feld leuchtete dann dauerhaft heller als
+       seine Nachbarn und sah aus, als waere dort etwas ausgewaehlt. */
+    @media (hover: hover) {
+      .sb-item:hover { background: var(--surface2); }
+    }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     /* Zeilenhoehen bewusst in ganzen Pixeln: mit "normal" ist die Zeile
        gebrochen hoch, damit auch die Reihe — und der 1-px-Spalt zwischen den
        beiden Reihen liegt dann zwischen zwei Bildpunkten und wirkt mal
        dicker, mal duenner. */
+    /* Zeilenhoehe und Buchstabenabstand liefen frueher mit. Sie sind der
+       teuerste Teil am Text — jede Aenderung setzt die Zeile neu — und der am
+       wenigsten sichtbare. Die Schriftgroesse traegt den Effekt allein. */
     .sb-lbl { font-size: calc(10px - 1px * var(--leiste-eng));
-      line-height: calc(12px - 1px * var(--leiste-eng));
-      font-weight: 700; letter-spacing: calc(.08em - .03em * var(--leiste-eng));
+      line-height: 12px;
+      font-weight: 700; letter-spacing: .07em;
       text-transform: uppercase; color: var(--text3);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sb-val { display: flex; align-items: baseline; gap: 3px;
-      line-height: calc(20px - 4px * var(--leiste-eng));
+      line-height: 20px;
       color: var(--text); font-variant-numeric: tabular-nums; }
     .sb-val b { font-size: calc(21px - 6px * var(--leiste-eng)); font-weight: 700; }
     .sb-val i { font-size: calc(11px - 2px * var(--leiste-eng)); font-style: normal;
@@ -940,9 +989,8 @@
          Angedockt dafuer so flach wie moeglich — und der Weg dorthin ist auch
          hier gerechnet statt geschaltet, damit die Schrift mitlaeuft, statt in
          einem Schritt zu springen. Zeilenhoehen bleiben ganzzahlig. */
-      .sb-lbl   { letter-spacing: calc(.08em - .04em * var(--leiste-eng));
-                  line-height: round(calc(12px - 1px * var(--leiste-eng)), 1px); }
-      .sb-val   { line-height: round(calc(20px - 4px * var(--leiste-eng)), 1px); }
+      .sb-lbl   { letter-spacing: .06em; line-height: 12px; }
+      .sb-val   { line-height: 20px; }
       .sb-sub   { max-height: round(calc(15px * (1 - var(--leiste-eng))), 1px); }
       .sb-item  { gap: round(calc(2px * (1 - var(--leiste-eng))), 1px); }
     }
@@ -2552,6 +2600,17 @@
       background: var(--yellow); border: none; border-radius: 8px; color: var(--bg);
       padding: 8px 14px; font-size: 12px; font-weight: 700; font-family: inherit;
       cursor: pointer; white-space: nowrap;
+    }
+    /* Auf dem Telefon hochkant reicht die Breite fuer Marke, Text UND Knopf
+       nicht. Der Knopf rutschte dann als drittes Element in eine eigene Zeile
+       und stand dort linksbuendig unter dem Text — als waere er verrutscht.
+       Untereinander ist es kein Unfall, sondern Absicht, und der Knopf laesst
+       sich mit dem Daumen treffen. */
+    @media (max-width: 560px) {
+      .veraltet { flex-direction: column; align-items: stretch; gap: 9px; }
+      .veraltet .kb-mark { align-self: flex-start; }
+      .veraltet .kb-txt { flex: none; }
+      .veraltet-knopf { width: 100%; padding: 11px 14px; font-size: 13px; }
     }
 
     /* ── Kontomenü ───────────────────────────────────────────────────────── */

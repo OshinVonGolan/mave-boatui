@@ -1001,8 +1001,16 @@ document.addEventListener('touchstart', e => {
 }, { passive: true });
 
 document.addEventListener('touchmove', e => {
-  if (e.touches.length === 2 && _gesteAnfang) _gesteJetzt = _fingerAbstand(e.touches);
-}, { passive: true });
+  if (e.touches.length !== 2 || !_gesteAnfang) return;
+  _gesteJetzt = _fingerAbstand(e.touches);
+  // Solange zwei Finger auf dem Schirm liegen, gehoert die Bewegung UNS.
+  //
+  // Ohne das schiebt der Browser waehrenddessen die Seite mit oder faengt an,
+  // sie neu zu laden — beides ist in der Wandfassung fast jedes Mal passiert,
+  // wenn jemand nur die Spaltenzahl aendern wollte. Der Horcher muss dafuer
+  // nicht-passiv sein, sonst darf er nicht abbrechen.
+  if (e.cancelable) e.preventDefault();
+}, { passive: false });
 
 document.addEventListener('touchend', () => {
   // Ausgewertet wird, sobald der ERSTE Finger geht — dann ist die Geste vorbei.
@@ -1393,20 +1401,9 @@ function _sbHaltenBinden() {
     const feld = e.target.closest('.sb-item');
     const ziel = feld?.dataset.detail;
     if (!ziel) return;
-    // Der Streifen entsteht erst beim ersten Halten — die meisten Felder
-    // werden nie gehalten, und ein leeres Element je Feld waere Ballast.
-    let streifen = feld.querySelector('.sb-halten');
-    if (!streifen) {
-      streifen = document.createElement('span');
-      streifen.className = 'sb-halten';
-      feld.appendChild(streifen);
-    }
-    streifen.style.transition = `width ${_SB_HALTEN_MS}ms linear`;
-    streifen.style.width = '100%';
     feld.setPointerCapture?.(e.pointerId);
     _sbHalten = { feld, gehalten: false, uhr: setTimeout(() => {
       _sbHalten && (_sbHalten.gehalten = true);
-      _sbHaltenLoesen(feld);
       if (navigator.vibrate) navigator.vibrate(20);
       const fn = window[ziel];
       if (typeof fn === 'function') fn();
@@ -1416,7 +1413,6 @@ function _sbHaltenBinden() {
   const beenden = () => {
     if (!_sbHalten) return;
     clearTimeout(_sbHalten.uhr);
-    _sbHaltenLoesen(_sbHalten.feld);
     // Nach einem Halten NICHT auch noch weiterschalten: der Klick kommt
     // unmittelbar nach dem Loslassen, und beides zugleich waere Unsinn.
     if (_sbHalten.gehalten) _sbKlickSchlucken = true;
@@ -1436,12 +1432,9 @@ function _sbHaltenBinden() {
 
 let _sbKlickSchlucken = false;
 
-function _sbHaltenLoesen(feld) {
-  const streifen = feld?.querySelector('.sb-halten');
-  if (!streifen) return;
-  streifen.style.transition = 'width .15s ease';
-  streifen.style.width = '0%';
-}
+// _sbHaltenLoesen stand hier, dazu ein Fuellstreifen unter dem Feld. Beides ist
+// entfallen: bei einer Drittelsekunde ist der Streifen kaum zu sehen, und ein
+// Balken, der bei jedem Tippen aufblitzt, ist mehr Unruhe als Auskunft.
 
 // ── Batterie-Feld: Service und Starter ──────────────────────────────────────
 // Beim Starter gibt es nur die Spannung — er haengt an einem einfachen
@@ -1562,11 +1555,53 @@ function _sbRenderTank(data) {
   // hier stand bisher immer derselbe Akzent, und Diesel sah aus wie Wasser.
   const bar = document.getElementById('sbT1Bar');
   if (bar) {
-    bar.style.width = pct == null ? '0%'
-      : Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
+    const anteil = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+    bar.style.width = anteil.toFixed(1) + '%';
     // Ohne eigene Farbe bleibt es beim Zustandsfarbton aus dem Stylesheet.
     bar.style.color = c.color || '';
+    if (c.color) {
+      // Der Verlauf spannt sich ueber das ganze FELD, von voll bis leer — nicht
+      // ueber den Balken.
+      //
+      // Der Unterschied ist der Punkt: liegt er im Balken, wandert die Farbe
+      // mit dem Pegel, und derselbe Ton bedeutet einmal 80 % und einmal 20 %.
+      // Ueber das Feld gespannt gehoert jede Stelle fest zu einem Stand — die
+      // Kante des Balkens sagt dann nicht nur WO sie ist, sondern auch, wie
+      // weit unten im Vorrat man steht.
+      //
+      // Gemacht mit background-size: der Balken ist nur `anteil` breit, sein
+      // Hintergrundbild wird auf die volle Feldbreite gestreckt und links
+      // verankert. Sichtbar ist genau der linke Ausschnitt.
+      bar.style.background =
+        `linear-gradient(to right,
+           color-mix(in srgb, ${c.color} 55%, #000) 0%,
+           ${c.color} 55%,
+           color-mix(in srgb, ${c.color} 60%, #fff) 100%)`;
+      bar.style.backgroundRepeat = 'no-repeat';
+      bar.style.backgroundPosition = 'left';
+      // Null waere eine Division durch null.
+      bar.style.backgroundSize = `${(100 / Math.max(anteil, 1) * 100).toFixed(1)}% 100%`;
+      bar.classList.add('mit-verlauf');
+    } else {
+      bar.style.background = '';
+      bar.style.backgroundSize = '';
+      bar.classList.remove('mit-verlauf');
+    }
   }
+  // Die Kante des Balkens: sie sitzt genau auf dem Stand und ist kraeftiger
+  // als die Flaeche — dasselbe Verhaeltnis wie bei den Verlaufsgraphen in den
+  // Nachbarfeldern, wo eine Linie ueber der Flaeche liegt. Ohne Wert keine
+  // Kante: eine Linie bei null waere eine Aussage ueber einen Stand, den
+  // niemand kennt.
+  const kante = document.getElementById('sbT1Kante');
+  if (kante) {
+    const anteil2 = pct == null ? null : Math.max(0, Math.min(100, pct));
+    kante.style.opacity = anteil2 == null ? 0 : 0.75;
+    kante.style.left = anteil2 == null ? '0%'
+      : `calc(${anteil2.toFixed(1)}% - 2px)`;
+    kante.style.color = c.color || '';
+  }
+
   // Die Zahl traegt die Farbe auch — aber nicht dieselbe.
   //
   // Die eingestellten Tankfarben sind fuer eine FLAECHE gedacht: Wasser ist

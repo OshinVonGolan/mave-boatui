@@ -33,17 +33,28 @@ function renderTank(idx, pct) {
 
   const clamped = Math.max(0, Math.min(100, pct));
   fill.style.height = clamped + '%';
-  // Ein Verlauf statt einer flachen Flaeche: unten satt, nach oben heller.
-  // Das gibt der Fuellung Tiefe und macht die Oberkante — den eigentlichen
-  // Messwert — deutlicher, weil dort der hellste Ton sitzt. Gerechnet wird er
-  // aus DER Farbe, die fuer den Tank eingestellt ist; ein zweiter Farbwert
-  // waere eine zweite Angabe, die jemand pflegen muesste.
+  // Der Verlauf spannt sich ueber den GANZEN Tank, von voll bis leer — nicht
+  // ueber die Fuellung.
+  //
+  // Der Unterschied ist der Punkt: liegt er in der Fuellung, wandert die Farbe
+  // mit dem Pegel, und derselbe Ton bedeutet einmal 80 % und einmal 20 %.
+  // Ueber den Tank gespannt gehoert jede Hoehe fest zu einem Stand — man sieht
+  // an der Farbe, wo man ist, nicht nur an der Kante.
+  //
+  // Gemacht wird das mit background-size: die Fuellung ist nur `--fuell` hoch,
+  // ihr Hintergrundbild wird auf die volle Tankhoehe gestreckt und unten
+  // verankert. Sichtbar ist dann genau der untere Ausschnitt.
   const farbe = tanksConfig[`tank${idx}`]?.color || 'var(--green)';
   fill.style.background =
     `linear-gradient(to top,
-       color-mix(in srgb, ${farbe} 78%, #000) 0%,
-       ${farbe} 62%,
-       color-mix(in srgb, ${farbe} 82%, #fff) 100%)`;
+       color-mix(in srgb, ${farbe} 72%, #000) 0%,
+       ${farbe} 55%,
+       color-mix(in srgb, ${farbe} 78%, #fff) 100%)`;
+  fill.style.backgroundRepeat = 'no-repeat';
+  fill.style.backgroundPosition = 'bottom';
+  // Null waere eine Division durch null; unter einem Prozent sieht ohnehin
+  // niemand mehr einen Verlauf.
+  fill.style.backgroundSize = `100% ${(100 / Math.max(clamped, 1) * 100).toFixed(2)}%`;
 
   const cap = tanksConfig[`tank${idx}`]?.capacity_l ?? 100;
 
