@@ -305,7 +305,7 @@ function _lichtFelderBauen() {
                         + ' · nicht auf der Kachel</span>' : ''}
         </label>
         <input class="settings-input" id="sLicht${i}" type="text" maxlength="32"
-               value="${_esc(gesetzt)}" placeholder="${_esc(chName(i))}">
+               value="${_esc(gesetzt)}" placeholder="ohne Namen">
       </div>`;
   }
   feld.innerHTML = html;

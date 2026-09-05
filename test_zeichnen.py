@@ -499,7 +499,7 @@ class StreifenDurchschalten(Pruefstand):
 
     def test_batterie_und_starter(self):
         self.assertEqual(self.feld('sbBattLbl', 'sbSoc', 'sbBattUnit'),
-                         ['Batterie', '78', '%'])
+                         ['Service', '78', '%'])
         self.pg.evaluate('() => sbBattWeiter()')
         self.assertEqual(self.feld('sbBattLbl', 'sbSoc', 'sbBattUnit'),
                          ['Starter', '12.80', 'V'])
@@ -610,7 +610,7 @@ class HaltenOeffnetDetail(Pruefstand):
         self.assertEqual(self.label(), vorher)
 
     def test_zu_kurz_oeffnet_nicht(self):
-        self.halten(900)
+        self.halten(350)
         self.assertFalse(self.offen())
 
     def test_nur_felder_mit_seite(self):
@@ -647,9 +647,36 @@ class Lichtkreise(Pruefstand):
             "() => [...document.querySelectorAll('.ch-name')].map(e => e.textContent)")
         self.assertEqual(namen[:2], ['Kombüse', 'Kartentisch'])
         self.assertEqual(namen[-1], 'Ankerlicht')
+        # Ohne Eintrag bleibt der Balken ein Balken.
+        self.assertEqual(namen[2], '')
 
-    def test_ohne_eintrag_gilt_die_vorgabe(self):
-        self.assertEqual(self.pg.evaluate("() => chName(2)"), 'Salon')
+    def test_ohne_eintrag_bleibt_der_name_leer(self):
+        """Vorgabenamen gab es einmal — "Küche", "Salon". Das waren Angaben über
+        ein bestimmtes Boot, fest im Programm. Ohne Eingabe steht jetzt nichts
+        da; wo eine Beschriftung sein MUSS, tritt die Kanalnummer ein."""
+        self.assertEqual(self.pg.evaluate("() => chName(2)"), '')
+        self.assertEqual(self.pg.evaluate("() => chBezeichnung(2)"), 'Kanal 3')
+        # Das Relais heisst in dieser Vorlage "Ankerlicht" — ohne Eintrag
+        # traegt es seine Rolle als Bezeichnung.
+        self.assertEqual(self.pg.evaluate("() => chBezeichnung(8)"), 'Ankerlicht')
+        self.assertEqual(self.pg.evaluate(
+            "() => { const alt = lightsConfig['8']; delete lightsConfig['8'];"
+            "        const b = chBezeichnung(8); lightsConfig['8'] = alt; return b; }"),
+            'Relais')
+
+    def test_zu_langer_name_faellt_auf_drei_buchstaben(self):
+        """Wie viel hineingeht, haengt an der Groesse der Kachel — also
+        nachmessen statt auf eine Zeichenzahl raten. "Kom" laesst sich noch
+        zuordnen, ein abgeschnittenes "Kombüs" sieht nach Fehler aus."""
+        self.pg.evaluate("""() => {
+            lightsConfig['1'] = { name: 'Ein wirklich absurd langer Raumname '
+                                        + 'der niemals in einen Balken passt' };
+            chNamenPassend();
+        }""")
+        namen = self.pg.evaluate(
+            "() => [...document.querySelectorAll('.ch-name')].map(e => e.textContent)")
+        self.assertEqual(namen[0], 'Kombüse', 'was passt, bleibt ganz')
+        self.assertEqual(namen[1], 'Ein')
 
     def test_ziehen_rechnet_die_bewegung(self):
         """Nicht die Position: wer unten auf den Balken tippt, will nicht, dass
@@ -686,9 +713,9 @@ class Lichtkreise(Pruefstand):
         self.assertFalse(self.pg.evaluate(
             "() => document.getElementById('lightOverlay').classList.contains('hidden')"))
 
-    def test_relais_erst_nach_zwei_sekunden(self):
+    def test_relais_erst_nach_dem_halten(self):
         """Ohne die Wartezeit schaltete es jedes Mal mit, wenn jemand die
-        Detailseite öffnen wollte."""
+        Detailseite öffnen wollte. Eine Sekunde — zwei waren zu lang."""
         x, y = self.kasten(8)
         vorher = self.pg.evaluate("() => _wideCh[8]")
         self.pg.mouse.click(x, y)

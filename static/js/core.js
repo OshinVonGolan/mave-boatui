@@ -187,31 +187,24 @@ let tanksConfig    = { tank1: { name: 'Tank 1', capacity_l: 200 }, tank2: { name
 // DIESES Boot und kein Programmtext.
 //
 // Jetzt: eine Quelle in presets.json (`lights`), gepflegt in den
-// Einstellungen. Die Vorgaben hier sind das, was vorher fest verdrahtet war —
-// so aendert sich ohne Eingabe nichts.
+// Einstellungen.
+//
+// KEINE Vorgabenamen mehr. "Küche" und "Salon" waren Angaben ueber ein
+// bestimmtes Boot, fest im Programm — auf dem naechsten Boot heissen die
+// Raeume anders, und in den Einstellungen stand ein Name, den niemand
+// eingetippt hatte. Ohne Eingabe ist der Name jetzt leer, und die Oberflaeche
+// zeigt an den Stellen, die eine Beschriftung brauchen, die schlichte
+// Kanalnummer.
 let lightsConfig = {};
-const _LICHT_VORGABE = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd',
-                        'Kanal 5', 'Kanal 6', 'Kanal 7', 'Kanal 8', 'Relais'];
 
-/** Der volle Name eines Kanals. */
+/** Der eingetragene Name eines Kanals — oder '' , wenn keiner gesetzt ist. */
 function chName(i) {
-  return (lightsConfig?.[String(i)]?.name || '').trim()
-      || _LICHT_VORGABE[i] || ('Kanal ' + (i + 1));
+  return (lightsConfig?.[String(i)]?.name || '').trim();
 }
 
-/**
- * Kurzform fuer schmale Spalten.
- *
- * Nicht abschneiden und Punkte anhaengen, wo ein Wort schon kurz genug ist:
- * "Salon" bleibt "Salon". Erst ab 9 Zeichen wird gekuerzt, und dann am
- * Wortende statt mitten in einer Silbe.
- */
-function chKurz(i, max = 9) {
-  const name = chName(i);
-  if (name.length <= max) return name;
-  const teile = name.split(/[\s-]+/);
-  if (teile[0].length <= max) return teile[0];
-  return teile[0].slice(0, max - 1) + '.';
+/** Ersatzbeschriftung, wo ein Feld nicht leer bleiben kann. */
+function chBezeichnung(i) {
+  return chName(i) || (i >= 8 ? 'Relais' : 'Kanal ' + (i + 1));
 }
 let devicesConfig  = {};
 let batteriesConfig = { service_instance: 0, starter_instance: 1, primary_source: 'shunt' };

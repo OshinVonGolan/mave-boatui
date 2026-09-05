@@ -606,6 +606,7 @@ window.addEventListener('resize', () => {
     _applyGrid();
     if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
     if (typeof _renderBattWideChart === 'function') _renderBattWideChart(true);
+    if (typeof chNamenPassend === 'function') chNamenPassend();
   });
 });
 
@@ -652,6 +653,7 @@ function applyDisplayConfig() {
   requestAnimationFrame(() => {
     if (typeof updateWartungHomeTile === 'function') updateWartungHomeTile();
     if (typeof _renderBattWideChart === 'function') _renderBattWideChart(true);
+    if (typeof chNamenPassend === 'function') chNamenPassend();
   });
 }
 
@@ -1375,7 +1377,9 @@ function updateStatusBar(data) {
 // und demselben mitlaufenden Streifen. Eine Bedienung, die man einmal lernt,
 // soll ueberall dasselbe bedeuten.
 
-const _SB_HALTEN_MS = 2000;
+// Eine Sekunde. Zwei waren gemessen zu lang — man haelt den Finger drauf und
+// glaubt, es passiere nichts.
+const _SB_HALTEN_MS = 1000;
 let _sbHalten = null;          // {uhr, feld, gehalten}
 
 function _sbHaltenBinden() {
@@ -1444,7 +1448,9 @@ function _sbHaltenLoesen(feld) {
 // waere fuer 12 Volt keine Skala, sondern ein flacher Strich am Boden.
 
 const _SB_BATT = [
-  { schluessel: 'service', label: 'Batterie', einheit: '%', reihe: 'soc',
+  // "Service" und nicht "Batterie": daneben steht der Starter, und der ist
+  // auch eine Batterie. Der Name muss sagen, WELCHE.
+  { schluessel: 'service', label: 'Service', einheit: '%', reihe: 'soc',
     tief: '0', hoch: '100' },
   // 11,5 bis 14,5 V deckt vom tiefentladenen Bleiakku bis zur Ladeschlusssp.
   // alles ab, was an einem Starter vorkommt.
@@ -1559,6 +1565,10 @@ function _sbRenderTank(data) {
     // Ohne eigene Farbe bleibt es beim Zustandsfarbton aus dem Stylesheet.
     bar.style.color = c.color || '';
   }
+  // Die Zahl auch. Ein blauer Balken unter einer gruenen Zahl sind zwei
+  // Aussagen ueber denselben Tank.
+  const zahl = document.getElementById('sbT1');
+  if (zahl) zahl.style.color = c.color || '';
   // Mehrere Tanks: sagen, dass hier etwas zu tippen ist.
   const feld = document.getElementById('sbTankItem');
   if (feld) {
@@ -1621,21 +1631,18 @@ function _sbRenderLaden(data) {
   _sbSet('sbChgLbl', aktiv.label);
   const einheitEl = document.querySelector('#sbChgItem .sb-val i');
 
-  if (inAh) {
-    // Aus Leistung und aktueller Batteriespannung. Ohne Spannung wird nicht
-    // geraten — dann bleibt das Feld bei Watt, statt eine falsche Zahl zu
-    // zeigen.
-    if (leistung != null && spannung > 1) {
-      _sbSet('sbChg', (leistung / spannung).toFixed(1));
-      if (einheitEl) einheitEl.textContent = 'A';
-    } else {
-      _sbSet('sbChg', leistung == null ? '--' : String(Math.round(leistung)));
-      if (einheitEl) einheitEl.textContent = 'W';
-    }
-  } else {
-    _sbSet('sbChg', leistung == null ? '--' : String(Math.round(leistung)));
-    if (einheitEl) einheitEl.textContent = 'W';
-  }
+  // Die Einheit haengt am gewaehlten Mass und an der Spannung — NICHT daran,
+  // ob diese eine Quelle gerade etwas liefert.
+  //
+  // Vorher stand beides in derselben Bedingung. Meldete das Landstromgeraet
+  // keine Leistung (also immer, wenn kein Kabel dranhaengt), fiel der Zweig
+  // durch und die Einheit sprang auf Watt, obwohl auf dem ganzen Rest des
+  // Bildschirms Ampere stand. Ohne Spannung wird weiter nicht gerechnet: dann
+  // ist Watt richtig, weil Ampere geraten waere.
+  const inA = inAh && spannung > 1;
+  _sbSet('sbChg', leistung == null ? '--'
+    : inA ? (leistung / spannung).toFixed(1) : String(Math.round(leistung)));
+  if (einheitEl) einheitEl.textContent = inA ? 'A' : 'W';
 
   // Untere Zeile: geladene Menge der letzten 24 Stunden, in derselben Einheit.
   // Fehlt die Bilanz noch (erster Abruf laeuft), lieber nichts behaupten.

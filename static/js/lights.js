@@ -18,7 +18,6 @@ function buildChannelBars() {
     // der Fuellung und bleibt damit bei jedem Stand lesbar.
     const name = document.createElement('span');
     name.className = 'ch-name'; name.id = `chName${i}`;
-    name.textContent = chKurz(i, 14);
     // Fuer das Halten am Relais: ein Streifen, der in zwei Sekunden volllaeuft.
     const halten = document.createElement('div');
     halten.className = 'ch-halten'; halten.id = `chHalten${i}`;
@@ -26,19 +25,50 @@ function buildChannelBars() {
     row.appendChild(wrap);
   });
   _chGesteBinden(row);
+  chNamenPassend();
 }
 buildChannelBars();
 
-/** Namen neu schreiben, ohne die Balken neu zu bauen (nach dem Speichern). */
-function chNamenAuffrischen() {
+/**
+ * Die Namen so schreiben, dass sie in ihren Balken PASSEN.
+ *
+ * Nicht auf eine Zeichenzahl raten: wie viel hineingeht, haengt an der Breite
+ * der Kachel, der Zahl der Kanaele und der Schriftgroesse — und die Kachel
+ * aendert ihre Groesse (Spaltenwahl, Drehen des Tablets, Kiosk-Raster). Also
+ * hinschreiben, nachmessen, und wenn es nicht passt, kuerzen.
+ *
+ * Drei Buchstaben sind die letzte Stufe vor gar nichts: "Kom" laesst sich noch
+ * zuordnen, ein abgeschnittenes "Kombüs" sieht nach Fehler aus.
+ */
+function chNamenPassend() {
   VISIBLE_CH.forEach(i => {
     const el = $(`chName${i}`);
-    if (el) el.textContent = chKurz(i, 14);
+    const wrap = el?.parentElement;
+    if (!el || !wrap) return;
+    const voll = chName(i);
+    // Ohne Namen bleibt der Balken ein Balken.
+    if (!voll) { el.textContent = ''; return; }
+    // Schmaler als eine Zeile Schrift: da geht senkrecht gar nichts.
+    if (wrap.clientWidth < 18) { el.textContent = ''; return; }
+    el.textContent = voll;
+    // Senkrechte Schrift: die Laenge des Textes liegt in der Hoehe.
+    if (el.scrollHeight <= wrap.clientHeight) return;
+    el.textContent = voll.slice(0, 3);
+    if (el.scrollHeight > wrap.clientHeight) el.textContent = '';
   });
+}
+
+/** Namen neu schreiben, ohne die Balken neu zu bauen (nach dem Speichern). */
+function chNamenAuffrischen() {
+  chNamenPassend();
   if (typeof buildWideSliders === 'function') buildWideSliders();
   if (typeof _lastData !== 'undefined' && _lastData?.lights)
     updateChannels(_lastData.lights.channels ?? []);
 }
+
+// Die Kachel aendert ihre Groesse: Spaltenwahl, Drehen, Kiosk-Raster. Passt
+// der Name dann nicht mehr, muss er kuerzer werden — und andersherum.
+window.addEventListener('resize', chNamenPassend);
 
 // ── Die Balken sind Regler ──────────────────────────────────────────────────
 // Ein Balken zeigt die Helligkeit ohnehin an — dann kann er sie auch stellen.
@@ -59,7 +89,9 @@ function chNamenAuffrischen() {
 
 const _CH_WEG_PX      = 150;   // Fingerweg fuer den ganzen Bereich 0..255
 const _CH_ZUG_AB_PX   = 4;     // darunter ist es ein Tipp, kein Zug
-const _CH_HALTEN_MS   = 2000;  // Relais: so lange halten zum Schalten
+const _CH_HALTEN_MS   = 1000;  // Relais: so lange halten zum Schalten.
+                               // Zwei Sekunden waren zu lang — dieselbe
+                               // Dauer wie in der Statusleiste.
 
 let _chZug = null;             // {ch, startY, startWert, gezogen}
 let _chKlickSchlucken = false;
@@ -148,7 +180,15 @@ function _chHaltenZuruecksetzen(ch) {
 let _wideCh = Array(9).fill(0);
 
 function updateChannels(channels) {
+  // Der Kanal, an dem gerade ein Finger haengt, gehoert dem Finger.
+  //
+  // Ohne diese Ausnahme schrieb jeder hereinkommende Datensatz den Balken auf
+  // den Stand zurueck, den das Geraet vor 200 ms gemeldet hatte — der Balken
+  // sprang dann waehrend des Ziehens hoch und runter, weil zwei Quellen um
+  // dieselbe Hoehe stritten.
+  const gezogen = _chZug ? _chZug.ch : -1;
   VISIBLE_CH.forEach(i => {
+    if (i === gezogen) return;
     const v = channels[i] ?? 0, bar = $(`chBar${i}`);
     if (!bar) return;
     bar.style.height  = (i < 8 ? v/255*100 : v>0?100:0) + '%';
@@ -156,7 +196,7 @@ function updateChannels(channels) {
   });
   // _wideCh mit echtem Zustand abgleichen — außer dem gerade gezogenen Slider
   for (let i = 0; i < 9; i++) {
-    if (channels[i] == null) continue;
+    if (channels[i] == null || i === gezogen) continue;
     const sl = $(`wideSlider${i}`);
     if (sl && document.activeElement === sl) continue;
     _wideCh[i] = channels[i];
@@ -175,10 +215,10 @@ function buildWideSliders() {
   wrap.innerHTML = '';
   VISIBLE_CH.forEach(i => {
     const isRelay = i >= 8;
-    // Voller Name; kuerzen macht der Browser, wenn die Spalte zu schmal ist.
-    // Auf neun Zeichen zu raten ergab "Ankerlic." — die tatsaechliche Breite
-    // kennt nur das Stylesheet.
-    const lbl = _esc(chName(i));
+    // Volle Bezeichnung; kuerzen macht der Browser, wenn die Spalte zu schmal
+    // ist. Auf neun Zeichen zu raten ergab "Ankerlic." — die tatsaechliche
+    // Breite kennt nur das Stylesheet.
+    const lbl = _esc(chBezeichnung(i));
     const item = document.createElement('div');
     item.className = 'lights-slider-item';
     if (isRelay) {
@@ -209,18 +249,45 @@ function updateWideSliders(channels) {
   });
 }
 
-let _wideDebounce = null;
+// Gesendet wird GETAKTET, nicht entprellt.
+//
+// Vorher stand hier ein clearTimeout/setTimeout-Paar: jede Bewegung schob den
+// Timer nach hinten. Solange der Finger lief, ging deshalb GAR NICHTS hinaus —
+// das Licht sprang erst, wenn man losliess. Genau das war der spuerbare
+// Nachlauf; ein Preset fuehlte sich schneller an, weil es ein einziger Aufruf
+// ohne Timer ist.
+//
+// Jetzt: der erste Wert geht sofort raus, danach hoechstens alle 60 ms einer,
+// und der letzte kommt am Ende in jedem Fall nach. So sieht man beim Ziehen,
+// was man tut, und der Bus bekommt trotzdem nicht jede Fingerregung.
+const _LICHT_TAKT_MS = 60;
+let _lichtLetzteSendung = 0;
+let _lichtNachzuegler = null;
+
+function _lichtSenden() {
+  _lichtLetzteSendung = Date.now();
+  fetch('/api/lights/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: _wideCh }),
+  }).catch(() => {});
+}
+
 function _setChannelFromSlider(ch, val) {
   _wideCh[ch] = val;
   if (typeof checkPresetMatch === 'function') checkPresetMatch(_wideCh);
-  clearTimeout(_wideDebounce);
-  _wideDebounce = setTimeout(() => {
-    fetch('/api/lights/channels', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: _wideCh }),
-    }).catch(() => {});
-  }, 80);
+  const seit = Date.now() - _lichtLetzteSendung;
+  if (seit >= _LICHT_TAKT_MS) {
+    clearTimeout(_lichtNachzuegler);
+    _lichtNachzuegler = null;
+    _lichtSenden();
+    return;
+  }
+  if (_lichtNachzuegler) return;           // einer wartet schon
+  _lichtNachzuegler = setTimeout(() => {
+    _lichtNachzuegler = null;
+    _lichtSenden();
+  }, _LICHT_TAKT_MS - seit);
 }
 
 function _toggleRelayFromWide() {
