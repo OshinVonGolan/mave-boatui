@@ -1375,66 +1375,45 @@ function updateStatusBar(data) {
   _sbRenderWartung();
 }
 
-// ── Halten oeffnet die Detailseite ──────────────────────────────────────────
-// Die Felder der Leiste schalten beim Tippen durch — damit war der kurze Weg
-// zur Detailseite weg, den einige von ihnen vorher hatten. Er kommt hier
-// zurueck, und zwar fuer ALLE Felder, zu denen es eine Seite gibt: zwei
-// Sekunden halten.
+// ── Doppeltipp oeffnet die Detailseite ──────────────────────────────────────
+// Die Felder schalten beim Tippen durch. Der Weg zur Detailseite lief erst
+// ueber langes Druecken — erst zwei Sekunden, dann eine, dann eine Drittel, und
+// jedes Mal fuehlte es sich falsch an: zu lang wirkte kaputt, zu kurz loeste
+// beim blossen Weiterschalten aus. Jetzt ein schneller Doppeltipp.
 //
-// Dieselbe Geste wie beim Relais in der Lichtkachel, mit derselben Wartezeit
-// und demselben mitlaufenden Streifen. Eine Bedienung, die man einmal lernt,
-// soll ueberall dasselbe bedeuten.
+// Der erste Tipp schaltet SOFORT weiter — ihn zurueckzuhalten, bis feststeht,
+// ob ein zweiter kommt, machte die haeufigste Handlung traege. Kommt der zweite
+// rechtzeitig, wird das Weiterschalten des ersten zurueckgenommen und die Seite
+// geoeffnet: man landet dort, wo man beim Antippen stand.
 
-// Eine Drittelsekunde. Erst zwei, dann eine — beides fuehlte sich an, als
-// passiere nichts. So kurz geht es hier, weil ein Tipp auf diese Felder nur
-// weiterschaltet: greift das Halten versehentlich, landet man eine Seite
-// weiter statt etwas geschaltet zu haben.
-const _SB_HALTEN_MS = 330;
-let _sbHalten = null;          // {uhr, feld, gehalten}
+const _SB_DOPPEL_MS = 320;
+let _sbLetzterTipp = { feld: null, zeit: 0 };
 
 function _sbHaltenBinden() {
   const leiste = document.getElementById('statusBar');
-  if (!leiste || leiste.dataset.haltenBereit) return;
-  leiste.dataset.haltenBereit = '1';
+  if (!leiste || leiste.dataset.doppelBereit) return;
+  leiste.dataset.doppelBereit = '1';
 
-  leiste.addEventListener('pointerdown', e => {
+  leiste.addEventListener('click', e => {
     const feld = e.target.closest('.sb-item');
     const ziel = feld?.dataset.detail;
     if (!ziel) return;
-    feld.setPointerCapture?.(e.pointerId);
-    _sbHalten = { feld, gehalten: false, uhr: setTimeout(() => {
-      _sbHalten && (_sbHalten.gehalten = true);
-      if (navigator.vibrate) navigator.vibrate(20);
-      const fn = window[ziel];
-      if (typeof fn === 'function') fn();
-    }, _SB_HALTEN_MS) };
+    const jetzt = Date.now();
+    const doppelt = _sbLetzterTipp.feld === feld
+                 && jetzt - _sbLetzterTipp.zeit < _SB_DOPPEL_MS;
+    _sbLetzterTipp = doppelt ? { feld: null, zeit: 0 } : { feld, zeit: jetzt };
+    if (!doppelt) return;
+
+    // ZWEI Schritte zurueck, nicht einer: beide Tipps haben weitergeschaltet.
+    // Der Knopf traegt seinen eigenen onclick, der vor diesem Horcher laeuft —
+    // wenn wir hier ankommen, steht die Anzeige also schon zwei Schritte
+    // weiter als beim ersten Antippen.
+    const weiter = window[feld.dataset.weiter];
+    if (typeof weiter === 'function') weiter(-2);
+    const fn = window[ziel];
+    if (typeof fn === 'function') fn();
   });
-
-  const beenden = () => {
-    if (!_sbHalten) return;
-    clearTimeout(_sbHalten.uhr);
-    // Nach einem Halten NICHT auch noch weiterschalten: der Klick kommt
-    // unmittelbar nach dem Loslassen, und beides zugleich waere Unsinn.
-    if (_sbHalten.gehalten) _sbKlickSchlucken = true;
-    _sbHalten = null;
-  };
-  leiste.addEventListener('pointerup', beenden);
-  leiste.addEventListener('pointercancel', beenden);
-  leiste.addEventListener('pointerleave', beenden);
-
-  leiste.addEventListener('click', e => {
-    if (!_sbKlickSchlucken) return;
-    _sbKlickSchlucken = false;
-    e.stopPropagation();
-    e.preventDefault();
-  }, true);
 }
-
-let _sbKlickSchlucken = false;
-
-// _sbHaltenLoesen stand hier, dazu ein Fuellstreifen unter dem Feld. Beides ist
-// entfallen: bei einer Drittelsekunde ist der Streifen kaum zu sehen, und ein
-// Balken, der bei jedem Tippen aufblitzt, ist mehr Unruhe als Auskunft.
 
 // ── Batterie-Feld: Service und Starter ──────────────────────────────────────
 // Beim Starter gibt es nur die Spannung — er haengt an einem einfachen
@@ -1454,8 +1433,9 @@ const _SB_BATT = [
 ];
 let _sbBattIdx = 0;
 
-function sbBattWeiter() {
-  _sbBattIdx = (_sbBattIdx + 1) % _SB_BATT.length;
+function sbBattWeiter(richtung = 1) {
+  const n = _SB_BATT.length;
+  _sbBattIdx = (_sbBattIdx + richtung + n) % n;
   const wahl = _SB_BATT[_sbBattIdx];
   const spark = document.querySelector('#sbBattItem .sb-spark');
   if (spark) {
@@ -1510,10 +1490,10 @@ function _sbTanks() {
   return Object.keys(cfg).filter(k => /^tank\d+$/.test(k)).sort();
 }
 
-function sbTankWeiter() {
+function sbTankWeiter(richtung = 1) {
   const tanks = _sbTanks();
   if (tanks.length < 2) return;            // nichts zum Durchschalten
-  _sbTankIdx = (_sbTankIdx + 1) % tanks.length;
+  _sbTankIdx = (_sbTankIdx + richtung + tanks.length) % tanks.length;
   // Der Graph zeigt ab jetzt denselben Tank wie die Zahl.
   const spark = document.querySelector('#sbTankItem .sb-spark');
   if (spark) {
@@ -1572,19 +1552,38 @@ function _sbRenderTank(data) {
       // Gemacht mit background-size: der Balken ist nur `anteil` breit, sein
       // Hintergrundbild wird auf die volle Feldbreite gestreckt und links
       // verankert. Sichtbar ist genau der linke Ausschnitt.
-      bar.style.background =
-        `linear-gradient(to right,
-           color-mix(in srgb, ${c.color} 55%, #000) 0%,
-           ${c.color} 55%,
-           color-mix(in srgb, ${c.color} 60%, #fff) 100%)`;
+      // Zwei Verlaeufe uebereinander, jeder mit einer eigenen Aufgabe.
+      //
+      // Der HINTERGRUND ist derselbe wie bei den Verlaufsgraphen nebenan:
+      // dieselbe Farbe, oben bei 22 % Deckkraft, nach unten auf null
+      // auslaufend (dort steht `stop-opacity .22` bei 0 und 0 bei .85). Damit
+      // sieht das Feld aus wie seine Nachbarn und nicht wie ein Farbklotz.
+      //
+      // Die MASKE traegt die Aussage: sie laeuft von voll nach leer und ist
+      // ueber das ganze FELD gespannt, nicht ueber den Balken. Jede Stelle
+      // gehoert damit fest zu einem Stand — der Balken wird nach rechts hin
+      // duenner, weil dort das leere Ende liegt.
+      const verlauf =
+        `linear-gradient(to bottom,
+           color-mix(in srgb, ${c.color} 22%, transparent) 0%,
+           color-mix(in srgb, ${c.color} 0%, transparent) 85%)`;
+      const maske = 'linear-gradient(to right, #000 0%, rgba(0,0,0,.18) 100%)';
+      bar.style.background = verlauf;
       bar.style.backgroundRepeat = 'no-repeat';
-      bar.style.backgroundPosition = 'left';
-      // Null waere eine Division durch null.
-      bar.style.backgroundSize = `${(100 / Math.max(anteil, 1) * 100).toFixed(1)}% 100%`;
+      bar.style.backgroundSize = '100% 100%';
+      // Nur die Maske wird auf die volle Feldbreite gestreckt und links
+      // verankert. Null waere eine Division durch null.
+      const breit = `${(100 / Math.max(anteil, 1) * 100).toFixed(1)}% 100%`;
+      bar.style.maskImage = maske;
+      bar.style.webkitMaskImage = maske;
+      bar.style.maskRepeat = bar.style.webkitMaskRepeat = 'no-repeat';
+      bar.style.maskPosition = bar.style.webkitMaskPosition = 'left';
+      bar.style.maskSize = bar.style.webkitMaskSize = breit;
       bar.classList.add('mit-verlauf');
     } else {
       bar.style.background = '';
       bar.style.backgroundSize = '';
+      bar.style.maskImage = bar.style.webkitMaskImage = '';
       bar.classList.remove('mit-verlauf');
     }
   }
@@ -1596,7 +1595,9 @@ function _sbRenderTank(data) {
   const kante = document.getElementById('sbT1Kante');
   if (kante) {
     const anteil2 = pct == null ? null : Math.max(0, Math.min(100, pct));
-    kante.style.opacity = anteil2 == null ? 0 : 0.75;
+    // .34 statt kraeftiger: die Linie ueber der Flaeche eines Verlaufsgraphen
+    // liegt bei .3 — die Kante soll dazu passen und nicht daneben schreien.
+    kante.style.opacity = anteil2 == null ? 0 : 0.34;
     kante.style.left = anteil2 == null ? '0%'
       : `calc(${anteil2.toFixed(1)}% - 2px)`;
     kante.style.color = c.color || '';
@@ -1640,8 +1641,9 @@ const _SB_LADEN = [
 ];
 let _sbLadenIdx = 0;
 
-function sbLadenWeiter() {
-  _sbLadenIdx = (_sbLadenIdx + 1) % _SB_LADEN.length;
+function sbLadenWeiter(richtung = 1) {
+  const n = _SB_LADEN.length;
+  _sbLadenIdx = (_sbLadenIdx + richtung + n) % n;
   // Der Graph zeigt ab jetzt dieselbe Quelle wie die Zahl.
   const spark = document.querySelector('#sbChgItem .sb-spark');
   if (spark) {
@@ -1803,10 +1805,10 @@ function _sbHzSchritte() {
   return schritte;
 }
 
-function sbHeizungWeiter() {
+function sbHeizungWeiter(richtung = 1) {
   const schritte = _sbHzSchritte();
   if (schritte.length < 2) return;
-  _sbHzIdx = (_sbHzIdx + 1) % schritte.length;
+  _sbHzIdx = (_sbHzIdx + richtung + schritte.length) % schritte.length;
   const wahl = schritte[_sbHzIdx];
   const spark = document.querySelector('#sbHzItem .sb-spark');
   if (spark) {

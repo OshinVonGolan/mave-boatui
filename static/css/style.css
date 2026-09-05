@@ -899,8 +899,11 @@
        genau die Warnung verloren, fuer die die Farben da sind. */
     .sb-item.sb-wasser.sb-ok .sb-val b,
     .sb-item.sb-wasser.sb-ok .sb-balken { color: var(--accent); }
-    .sb-balken.mit-verlauf { opacity: .42; }
-    .statusbar.eng .sb-balken.mit-verlauf { opacity: .34; }
+    /* Mit Verlauf steckt die Deckkraft in den Farbstopps selbst (siehe
+       _sbRenderTank) — genau wie bei den Verlaufsgraphen, die ihre Flaeche
+       ueber stop-opacity aufbauen. Das Element bleibt deshalb voll deckend,
+       sonst multiplizierte sich beides. */
+    .sb-balken.mit-verlauf { opacity: 1; }
     /* Die Kante markiert den Stand — so, wie die Linie ueber der Flaeche eines
        Verlaufsgraphen ihn markiert. Sie ist kraeftiger als die Flaeche
        dahinter, sonst waere sie keine Kante. */

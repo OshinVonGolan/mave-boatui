@@ -165,7 +165,7 @@
        erreicht man weiter ueber die Batteriekachel — in dieser Leiste schaltet
        jedes Feld durch, das etwas durchzuschalten hat. -->
   <button type="button" class="sb-item" onclick="sbBattWeiter()" id="sbBattItem"
-          data-detail="openBattDetail">
+          data-detail="openBattDetail" data-weiter="sbBattWeiter">
     <!-- Feste Skala 0..100 %: die Hoehe der Flaeche IST der Ladestand, und
          100 % liegt auf der Oberkante des Feldes. Beim Starter tauscht JS
          Reihe und Skala gegen die Spannung. -->
@@ -177,7 +177,7 @@
   <!-- Ein Tipp schaltet die Quelle weiter: Gesamt, Landstrom, Solar, Orion.
        Die Reihe des Graphen wird dabei mitgetauscht (data-reihe von JS). -->
   <button type="button" class="sb-item" onclick="sbLadenWeiter()" id="sbChgItem"
-          data-detail="openBattDetail">
+          data-detail="openBattDetail" data-weiter="sbLadenWeiter">
     <!-- Watt hat keine feste Obergrenze: unten 0 (nichts laedt), oben der
          Hoechstwert der letzten 24 Stunden, mindestens aber 50 W — sonst
          fuellte eine Ladung von 5 W das ganze Feld. -->
@@ -193,7 +193,8 @@
        dasselbe sagen.
        Die Umschaltung Liter/Prozent sass frueher auf diesem Tipp; sie steht
        weiter auf der Tankkachel, und die Leiste folgt ihr. -->
-  <button type="button" class="sb-item sb-wasser" onclick="sbTankWeiter()" id="sbTankItem">
+  <button type="button" class="sb-item sb-wasser" onclick="sbTankWeiter()" id="sbTankItem"
+          data-weiter="sbTankWeiter">
     <span class="sb-balken" id="sbT1Bar" aria-hidden="true"></span>
     <!-- Die Kante des Balkens als eigenes Element und nicht als Rand am
          Balken: der Balken traegt eine Deckkraft, und ein Kind haette sie
@@ -223,7 +224,7 @@
   <!-- Ein Tipp schaltet weiter: Heizung, Vorlauf, dann jeder Raum einzeln.
        Die Raeume kommen vom Hub, es steht hier also keine Raumliste. -->
   <button type="button" class="sb-item" onclick="sbHeizungWeiter()" id="sbHzItem"
-          data-detail="openHeizung">
+          data-detail="openHeizung" data-weiter="sbHeizungWeiter">
     <!-- Temperatur hat keine feste Skala wie ein Prozentwert: Hoechstwert an
          die Oberkante, mindestens 4 Grad Spanne, damit ein ruhiger Tag nicht
          zum Gebirge wird. Reihe und Spanne tauscht JS beim Durchschalten. -->

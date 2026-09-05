@@ -568,12 +568,12 @@ class StreifenDurchschalten(Pruefstand):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
-class HaltenOeffnetDetail(Pruefstand):
-    """Zwei Sekunden halten führt zur Detailseite.
+class DoppeltippOeffnetDetail(Pruefstand):
+    """Ein schneller Doppeltipp führt zur Detailseite.
 
-    Seit die Felder beim Tippen durchschalten, war der kurze Weg dorthin weg.
-    Dieselbe Geste wie beim Relais in der Lichtkachel — eine Bedienung, die man
-    einmal lernt, soll überall dasselbe bedeuten.
+    Vorher war es langes Drücken — erst zwei Sekunden, dann eine, dann eine
+    Drittel, und jedes Mal fühlte es sich falsch an: zu lang wirkte kaputt, zu
+    kurz löste beim bloßen Weiterschalten aus.
     """
 
     def setUp(self):
@@ -590,45 +590,46 @@ class HaltenOeffnetDetail(Pruefstand):
     def label(self):
         return self.pg.evaluate("() => document.getElementById('sbBattLbl').textContent")
 
-    def halten(self, ms):
-        self.pg.mouse.move(self.x, self.y)
-        self.pg.mouse.down()
-        self.pg.wait_for_timeout(ms)
-        self.pg.mouse.up()
-        self.pg.wait_for_timeout(400)
-
-    def test_kurzer_tipp_schaltet_nur_weiter(self):
+    def test_einzelner_tipp_schaltet_nur_weiter(self):
         self.pg.mouse.click(self.x, self.y)
-        self.pg.wait_for_timeout(300)
+        self.pg.wait_for_timeout(500)
         self.assertEqual(self.label(), 'Starter')
-        self.assertFalse(self.offen(), 'ein Tipp soll keine Seite öffnen')
+        self.assertFalse(self.offen(), 'ein einzelner Tipp soll keine Seite öffnen')
 
-    def test_halten_oeffnet(self):
-        self.halten(700)
+    def test_doppeltipp_oeffnet(self):
+        self.pg.mouse.click(self.x, self.y, click_count=2, delay=40)
+        self.pg.wait_for_timeout(500)
         self.assertTrue(self.offen())
 
-    def test_kein_fuellstreifen_mehr(self):
-        """Bei einer Drittelsekunde ist er kaum zu sehen, und ein Balken, der
-        bei jedem Tippen aufblitzt, ist mehr Unruhe als Auskunft."""
-        self.halten(700)
-        self.assertIsNone(self.pg.query_selector('#sbBattItem .sb-halten'))
-
-    def test_halten_schaltet_nicht_zusaetzlich_weiter(self):
-        """Beides zugleich wäre Unsinn: man landet auf der Detailseite und
-        hätte nebenbei die Auswahl darunter verstellt."""
+    def test_doppeltipp_nimmt_das_weiterschalten_zurueck(self):
+        """Man landet dort, wo man beim Antippen stand — nicht zwei Schritte
+        weiter."""
         vorher = self.label()
-        self.halten(700)
+        self.pg.mouse.click(self.x, self.y, click_count=2, delay=40)
+        self.pg.wait_for_timeout(500)
         self.assertEqual(self.label(), vorher)
 
-    def test_zu_kurz_oeffnet_nicht(self):
-        self.halten(120)
+    def test_zu_langsam_ist_kein_doppeltipp(self):
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(600)
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(400)
         self.assertFalse(self.offen())
+        self.assertEqual(self.label(), 'Service', 'zweimal getippt, zweimal weiter')
 
     def test_nur_felder_mit_seite(self):
-        """Für die Tanks gibt es keine Detailseite — dort darf das Halten auch
-        nichts vortäuschen."""
+        """Für die Tanks gibt es keine Detailseite — dort darf der Doppeltipp
+        auch nichts vortäuschen."""
         self.assertIsNone(self.pg.evaluate(
             "() => document.getElementById('sbTankItem').dataset.detail ?? null"))
+
+    def test_kein_halten_mehr(self):
+        self.pg.mouse.move(self.x, self.y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(1200)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(300)
+        self.assertFalse(self.offen(), 'langes Drücken soll nichts mehr öffnen')
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
