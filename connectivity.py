@@ -4,6 +4,7 @@ import logging
 import ssl
 import threading
 import time
+import urllib.error
 import urllib.request
 
 log = logging.getLogger(__name__)
@@ -96,6 +97,11 @@ class ConnectivityMonitor:
     # ── polling ───────────────────────────────────────────────────────────────
 
     def _loop(self):
+        # Dieselbe Stoerung nicht dreimal je Minute in den Mitschnitt schreiben.
+        # Am 05.09.2026 bestand er zu neun Zehnteln aus derselben Zeile ("HTTP
+        # Error 401") — sie verdeckte alles andere, und das eigentlich
+        # Interessante (seit wann, und wann wieder gut) stand nirgends.
+        letzte_stoerung = None
         while True:
             try:
                 router   = self._fetch_router()
@@ -104,8 +110,14 @@ class ConnectivityMonitor:
                     self._status = {'router': router, 'starlink': starlink,
                                     'router_url': self._router_host,
                                     'ts': time.time()}
+                if letzte_stoerung is not None:
+                    log.warning('Verbindungsabfrage geht wieder (vorher: %s)', letzte_stoerung)
+                    letzte_stoerung = None
             except Exception as e:
-                log.warning('connectivity poll: %s', e)
+                text = f'{type(e).__name__}: {e}'
+                if text != letzte_stoerung:
+                    log.warning('connectivity poll: %s', text)
+                    letzte_stoerung = text
             time.sleep(POLL_INTERVAL)
 
     # ── router ────────────────────────────────────────────────────────────────
@@ -130,10 +142,39 @@ class ConnectivityMonitor:
             self._token_ts = now
         return {'Authorization': f'Bearer {self._token}'}
 
+    def _router_holen(self, pfad: str) -> dict:
+        """Etwas beim Router abfragen — und bei einer Abweisung neu anmelden.
+
+        Der Router wirft einen Zugang weg, ohne uns zu fragen: RutOS begrenzt
+        die Zahl gleichzeitiger Sitzungen, und meldet sich jemand am Router an,
+        faellt die aelteste heraus. Auch sonst gilt ein Zugang nicht ewig.
+
+        `_token_headers` erneuerte nur nach ALTER (50 min). Wurde der Zugang
+        vorher abgewiesen, half das nichts: die Anwendung lief in ein 401 und
+        fragte danach fuenfzig Minuten lang immer wieder mit demselben toten
+        Zugang nach. Am 05.09.2026 genau so vorgefunden — alle 20 Sekunden ein
+        "HTTP Error 401: Unauthorized", und weil der erste Aufruf schon
+        scheiterte, wurde der GESAMTE Verbindungszustand nicht mehr
+        aktualisiert. Sichtbar wurde es an der Position: der Router hatte einen
+        Fix, das Logbuch meldete "kein Fix vom Router".
+
+        Deshalb: eine Abweisung wirft den Zugang weg und der Aufruf wird
+        einmal wiederholt. Genau einmal — scheitert auch die frische Anmeldung,
+        ist es kein Zugangsproblem mehr, und eine Schleife wuerde den Router nur
+        beschaeftigen.
+        """
+        try:
+            return self._http(self._router_host + pfad, headers=self._token_headers())
+        except urllib.error.HTTPError as e:
+            if e.code not in (401, 403):
+                raise
+            log.info('Router hat den Zugang abgewiesen (%s) — melde neu an', e.code)
+            self._token = None
+            return self._http(self._router_host + pfad, headers=self._token_headers())
+
     def _fetch_router(self):
-        hdrs   = self._token_headers()
-        ifaces = self._http(f'{self._router_host}/api/interfaces/status', headers=hdrs)['data']
-        modems = self._http(f'{self._router_host}/api/modems/status',     headers=hdrs)['data']
+        ifaces = self._router_holen('/api/interfaces/status')['data']
+        modems = self._router_holen('/api/modems/status')['data']
 
         wan = [i for i in ifaces if i.get('area_type') == 'wan' and i.get('is_up')]
         wan.sort(key=lambda i: i.get('metric', 99))
@@ -146,7 +187,7 @@ class ConnectivityMonitor:
         # Jedes Interface (pro Band) hat eine clients-Liste mit hostname/ip/signal.
         wifi_clients = []
         try:
-            wifi = self._http(f'{self._router_host}/api/wireless/interfaces/status', headers=hdrs)
+            wifi = self._router_holen('/api/wireless/interfaces/status')
             for iface in (wifi.get('data') or []):
                 ssid = iface.get('ssid', '')
                 for c in (iface.get('clients') or []):
@@ -175,8 +216,7 @@ class ConnectivityMonitor:
         if self._leases_zaehler <= 0:
             self._leases_zaehler = 5
             try:
-                antwort = self._http(f'{self._router_host}/api/dhcp/leases/ipv4/status',
-                                     headers=hdrs)
+                antwort = self._router_holen('/api/dhcp/leases/ipv4/status')
                 self._leases = [{
                     'hostname':  l.get('hostname') or '',
                     'mac':       l.get('macaddr', ''),
@@ -201,8 +241,7 @@ class ConnectivityMonitor:
         # es sie ohnehin nicht immer.
         gps = None
         try:
-            roh = self._http(f'{self._router_host}/api/gps/position/status',
-                             headers=hdrs).get('data') or {}
+            roh = self._router_holen('/api/gps/position/status').get('data') or {}
             gps = _gps_lesen(roh)
         except Exception as e:
             if not getattr(self, '_gps_warn_logged', False):
