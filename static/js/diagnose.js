@@ -2639,6 +2639,44 @@ const SCHIENE_MIN_S = 300;
 
 let _zieht = null;      // 'a' | 'b' | 'band' | null
 
+// Nachladen WAEHREND des Ziehens.
+//
+// Der erste Anlauf zeichnete aus einer einmal geholten Grobuebersicht. Das war
+// sparsam und in einem Fall unbrauchbar: zieht man auf einen engen Ausschnitt,
+// liegt in der groben Uebersicht dort KEIN einziger Punkt, und der Graph wurde
+// leer. Ein leeres Bild ist schlechter als ein spaeteres.
+//
+// Jetzt werden echte Daten geholt, aber selbstbegrenzend: es ist immer nur
+// EINE Abfrage unterwegs, und zwischen zweien liegen mindestens 120 ms. Kommt
+// waehrenddessen eine neue Zeigerbewegung, wird sie gemerkt und nach der
+// laufenden Abfrage nachgeholt — nicht eingereiht. Damit haengt die Bildrate
+// von selbst daran, wie schnell der Server antwortet: heute misst er 19 ms
+// fuer einen Tag und 66 fuer sieben, also fluessig; wird der Verlauf in einem
+// Jahr traege, kommen eben weniger Bilder statt einer Warteschlange.
+const ZIEH_TAKT_MS = 120;
+let _ziehBedarf = false;
+let _ziehLaeuft = false;
+let _ziehZuletzt = 0;
+
+async function _ziehNachladen() {
+  if (_ziehLaeuft) return;
+  const wartet = ZIEH_TAKT_MS - (Date.now() - _ziehZuletzt);
+  if (wartet > 0) { setTimeout(() => { if (_ziehBedarf) _ziehNachladen(); }, wartet); return; }
+  _ziehBedarf = false;
+  _ziehLaeuft = true;
+  try {
+    const { von, bis } = _messFenster();
+    // Weniger Punkte als sonst: waehrend des Ziehens sieht niemand 700
+    // Stuetzstellen, und die Antwort wird spuerbar schneller.
+    const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=250`);
+    if (d && _zieht) { _messDaten = d; zeichneMesswerte(); }
+  } finally {
+    _ziehLaeuft = false;
+    _ziehZuletzt = Date.now();
+    if (_ziehBedarf && _zieht) _ziehNachladen();
+  }
+}
+
 /** Der Zeitraum, den die Spur abbildet: alles Vorhandene, mindestens bis jetzt. */
 function _schieneRaum() {
   const z = (_daten.diagnose || {}).verlauf_zeitraum || {};
@@ -2716,6 +2754,10 @@ function _schieneZieht(e) {
   _messFolgt = bis >= raum.bis - 60;
   zeichneSchiene();
   zeichneZeitleiste();
+  // Nebenlaeufig: das Ziehen darf nie auf die Leitung warten. Bis neue Daten
+  // da sind, bleibt das letzte Bild stehen — besser als ein leerer Rahmen.
+  _ziehBedarf = true;
+  _ziehNachladen();
 }
 
 function _schieneEnde() {
