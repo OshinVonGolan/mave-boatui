@@ -4,17 +4,144 @@ const VISIBLE_CH = [0, 1, 2, 3, 8]; // PWM 1–4 + relay
 
 function buildChannelBars() {
   const row = $('channelsRow'), lbl = $('channelsLabel');
-  row.innerHTML = lbl.innerHTML = '';
+  row.innerHTML = '';
+  if (lbl) lbl.innerHTML = '';     // die Nummernzeile ist entfallen, s.u.
   VISIBLE_CH.forEach(i => {
-    const wrap = document.createElement('div'); wrap.className = 'ch-bar-wrap';
-    const bar  = document.createElement('div'); bar.className = 'ch-bar' + (i===8?' relay':'');
+    const wrap = document.createElement('div');
+    wrap.className = 'ch-bar-wrap' + (i === 8 ? ' ist-relais' : '');
+    wrap.dataset.ch = i;
+    const bar = document.createElement('div');
+    bar.className = 'ch-bar' + (i === 8 ? ' relay' : '');
     bar.id = `chBar${i}`; bar.style.height = '0%';
-    wrap.appendChild(bar); row.appendChild(wrap);
-    const l = document.createElement('div'); l.className = 'ch-num';
-    l.textContent = i < 8 ? (i+1) : 'R'; lbl.appendChild(l);
+    // Der Name steht IM Balken, nicht darunter. Vorher stand dort die
+    // Kanalnummer — "3" sagt niemandem, welches Licht das ist. Er liegt ueber
+    // der Fuellung und bleibt damit bei jedem Stand lesbar.
+    const name = document.createElement('span');
+    name.className = 'ch-name'; name.id = `chName${i}`;
+    name.textContent = chKurz(i, 14);
+    // Fuer das Halten am Relais: ein Streifen, der in zwei Sekunden volllaeuft.
+    const halten = document.createElement('div');
+    halten.className = 'ch-halten'; halten.id = `chHalten${i}`;
+    wrap.append(bar, halten, name);
+    row.appendChild(wrap);
   });
+  _chGesteBinden(row);
 }
 buildChannelBars();
+
+/** Namen neu schreiben, ohne die Balken neu zu bauen (nach dem Speichern). */
+function chNamenAuffrischen() {
+  VISIBLE_CH.forEach(i => {
+    const el = $(`chName${i}`);
+    if (el) el.textContent = chKurz(i, 14);
+  });
+  if (typeof buildWideSliders === 'function') buildWideSliders();
+  if (typeof _lastData !== 'undefined' && _lastData?.lights)
+    updateChannels(_lastData.lights.channels ?? []);
+}
+
+// ── Die Balken sind Regler ──────────────────────────────────────────────────
+// Ein Balken zeigt die Helligkeit ohnehin an — dann kann er sie auch stellen.
+//
+// Zwei Dinge sind dabei wichtig und beide ausdruecklich gewuenscht:
+//
+//   * Es wird die BEWEGUNG gerechnet, nicht die Position. Wer unten auf den
+//     Balken tippt, will nicht, dass das Licht auf 5 % springt — er will
+//     vielleicht nur die Detailseite oeffnen. Der Wert aendert sich um das,
+//     was der Finger zurueckgelegt hat, ausgehend vom Stand beim Aufsetzen.
+//   * Der Finger wird ueber die Kachel hinaus verfolgt (Pointer Capture). Ein
+//     Balken ist ein paar Zentimeter hoch; wer von ganz unten nach ganz oben
+//     will, verlaesst ihn dabei zwangslaeufig.
+//
+// Ein kurzer Tipp bleibt, was er war: er oeffnet die Detailseite. Dafuer wird
+// hier nichts abgefangen — nur nach einem Zug oder einem Halten wird der
+// folgende Klick geschluckt, damit nicht beides zugleich passiert.
+
+const _CH_WEG_PX      = 150;   // Fingerweg fuer den ganzen Bereich 0..255
+const _CH_ZUG_AB_PX   = 4;     // darunter ist es ein Tipp, kein Zug
+const _CH_HALTEN_MS   = 2000;  // Relais: so lange halten zum Schalten
+
+let _chZug = null;             // {ch, startY, startWert, gezogen}
+let _chKlickSchlucken = false;
+
+function _chGesteBinden(row) {
+  row.addEventListener('pointerdown', e => {
+    const wrap = e.target.closest('.ch-bar-wrap');
+    if (!wrap) return;
+    const ch = +wrap.dataset.ch;
+    _chZug = { ch, startY: e.clientY, startWert: _wideCh[ch] ?? 0, gezogen: false,
+               halteUhr: null, wrap };
+    wrap.setPointerCapture?.(e.pointerId);
+    row.classList.add('zieht');
+
+    if (ch >= 8) {
+      // Relais: erst nach zwei Sekunden. Ohne die Wartezeit schaltete es
+      // jedes Mal mit, wenn jemand die Detailseite oeffnen wollte.
+      const streifen = $(`chHalten${ch}`);
+      if (streifen) {
+        streifen.style.transition = `height ${_CH_HALTEN_MS}ms linear`;
+        streifen.style.height = '100%';
+      }
+      _chZug.halteUhr = setTimeout(() => {
+        _chZug && (_chZug.gezogen = true);        // Klick danach schlucken
+        _chHaltenZuruecksetzen(ch);
+        if (typeof _toggleRelayFromWide === 'function') _toggleRelayFromWide();
+        if (navigator.vibrate) navigator.vibrate(20);
+      }, _CH_HALTEN_MS);
+    }
+  });
+
+  const beenden = e => {
+    if (!_chZug) return;
+    clearTimeout(_chZug.halteUhr);
+    _chHaltenZuruecksetzen(_chZug.ch);
+    _chKlickSchlucken = _chZug.gezogen;
+    _chZug = null;
+    row.classList.remove('zieht');
+    // Der Klick kommt unmittelbar nach pointerup; das Fenster darf nur so
+    // lange offen sein, dass genau dieser eine hineinfaellt.
+    if (_chKlickSchlucken) setTimeout(() => { _chKlickSchlucken = false; }, 300);
+  };
+  row.addEventListener('pointerup', beenden);
+  row.addEventListener('pointercancel', beenden);
+
+  row.addEventListener('pointermove', e => {
+    if (!_chZug) return;
+    const weg = _chZug.startY - e.clientY;          // nach oben ist heller
+    if (!_chZug.gezogen && Math.abs(weg) < _CH_ZUG_AB_PX) return;
+    if (!_chZug.gezogen) {
+      _chZug.gezogen = true;
+      clearTimeout(_chZug.halteUhr);                // aus Halten wird Ziehen
+      _chHaltenZuruecksetzen(_chZug.ch);
+    }
+    if (_chZug.ch >= 8) return;                     // das Relais kennt kein Dazwischen
+    const wert = Math.max(0, Math.min(255,
+      Math.round(_chZug.startWert + weg / _CH_WEG_PX * 255)));
+    if (wert === _wideCh[_chZug.ch]) return;
+    // Sofort sichtbar, gesendet wird gedrosselt (_setChannelFromSlider).
+    _wideCh[_chZug.ch] = wert;
+    const bar = $(`chBar${_chZug.ch}`);
+    if (bar) { bar.style.height = wert / 255 * 100 + '%';
+               bar.style.opacity = wert > 0 ? '0.9' : '0.2'; }
+    _setChannelFromSlider(_chZug.ch, wert);
+    if (typeof updateWideSliders === 'function') updateWideSliders(_wideCh);
+  });
+
+  // Nach einem Zug oder einem Halten NICHT auch noch die Detailseite oeffnen.
+  row.addEventListener('click', e => {
+    if (!_chKlickSchlucken) return;
+    e.stopPropagation();
+    e.preventDefault();
+    _chKlickSchlucken = false;
+  }, true);
+}
+
+function _chHaltenZuruecksetzen(ch) {
+  const streifen = $(`chHalten${ch}`);
+  if (!streifen) return;
+  streifen.style.transition = 'height .15s ease';
+  streifen.style.height = '0%';
+}
 
 // Aktueller Kanal-Zustand für die Wide-Slider (mit echtem Gerätezustand synchron,
 // damit ein Slider-Move nicht das Relais oder andere Kanäle überschreibt).
@@ -39,8 +166,8 @@ function updateChannels(channels) {
 
 // ── Wide tile: vertical zone sliders ────────────────────────────────────────
 
-// Kurze Zonen-Labels (CH_NAMES sind teils zu lang für die schmale Spalte)
-const _WIDE_LABELS = { 0: 'Küche', 1: 'Kartent.', 2: 'Salon', 3: 'Kabine', 8: 'Relais' };
+// _WIDE_LABELS stand hier als zweite, kürzere Namensliste. Gekürzt wird jetzt
+// gerechnet (chKurz in core.js) statt ein zweites Mal gepflegt.
 
 function buildWideSliders() {
   const wrap = $('lightsWideSliders');
@@ -48,7 +175,10 @@ function buildWideSliders() {
   wrap.innerHTML = '';
   VISIBLE_CH.forEach(i => {
     const isRelay = i >= 8;
-    const lbl = _WIDE_LABELS[i] ?? (i + 1);
+    // Voller Name; kuerzen macht der Browser, wenn die Spalte zu schmal ist.
+    // Auf neun Zeichen zu raten ergab "Ankerlic." — die tatsaechliche Breite
+    // kennt nur das Stylesheet.
+    const lbl = _esc(chName(i));
     const item = document.createElement('div');
     item.className = 'lights-slider-item';
     if (isRelay) {
@@ -116,6 +246,7 @@ async function loadPresets() {
     if (data.devices)   devicesConfig   = data.devices;
     if (data.batteries) batteriesConfig = data.batteries;
     if (data.wartung)   wartungConfig   = { ...wartungConfig, ...data.wartung };
+    if (data.lights)    lightsConfig    = data.lights;
     // Apply tank names from config
     $('tank1Name').textContent = tanksConfig.tank1?.name ?? 'Tank 1';
     $('tank2Name').textContent = tanksConfig.tank2?.name ?? 'Tank 2';

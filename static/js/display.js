@@ -1352,60 +1352,220 @@ async function ladeSparklines() {
 function updateStatusBar(data) {
   if (!data || !document.getElementById('statusBar')) return;
 
-  // Batterie: SOC gross, Spannung und Strom klein darunter
-  const b = data.battery || {};
-  _sbSet('sbSoc', _n(b.soc) ?? '--');
-  const volt = _n(b.voltage, 2), cur = _n(b.current, 1);
-  _sbSet('sbBattSub', (volt == null && cur == null) ? 'keine Daten'
-    : `${volt ?? '--'} V · ${cur != null && cur > 0 ? '+' : ''}${cur ?? '--'} A`);
-  _sbState('sbSoc', b.soc == null ? 'sb-idle'
-    : b.soc < 30 ? 'sb-warn' : b.soc < 50 ? 'sb-low' : 'sb-ok');
+  _sbRenderBatterie(data);
 
   _sbRenderLaden(data);
 
-  // Tanks: Namen und Kapazitaet kommen aus den Presets, nicht hart verdrahtet
-  const t = data.tanks || {};
-  const cfg = (typeof tanksConfig === 'object' && tanksConfig) || {};
-  // Diesel steht seit v1.54.0 nicht mehr in der Leiste (Eignerwunsch, der
-  // Platz bleibt vorerst frei). Die Schleife laeuft weiter ueber beide IDs —
-  // _sbSet und _sbState pruefen auf Vorhandensein, tank2 faellt also
-  // geraeuschlos weg und ist wieder da, sobald das Feld zurueckkommt.
-  // Liter oder Prozent — dieselbe Umschaltung wie auf der Tankkachel
-  // (tankShowLiters in tanks.js). Vorher stand hier immer Prozent, obwohl der
-  // Tipp auf das Feld toggleTanks() aufruft: die Kachel schaltete um, die
-  // Leiste nicht.
-  const inLiter = (typeof tankShowLiters !== 'undefined') && tankShowLiters;
-  [['tank1', 'sbT1'], ['tank2', 'sbT2']].forEach(([key, id]) => {
-    const pct = t[key];
-    const c = cfg[key] || {};
-    if (c.name) _sbSet(id + 'Lbl', c.name);
-    const einheitEl = document.getElementById(id)?.nextElementSibling;
-
-    if (pct != null && inLiter && c.capacity_l) {
-      _sbSet(id, String(Math.round(pct * c.capacity_l / 100)));
-      if (einheitEl) einheitEl.textContent = 'L';
-      _sbSet(id + 'Sub', `${Math.round(pct)} % von ${c.capacity_l} L`);
-    } else {
-      _sbSet(id, _n(pct) ?? '--');
-      if (einheitEl) einheitEl.textContent = '%';
-      _sbSet(id + 'Sub', (pct != null && c.capacity_l)
-        ? `${Math.round(pct * c.capacity_l / 100)} von ${c.capacity_l} L`
-        : (pct == null ? 'keine Daten' : ''));
-    }
-    // Der Zustand haengt immer am Prozentwert, egal welche Einheit dasteht.
-    _sbState(id, pct == null ? 'sb-idle'
-      : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
-    // Waagerechter Balken: die Breite IST der Fuellstand.
-    const bar = document.getElementById(id + 'Bar');
-    if (bar) bar.style.width = pct == null ? '0%'
-      : Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
-  });
+  _sbRenderTank(data);
 
   // Der Pegel stand hier bis v1.54.0. An seiner Stelle steht jetzt die Heizung
   // — der Wasserstand hat eine eigene Seite und ist dort vollstaendiger.
   _sbRenderHeizung();
   _sbRenderInternet();
   _sbRenderWartung();
+}
+
+// ── Halten oeffnet die Detailseite ──────────────────────────────────────────
+// Die Felder der Leiste schalten beim Tippen durch — damit war der kurze Weg
+// zur Detailseite weg, den einige von ihnen vorher hatten. Er kommt hier
+// zurueck, und zwar fuer ALLE Felder, zu denen es eine Seite gibt: zwei
+// Sekunden halten.
+//
+// Dieselbe Geste wie beim Relais in der Lichtkachel, mit derselben Wartezeit
+// und demselben mitlaufenden Streifen. Eine Bedienung, die man einmal lernt,
+// soll ueberall dasselbe bedeuten.
+
+const _SB_HALTEN_MS = 2000;
+let _sbHalten = null;          // {uhr, feld, gehalten}
+
+function _sbHaltenBinden() {
+  const leiste = document.getElementById('statusBar');
+  if (!leiste || leiste.dataset.haltenBereit) return;
+  leiste.dataset.haltenBereit = '1';
+
+  leiste.addEventListener('pointerdown', e => {
+    const feld = e.target.closest('.sb-item');
+    const ziel = feld?.dataset.detail;
+    if (!ziel) return;
+    // Der Streifen entsteht erst beim ersten Halten — die meisten Felder
+    // werden nie gehalten, und ein leeres Element je Feld waere Ballast.
+    let streifen = feld.querySelector('.sb-halten');
+    if (!streifen) {
+      streifen = document.createElement('span');
+      streifen.className = 'sb-halten';
+      feld.appendChild(streifen);
+    }
+    streifen.style.transition = `width ${_SB_HALTEN_MS}ms linear`;
+    streifen.style.width = '100%';
+    feld.setPointerCapture?.(e.pointerId);
+    _sbHalten = { feld, gehalten: false, uhr: setTimeout(() => {
+      _sbHalten && (_sbHalten.gehalten = true);
+      _sbHaltenLoesen(feld);
+      if (navigator.vibrate) navigator.vibrate(20);
+      const fn = window[ziel];
+      if (typeof fn === 'function') fn();
+    }, _SB_HALTEN_MS) };
+  });
+
+  const beenden = () => {
+    if (!_sbHalten) return;
+    clearTimeout(_sbHalten.uhr);
+    _sbHaltenLoesen(_sbHalten.feld);
+    // Nach einem Halten NICHT auch noch weiterschalten: der Klick kommt
+    // unmittelbar nach dem Loslassen, und beides zugleich waere Unsinn.
+    if (_sbHalten.gehalten) _sbKlickSchlucken = true;
+    _sbHalten = null;
+  };
+  leiste.addEventListener('pointerup', beenden);
+  leiste.addEventListener('pointercancel', beenden);
+  leiste.addEventListener('pointerleave', beenden);
+
+  leiste.addEventListener('click', e => {
+    if (!_sbKlickSchlucken) return;
+    _sbKlickSchlucken = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+}
+
+let _sbKlickSchlucken = false;
+
+function _sbHaltenLoesen(feld) {
+  const streifen = feld?.querySelector('.sb-halten');
+  if (!streifen) return;
+  streifen.style.transition = 'width .15s ease';
+  streifen.style.width = '0%';
+}
+
+// ── Batterie-Feld: Service und Starter ──────────────────────────────────────
+// Beim Starter gibt es nur die Spannung — er haengt an einem einfachen
+// Spannungseingang, kein Shunt, also kein Ladestand und kein Strom. Genau
+// deshalb wechselt hier auch die Einheit und die Skala des Graphen: 0..100 %
+// waere fuer 12 Volt keine Skala, sondern ein flacher Strich am Boden.
+
+const _SB_BATT = [
+  { schluessel: 'service', label: 'Batterie', einheit: '%', reihe: 'soc',
+    tief: '0', hoch: '100' },
+  // 11,5 bis 14,5 V deckt vom tiefentladenen Bleiakku bis zur Ladeschlusssp.
+  // alles ab, was an einem Starter vorkommt.
+  { schluessel: 'starter', label: 'Starter',  einheit: 'V', reihe: 'starter',
+    tief: '11.5', hoch: '14.5' },
+];
+let _sbBattIdx = 0;
+
+function sbBattWeiter() {
+  _sbBattIdx = (_sbBattIdx + 1) % _SB_BATT.length;
+  const wahl = _SB_BATT[_sbBattIdx];
+  const spark = document.querySelector('#sbBattItem .sb-spark');
+  if (spark) {
+    spark.dataset.reihe = wahl.reihe;
+    spark.dataset.tief  = wahl.tief;
+    spark.dataset.hoch  = wahl.hoch;
+    if (typeof _sparkZeichnen === 'function') _sparkZeichnen();
+  }
+  if (typeof _lastData !== 'undefined' && _lastData) _sbRenderBatterie(_lastData);
+}
+
+function _sbRenderBatterie(data) {
+  const b = data.battery || {};
+  const wahl = _SB_BATT[_sbBattIdx];
+  _sbSet('sbBattLbl', wahl.label);
+  _sbSet('sbBattUnit', wahl.einheit);
+
+  if (wahl.schluessel === 'starter') {
+    const v = _n(b.starter_voltage, 2);
+    _sbSet('sbSoc', v ?? '--');
+    // Kein Strom, kein Ladestand — und deshalb hier auch keine zweite Zeile,
+    // die so tut, als gaebe es noch etwas. Das Leerzeichen haelt die Hoehe.
+    _sbSet('sbBattSub', v == null ? 'keine Daten' : '\u00a0');
+    // Schwellen fuer einen 12-V-Starter in Ruhe: unter 12,0 ist er leer,
+    // unter 12,4 angeknabbert.
+    _sbState('sbSoc', v == null ? 'sb-idle'
+      : v < 12.0 ? 'sb-warn' : v < 12.4 ? 'sb-low' : 'sb-ok');
+    return;
+  }
+
+  _sbSet('sbSoc', _n(b.soc) ?? '--');
+  const volt = _n(b.voltage, 2), cur = _n(b.current, 1);
+  _sbSet('sbBattSub', (volt == null && cur == null) ? 'keine Daten'
+    : `${volt ?? '--'} V · ${cur != null && cur > 0 ? '+' : ''}${cur ?? '--'} A`);
+  _sbState('sbSoc', b.soc == null ? 'sb-idle'
+    : b.soc < 30 ? 'sb-warn' : b.soc < 50 ? 'sb-low' : 'sb-ok');
+}
+
+// ── Tank-Feld: Tanks durchschalten ──────────────────────────────────────────
+// Ein Tipp wechselt den Tank. Vorher stand hier fest das Frischwasser und der
+// Tipp schaltete zwischen Liter und Prozent um — die Umschaltung sitzt jetzt
+// nur noch auf der Tankkachel, und die Leiste folgt ihr.
+//
+// Die Liste wird bei jedem Zeichnen aus den Presets gebildet und nicht fest
+// verdrahtet: kommt ein dritter Tank dazu, faehrt er von selbst mit.
+
+let _sbTankIdx = 0;
+
+/** Welche Tanks es gibt, in der Reihenfolge der Presets. */
+function _sbTanks() {
+  const cfg = (typeof tanksConfig === 'object' && tanksConfig) || {};
+  return Object.keys(cfg).filter(k => /^tank\d+$/.test(k)).sort();
+}
+
+function sbTankWeiter() {
+  const tanks = _sbTanks();
+  if (tanks.length < 2) return;            // nichts zum Durchschalten
+  _sbTankIdx = (_sbTankIdx + 1) % tanks.length;
+  // Der Graph zeigt ab jetzt denselben Tank wie die Zahl.
+  const spark = document.querySelector('#sbTankItem .sb-spark');
+  if (spark) {
+    spark.dataset.reihe = tanks[_sbTankIdx];
+    if (typeof _sparkZeichnen === 'function') _sparkZeichnen();
+  }
+  if (typeof _lastData !== 'undefined' && _lastData) _sbRenderTank(_lastData);
+}
+
+function _sbRenderTank(data) {
+  const tanks = _sbTanks();
+  if (!tanks.length) return;
+  if (_sbTankIdx >= tanks.length) _sbTankIdx = 0;
+  const key = tanks[_sbTankIdx];
+  const c   = ((typeof tanksConfig === 'object' && tanksConfig) || {})[key] || {};
+  const pct = (data.tanks || {})[key];
+
+  _sbSet('sbT1Lbl', c.name || key);
+  // Liter oder Prozent — dieselbe Umschaltung wie auf der Tankkachel
+  // (tankShowLiters in tanks.js).
+  const inLiter = (typeof tankShowLiters !== 'undefined') && tankShowLiters;
+  if (pct != null && inLiter && c.capacity_l) {
+    _sbSet('sbT1', String(Math.round(pct * c.capacity_l / 100)));
+    _sbSet('sbT1Unit', 'L');
+    _sbSet('sbT1Sub', `${Math.round(pct)} % von ${c.capacity_l} L`);
+  } else {
+    _sbSet('sbT1', _n(pct) ?? '--');
+    _sbSet('sbT1Unit', '%');
+    _sbSet('sbT1Sub', (pct != null && c.capacity_l)
+      ? `${Math.round(pct * c.capacity_l / 100)} von ${c.capacity_l} L`
+      : (pct == null ? 'keine Daten' : ''));
+  }
+  // Der Zustand haengt immer am Prozentwert, egal welche Einheit dasteht.
+  _sbState('sbT1', pct == null ? 'sb-idle'
+    : pct < 15 ? 'sb-warn' : pct < 30 ? 'sb-low' : 'sb-ok');
+
+  // Waagerechter Balken: die Breite IST der Fuellstand, die Farbe die des
+  // Tanks. Sie steht in den Presets und wird auf der Kachel schon benutzt —
+  // hier stand bisher immer derselbe Akzent, und Diesel sah aus wie Wasser.
+  const bar = document.getElementById('sbT1Bar');
+  if (bar) {
+    bar.style.width = pct == null ? '0%'
+      : Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
+    // Ohne eigene Farbe bleibt es beim Zustandsfarbton aus dem Stylesheet.
+    bar.style.color = c.color || '';
+  }
+  // Mehrere Tanks: sagen, dass hier etwas zu tippen ist.
+  const feld = document.getElementById('sbTankItem');
+  if (feld) {
+    const mehr = _sbTanks().length > 1;
+    feld.title = mehr ? 'Tippen: nächster Tank' : (c.name || '');
+    feld.style.cursor = mehr ? 'pointer' : 'default';
+  }
 }
 
 // ── Laden-Feld: Quellen durchschalten ───────────────────────────────────────
@@ -1560,10 +1720,61 @@ function _sbRenderInternet() {
  * Heizungsdaten da sind. Sonst haette das Feld je nach Reihenfolge bis zu
  * sechs Sekunden alte Werte gezeigt.
  */
+// ── Heizungs-Feld: Heizung, Vorlauf, Raeume ─────────────────────────────────
+// Die Liste der Raeume steht nicht hier, sie kommt vom Hub: er weiss, welche
+// Fuehler angelernt sind, und meldet sie mitsamt Namen. Kommt ein Raumknoten
+// dazu, faehrt er von selbst mit; wird einer entfernt, verschwindet er.
+//
+// Raeume, die gerade nichts senden, bleiben in der Liste und zeigen "--" mit
+// dem Vermerk "offline". Sie zu ueberspringen hiesse, einen ausgefallenen
+// Fuehler dadurch zu verstecken, dass er ausgefallen ist.
+
+let _sbHzIdx = 0;
+
+/** Was sich im Heizungsfeld durchschalten laesst — Heizung, Vorlauf, Raeume. */
+function _sbHzSchritte() {
+  const d = (typeof _hzDaten !== 'undefined') ? _hzDaten : null;
+  const schritte = [
+    { art: 'heizung', label: 'Heizung', einheit: '%',
+      reihe: 'heizleistung', tief: '0', spanne: '20' },
+    { art: 'vorlauf', label: 'Vorlauf', einheit: '°C',
+      reihe: 'vorlauf', spanne: '4' },
+  ];
+  for (const r of (d?.state?.rooms || [])) {
+    schritte.push({ art: 'raum', raum: r, label: r.name || ('Raum ' + r.id),
+                    einheit: '°C', reihe: 'raum' + r.id, spanne: '4' });
+  }
+  return schritte;
+}
+
+function sbHeizungWeiter() {
+  const schritte = _sbHzSchritte();
+  if (schritte.length < 2) return;
+  _sbHzIdx = (_sbHzIdx + 1) % schritte.length;
+  const wahl = schritte[_sbHzIdx];
+  const spark = document.querySelector('#sbHzItem .sb-spark');
+  if (spark) {
+    spark.dataset.reihe  = wahl.reihe;
+    spark.dataset.spanne = wahl.spanne;
+    // tief nur setzen, wo es eine feste Untergrenze gibt — bei Temperaturen
+    // waere eine Null am Boden verschenkte Hoehe.
+    if (wahl.tief !== undefined) spark.dataset.tief = wahl.tief;
+    else delete spark.dataset.tief;
+    if (typeof _sparkZeichnen === 'function') _sparkZeichnen();
+  }
+  _sbRenderHeizung();
+}
+
 function _sbRenderHeizung() {
   const d = (typeof _hzDaten !== 'undefined') ? _hzDaten : null;
   const st = d?.state, h = st?.heater;
   const erreichbar = d && d.enabled && d.configured && d.reachable !== false;
+
+  const schritte = _sbHzSchritte();
+  if (_sbHzIdx >= schritte.length) _sbHzIdx = 0;
+  const wahl = schritte[_sbHzIdx];
+  _sbSet('sbHzLbl', wahl.label);
+  _sbSet('sbHzUnit', wahl.einheit);
 
   if (!d || !d.configured) {
     _sbSet('sbHz', '--');
@@ -1577,8 +1788,32 @@ function _sbRenderHeizung() {
     _sbState('sbHz', 'sb-warn');
     return;
   }
-  _sbSet('sbHz', h.flowTemp != null ? String(Math.round(h.flowTemp)) : '--');
 
+  if (wahl.art === 'raum') {
+    // Der Raum aus der frischen Liste, nicht der beim Umschalten gemerkte:
+    // zwischen zwei Tipps koennen neue Werte gekommen sein.
+    const r = (st.rooms || []).find(x => x.id === wahl.raum.id) || wahl.raum;
+    const still = r.conn !== 'online';
+    const temp = (typeof r.roomTemp === 'number') ? r.roomTemp : null;
+    _sbSet('sbHz', temp != null ? temp.toFixed(1) : '--');
+    _sbSet('sbHzSub', still ? 'offline'
+      : (typeof r.target === 'number' ? `Soll ${r.target.toFixed(1)} °C` : '\u00a0'));
+    _sbState('sbHz', still || temp == null ? 'sb-idle'
+      : r.wantsHeat ? 'sb-ok' : null);
+    return;
+  }
+
+  if (wahl.art === 'vorlauf') {
+    _sbSet('sbHz', h.flowTemp != null ? String(Math.round(h.flowTemp)) : '--');
+    _sbSet('sbHzSub', h.flowTemp == null ? 'keine Daten'
+      : (h.boiler?.active ? 'Kessel läuft' : 'Kessel aus'));
+    _sbState('sbHz', h.errorCode ? 'sb-warn'
+      : h.state && h.state !== 'off' ? 'sb-ok' : 'sb-idle');
+    return;
+  }
+
+  // Heizung: was das Geraet TUT. Der Vorlauf hat jetzt einen eigenen Schritt.
+  _sbSet('sbHz', h.powerLevel != null ? String(Math.round(h.powerLevel)) : '--');
   // Preset und Betriebsart in einer Zeile. Ohne Preset steht nur die
   // Betriebsart da, statt eines fuehrenden Trennzeichens.
   const preset = st.preset?.name;

@@ -422,5 +422,292 @@ class AnsichtInDerAdresse(Pruefstand):
             "() => $('connInetOverlay').classList.contains('hidden')"))
 
 
+
+# Ein Heizungsschnappschuss, wie ihn der Hub liefert — mit einem Raum, der
+# meldet, und einem, der still ist. Beide muessen im Feld auftauchen.
+HEIZUNG = {
+    'enabled': True, 'configured': True, 'reachable': True,
+    'state': {
+        'heater': {'mode': 'auto', 'state': 'heating', 'powerLevel': 62,
+                   'flowTemp': 48.3, 'errorCode': 0, 'boiler': {'active': True}},
+        'preset': {'name': 'Tag'},
+        'rooms': [
+            {'id': 1, 'name': 'Salon', 'conn': 'online', 'roomTemp': 19.4,
+             'target': 20.0, 'wantsHeat': True},
+            {'id': 2, 'name': 'Bugkabine', 'conn': 'offline', 'roomTemp': None,
+             'target': 18.0},
+        ],
+    },
+}
+
+TANKS = {'tank1': {'name': 'Wasser', 'capacity_l': 200, 'color': '#1a5fb4'},
+         'tank2': {'name': 'Diesel', 'capacity_l': 200, 'color': '#ff7800'}}
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class StreifenDurchschalten(Pruefstand):
+    """Die Felder der Statusleiste schalten durch — wie das Laden-Feld schon.
+
+    Der Wert kommt aus einer eingespielten Nutzlast, nicht vom Boot: geprüft
+    wird das Umschalten, nicht die Messtechnik.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # `_hzDaten` und `tanksConfig` sind `let` auf oberster Ebene des
+        # Bündels — also lexikalische Bindungen und KEINE window-Eigenschaften.
+        # `window._hzDaten = …` legt daneben eine zweite Variable an, die
+        # niemand liest; die blanke Zuweisung trifft die richtige.
+        self.pg.evaluate("""([d, hz, tk]) => {
+            _hzDaten = hz;
+            tanksConfig = tk;
+            handleData(d);
+        }""", [NUTZLAST, HEIZUNG, TANKS])
+        self.pg.wait_for_timeout(200)
+
+    def feld(self, *ids):
+        return self.pg.evaluate(
+            "(ids) => ids.map(i => document.getElementById(i)?.textContent)", list(ids))
+
+    # ── Tanks ──────────────────────────────────────────────────────────────
+
+    def test_tank_schaltet_weiter(self):
+        self.assertEqual(self.feld('sbT1Lbl', 'sbT1'), ['Wasser', '61'])
+        self.pg.evaluate('() => sbTankWeiter()')
+        self.assertEqual(self.feld('sbT1Lbl', 'sbT1'), ['Diesel', '22'])
+        self.pg.evaluate('() => sbTankWeiter()')
+        self.assertEqual(self.feld('sbT1Lbl', 'sbT1'), ['Wasser', '61'])
+
+    def test_tank_traegt_seine_farbe(self):
+        """Die Farbe steht in den Presets und wird auf der Kachel schon
+        benutzt; in der Leiste stand bisher immer derselbe Akzent."""
+        farbe = lambda: self.pg.evaluate(          # noqa: E731
+            "() => document.getElementById('sbT1Bar').style.color")
+        self.assertEqual(farbe(), 'rgb(26, 95, 180)')     # #1a5fb4
+        self.pg.evaluate('() => sbTankWeiter()')
+        self.assertEqual(farbe(), 'rgb(255, 120, 0)')     # #ff7800
+
+    def test_ein_einziger_tank_schaltet_nicht(self):
+        self.pg.evaluate("""(d) => {
+            tanksConfig = { tank1: { name: 'Wasser', capacity_l: 200 } };
+            handleData(d);
+        }""", NUTZLAST)
+        self.pg.evaluate('() => sbTankWeiter()')
+        self.assertEqual(self.feld('sbT1Lbl'), ['Wasser'])
+
+    # ── Batterie ───────────────────────────────────────────────────────────
+
+    def test_batterie_und_starter(self):
+        self.assertEqual(self.feld('sbBattLbl', 'sbSoc', 'sbBattUnit'),
+                         ['Batterie', '78', '%'])
+        self.pg.evaluate('() => sbBattWeiter()')
+        self.assertEqual(self.feld('sbBattLbl', 'sbSoc', 'sbBattUnit'),
+                         ['Starter', '12.80', 'V'])
+
+    def test_starter_zeigt_nur_die_spannung(self):
+        """Kein Strom, kein Ladestand — der Starter hängt an einem einfachen
+        Spannungseingang. Eine zweite Zeile hätte nichts zu sagen."""
+        self.pg.evaluate('() => sbBattWeiter()')
+        self.assertEqual(self.feld('sbBattSub')[0].strip(), '')
+
+    def test_starter_wechselt_auch_die_skala(self):
+        """0..100 % wäre für 12 Volt keine Skala, sondern ein Strich am Boden."""
+        skala = lambda: self.pg.evaluate(          # noqa: E731
+            "() => { const s = document.querySelector('#sbBattItem .sb-spark');"
+            "        return [s.dataset.reihe, s.dataset.tief, s.dataset.hoch]; }")
+        self.assertEqual(skala(), ['soc', '0', '100'])
+        self.pg.evaluate('() => sbBattWeiter()')
+        self.assertEqual(skala(), ['starter', '11.5', '14.5'])
+
+    # ── Heizung ────────────────────────────────────────────────────────────
+
+    def test_heizung_vorlauf_dann_raeume(self):
+        schritte = []
+        for _ in range(4):
+            schritte.append(self.feld('sbHzLbl', 'sbHz', 'sbHzUnit'))
+            self.pg.evaluate('() => sbHeizungWeiter()')
+        self.assertEqual(schritte, [
+            ['Heizung', '62', '%'],
+            ['Vorlauf', '48', '°C'],
+            ['Salon', '19.4', '°C'],
+            ['Bugkabine', '--', '°C'],
+        ])
+
+    def test_stiller_raum_bleibt_in_der_liste(self):
+        """Einen ausgefallenen Fühler dadurch zu verstecken, dass er
+        ausgefallen ist, wäre die falsche Antwort."""
+        for _ in range(3):
+            self.pg.evaluate('() => sbHeizungWeiter()')
+        self.assertEqual(self.feld('sbHzLbl', 'sbHz', 'sbHzSub'),
+                         ['Bugkabine', '--', 'offline'])
+
+    def test_raumliste_kommt_vom_hub(self):
+        """Keine fest verdrahtete Raumliste: verschwindet ein Raum aus dem
+        Schnappschuss, verschwindet er auch aus dem Feld."""
+        self.pg.evaluate("""() => {
+            _hzDaten.state.rooms = [_hzDaten.state.rooms[0]];
+            _sbRenderHeizung();
+        }""")
+        namen = self.pg.evaluate("() => _sbHzSchritte().map(s => s.label)")
+        self.assertEqual(namen, ['Heizung', 'Vorlauf', 'Salon'])
+
+    def test_graph_folgt_der_auswahl(self):
+        reihe = lambda: self.pg.evaluate(          # noqa: E731
+            "() => document.querySelector('#sbHzItem .sb-spark').dataset.reihe")
+        self.assertEqual(reihe(), 'heizleistung')
+        self.pg.evaluate('() => sbHeizungWeiter()')
+        self.assertEqual(reihe(), 'vorlauf')
+        self.pg.evaluate('() => sbHeizungWeiter()')
+        self.assertEqual(reihe(), 'raum1')
+
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class HaltenOeffnetDetail(Pruefstand):
+    """Zwei Sekunden halten führt zur Detailseite.
+
+    Seit die Felder beim Tippen durchschalten, war der kurze Weg dorthin weg.
+    Dieselbe Geste wie beim Relais in der Lichtkachel — eine Bedienung, die man
+    einmal lernt, soll überall dasselbe bedeuten.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.pg.evaluate('(d) => handleData(d)', NUTZLAST)
+        self.pg.wait_for_timeout(200)
+        k = self.pg.locator('#sbBattItem').bounding_box()
+        self.x, self.y = k['x'] + k['width'] / 2, k['y'] + k['height'] / 2
+
+    def offen(self):
+        return self.pg.evaluate(
+            "() => !document.getElementById('battOverlay').classList.contains('hidden')")
+
+    def label(self):
+        return self.pg.evaluate("() => document.getElementById('sbBattLbl').textContent")
+
+    def halten(self, ms):
+        self.pg.mouse.move(self.x, self.y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(ms)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(400)
+
+    def test_kurzer_tipp_schaltet_nur_weiter(self):
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(300)
+        self.assertEqual(self.label(), 'Starter')
+        self.assertFalse(self.offen(), 'ein Tipp soll keine Seite öffnen')
+
+    def test_halten_oeffnet(self):
+        self.halten(2400)
+        self.assertTrue(self.offen())
+
+    def test_halten_schaltet_nicht_zusaetzlich_weiter(self):
+        """Beides zugleich wäre Unsinn: man landet auf der Detailseite und
+        hätte nebenbei die Auswahl darunter verstellt."""
+        vorher = self.label()
+        self.halten(2400)
+        self.assertEqual(self.label(), vorher)
+
+    def test_zu_kurz_oeffnet_nicht(self):
+        self.halten(900)
+        self.assertFalse(self.offen())
+
+    def test_nur_felder_mit_seite(self):
+        """Für die Tanks gibt es keine Detailseite — dort darf das Halten auch
+        nichts vortäuschen."""
+        self.assertIsNone(self.pg.evaluate(
+            "() => document.getElementById('sbTankItem').dataset.detail ?? null"))
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Lichtkreise(Pruefstand):
+    """Namen aus den Einstellungen, Balken als Regler, Relais auf Halten."""
+
+    def setUp(self):
+        super().setUp()
+        self.pg.route('**/api/lights/channels',
+                      lambda r: r.fulfill(status=200, body='{}'))
+        self.pg.evaluate("""(d) => {
+            lightsConfig = { '0': {name:'Kombüse'}, '1': {name:'Kartentisch'},
+                             '8': {name:'Ankerlicht'} };
+            chNamenAuffrischen();
+            handleData(d);
+        }""", NUTZLAST)
+        self.pg.wait_for_timeout(300)
+
+    def kasten(self, ch):
+        k = self.pg.locator(f'.ch-bar-wrap[data-ch="{ch}"]').bounding_box()
+        return k['x'] + k['width'] / 2, k['y'] + k['height'] / 2
+
+    def test_namen_stehen_in_den_balken(self):
+        """Vorher stand dort die Kanalnummer. "3" sagt niemandem, welches
+        Licht das ist."""
+        namen = self.pg.evaluate(
+            "() => [...document.querySelectorAll('.ch-name')].map(e => e.textContent)")
+        self.assertEqual(namen[:2], ['Kombüse', 'Kartentisch'])
+        self.assertEqual(namen[-1], 'Ankerlicht')
+
+    def test_ohne_eintrag_gilt_die_vorgabe(self):
+        self.assertEqual(self.pg.evaluate("() => chName(2)"), 'Salon')
+
+    def test_ziehen_rechnet_die_bewegung(self):
+        """Nicht die Position: wer unten auf den Balken tippt, will nicht, dass
+        das Licht auf 5 % springt."""
+        x, y = self.kasten(0)
+        vorher = self.pg.evaluate("() => _wideCh[0]")
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        for dy in range(0, 76, 15):
+            self.pg.mouse.move(x, y - dy)
+            self.pg.wait_for_timeout(30)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(300)
+        nachher = self.pg.evaluate("() => _wideCh[0]")
+        # 75 px von 150 px Vollausschlag sind rund die Hälfte von 255.
+        self.assertAlmostEqual(nachher - vorher, 128, delta=12)
+
+    def test_nach_dem_ziehen_keine_detailseite(self):
+        x, y = self.kasten(0)
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        for dy in range(0, 61, 20):
+            self.pg.mouse.move(x, y - dy)
+            self.pg.wait_for_timeout(30)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(400)
+        self.assertTrue(self.pg.evaluate(
+            "() => document.getElementById('lightOverlay').classList.contains('hidden')"))
+
+    def test_kurzer_tipp_oeffnet_die_detailseite(self):
+        x, y = self.kasten(0)
+        self.pg.mouse.click(x, y)
+        self.pg.wait_for_timeout(400)
+        self.assertFalse(self.pg.evaluate(
+            "() => document.getElementById('lightOverlay').classList.contains('hidden')"))
+
+    def test_relais_erst_nach_zwei_sekunden(self):
+        """Ohne die Wartezeit schaltete es jedes Mal mit, wenn jemand die
+        Detailseite öffnen wollte."""
+        x, y = self.kasten(8)
+        vorher = self.pg.evaluate("() => _wideCh[8]")
+        self.pg.mouse.click(x, y)
+        self.pg.wait_for_timeout(400)
+        self.assertEqual(self.pg.evaluate("() => _wideCh[8]"), vorher,
+                         'ein Tipp hat das Relais geschaltet')
+        self.pg.evaluate("() => closeLightDetail()")
+        self.pg.wait_for_timeout(200)
+
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(2400)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(400)
+        self.assertNotEqual(self.pg.evaluate("() => _wideCh[8]"), vorher)
+        self.assertTrue(self.pg.evaluate(
+            "() => document.getElementById('lightOverlay').classList.contains('hidden')"),
+            'nach dem Halten soll nicht auch noch die Seite aufgehen')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -256,6 +256,76 @@ class EchteRegistry(unittest.TestCase):
                 self.assertIn(g['verbunden_an'], ids, g['id'])
 
 
+
+class RaeumeKommenVomHub(unittest.TestCase):
+    """Welche Raumknoten es gibt, sagt der Hub — nicht die Geräteliste.
+
+    Anlass: die Liste trug vier Raumknoten (Bugkabine, Salon, Kartentisch,
+    Schlafzimmer), der Hub kannte genau einen. Die drei übrigen standen auf der
+    Geräteseite unter „Braucht einen Blick" — als wären sie kaputt. Sie hat es
+    nie gegeben.
+    """
+
+    HUB = {
+        'configured': True, 'reachable': True, 'age_s': 1.0, 'info': {},
+        'state': {'rooms': [
+            {'id': 1, 'name': 'Salon', 'nodeId': 1, 'conn': 'offline',
+             'roomTemp': None, 'lastSeenS': 90},
+        ]},
+    }
+
+    def geraete(self, registry):
+        return geraete.aggregiere(registry, stoker_snapshot=self.HUB)['geraete']
+
+    def test_raum_ohne_entsprechung_faellt_weg(self):
+        namen = [g['name'] for g in self.geraete([
+            {'id': 'r1', 'name': 'Knoten Salon', 'kategorie': 'heizung',
+             'match': {'typ': 'stoker', 'roomName': 'Salon'}},
+            {'id': 'r2', 'name': 'Knoten Schlafzimmer', 'kategorie': 'heizung',
+             'match': {'typ': 'stoker', 'roomName': 'Schlafzimmer'}},
+        ])]
+        self.assertIn('Knoten Salon', namen)
+        self.assertNotIn('Knoten Schlafzimmer', namen)
+
+    def test_ohne_hub_verschwindet_nichts(self):
+        """Antwortet der Hub nicht, wissen wir über die Knoten nichts — nicht,
+        dass es sie nicht gibt. Sie verschwinden zu lassen wäre eine Aussage,
+        die niemand belegen kann."""
+        aus = geraete.aggregiere([
+            {'id': 'r2', 'name': 'Knoten Schlafzimmer', 'kategorie': 'heizung',
+             'match': {'typ': 'stoker', 'roomName': 'Schlafzimmer'}},
+        ], stoker_snapshot={'configured': True, 'reachable': False, 'state': {}})
+        namen = [g['name'] for g in aus['geraete']]
+        self.assertIn('Knoten Schlafzimmer', namen)
+
+    def test_der_hub_selbst_bleibt(self):
+        """Der Hub ist kein Raum — er darf nicht an derselben Regel hängen."""
+        namen = [g['name'] for g in self.geraete([
+            {'id': 'hub', 'name': 'Stoker Hub', 'kategorie': 'heizung',
+             'match': {'typ': 'stoker', 'rolle': 'hub'}},
+        ])]
+        self.assertIn('Stoker Hub', namen)
+
+    def test_neuer_raum_erscheint_von_selbst(self):
+        """Wird ein Knoten angelernt, steht sein Raum ohne Zutun auf der Seite
+        — so wie ein neues Gerät am Bus auch."""
+        gefunden = [g for g in self.geraete([]) if g['id'] == 'stoker-raum-1']
+        self.assertEqual(len(gefunden), 1)
+        self.assertEqual(gefunden[0]['name'], 'Salon')
+        self.assertFalse(gefunden[0]['gepflegt'])
+        self.assertEqual(gefunden[0]['status'], 'offline')
+
+    def test_kein_doppelter_raum(self):
+        """Steht der Raum schon in der Liste, kommt er nicht zusätzlich als
+        Fund dazu."""
+        ids = [g['id'] for g in self.geraete([
+            {'id': 'r1', 'name': 'Knoten Salon', 'kategorie': 'heizung',
+             'match': {'typ': 'stoker', 'roomName': 'Salon'}},
+        ])]
+        self.assertIn('r1', ids)
+        self.assertNotIn('stoker-raum-1', ids)
+
+
 if __name__ == '__main__':
     unittest.main()
 

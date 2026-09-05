@@ -322,6 +322,29 @@ class StokerClient:
 
     # ── Zustand fuer die Oberflaeche ────────────────────────────────────────
 
+    def verlauf(self, von: float, bis: float, aufloesung: str = 'quarter') -> dict | None:
+        """Den Verlauf vom Hub holen — er fuehrt ihn selbst, und zwar besser.
+
+        Der Hub legt seine Saetze in vier Stufen im Flash ab: minuetlich 24
+        Stunden tief, viertelstuendlich 30 Tage, stuendlich 45 Tage, taeglich
+        gut drei Jahre. Je Satz stehen darin fuer JEDEN Raum Ist-, Soll- und
+        Vorlauftemperatur und die Geblaesedrehzahl, dazu Zustand, Leistung und
+        Vorlauf der Heizung selbst.
+
+        Deshalb wird hier nichts davon ein zweites Mal mitgeschrieben: ein
+        eigener Mitschnitt koennte davon nichts besser, nur aelter werden.
+
+        Rueckgabe ist die Antwort des Hubs unveraendert (`columns` und `rows`)
+        oder None, wenn er gerade nichts hergibt. Wirft nicht: der Verlauf ist
+        Beiwerk, und eine fehlende Kurve darf keine Anzeige aufhalten.
+        """
+        try:
+            return self._anfrage(f'/api/history?resolution={aufloesung}'
+                                 f'&from={int(von)}&to={int(bis)}')
+        except Exception as e:
+            log.debug('Heizungsverlauf nicht abrufbar: %s', e)
+            return None
+
     def snapshot(self) -> dict:
         """Zwischengespeicherter Zustand plus Erreichbarkeit."""
         with self._lock:

@@ -843,6 +843,15 @@
     /* Waagerechter Balken: fuellt das Feld von links nach rechts. Anders als
        der Verlauf zeigt er keinen Weg, sondern den Stand — deshalb eine
        gleichmaessige Flaeche mit klarer Kante statt eines Verlaufs. */
+    /* Der Streifen fuers Halten. Er laeuft waagerecht voll, weil die Felder
+       breit und flach sind — senkrecht waere er nach zwei Pixeln fertig. */
+    .sb-halten {
+      position: absolute; inset: auto 0 0 0; height: 2px; width: 0;
+      background: var(--accent); z-index: 3;
+      pointer-events: none;
+    }
+    .sb-item[data-detail] { cursor: pointer; }
+
     .sb-balken {
       position: absolute; inset: 0 auto 0 0; width: 0;
       background: currentColor; opacity: .18;
@@ -1135,23 +1144,29 @@
        `var(--red)33` ist kein gueltiger Farbwert — so haengt man keine
        Deckkraft an eine Variable. Der Browser hat die ganze Zeile verworfen,
        der Alarmring war also nie zu sehen. */
+    /* Ein Ring, zwei Farben.
+       Erst lagen beide auf box-shadow — dieselbe Eigenschaft, also gewann die
+       spaetere Regel und der Alarm verschwand beim Anfassen. Dann lag der rote
+       Ring vier Pixel weiter innen: sichtbar blieben beide, aber der blaue war
+       vom roten fast verdeckt, und zwei ineinandergeschachtelte Ringe sahen
+       nach Fehler aus.
+       Jetzt teilen sie sich GENAU dieselbe Flaeche — Rahmen und ein Pixel
+       Ring nach innen. Beim Anfassen wechselt nur die Farbe von Rot auf Blau,
+       und wenn der Finger weg ist, ist der Alarm wieder da. Nichts springt,
+       nichts wird breiter.
+       Beim Kacheln-Ordnen gewinnt die gestrichelte Greifkante — das ist ein
+       gewollter Ausnahmezustand und dauert, solange man ordnet. */
     .card--alarm {
       border-color: var(--red) !important;
-      /* Der Alarmring liegt WEITER INNEN als der blaue Ring beim Anfassen —
-         und auf einer anderen Eigenschaft.
-         Vorher nutzten beide box-shadow. Das ist dieselbe Eigenschaft, also
-         gewann die spaetere Regel: beim Anfassen verschwand der rote Ring, und
-         uebrig blieben roter Rahmen und blauer Ring uebereinander. Ein Alarm,
-         der beim Beruehren unsichtbar wird, ist keiner.
-         Jetzt: blau an der Kante (box-shadow), rot vier Pixel dahinter
-         (outline mit negativem Abstand). Beide gleichzeitig sichtbar, und
-         keiner kann den anderen verdraengen.
-         Beim Kacheln-Ordnen gewinnt die gestrichelte Greifkante — das ist ein
-         gewollter Ausnahmezustand und dauert, solange man ordnet. */
-      outline: 2px solid color-mix(in srgb, var(--red) 75%, transparent);
-      outline-offset: -5px;
-      box-shadow: none;
-      transition: border-color .3s;
+      box-shadow: inset 0 0 0 1px var(--red);
+      transition: border-color .3s, box-shadow .3s;
+    }
+    /* Der Alarm tritt beim Anfassen hinter die Hervorhebung zurueck — er ist
+       eine halbe Sekunde spaeter wieder da, und in dieser halben Sekunde
+       schaut jemand ohnehin genau auf diese Kachel. */
+    .card--alarm[onclick]:hover {
+      border-color: var(--accent2) !important;
+      box-shadow: inset 0 0 0 1px var(--accent2);
     }
     /* Auch hier stand `var(--red)55` — kein gueltiger Farbwert, so haengt man
        keine Deckkraft an eine Variable. Der Browser hat die Zeile verworfen,
@@ -1365,14 +1380,45 @@
     .preset-btn.disabled { opacity: .35; cursor: not-allowed; }
     .preset-emoji { font-size: 22px; line-height: 1; }
     .preset-name  { font-size: 12px; font-weight: 500; text-align: center; line-height: 1.2; }
-    .channels-row { display: flex; gap: 5px; align-items: flex-end; height: 32px; }
+    .channels-row { display: flex; gap: 5px; align-items: flex-end; height: 32px;
+      /* Der Finger regelt hier senkrecht — ohne das scrollt die Seite mit. */
+      touch-action: none; }
     .ch-bar-wrap { flex: 1; height: 100%; background: var(--surface2); border-radius: 4px;
-      position: relative; overflow: hidden; }
+      position: relative; overflow: hidden; cursor: ns-resize;
+      -webkit-tap-highlight-color: transparent; }
     .ch-bar { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent);
       border-radius: 4px; transition: height .5s ease; opacity: .85; }
+    /* Waehrend gezogen wird, darf die Fuellung dem Finger nicht hinterherlaufen —
+       eine halbe Sekunde Nachlauf fuehlt sich an wie ein Wackelkontakt. */
+    .channels-row.zieht .ch-bar { transition: none; }
     .ch-bar.relay { background: var(--orange); }
-    .channels-label { display: flex; gap: 5px; margin-top: 4px; }
-    .ch-num { flex: 1; text-align: center; font-size: 9px; color: var(--text3); }
+
+    /* Der Name IM Balken, von unten nach oben gelesen. Er liegt ueber der
+       Fuellung und bleibt damit bei jedem Stand lesbar; der Schatten traegt
+       ihn auch dort, wo die Fuellung genau hinter ihm endet. */
+    .ch-name {
+      position: absolute; inset: 0; z-index: 2;
+      display: flex; align-items: center; justify-content: center;
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      font-size: 11px; font-weight: 600; letter-spacing: .04em;
+      color: var(--text); opacity: .85;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, .8);
+      pointer-events: none; user-select: none;
+      white-space: nowrap; overflow: hidden;
+    }
+    /* Zu schmal fuer Buchstaben: dann lieber nichts als Buchstabensalat. */
+    @media (max-width: 380px) { .ch-name { display: none; } }
+
+    /* Das Relais schaltet erst nach zwei Sekunden Halten. Ohne sichtbares
+       Fuellen fuehlten sich diese zwei Sekunden wie ein Fehler an. */
+    .ch-halten {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 0; z-index: 1;
+      background: color-mix(in srgb, var(--accent) 45%, transparent);
+      pointer-events: none;
+    }
+    /* Die Nummernzeile unter den Balken ist entfallen: die Namen stehen jetzt
+       in den Balken, und "1 2 3 4 R" darunter sagte ohnehin niemandem etwas. */
+    .channels-label { display: none; }
     .divider { height: 1px; background: var(--border); margin: 0 -4px; }
 
     /* ── Full-screen overlay (shared base) ── */

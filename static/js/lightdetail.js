@@ -49,7 +49,7 @@ function buildLightSliders() {
     card.innerHTML = `
       <div class="ch-card-header">
         <span class="ch-card-num">${i + 1}</span>
-        <span class="ch-card-name">${CH_NAMES[i]}</span>
+        <span class="ch-card-name">${chName(i)}</span>
         <span class="ch-card-val" id="chv${i}">${Math.round(v / 255 * 100)}%</span>
       </div>
       <input class="ch-slider-big" id="chs${i}" type="range" min="0" max="255" step="1" value="${v}">`;

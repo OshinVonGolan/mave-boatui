@@ -45,7 +45,8 @@ const SERIES_DEF = {
   zelldiff: { color: '#a78bfa', unit: 'mV', label: 'Zelldiff.', fmt: v => Math.round(v * 1000) + ' mV', minSpan: 0.03, zero: true, tau: 250 },
 };
 
-const CH_NAMES = ['Küche', 'Kartentisch', 'Salon', 'Achtkabine stbd'];
+// CH_NAMES stand hier als feste Liste ['Küche', 'Kartentisch', …]. Die Namen
+// kommen jetzt aus den Einstellungen — chName(i) in core.js.
 
 let chartSecondary = 'current';       // aktive Sekundär-Serie (rechte Achse) oder null
 let chartRangeSec  = 1800;

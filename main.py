@@ -692,6 +692,13 @@ async def broadcast(data: dict):
         v = batt.get(key)
         if v is not None:
             entry[key] = v
+    # Die Starterbatterie. Sie haengt an einem einfachen Spannungseingang, es
+    # gibt also weder Ladestand noch Strom — die Spannung ist alles, was man
+    # ueber sie sagen kann, und genau deshalb ist ihr VERLAUF das Interessante:
+    # ein Starter faellt nicht ploetzlich aus, er wird ueber Wochen schlechter.
+    sv = batt.get('starter_voltage')
+    if isinstance(sv, (int, float)) and not isinstance(sv, bool):
+        entry['starter'] = sv
     # solar2/solar3/wind sind VORBEREITUNG für Hardware, die noch nicht verbaut
     # ist. Sie kosten nichts: fehlt die Quelle im State, liefert .get() None und
     # es wird nichts geschrieben. NICHT entfernen — sie gehören zum Ausbauplan.
@@ -2233,8 +2240,9 @@ async def save_stauplan(request: Request):
 # Bekannte Schluessel je Abschnitt. Unbekannte werden mit 400 abgelehnt, damit
 # presets.json nicht bei jedem Tippfehler um einen Eintrag waechst — geloescht
 # wird dabei nichts, was schon in der Datei steht.
-_SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung')
+_SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung', 'lights')
 _TANK_FELDER         = ('name', 'capacity_l', 'color')
+_LICHT_FELDER        = ('name',)
 _BATTERIE_FELDER     = ('service_instance', 'starter_instance',
                         'primary_source', 'capacity_ah')
 
@@ -2272,6 +2280,36 @@ async def update_settings(body: dict):
                 raise HTTPException(400, detail=f'tanks.{key}: Eintrag in presets.json '
                                                 f'ist kein Objekt')
             ziel.update(geprueft)
+
+    if 'lights' in body:
+        # Namen der Lichtkreise. Sie standen bis hierher fest im Skript
+        # (CH_NAMES, _WIDE_LABELS) — an zwei Stellen, in zwei Laengen, und beide
+        # nur durch ein Update zu aendern. Ein Kanalname ist aber eine Angabe
+        # ueber DIESES Boot, kein Programmtext.
+        #
+        # Schluessel ist die Kanalnummer 0..8 als Zeichenkette: acht
+        # PWM-Kanaele und das Relais. Ein leerer Name loescht den Eintrag —
+        # dann greift wieder die Vorgabe in der Oberflaeche.
+        if not isinstance(body['lights'], dict):
+            raise HTTPException(400, detail='lights: Objekt erwartet')
+        for key, val in body['lights'].items():
+            try:
+                kanal = int(key)
+            except (TypeError, ValueError):
+                raise HTTPException(400, detail=f'lights: {key!r} ist keine '
+                                                f'Kanalnummer') from None
+            if not 0 <= kanal <= 8:
+                raise HTTPException(400, detail=f'lights: Kanal {kanal} liegt '
+                                                f'ausserhalb von 0 bis 8')
+            if not isinstance(val, dict):
+                raise HTTPException(400, detail=f'lights.{key}: Objekt erwartet')
+            _unbekannt_ablehnen(val, _LICHT_FELDER, f'lights.{key}')
+            ziel = data.setdefault('lights', {})
+            name = _text(val.get('name', ''), 32, f'lights.{key}.name').strip()
+            if name:
+                ziel.setdefault(str(kanal), {})['name'] = name
+            else:
+                ziel.pop(str(kanal), None)
 
     if 'devices' in body:
         # Die Schluessel sind CAN-Quelladressen (0..255), keine feste Liste —
@@ -2522,6 +2560,60 @@ _SPARK_PUNKTE    = 60
 _spark_cache: dict = {'ts': 0.0, 'data': None}
 
 
+def _heizung_reihen(von: float, breite: float) -> dict:
+    """Heizungsreihen fuer die Statusleiste — geholt, nicht mitgeschrieben.
+
+    Der Hub fuehrt seinen Verlauf selbst und tiefer, als wir es je wuerden
+    (siehe StokerClient.verlauf). Hier wird er nur auf dasselbe Raster gelegt
+    wie die uebrigen Reihen, damit die Leiste eine Sprache spricht.
+
+    Viertelstundenstufe und nicht Minutenstufe: die Leiste hat 60 Stuetzstellen
+    auf 24 Stunden, also einen Punkt je 24 Minuten. Minutenwerte waeren 1440
+    Zeilen, die der Pi holen, lesen und wieder wegwerfen muesste.
+
+    Faellt der Hub aus, fehlen die Reihen — und die Felder zeigen ihre Zahlen
+    ohne Hintergrund. Das ist richtig so: eine Kurve zu zeichnen, deren Quelle
+    gerade schweigt, waere eine Behauptung.
+    """
+    antwort = heizung.verlauf(von, von + _SPARK_FENSTER_S)
+    if not antwort:
+        return {}
+    spalten = antwort.get('columns') or []
+    zeilen  = antwort.get('rows') or []
+    if not spalten or not zeilen:
+        return {}
+
+    # Welche Spalte wohin gehoert. Die Raumnummer in `r<N>.temp` ist die id des
+    # Raums, unter der ihn auch /api/state fuehrt.
+    ziele: dict[str, str] = {'heater.flow': 'vorlauf', 'heater.power': 'heizleistung'}
+    for name in spalten:
+        if name.startswith('r') and name.endswith('.temp'):
+            ziele[name] = 'raum' + name[1:-5]
+
+    eimer: dict[str, list] = {z: [(0.0, 0)] * _SPARK_PUNKTE for z in ziele.values()}
+    for zeile in zeilen:
+        if not zeile:
+            continue
+        i = int((zeile[0] - von) / breite)
+        if not 0 <= i < _SPARK_PUNKTE:
+            continue
+        for spalte, wert in zip(spalten, zeile):
+            ziel = ziele.get(spalte)
+            if ziel is None or not isinstance(wert, (int, float)) or isinstance(wert, bool):
+                continue
+            summe, anzahl = eimer[ziel][i]
+            eimer[ziel][i] = (summe + wert, anzahl + 1)
+
+    aus = {}
+    for ziel, werte in eimer.items():
+        reihe = [round(su / an, 2) if an else None for su, an in werte]
+        # Eine Reihe ohne einen einzigen Wert ist keine Reihe. Sie wegzulassen
+        # heisst: das Feld zeigt keinen Hintergrund, statt einer leeren Flaeche.
+        if any(v is not None for v in reihe):
+            aus[ziel] = reihe
+    return aus
+
+
 def _spark_bauen() -> dict:
     """Verlaufsreihen fuer die Statusleiste aus dem groben Puffer verdichten."""
     jetzt = time.time()
@@ -2566,7 +2658,8 @@ def _spark_bauen() -> dict:
             aus.append(round(sum(werte), 1) if werte else None)
         return aus
 
-    serien = {'soc': _reihe('soc'), 'laden': _ladeleistung(),
+    serien = {'soc': _reihe('soc'), 'starter': _reihe('starter'),
+              'laden': _ladeleistung(),
               'tank1': _reihe('tank1'), 'tank2': _reihe('tank2'),
               'raumtemp': _reihe('raumtemp'),
               # Die Verbindung nach draussen. Ein hoher Ausschlag heisst hier
@@ -2576,6 +2669,8 @@ def _spark_bauen() -> dict:
               # Je Quelle einzeln, damit das Laden-Feld durchschalten kann.
               'charger': _reihe('charger'), 'solar1': _reihe('solar1'),
               'orion': _reihe('orion')}
+    # Heizung und Raeume kommen aus dem Hub, nicht aus unserem Puffer.
+    serien.update(_heizung_reihen(von, breite))
 
     # Geladene Amperestunden der letzten 24 Stunden, je Quelle und gesamt.
     # Aus Leistung und Spannung DESSELBEN Punktes: Ah = Summe(P/U) * dt.

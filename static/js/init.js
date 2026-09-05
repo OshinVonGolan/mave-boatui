@@ -3,6 +3,7 @@
 applyDisplayConfig();
 _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 _leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
+_sbHaltenBinden();        // 2 s halten oeffnet die Detailseite eines Feldes
 _vollbildFuehren();       // Vollbild nach einem Neuladen wieder herstellen
 wandStart();              // Bildschirm-anlassen-Schalter und Nachtmodus
 // Steht eine Ansicht in der Adresse, wird sie SOFORT geoeffnet — nicht erst,

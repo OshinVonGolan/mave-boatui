@@ -161,17 +161,23 @@
 <div class="statusbar-fuehler" aria-hidden="true"></div>
 <div class="statusbar-halter">
 <section class="statusbar" id="statusBar" aria-label="Bordstatus">
-  <button type="button" class="sb-item" onclick="openBattDetail()">
+  <!-- Ein Tipp wechselt zwischen Servicebatterie und Starter. Die Detailseite
+       erreicht man weiter ueber die Batteriekachel — in dieser Leiste schaltet
+       jedes Feld durch, das etwas durchzuschalten hat. -->
+  <button type="button" class="sb-item" onclick="sbBattWeiter()" id="sbBattItem"
+          data-detail="openBattDetail">
     <!-- Feste Skala 0..100 %: die Hoehe der Flaeche IST der Ladestand, und
-         100 % liegt auf der Oberkante des Feldes. -->
+         100 % liegt auf der Oberkante des Feldes. Beim Starter tauscht JS
+         Reihe und Skala gegen die Spannung. -->
     <span class="sb-spark" data-reihe="soc" data-tief="0" data-hoch="100" aria-hidden="true"></span>
-    <span class="sb-lbl">Batterie</span>
-    <span class="sb-val"><b id="sbSoc">--</b><i>%</i></span>
+    <span class="sb-lbl" id="sbBattLbl">Batterie</span>
+    <span class="sb-val"><b id="sbSoc">--</b><i id="sbBattUnit">%</i></span>
     <span class="sb-sub" id="sbBattSub">--</span>
   </button>
   <!-- Ein Tipp schaltet die Quelle weiter: Gesamt, Landstrom, Solar, Orion.
        Die Reihe des Graphen wird dabei mitgetauscht (data-reihe von JS). -->
-  <button type="button" class="sb-item" onclick="sbLadenWeiter()" id="sbChgItem">
+  <button type="button" class="sb-item" onclick="sbLadenWeiter()" id="sbChgItem"
+          data-detail="openBattDetail">
     <!-- Watt hat keine feste Obergrenze: unten 0 (nichts laedt), oben der
          Hoechstwert der letzten 24 Stunden, mindestens aber 50 W — sonst
          fuellte eine Ladung von 5 W das ganze Feld. -->
@@ -180,18 +186,24 @@
     <span class="sb-val"><b id="sbChg">--</b><i>W</i></span>
     <span class="sb-sub" id="sbChgSub">--</span>
   </button>
-  <!-- Wasser als waagerechter Balken statt Verlauf: beim Frischwasser zaehlt
-       der Fuellstand jetzt, nicht der Weg dorthin. -->
-  <button type="button" class="sb-item sb-wasser" onclick="toggleTanks()">
+  <!-- Tanks als waagerechter Balken statt Verlauf: beim Fuellstand zaehlt der
+       Stand jetzt, nicht der Weg dorthin. Ein Tipp schaltet zum naechsten Tank
+       weiter — wie beim Laden-Feld daneben. Die Farbe des Balkens ist die, die
+       fuer den Tank eingestellt ist (presets.json), damit Kachel und Leiste
+       dasselbe sagen.
+       Die Umschaltung Liter/Prozent sass frueher auf diesem Tipp; sie steht
+       weiter auf der Tankkachel, und die Leiste folgt ihr. -->
+  <button type="button" class="sb-item sb-wasser" onclick="sbTankWeiter()" id="sbTankItem">
     <span class="sb-balken" id="sbT1Bar" aria-hidden="true"></span>
     <span class="sb-lbl" id="sbT1Lbl">Wasser</span>
-    <span class="sb-val"><b id="sbT1">--</b><i>%</i></span>
+    <span class="sb-val"><b id="sbT1">--</b><i id="sbT1Unit">%</i></span>
     <span class="sb-sub" id="sbT1Sub">--</span>
   </button>
   <!-- Hier stand Diesel, danach kurz ein leeres Feld. Jetzt der Internet-
        Zustand: die Zahl ist die Antwortzeit, weil der Durchsatz im Leerlauf
        ohnehin bei null liegt und nichts ueber die Verbindung aussagt. -->
-  <button type="button" class="sb-item" onclick="openConnectivity()">
+  <button type="button" class="sb-item" onclick="openConnectivity()"
+          data-detail="openConnectivity">
     <!-- Der Graph zeigt dieselbe Groesse wie die Zahl: die Antwortzeit ueber
          24 Stunden. Hier schlaegt ein hoher Wert AUS, und das ist richtig
          herum — bei der Latenz ist wenig gut, was hochgeht ist ein Problem.
@@ -203,17 +215,20 @@
     <span class="sb-val"><b id="sbNet">--</b><i id="sbNetUnit">ms</i></span>
     <span class="sb-sub" id="sbNetSub">--</span>
   </button>
-  <button type="button" class="sb-item" onclick="openHeizung()">
-    <!-- Der Graph zeigt die mittlere Raumtemperatur, die Zahl daneben den
-         Vorlauf. Temperatur hat keine feste Skala wie ein Prozentwert:
-         Hoechstwert an die Oberkante, mindestens 4 Grad Spanne, damit ein
-         ruhiger Tag nicht zum Gebirge wird. -->
-    <span class="sb-spark" data-reihe="raumtemp" data-spanne="4" aria-hidden="true"></span>
-    <span class="sb-lbl">Heizung</span>
-    <span class="sb-val"><b id="sbHz">--</b><i>°C</i></span>
+  <!-- Ein Tipp schaltet weiter: Heizung, Vorlauf, dann jeder Raum einzeln.
+       Die Raeume kommen vom Hub, es steht hier also keine Raumliste. -->
+  <button type="button" class="sb-item" onclick="sbHeizungWeiter()" id="sbHzItem"
+          data-detail="openHeizung">
+    <!-- Temperatur hat keine feste Skala wie ein Prozentwert: Hoechstwert an
+         die Oberkante, mindestens 4 Grad Spanne, damit ein ruhiger Tag nicht
+         zum Gebirge wird. Reihe und Spanne tauscht JS beim Durchschalten. -->
+    <span class="sb-spark" data-reihe="heizleistung" data-tief="0" data-spanne="20" aria-hidden="true"></span>
+    <span class="sb-lbl" id="sbHzLbl">Heizung</span>
+    <span class="sb-val"><b id="sbHz">--</b><i id="sbHzUnit">%</i></span>
     <span class="sb-sub" id="sbHzSub">--</span>
   </button>
-  <button type="button" class="sb-item" onclick="openWartung()">
+  <button type="button" class="sb-item" onclick="openWartung()"
+          data-detail="openWartung">
     <span class="sb-lbl">Wartung</span>
     <span class="sb-val"><b id="sbWart">--</b></span>
     <span class="sb-sub" id="sbWartSub">--</span>
@@ -770,12 +785,34 @@
       <button class="set-nav-btn active" data-cat="tanks"   onclick="switchSettingsCat('tanks')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.7l5.7 5.6a8 8 0 1 1-11.4 0z"/></svg> Tanks</button>
       <button class="set-nav-btn"        data-cat="batt"    onclick="switchSettingsCat('batt')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg> Batterien</button>
       <button class="set-nav-btn"        data-cat="laden"   onclick="switchSettingsCat('laden')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Laden</button>
+      <button class="set-nav-btn"        data-cat="licht"   onclick="switchSettingsCat('licht')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Licht</button>
       <button class="set-nav-btn"        data-cat="heizung" onclick="switchSettingsCat('heizung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4 4 0 1 0 5 0z"/></svg> Heizung</button>
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg> Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg> Netzwerk</button>
       <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 2.6h.1A2 2 0 1 1 11 2.6V3a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.4 9V9a2 2 0 1 1 0 4h-.1z"/></svg> System</button>
       <button class="set-nav-btn"        data-cat="alarme"  onclick="switchSettingsCat('alarme')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Alarme</button>
       <button class="set-nav-btn"        data-cat="display" onclick="switchSettingsCat('display')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Anzeige</button>
+    </div>
+
+    <!-- Kategorie: Licht.
+         Die Namen standen bis hierher fest im Skript, an zwei Stellen und in
+         zwei Laengen. Sie sind eine Angabe ueber DIESES Boot — hier gehoeren
+         sie hin. Die Felder baut settings.js, damit die Kanalzahl an einer
+         Stelle steht. -->
+    <div class="set-pane" id="setPane-licht">
+      <div class="set-card">
+        <div class="set-card-hd">Namen der Lichtkreise</div>
+        <div id="sLichtFelder"></div>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          Der Name steht im Balken der Kachel, auf der Steuerseite und im
+          Verlauf. Leer lassen setzt ihn auf die Vorgabe zurück. In der Kachel
+          wird er bei Bedarf gekürzt — dort ist wenig Platz.
+        </div>
+      </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="sLichtFeedback"></span>
+        <button class="btn-primary" onclick="saveLichtNamen()">Speichern</button>
+      </div>
     </div>
 
     <!-- Kategorie: Tanks -->

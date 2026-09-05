@@ -68,8 +68,14 @@ function renderVersionInfo() {
 }
 
 function switchSettingsCat(cat) {
-  ['tanks', 'batt', 'laden', 'heizung', 'wartung', 'netz', 'system', 'alarme', 'display'].forEach(c =>
-    $(`setPane-${c}`)?.classList.toggle('active', c === cat)
+  // Die Bereiche kommen aus dem Markup, nicht aus einer Liste hier.
+  //
+  // Vorher stand jeder Name zweimal: einmal als `setPane-…` in index.html und
+  // einmal in dieser Aufzaehlung. Ein neuer Bereich brauchte beides — und beim
+  // ersten Versuch fehlte prompt der zweite Eintrag: der Reiter liess sich
+  // waehlen, und darunter blieb die Seite leer.
+  document.querySelectorAll('[id^="setPane-"]').forEach(el =>
+    el.classList.toggle('active', el.id.slice('setPane-'.length) === cat)
   );
   document.querySelectorAll('.set-nav-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.cat === cat)
@@ -183,6 +189,7 @@ function _showSettingsPanel(tab) {
   const dueDays = wartungConfig.due_soon_days ?? 7;
   const slEl = $('sWartDueSoon'); if (slEl) slEl.value = dueDays;
   const valEl = $('sWartDueSoonVal'); if (valEl) valEl.textContent = dueDays;
+  _lichtFelderBauen();
   $('settingsFeedback').className = 'settings-feedback';
   $('settingsFeedback').textContent = '';
   $('settingsFeedbackWartung').className = 'settings-feedback';
@@ -272,6 +279,61 @@ async function saveSettings() {
     _fbError(fb, e.message);
   }
   btn.disabled = false;
+}
+
+// ── Namen der Lichtkreise ───────────────────────────────────────────────────
+// Neun Kanaele: acht PWM-Kreise und das Relais. Die Felder werden gebaut und
+// nicht in index.html geschrieben — sonst stuende die Kanalzahl an zwei
+// Stellen, und die eine wuerde beim naechsten Umbau vergessen.
+
+const _LICHT_KANAELE = 9;
+
+function _lichtFelderBauen() {
+  const feld = $('sLichtFelder');
+  if (!feld) return;
+  let html = '';
+  for (let i = 0; i < _LICHT_KANAELE; i++) {
+    const gesetzt = (lightsConfig?.[String(i)]?.name || '');
+    // Sichtbar in der Kachel sind nur fuenf Kanaele; die uebrigen bekommen
+    // einen Vermerk, damit niemand sucht, wo sein Name geblieben ist.
+    const versteckt = (typeof VISIBLE_CH !== 'undefined') && !VISIBLE_CH.includes(i);
+    html += `
+      <div class="settings-row">
+        <label class="settings-label" for="sLicht${i}">
+          ${i === 8 ? 'Relais' : 'Kanal ' + (i + 1)}
+          ${versteckt ? '<span style="color:var(--text3);font-size:11px">'
+                        + ' · nicht auf der Kachel</span>' : ''}
+        </label>
+        <input class="settings-input" id="sLicht${i}" type="text" maxlength="32"
+               value="${_esc(gesetzt)}" placeholder="${_esc(chName(i))}">
+      </div>`;
+  }
+  feld.innerHTML = html;
+}
+
+async function saveLichtNamen() {
+  const fb = $('sLichtFeedback');
+  const lights = {};
+  for (let i = 0; i < _LICHT_KANAELE; i++) {
+    lights[String(i)] = { name: ($(`sLicht${i}`)?.value || '').trim() };
+  }
+  try {
+    const data = await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lights }),
+    }).then(_jsonOrThrow);
+    lightsConfig = data.lights || {};
+    // Ueberall dort auffrischen, wo der Name steht: Kachel, Zonenregler,
+    // Steuerseite. Ohne das stuende der alte Name bis zum naechsten Neuladen.
+    if (typeof chNamenAuffrischen === 'function') chNamenAuffrischen();
+    if (typeof lightDetailOpen !== 'undefined' && lightDetailOpen
+        && typeof buildLightSliders === 'function') buildLightSliders();
+    _lichtFelderBauen();
+    _fbOk(fb);
+  } catch (e) {
+    _fbError(fb, e.message);
+  }
 }
 
 // ── Ladesteuerung ─────────────────────────────────────────────────────────────

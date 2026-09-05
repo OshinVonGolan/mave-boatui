@@ -239,7 +239,7 @@ def stoker_index(snapshot: dict | None) -> dict:
     """
     snap = snapshot or {}
     if not snap.get('configured'):
-        return {'verfuegbar': False, 'hub': None, 'raeume': {}}
+        return {'verfuegbar': False, 'erreichbar': False, 'hub': None, 'raeume': {}}
     info  = snap.get('info')  or {}
     state = snap.get('state') or {}
     erreichbar = bool(snap.get('reachable'))
@@ -274,7 +274,11 @@ def stoker_index(snapshot: dict | None) -> dict:
             raeume[f"name:{eintrag['name'].lower()}"] = eintrag
         if r.get('nodeId') is not None:
             raeume[f"node:{r['nodeId']}"] = eintrag
-    return {'verfuegbar': True, 'hub': hub, 'raeume': raeume,
+    # `verfuegbar` heisst: eine Heizung ist eingerichtet. `erreichbar` heisst:
+    # der Hub hat gerade geantwortet. Nur im zweiten Fall ist seine Raumliste
+    # eine Aussage darueber, welche Raeume es gibt — im ersten wissen wir es
+    # schlicht nicht.
+    return {'verfuegbar': True, 'erreichbar': erreichbar, 'hub': hub, 'raeume': raeume,
             'heizung': state.get('heater') or {}}
 
 
@@ -579,6 +583,9 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
     geraete: list[dict] = []
     belegt_n2k: set[int] = set()
     belegt_lan: set[str] = set()
+    # Welche Raeume des Hubs schon durch einen Registry-Eintrag beschrieben
+    # sind. Der Rest wird unten von selbst aufgenommen.
+    belegt_raum: set[int] = set()
     # Ein Geraet, das schon ueber eine andere Quelle bekannt ist, darf nicht
     # ZUSAETZLICH als unbekannter WLAN-Client erscheinen. Der Stoker-Hub meldet
     # seine IP selbst, der Pi kennt seinen eigenen Rechnernamen — beides reicht,
@@ -588,6 +595,24 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
 
     for eintrag in (registry or []):
         if not isinstance(eintrag, dict):
+            continue
+        # Raumknoten, die es nicht gibt, gehoeren nicht in die Liste.
+        #
+        # Welche Raeume vorhanden sind, weiss der Hub — er lernt seine Knoten
+        # selbst an und meldet sie, samt Namen und auch dann, wenn ein Knoten
+        # gerade schweigt. Ein von Hand gepflegter Eintrag daneben kann deshalb
+        # nur eines: auseinanderlaufen. Genau das war passiert — die Liste
+        # trug drei Raeume, die der Hub nie kannte, und die Geraeteseite hielt
+        # sie folgerichtig fuer stumm.
+        #
+        # Uebersprungen wird nur, wenn der Hub ANTWORTET und den Raum nicht
+        # kennt. Ist er selbst weg, wissen wir ueber die Knoten nichts — dann
+        # verschwinden sie nicht, sie stehen auf "unbekannt".
+        stoker_match = eintrag.get('match') or {}
+        if (_txt(stoker_match.get('typ')) == 'stoker'
+                and _txt(stoker_match.get('rolle')) != 'hub'
+                and quellen['stoker'].get('erreichbar')
+                and _stoker_treffer(stoker_match, quellen['stoker']['raeume']) is None):
             continue
         zustand = _zustand_eines(eintrag, quellen)
         geraet = {f: eintrag.get(f) for f in _STAMM_FELDER}
@@ -613,6 +638,8 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
             ip = _txt(zustand['live'].get('ip'))
             if ip:
                 belegt_ip.add(ip)
+            if zustand['quelle'] == 'stoker' and zustand['live'].get('roomId') is not None:
+                belegt_raum.add(zustand['live']['roomId'])
 
     # Was am Bus haengt, aber in keiner Liste steht, verschwindet nicht — es
     # wird als unbekanntes Geraet gezeigt und kann uebernommen werden. So
@@ -636,6 +663,37 @@ def aggregiere(registry, netzwerk=None, presets_devices=None, stoker_snapshot=No
             'quelle': 'n2k', 'gepflegt': False,
             'vorschlag': {'typ': 'n2k', 'name_hex': g['name_hex'], 'src': src,
                           'device_name': g['name']},
+        })
+
+    # Und andersherum: ein Raumknoten, den der Hub meldet und den niemand in
+    # die Liste eingetragen hat, erscheint trotzdem. Wird die zweite Steuerung
+    # angelernt, steht ihr Raum ohne Zutun auf der Geraeteseite — so wie ein
+    # neues Geraet am Bus auch.
+    gesehen_raum: set[int] = set()
+    for schluessel, raum in quellen['stoker']['raeume'].items():
+        rid = raum.get('roomId')
+        if rid is None or rid in gesehen_raum or rid in belegt_raum:
+            continue
+        gesehen_raum.add(rid)
+        stoerung = _txt(raum.get('fault'))
+        geraete.append({
+            'id': f'stoker-raum-{rid}', 'name': raum.get('name') or f'Raum {rid}',
+            'kategorie': 'heizung', 'netz': 'lan', 'netz_name': NETZE['lan'],
+            'ort': '', 'hersteller': '', 'modell': '', 'seriennr': '', 'baujahr': '',
+            'versorgung': '', 'sicherung': '', 'doku': '', 'notiz': '',
+            'verbunden_an': '', 'sprung': 'heizung',
+            'status': raum['status'],
+            'status_text': STATUS_TEXT.get(raum['status'], raum['status']),
+            'kennzahlen': _kennzahlen([
+                ('Raumtemp.', f"{raum['raumtemp']:.1f} °C"
+                              if isinstance(raum.get('raumtemp'), (int, float)) else ''),
+                ('Knoten',    raum.get('nodeId')),
+                ('zuletzt',   f"vor {raum['age_s']:.0f} s"
+                              if isinstance(raum.get('age_s'), (int, float)) else ''),
+                ('Störung',   stoerung if stoerung and stoerung != 'none' else ''),
+            ]),
+            'live': dict(raum), 'quelle': 'stoker', 'gepflegt': False,
+            'vorschlag': {'typ': 'stoker', 'roomId': rid},
         })
 
     gesehen_lan: set[str] = set()
