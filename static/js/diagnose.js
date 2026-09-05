@@ -1323,7 +1323,9 @@ async function laden() {
   // Der Ort nur zum Rechnen: daraus kommt der echte Sonnenuntergang fuer die
   // Nachtmodus-Automatik.
   const _p = (_daten.zustand || {}).position;
-  if (_p && typeof _p.lat === 'number') wandOrtSetzen(_p.lat, _p.lon);
+  if (_p && typeof _p.lat === 'number' && typeof wandOrtSetzen === 'function') {
+    wandOrtSetzen(_p.lat, _p.lon);
+  }
   zeichneZustand();
   zeichneUeberblick();
   if (_seite === 'position') { zeichnePosition(); if (_karte) karteZeichnen(); }
