@@ -5,6 +5,9 @@ Kein Boot, kein Server, kein Netz: alles hier sind reine Funktionen. Aufruf:
     python3 -m unittest test_sync -v
 """
 import unittest
+from pathlib import Path
+
+import sync_client
 
 from sync import protokoll as p
 from sync import zeit as z
@@ -293,6 +296,60 @@ class PushProtokoll(unittest.TestCase):
     def test_abmelden_faehrt_als_gleiche_nachricht(self):
         n = p.push_abo({'endpoint': 'https://x/y'}, 'joshy', abmelden=True)
         self.assertTrue(n['daten']['abmelden'])
+
+
+class Wiederverbinden(unittest.TestCase):
+    """Wie lange der Pi wartet, bevor er es noch einmal versucht.
+
+    Die Schleife ist kurz, die Falle darin war teuer: eine Verbindung endet im
+    Betrieb IMMER mit einer Ausnahme (die Gegenseite geht weg, `websockets`
+    wirft). Setzte nur ein Ende ohne Ausnahme die Wartezeit zurueck, verdoppelte
+    sie sich ueber die Lebensdauer des Dienstes hinweg bis auf fuenf Minuten —
+    und nach jedem Neustart des Servers stand im Logbuch minutenlang "Boot nicht
+    verbunden", obwohl der Pi da war und nur wartete.
+
+    Geprueft wird die Regel selbst, nicht die Schleife: sie nachzubauen hiesse,
+    den Test gegen eine Kopie laufen zu lassen.
+    """
+
+    def _warte_danach(self, warte, dauer_s, mit_ausnahme=True):
+        """Ein Durchlauf der Regel aus `laufen()`."""
+        stand = not mit_ausnahme
+        if stand or dauer_s >= sync_client._GUTE_SITZUNG_S:
+            warte = sync_client._WARTE_START_S
+        return min(warte * 2, sync_client._WARTE_MAX_S)
+
+    def test_eine_stehende_sitzung_setzt_zurueck(self):
+        # Acht Minuten gestanden, dann riss der Server sie ab: das ist keine
+        # gescheiterte Verbindung.
+        self.assertEqual(self._warte_danach(sync_client._WARTE_MAX_S, 480),
+                         sync_client._WARTE_START_S * 2)
+
+    def test_sofortiges_scheitern_verdoppelt_weiter(self):
+        # Gar keine Verbindung zustande gekommen — dann ist Zurueckhaltung
+        # richtig, sonst haemmert der Pi gegen einen toten Server.
+        self.assertEqual(self._warte_danach(20, 0.4), 40)
+
+    def test_die_obergrenze_haelt(self):
+        self.assertEqual(self._warte_danach(sync_client._WARTE_MAX_S, 0.4),
+                         sync_client._WARTE_MAX_S)
+
+    def test_ordentliches_ende_setzt_auch_zurueck(self):
+        self.assertEqual(self._warte_danach(200, 0.1, mit_ausnahme=False),
+                         sync_client._WARTE_START_S * 2)
+
+    def test_die_schwelle_liegt_unter_einer_ueblichen_sitzung(self):
+        # Eine Minute ist erreicht, sobald Handschlag, hallo und der erste
+        # Zustand durch sind — auch in der gedrosselten Betriebsart (60 s).
+        self.assertLessEqual(sync_client._GUTE_SITZUNG_S, 60)
+        self.assertGreater(sync_client._GUTE_SITZUNG_S, sync_client._WARTE_START_S)
+
+    def test_die_regel_steht_wirklich_so_im_code(self):
+        # Der Test rechnet die Regel nach; er muss deshalb belegen, dass der
+        # Code sie auch anwendet. Sonst prueft er nur sich selbst.
+        quelle = Path(sync_client.__file__).read_text()
+        self.assertIn('if stand or time.monotonic() - begonnen >= _GUTE_SITZUNG_S:', quelle)
+        self.assertIn('warte = _WARTE_START_S', quelle)
 
 
 if __name__ == '__main__':

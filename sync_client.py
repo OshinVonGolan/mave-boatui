@@ -39,6 +39,11 @@ log = logging.getLogger(__name__)
 # anderen wieder ein (hier nur eines, aber die Gewohnheit ist richtig).
 _WARTE_START_S = 5
 _WARTE_MAX_S = 300
+# Ab wann eine Sitzung als gelungen gilt — auch wenn sie mit einer Ausnahme
+# endete. Eine Minute reicht als Beleg: der Handschlag steht, das hallo ist
+# durch, Daten sind geflossen. Was danach abreisst, liegt an der Leitung oder
+# an der Gegenseite und nicht daran, dass wir zu frueh wiederkommen.
+_GUTE_SITZUNG_S = 60
 
 # Wie lange ein lokal ausgefuehrter Befehl dauern darf. Laenger heisst: etwas
 # ist kaputt, und der Server soll das erfahren statt zu warten.
@@ -148,14 +153,29 @@ class SyncClient:
         self._laeuft = True
         warte = _WARTE_START_S
         while self._laeuft:
+            begonnen = time.monotonic()
             try:
                 await self._sitzung()
-                warte = _WARTE_START_S          # eine gute Sitzung setzt zurueck
+                stand = True
             except asyncio.CancelledError:
                 raise
             except Exception as e:
+                stand = False
                 log.info('Serververbindung nicht moeglich (%s) — neuer Versuch in %d s',
                          e, warte)
+            # Eine Sitzung, die STAND, setzt die Wartezeit zurueck — auch wenn
+            # sie mit einer Ausnahme endete. Genau so endet die normale: die
+            # Gegenseite geht weg, und `websockets` wirft.
+            #
+            # Vorher setzte nur ein Ende OHNE Ausnahme zurueck, und das kommt im
+            # Betrieb praktisch nie vor. Die Wartezeit verdoppelte sich deshalb
+            # ueber die Lebensdauer des Dienstes hinweg bis auf fuenf Minuten —
+            # und nach einem Neustart des Servers stand im Logbuch minutenlang
+            # "Boot nicht verbunden", obwohl der Pi die ganze Zeit da war und
+            # nur brav wartete. Gemessen: nach einem Neustart dauerte es dreiein-
+            # halb Minuten, bis sich das Boot wieder meldete.
+            if stand or time.monotonic() - begonnen >= _GUTE_SITZUNG_S:
+                warte = _WARTE_START_S
             self._ws = None
             if not self._laeuft:
                 break
