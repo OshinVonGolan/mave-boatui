@@ -150,6 +150,7 @@ Raspberry Pi
 | `heating.py` | Anbindung an die Stoker-Heizung: pollt den Hub zentral (max. 1 Hz laut Gerätedoku), hält den Zustand vor, reicht Schaltbefehle durch. Relaisbetrieb bewusst nicht abgebildet |
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |
 | `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
+| `static/js/weather.js` | Wetterkachel und Wetterseite. Bis zu fünf Orte plus die eigene Position, Modellwahl, Modellvergleich; Wind/Böen/Seegang/Regen als Leinwand-Streifen über 72 Stunden. Quelle Open-Meteo über `/api/weather`, `/api/wetter/*` |
 
 ### Konfiguration / Daten
 

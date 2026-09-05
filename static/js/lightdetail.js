@@ -238,6 +238,7 @@ function _ansichtAusAdresse() {
       // ohne diesen Eintrag hier bliebe die Ansicht beim Vorwaerts-Blaettern leer.
       waterlevel: () => { _wlOverlayAnzeigen(); },
       geraete:    () => { _gerOverlayAnzeigen(); },
+      wetter:     () => { _wetterSeiteAnzeigen(); },
       stauplan: () => { $('stauplanOverlay').classList.remove('hidden'); renderStauTable(''); },
       monday: () => {
         $('mondayOverlay').classList.remove('hidden');

@@ -91,6 +91,7 @@ function switchSettingsCat(cat) {
   if (cat === 'system')  refreshVersion();
   if (cat === 'laden')   refreshChargerStatus();
   if (cat === 'display') openDisplaySettings();
+  if (cat === 'wetter')  wetterEinstellungenBauen();
 }
 
 async function fetchSettingsNetwork() {
@@ -532,5 +533,124 @@ async function setChargerMode(mode) {
   } catch(e) {
     const fb = $('settingsFeedbackLaden');
     if (fb) _fbError(fb, e.message || 'Fehler');
+  }
+}
+
+
+// ── Einstellungen: Wetterorte ───────────────────────────────────────────────
+//
+// Fuenf Orte, in gepflegter Reihenfolge, plus die Modellwahl. Gesucht wird
+// ueber dieselbe Quelle wie die Vorhersage — wer einen Hafen eintraegt, kennt
+// seinen Namen und nicht seine Dezimalgrade.
+//
+// Anders als die uebrigen Bereiche gibt es hier keinen Speichern-Knopf:
+// Hinzufuegen, Loeschen und Verschieben SIND die Aenderung. Ein Knopf, der
+// danach noch einmal bestaetigt werden will, ist bei einer Liste ein
+// Stolperstein — man sieht das Ergebnis ja schon.
+
+let _wetterSucheUhr = null;
+
+function wetterEinstellungenBauen() {
+  const liste = $('sWetterOrte');
+  const zahl  = $('sWetterZahl');
+  if (!liste) return;
+
+  const orte = _wxOrte || [];
+  if (zahl) zahl.textContent = `${orte.length} von 5`;
+  liste.innerHTML = orte.length ? orte.map((o, i) => `
+    <div class="set-ort">
+      <div class="set-ort-name">${_wxEsc(o.name)}
+        <span class="set-ort-koord">${o.lat.toFixed(3)}, ${o.lon.toFixed(3)}</span></div>
+      <button class="set-ort-btn" title="nach oben" ${i === 0 ? 'disabled' : ''}
+              onclick="wetterOrtSchieben(${i}, -1)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <button class="set-ort-btn" title="nach unten" ${i === orte.length - 1 ? 'disabled' : ''}
+              onclick="wetterOrtSchieben(${i}, 1)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="set-ort-btn set-ort-weg" title="entfernen" onclick="wetterOrtWeg(${i})">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>`).join('')
+    : '<div class="set-ort-leer">Noch kein Ort gepflegt. Die Kachel zeigt so lange die Lübecker Bucht.</div>';
+
+  const wahl = $('sWetterModell');
+  if (wahl) {
+    wahl.innerHTML = Object.entries(_wxModelle || {}).map(([k, name]) =>
+      `<option value="${_wxEsc(k)}"${k === _wxModell ? ' selected' : ''}>${_wxEsc(name)}</option>`).join('');
+  }
+  const feld = $('sWetterSuche');
+  if (feld) feld.disabled = orte.length >= 5;
+}
+
+/**
+ * Tippen in der Suche.
+ *
+ * Gedrosselt, nicht bei jedem Anschlag: die Suche geht ueber das Internet, und
+ * "Heiligenhafen" waeren dreizehn Abrufe. 350 ms ist die Pause, nach der man
+ * ohnehin aufhoert zu tippen.
+ */
+function wetterSucheTippen() {
+  clearTimeout(_wetterSucheUhr);
+  _wetterSucheUhr = setTimeout(_wetterSuchen, 350);
+}
+
+async function _wetterSuchen() {
+  const feld = $('sWetterSuche'), box = $('sWetterTreffer');
+  if (!feld || !box) return;
+  const q = feld.value.trim();
+  if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  let d = null;
+  try {
+    d = await fetch('/api/wetter/suche?q=' + encodeURIComponent(q)).then(r => r.ok ? r.json() : null);
+  } catch (_) {}
+  const treffer = (d && d.treffer) || [];
+  box.hidden = false;
+  box.innerHTML = treffer.length ? treffer.map(t => `
+    <button class="set-treffer-zeile" onclick="wetterOrtHinzu(this)"
+            data-name="${_wxEsc(t.name)}" data-lat="${t.lat}" data-lon="${t.lon}">
+      <b>${_wxEsc(t.name)}</b> <span>${_wxEsc(t.zusatz)}</span></button>`).join('')
+    : '<div class="set-ort-leer">Nichts gefunden.</div>';
+}
+
+function wetterOrtHinzu(knopf) {
+  const orte = [...(_wxOrte || [])];
+  if (orte.length >= 5) return;
+  orte.push({ name: knopf.dataset.name,
+              lat: parseFloat(knopf.dataset.lat), lon: parseFloat(knopf.dataset.lon) });
+  const feld = $('sWetterSuche'), box = $('sWetterTreffer');
+  if (feld) feld.value = '';
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  _wetterOrteSpeichern(orte);
+}
+
+function wetterOrtWeg(i) {
+  const orte = [...(_wxOrte || [])];
+  orte.splice(i, 1);
+  _wetterOrteSpeichern(orte);
+}
+
+function wetterOrtSchieben(i, richtung) {
+  const orte = [...(_wxOrte || [])];
+  const j = i + richtung;
+  if (j < 0 || j >= orte.length) return;
+  [orte[i], orte[j]] = [orte[j], orte[i]];
+  _wetterOrteSpeichern(orte);
+}
+
+async function _wetterOrteSpeichern(orte) {
+  const fb = $('sWetterFeedback');
+  try {
+    await fetch('/api/settings', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wetter: { orte } }),
+    }).then(_jsonOrThrow);
+    // Die Kachel steht schon auf einem Ort — nach dem Umsortieren kann das ein
+    // anderer sein. Zurueck auf den ersten, statt still woanders zu landen.
+    _wxIndex = 0;
+    await fetchWetterOrte();
+    fetchWeather();
+    wetterEinstellungenBauen();
+    if (fb) _fbOk(fb);
+  } catch (e) {
+    if (fb) _fbError(fb, e.message);
   }
 }

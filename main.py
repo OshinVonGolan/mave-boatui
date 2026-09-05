@@ -13,6 +13,7 @@ import socket
 import subprocess
 import threading
 import time
+import urllib.parse
 import urllib.request
 import zlib
 from collections import deque
@@ -2416,9 +2417,13 @@ async def save_grundriss(request: Request):
 # Bekannte Schluessel je Abschnitt. Unbekannte werden mit 400 abgelehnt, damit
 # presets.json nicht bei jedem Tippfehler um einen Eintrag waechst — geloescht
 # wird dabei nichts, was schon in der Datei steht.
-_SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung', 'lights')
+_SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung', 'lights',
+                        'wetter')
 _TANK_FELDER         = ('name', 'capacity_l', 'color')
 _LICHT_FELDER        = ('name',)
+_WETTER_FELDER       = ('orte', 'modell')
+_WETTER_ORT_FELDER   = ('name', 'lat', 'lon')
+_WETTER_ORTE_MAX     = 5
 _BATTERIE_FELDER     = ('service_instance', 'starter_instance',
                         'primary_source', 'capacity_ah')
 
@@ -2486,6 +2491,51 @@ async def update_settings(body: dict):
                 ziel.setdefault(str(kanal), {})['name'] = name
             else:
                 ziel.pop(str(kanal), None)
+
+    if 'wetter' in body:
+        # Bis zu fuenf Orte, dazu das Rechenmodell. Warum eine Liste und keine
+        # einzelne Angabe: die Frage vor dem Ablegen ist selten "wie wird es
+        # hier", sondern "wie wird es DORT, wo ich hinwill" — und zwischen
+        # Liegeplatz, Ziel und der Ecke dazwischen schaltet man hin und her.
+        #
+        # Die aktuelle Position steht NICHT in dieser Liste. Sie kommt vom
+        # Router und ist keine Einstellung; die Oberflaeche haengt sie beim
+        # Durchschalten von selbst an.
+        if not isinstance(body['wetter'], dict):
+            raise HTTPException(400, detail='wetter: Objekt erwartet')
+        _unbekannt_ablehnen(body['wetter'], _WETTER_FELDER, 'wetter')
+        ziel = data.setdefault('wetter', {})
+        if not isinstance(ziel, dict):
+            ziel = data['wetter'] = {}
+
+        if 'modell' in body['wetter']:
+            modell = _text(body['wetter']['modell'], 24, 'wetter.modell').strip()
+            if modell not in WX_MODELLE:
+                raise HTTPException(400, detail=f'wetter.modell: unbekanntes '
+                                                f'Modell {modell!r}')
+            ziel['modell'] = modell
+
+        if 'orte' in body['wetter']:
+            roh = body['wetter']['orte']
+            if not isinstance(roh, list):
+                raise HTTPException(400, detail='wetter.orte: Liste erwartet')
+            if len(roh) > _WETTER_ORTE_MAX:
+                raise HTTPException(400, detail=f'wetter.orte: hoechstens '
+                                                f'{_WETTER_ORTE_MAX} Orte')
+            orte = []
+            for i, eintrag in enumerate(roh):
+                if not isinstance(eintrag, dict):
+                    raise HTTPException(400, detail=f'wetter.orte[{i}]: Objekt erwartet')
+                _unbekannt_ablehnen(eintrag, _WETTER_ORT_FELDER, f'wetter.orte[{i}]')
+                name = _text(eintrag.get('name', ''), 40, f'wetter.orte[{i}].name').strip()
+                if not name:
+                    raise HTTPException(400, detail=f'wetter.orte[{i}].name: fehlt')
+                orte.append({
+                    'name': name,
+                    'lat': round(_zahl(eintrag.get('lat'), -90, 90, f'wetter.orte[{i}].lat'), 4),
+                    'lon': round(_zahl(eintrag.get('lon'), -180, 180, f'wetter.orte[{i}].lon'), 4),
+                })
+            ziel['orte'] = orte
 
     if 'devices' in body:
         # Die Schluessel sind CAN-Quelladressen (0..255), keine feste Liste —
@@ -3050,10 +3100,33 @@ async def display_brightness(body: dict):
 # Quelle: Open-Meteo (kostenlos, kein API-Key). DMI wäre möglich, braucht aber
 # eine Schlüssel-Registrierung — daher Open-Meteo. Struktur ist quellen-agnostisch,
 # ein späterer Wechsel auf DMI betrifft nur _fetch_weather().
-_WX_LAND = (53.87, 10.69)   # Lübeck (Stadt)
+_WX_LAND = (53.87, 10.69)   # Lübeck (Stadt) — Vorgabe, wenn nichts gepflegt ist
 _WX_SEA  = (54.10, 11.00)   # Lübecker Bucht (außen)
 _WX_STORM_CODES = {95, 96, 99}
-_wx_cache = {'data': None, 'ts': 0.0}
+# Je Ort und Modell ein eigener Eintrag: wer zwischen Orten durchschaltet, soll
+# nicht bei jedem Wechsel neu ins Netz muessen.
+_wx_cache: dict = {}
+_WX_FRISCH_S = 1800
+
+# Die Wettermodelle, die Open-Meteo ohne Anmeldung hergibt und die hier
+# ueberhaupt Sinn ergeben. `auto` laesst Open-Meteo je Ort das beste waehlen —
+# in Nordeuropa meist ICON, weiter draussen ECMWF.
+#
+# Warum ueberhaupt eine Wahl: zwei Modelle, die dasselbe sagen, sind eine
+# belastbare Vorhersage; zwei, die auseinanderlaufen, sind eine Warnung. Das
+# sieht man nur, wenn man umschalten kann.
+WX_MODELLE = {
+    'auto':    'Automatisch',
+    'icon':    'ICON (DWD)',
+    'ecmwf':   'ECMWF',
+    'gfs':     'GFS (NOAA)',
+    'arpege':  'ARPEGE (Météo-France)',
+    'ukmo':    'UKMO (Met Office)',
+}
+_WX_MODELL_PARAM = {
+    'icon': 'icon_seamless', 'ecmwf': 'ecmwf_ifs025',
+    'gfs': 'gfs_seamless', 'arpege': 'arpege_seamless', 'ukmo': 'ukmo_seamless',
+}
 
 
 def _http_json(url, timeout=15):
@@ -3062,68 +3135,267 @@ def _http_json(url, timeout=15):
         return json.loads(r.read().decode())
 
 
-def _fetch_weather() -> dict:
+def _fetch_weather(lat: float, lon: float, modell: str = 'auto') -> dict:
+    """Wetter fuer EINEN Ort — Tage fuer den Ueberblick, Stunden fuers Segeln.
+
+    Die Tagesuebersicht beantwortet "wie wird das Wochenende". Die Frage vor
+    dem Ablegen ist eine andere: WANN geht es, und was zieht durch. Dafuer
+    braucht es Stundenwerte — aus einem Tagesmaximum von 22 Knoten liest
+    niemand ab, ob das eine Boe am Nachmittag war oder der ganze Tag.
+
+    Land- und Seewetter kommen nicht mehr von zwei festen Punkten: der Ort
+    ist jetzt einer, und die Seegangswerte holt die Marine-API fuer denselben.
+    Liegt er an Land, gibt sie nichts zurueck — dann fehlt der Seegang, und
+    das ist richtig so.
+    """
     base = 'https://api.open-meteo.com/v1/forecast'
-    land = _http_json(f'{base}?latitude={_WX_LAND[0]}&longitude={_WX_LAND[1]}'
-                      '&daily=weathercode,temperature_2m_max,temperature_2m_min,'
-                      'precipitation_sum,precipitation_probability_max'
-                      '&timezone=Europe%2FBerlin&forecast_days=3')
-    sea = _http_json(f'{base}?latitude={_WX_SEA[0]}&longitude={_WX_SEA[1]}'
-                     '&daily=weathercode,windspeed_10m_max,windgusts_10m_max,'
-                     'winddirection_10m_dominant'
-                     '&timezone=Europe%2FBerlin&forecast_days=3&windspeed_unit=kn')
+    m = _WX_MODELL_PARAM.get(modell)
+    modellteil = f'&models={m}' if m else ''
+    gemeinsam = (f'?latitude={lat:.4f}&longitude={lon:.4f}'
+                 '&timezone=Europe%2FBerlin' + modellteil)
+
+    tage = _http_json(
+        f'{base}{gemeinsam}&forecast_days=5&windspeed_unit=kn'
+        '&daily=weathercode,temperature_2m_max,temperature_2m_min,'
+        'precipitation_sum,precipitation_probability_max,'
+        'windspeed_10m_max,windgusts_10m_max,winddirection_10m_dominant,'
+        'sunrise,sunset')
+    stunden = _http_json(
+        f'{base}{gemeinsam}&forecast_days=3&windspeed_unit=kn'
+        '&hourly=temperature_2m,weathercode,precipitation,'
+        'windspeed_10m,windgusts_10m,winddirection_10m,pressure_msl')
+
+    see_tage, see_stunden = {}, {}
     try:
-        marine = _http_json('https://marine-api.open-meteo.com/v1/marine'
-                            f'?latitude={_WX_SEA[0]}&longitude={_WX_SEA[1]}'
-                            '&daily=wave_height_max,wave_direction_dominant'
-                            '&timezone=Europe%2FBerlin&forecast_days=3')
+        marine = 'https://marine-api.open-meteo.com/v1/marine'
+        see_tage = _http_json(
+            f'{marine}?latitude={lat:.4f}&longitude={lon:.4f}'
+            '&timezone=Europe%2FBerlin&forecast_days=5'
+            '&daily=wave_height_max,wave_direction_dominant,wave_period_max')
+        see_stunden = _http_json(
+            f'{marine}?latitude={lat:.4f}&longitude={lon:.4f}'
+            '&timezone=Europe%2FBerlin&forecast_days=3'
+            '&hourly=wave_height,wave_direction,wave_period')
     except Exception:
-        marine = {}
+        # Ein Ort an Land hat keinen Seegang. Das ist kein Fehler.
+        pass
 
-    ld, sd, md = land.get('daily', {}), sea.get('daily', {}), marine.get('daily', {})
-    dates = ld.get('time', [])
+    def reihe(quelle, block, feld):
+        werte = ((quelle or {}).get(block) or {}).get(feld)
+        return werte if isinstance(werte, list) else []
 
+    td, sd = tage.get('daily', {}), see_tage.get('daily', {})
     def g(d, k, i):
         a = d.get(k)
         return a[i] if isinstance(a, list) and i < len(a) else None
 
-    land_days, sea_days = [], []
-    for i, date in enumerate(dates):
-        wmo = g(ld, 'weathercode', i)
-        land_days.append({
-            'date': date, 'wmo': wmo,
-            'tmax': g(ld, 'temperature_2m_max', i), 'tmin': g(ld, 'temperature_2m_min', i),
-            'precip': g(ld, 'precipitation_sum', i), 'pop': g(ld, 'precipitation_probability_max', i),
+    tagesliste = []
+    for i, datum in enumerate(td.get('time', [])):
+        wmo = g(td, 'weathercode', i)
+        tagesliste.append({
+            'date': datum, 'wmo': wmo,
+            'tmax': g(td, 'temperature_2m_max', i), 'tmin': g(td, 'temperature_2m_min', i),
+            'precip': g(td, 'precipitation_sum', i),
+            'pop': g(td, 'precipitation_probability_max', i),
+            'wind': g(td, 'windspeed_10m_max', i), 'gust': g(td, 'windgusts_10m_max', i),
+            'dir': g(td, 'winddirection_10m_dominant', i),
+            'wave': g(sd, 'wave_height_max', i),
+            'wave_dir': g(sd, 'wave_direction_dominant', i),
+            'wave_periode': g(sd, 'wave_period_max', i),
+            'auf': g(td, 'sunrise', i), 'unter': g(td, 'sunset', i),
             'storm': wmo in _WX_STORM_CODES,
         })
-        swmo = g(sd, 'weathercode', i)
-        sea_days.append({
-            'date': date,
-            'wind': g(sd, 'windspeed_10m_max', i), 'gust': g(sd, 'windgusts_10m_max', i),
-            'dir': g(sd, 'winddirection_10m_dominant', i), 'wave': g(md, 'wave_height_max', i),
-            'storm': swmo in _WX_STORM_CODES,
+
+    zeiten = reihe(stunden, 'hourly', 'time')
+    stundenliste = []
+    for i, t in enumerate(zeiten):
+        def h(feld, quelle=stunden, block='hourly'):
+            a = reihe(quelle, block, feld)
+            return a[i] if i < len(a) else None
+        stundenliste.append({
+            't': t, 'temp': h('temperature_2m'), 'wmo': h('weathercode'),
+            'regen': h('precipitation'),
+            'wind': h('windspeed_10m'), 'boe': h('windgusts_10m'),
+            'dir': h('winddirection_10m'), 'druck': h('pressure_msl'),
+            'welle': h('wave_height', see_stunden), 'welle_dir': h('wave_direction', see_stunden),
+            'welle_periode': h('wave_period', see_stunden),
         })
+
     return {'updated': time.time(), 'source': 'open-meteo',
-            'land': {'name': 'Lübeck', 'days': land_days},
-            'sea':  {'name': 'Lübecker Bucht', 'days': sea_days}}
+            'modell': modell, 'modell_name': WX_MODELLE.get(modell, modell),
+            'ort': {'lat': round(lat, 4), 'lon': round(lon, 4)},
+            'tage': tagesliste, 'stunden': stundenliste,
+            # Die alten Schluessel bleiben, solange die Kachel sie liest.
+            'land': {'name': '', 'days': tagesliste},
+            'sea':  {'name': '', 'days': tagesliste}}
 
 
 @app.get('/api/weather')
-async def get_weather():
+async def get_weather(lat: float | None = None, lon: float | None = None,
+                      modell: str = ''):
+    """Wetter fuer einen Ort. Ohne Angabe: der erste gepflegte Favorit.
+
+    Je Ort UND Modell ein eigener Zwischenspeicher: wer zwischen seinen Orten
+    durchschaltet, soll nicht bei jedem Wechsel warten. Eine halbe Stunde ist
+    reichlich frisch — die Modelle rechnen ohnehin nur alle paar Stunden neu.
+    """
+    modell = modell or _wetter_modell()
+    if modell not in WX_MODELLE:
+        raise HTTPException(400, detail=f'Unbekanntes Modell: {modell}')
+    if lat is None or lon is None:
+        favorit = (_wetter_orte() or [None])[0]
+        lat, lon = (favorit['lat'], favorit['lon']) if favorit else _WX_LAND
+    lat = _zahl(lat, -90, 90, 'lat')
+    lon = _zahl(lon, -180, 180, 'lon')
+
+    schluessel = f'{lat:.4f},{lon:.4f},{modell}'
     now = time.time()
-    if _wx_cache['data'] and now - _wx_cache['ts'] < 1800:
-        return _wx_cache['data']
+    eintrag = _wx_cache.get(schluessel)
+    if eintrag and now - eintrag['ts'] < _WX_FRISCH_S:
+        return eintrag['data']
     loop = asyncio.get_event_loop()
     try:
-        data = await loop.run_in_executor(None, _fetch_weather)
+        data = await loop.run_in_executor(None, _fetch_weather, lat, lon, modell)
     except Exception as e:
         log.warning('Wetter-Fetch fehlgeschlagen: %s', e)
-        if _wx_cache['data']:
-            return _wx_cache['data']
+        if eintrag:
+            return eintrag['data']
         raise HTTPException(503, detail='Wetter nicht verfügbar')
-    _wx_cache['data'] = data
-    _wx_cache['ts'] = now
+    # Der Speicher darf nicht mit jedem angetippten Ort wachsen.
+    if len(_wx_cache) > 24:
+        _wx_cache.clear()
+    _wx_cache[schluessel] = {'data': data, 'ts': now}
     return data
+
+
+def _fetch_wetter_vergleich(lat: float, lon: float) -> dict:
+    """Derselbe Ort, dieselben Stunden, fuenf Rechenmodelle.
+
+    Zwei Modelle, die dasselbe sagen, sind eine belastbare Vorhersage; zwei,
+    die auseinanderlaufen, sind eine Warnung — und zwar die einzige, die man
+    aus einer Vorhersage ueberhaupt herauslesen kann. 18 Knoten aus einem
+    Modell sehen genauso sicher aus wie 18 Knoten aus fuenfen; erst der
+    Vergleich zeigt, ob man sich darauf einrichten kann.
+
+    Open-Meteo beantwortet das in EINEM Aufruf (`&models=a,b,c`) — auf dem Pi
+    ist das der Unterschied zwischen einer Anfrage und fuenfen. Die Felder
+    heissen dann `windspeed_10m_<modell>`.
+    """
+    kennungen = [k for k in WX_MODELLE if k != 'auto']
+    param = ','.join(_WX_MODELL_PARAM[k] for k in kennungen)
+    roh = _http_json(
+        f'https://api.open-meteo.com/v1/forecast'
+        f'?latitude={lat:.4f}&longitude={lon:.4f}'
+        '&timezone=Europe%2FBerlin&forecast_days=3&windspeed_unit=kn'
+        '&hourly=windspeed_10m,windgusts_10m'
+        f'&models={param}')
+    h = roh.get('hourly') or {}
+
+    def reihe(feld):
+        a = h.get(feld)
+        return a if isinstance(a, list) else []
+
+    modelle = []
+    for k in kennungen:
+        suffix = _WX_MODELL_PARAM[k]
+        wind = reihe(f'windspeed_10m_{suffix}')
+        boe = reihe(f'windgusts_10m_{suffix}')
+        # Ein Modell, das fuer diesen Ort nichts rechnet, gehoert nicht in den
+        # Vergleich — eine leere Linie sieht sonst aus wie Flaute.
+        if not any(x is not None for x in wind):
+            continue
+        modelle.append({'kennung': k, 'name': WX_MODELLE[k],
+                        'wind': wind,
+                        # ECMWF liefert keine Boeen. Weglassen statt Nullen.
+                        'boe': boe if any(x is not None for x in boe) else []})
+    return {'updated': time.time(),
+            'ort': {'lat': round(lat, 4), 'lon': round(lon, 4)},
+            'zeiten': reihe('time'), 'modelle': modelle}
+
+
+_wx_vergleich_cache: dict = {}
+
+
+@app.get('/api/wetter/vergleich')
+async def get_wetter_vergleich(lat: float | None = None, lon: float | None = None):
+    """Wie weit die Modelle beim Wind auseinanderliegen."""
+    if lat is None or lon is None:
+        favorit = (_wetter_orte() or [None])[0]
+        lat, lon = (favorit['lat'], favorit['lon']) if favorit else _WX_LAND
+    lat = _zahl(lat, -90, 90, 'lat')
+    lon = _zahl(lon, -180, 180, 'lon')
+
+    schluessel = f'{lat:.4f},{lon:.4f}'
+    now = time.time()
+    eintrag = _wx_vergleich_cache.get(schluessel)
+    if eintrag and now - eintrag['ts'] < _WX_FRISCH_S:
+        return eintrag['data']
+    loop = asyncio.get_event_loop()
+    try:
+        data = await loop.run_in_executor(None, _fetch_wetter_vergleich, lat, lon)
+    except Exception as e:
+        log.warning('Modellvergleich fehlgeschlagen: %s', e)
+        if eintrag:
+            return eintrag['data']
+        raise HTTPException(503, detail='Modellvergleich nicht verfügbar') from None
+    if len(_wx_vergleich_cache) > 12:
+        _wx_vergleich_cache.clear()
+    _wx_vergleich_cache[schluessel] = {'data': data, 'ts': now}
+    return data
+
+
+@app.get('/api/wetter/orte')
+async def get_wetter_orte():
+    """Die gepflegten Orte, das gewaehlte Modell und die Auswahl dazu."""
+    return {'orte': _wetter_orte(), 'modell': _wetter_modell(),
+            'modelle': WX_MODELLE}
+
+
+def _wetter_einstellung() -> dict:
+    roh = (read_json(PRESETS_FILE, {}) or {}).get('wetter') or {}
+    return roh if isinstance(roh, dict) else {}
+
+
+def _wetter_orte() -> list:
+    """Favoriten aus presets.json — hoechstens fuenf, in gepflegter Reihenfolge."""
+    orte = _wetter_einstellung().get('orte')
+    return orte if isinstance(orte, list) else []
+
+
+def _wetter_modell() -> str:
+    modell = _wetter_einstellung().get('modell')
+    return modell if modell in WX_MODELLE else 'auto'
+
+
+@app.get('/api/wetter/suche')
+async def get_wetter_suche(q: str = ''):
+    """Ort nach Namen suchen, damit Favoriten ohne Koordinaten anzulegen sind.
+
+    Wer einen Hafen eintragen will, kennt seinen Namen und nicht seine
+    Dezimalgrade. Die Suche laeuft ueber dieselbe Quelle wie die Vorhersage
+    (Open-Meteo), damit die Koordinate zum Modellraster passt.
+    """
+    begriff = (q or '').strip()
+    if len(begriff) < 2:
+        return {'treffer': []}
+    url = ('https://geocoding-api.open-meteo.com/v1/search'
+           f'?name={urllib.parse.quote(begriff)}&count=8&language=de&format=json')
+    loop = asyncio.get_event_loop()
+    try:
+        roh = await loop.run_in_executor(None, _http_json, url)
+    except Exception as e:
+        log.warning('Ortssuche fehlgeschlagen: %s', e)
+        raise HTTPException(503, detail='Ortssuche nicht verfügbar') from None
+
+    treffer = []
+    for t in (roh.get('results') or []):
+        # Land und Region dazu: "Neustadt" gibt es reichlich, und aus der
+        # nackten Liste waere nicht zu erkennen, welches gemeint ist.
+        zusatz = ', '.join(x for x in (t.get('admin1'), t.get('country')) if x)
+        treffer.append({'name': t.get('name') or '', 'zusatz': zusatz,
+                        'lat': t.get('latitude'), 'lon': t.get('longitude')})
+    return {'treffer': treffer}
+
 
 
 # ── Heizung (Stoker) ────────────────────────────────────────────────────────

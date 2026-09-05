@@ -56,6 +56,12 @@ const _versionPoller = createPoller(refreshVersion, 60000);   // Update-Stand fr
 refreshChargerStatus();
 const _chargerPoller = createPoller(refreshChargerStatus, 300000);  // Badge alle 5 min
 
+// Wetter: erst die gepflegten Orte, dann die Vorhersage. Andersherum holte der
+// erste Abruf die Vorgabe des Servers und der zweite gleich darauf den
+// gewaehlten Ort — zwei Abrufe fuer eine Kachel, und der falsche zuerst.
+_wxBinden();
+const _pWetter = fetchWetterOrte().then(fetchWeather);
+
 const _pWl = fetchWaterLevel();
 const _wlPoller      = createPoller(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
 
@@ -95,7 +101,7 @@ const _QUELLEN = [
   ['Wartung',    _pWart],
   ['Grundriss',  _pGrundriss],
   ['Wasserstand', _pWl],
-  ['Wetter',     typeof fetchWeather === 'function' ? fetchWeather() : null],
+  ['Wetter',     _pWetter],
   ['Heizung',    typeof ladeHeizung === 'function' ? ladeHeizung(false) : null],
   ['Beleuchtung', typeof loadPresets === 'function' ? _presetsFertig : null],
 ];

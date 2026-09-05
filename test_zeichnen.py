@@ -21,6 +21,8 @@ Aufruf:
 
     ./venv/bin/python -m unittest test_zeichnen -v
 """
+import datetime
+import json
 import os
 import pathlib
 import shutil
@@ -913,6 +915,256 @@ class ZeigerartStattMedienabfrage(Pruefstand):
             self.pg.evaluate("""() => getComputedStyle(document.getElementById('sbBattItem'))
                                         .getPropertyValue('-webkit-tap-highlight-color')"""),
             'rgba(0, 0, 0, 0)')
+
+
+# ── Wetter ─────────────────────────────────────────────────────────────────
+# Die Vorhersage kommt hier NICHT vom Prüfserver: der reicht /api/weather ans
+# Boot durch, und ein Boot gibt es hier nicht. Stattdessen wird die Antwort im
+# Browser abgefangen. Das ist obendrein das Richtige — ein Test, der Open-Meteo
+# braucht, prüft irgendwann das Wetter statt den Quelltext.
+
+def _wx_vorlage():
+    """Drei Tage Vorhersage rund um JETZT, damit "die aktuelle Stunde" trägt."""
+    jetzt = datetime.datetime.now().replace(minute=0, second=0, microsecond=0)
+    start = jetzt - datetime.timedelta(hours=6)
+    stunden, tage = [], []
+    for i in range(72):
+        t = start + datetime.timedelta(hours=i)
+        stunden.append({
+            't': t.strftime('%Y-%m-%dT%H:00'),
+            'temp': 15.0 + (i % 8), 'wmo': 3, 'regen': 0.2 if i % 9 == 0 else 0.0,
+            # Ein wiedererkennbarer Wert genau in der aktuellen Stunde: daran
+            # laesst sich pruefen, dass der Kopf die richtige Stunde nimmt.
+            'wind': 33.0 if i == 6 else 10.0 + (i % 5),
+            'boe': 44.0 if i == 6 else 18.0 + (i % 5),
+            'dir': (270 + i) % 360, 'druck': 1010 + i * 0.2,
+            'welle': 0.4 + (i % 3) / 10, 'welle_dir': 260, 'welle_periode': 3.2,
+        })
+    for k in range(5):
+        d = (start + datetime.timedelta(days=k)).strftime('%Y-%m-%d')
+        tage.append({
+            'date': d, 'wmo': 95 if k == 1 else 3, 'tmax': 18.0 + k, 'tmin': 12.0 + k,
+            'precip': 1.0, 'pop': 40, 'wind': 15.0 + k, 'gust': 28.0 + k,
+            'dir': 270, 'wave': 0.6 if k < 3 else None,
+            'wave_dir': 261, 'wave_periode': 3.1,
+            'auf': f'{d}T06:32', 'unter': f'{d}T19:58',
+            'storm': k == 1,
+        })
+    return {'updated': 0, 'source': 'open-meteo', 'modell': 'auto',
+            'modell_name': 'Automatisch', 'ort': {'lat': 54.0, 'lon': 11.0},
+            'tage': tage, 'stunden': stunden}
+
+
+WX_ORTE = {'orte': [{'name': 'Travemünde', 'lat': 53.9585, 'lon': 10.8752},
+                    {'name': 'Fehmarnsund', 'lat': 54.4139, 'lon': 11.1058}],
+           'modell': 'auto',
+           'modelle': {'auto': 'Automatisch', 'icon': 'ICON (DWD)', 'ecmwf': 'ECMWF'}}
+
+WX_VERGLEICH = {
+    'zeiten': _wx_vorlage()['stunden'][:24] and [s['t'] for s in _wx_vorlage()['stunden'][:24]],
+    'modelle': [{'kennung': 'icon', 'name': 'ICON (DWD)',
+                 'wind': [10 + (i % 7) for i in range(24)], 'boe': []},
+                {'kennung': 'ecmwf', 'name': 'ECMWF',
+                 'wind': [18 + (i % 5) for i in range(24)], 'boe': []}],
+    'ort': {'lat': 54.0, 'lon': 11.0}, 'updated': 0,
+}
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Wetterkachel(Pruefstand):
+    """Ort durchschalten, Detailseite öffnen, und was dabei NICHT passieren darf."""
+
+    MIT_POSITION = True
+
+    def setUp(self):
+        self.pg = self._browser.new_page(viewport={'width': 1280, 'height': 900})
+        self.fehler = []
+        self.pg.on('pageerror', lambda e: self.fehler.append(str(e)[:250]))
+        self.wx_abrufe = []
+        self._wx_routen()
+        self.pg.goto(self.basis + '/', wait_until='domcontentloaded', timeout=30000)
+        self.pg.wait_for_timeout(2000)
+        if self.pg.evaluate("() => !!document.querySelector('.anmeldung:not(.hidden)')"):
+            self.pg.fill('#anmName', KONTO)
+            self.pg.fill('#anmPw', PASSWORT)
+            self.pg.click('#anmKnopf')
+            self.pg.wait_for_timeout(4000)
+        nutzlast = {**NUTZLAST}
+        if self.MIT_POSITION:
+            nutzlast['position'] = {'lat': 53.8961, 'lon': 10.7695}
+        self.pg.evaluate('(d) => handleData(d)', nutzlast)
+        self.pg.wait_for_timeout(400)
+
+    def tearDown(self):
+        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
+        self.pg.close()
+
+    def _wx_routen(self):
+        def json_antwort(route, daten):
+            route.fulfill(status=200, content_type='application/json',
+                          body=json.dumps(daten))
+        self.pg.route('**/api/wetter/orte', lambda r: json_antwort(r, WX_ORTE))
+        self.pg.route('**/api/wetter/vergleich*', lambda r: json_antwort(r, WX_VERGLEICH))
+
+        def wetter(route):
+            self.wx_abrufe.append(route.request.url)
+            json_antwort(route, _wx_vorlage())
+        self.pg.route('**/api/weather*', wetter)
+
+    # ── Werkzeug ───────────────────────────────────────────────────────────
+
+    def ort(self):
+        return self.pg.evaluate("() => document.getElementById('wxOrtName').textContent")
+
+    def offen(self):
+        return self.pg.evaluate(
+            "() => !document.getElementById('wxOverlay').classList.contains('hidden')")
+
+    # ── Die Kachel ─────────────────────────────────────────────────────────
+
+    def test_erster_favorit_steht_in_der_kachel(self):
+        self.assertEqual(self.ort(), 'Travemünde')
+
+    def test_tippen_schaltet_durch_und_die_position_haengt_hinten_an(self):
+        """"An Bord" steht nicht in den Einstellungen — es ist ein Messwert und
+        taucht auf, sobald der Router einen Fix hat."""
+        gesehen = [self.ort()]
+        for _ in range(3):
+            self.pg.click('#wxOrtKnopf')
+            self.pg.wait_for_timeout(300)
+            gesehen.append(self.ort())
+        self.assertEqual(gesehen, ['Travemünde', 'Fehmarnsund', 'An Bord', 'Travemünde'])
+
+    def test_tippen_auf_den_namen_oeffnet_die_seite_nicht(self):
+        """Sonst wäre Durchschalten unmöglich: jeder Tipp landete auf der
+        Detailseite."""
+        self.pg.click('#wxOrtKnopf')
+        self.pg.wait_for_timeout(400)
+        self.assertFalse(self.offen())
+
+    def test_tippen_auf_die_kachel_oeffnet_die_seite(self):
+        self.pg.click('.card-wx .wx-day')
+        self.pg.wait_for_timeout(600)
+        self.assertTrue(self.offen())
+        self.assertEqual(self.pg.evaluate('() => location.hash'), '#wetter')
+
+    def test_gewaehlter_ort_ueberlebt_das_neuladen(self):
+        """Wer auf dem Zielhafen steht, will nach jedem Neuladen nicht wieder
+        beim Liegeplatz anfangen."""
+        self.pg.click('#wxOrtKnopf')
+        self.pg.wait_for_timeout(400)
+        self.pg.reload(wait_until='domcontentloaded')
+        self.pg.wait_for_timeout(4000)
+        self.assertEqual(self.ort(), 'Fehmarnsund')
+
+    def test_der_ort_geht_als_koordinate_mit(self):
+        self.wx_abrufe.clear()
+        self.pg.click('#wxOrtKnopf')
+        self.pg.wait_for_timeout(700)
+        self.assertTrue(any('lat=54.4139' in u for u in self.wx_abrufe),
+                        f'abgerufen wurde: {self.wx_abrufe}')
+
+    def test_fuenf_tage_in_der_kachel(self):
+        self.assertEqual(self.pg.locator('.card-wx .wx-day').count(), 5)
+
+    def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self):
+        """Welle nur an drei von fünf Tagen sah aus, als fehlten Werte. Dann
+        lieber überall die Windrichtung."""
+        zeilen = self.pg.evaluate(
+            "() => [...document.querySelectorAll('.wx-row-welle')].map(e => e.textContent.trim())")
+        self.assertEqual(len(zeilen), 5)
+        self.assertFalse(any('m' in z for z in zeilen),
+                         f'gemischt: {zeilen}')
+
+    # ── Die Detailseite ────────────────────────────────────────────────────
+
+    def test_der_kopf_zeigt_die_aktuelle_stunde(self):
+        """Nicht die erste der Liste — die ist Mitternacht."""
+        self.pg.evaluate('() => openWetter()')
+        self.pg.wait_for_timeout(600)
+        text = self.pg.evaluate("() => document.getElementById('wxJetzt').innerText")
+        self.assertIn('33', text, f'gezeigt wurde: {text}')
+        self.assertIn('44', text)
+
+    def test_boeenfaktor_steht_dabei(self):
+        """44 zu 33 ist Faktor 1,3 — gleichmäßiger Wind. Die Zahl ist die
+        eigentliche Auskunft, nicht die Böe allein."""
+        self.pg.evaluate('() => openWetter()')
+        self.pg.wait_for_timeout(600)
+        self.assertIn('Faktor 1.3',
+                      self.pg.evaluate("() => document.getElementById('wxJetzt').innerText"))
+
+    def test_beaufort_und_himmelsrichtung(self):
+        werte = self.pg.evaluate("""() => ({
+            b0: wxBft(0), b3: wxBft(10), b4: wxBft(11), b7: wxBft(33), b8: wxBft(34),
+            n: wxStrich(0), o: wxStrich(90), sw: wxStrich(225), w: wxStrich(272),
+            rund: wxStrich(359), leer: wxStrich(null),
+        })""")
+        self.assertEqual([werte['b0'], werte['b3'], werte['b4'], werte['b7'], werte['b8']],
+                         [0, 3, 4, 7, 8])
+        self.assertEqual([werte['n'], werte['o'], werte['sw'], werte['w'], werte['rund']],
+                         ['N', 'O', 'SW', 'W', 'N'])
+        self.assertEqual(werte['leer'], '')
+
+    def test_die_diagramme_zeichnen_wirklich(self):
+        """Ein Canvas mit Breite 0 malt still nichts. Genau das passiert, wenn
+        gezeichnet wird, bevor das Overlay sichtbar ist."""
+        self.pg.evaluate('() => openWetter()')
+        self.pg.wait_for_timeout(900)
+        gemalt = self.pg.evaluate("""() => ['wxWindCanvas', 'wxWelleCanvas', 'wxRegenCanvas']
+            .map(id => {
+                const c = document.getElementById(id);
+                if (!c || !c.width) return [id, 0];
+                const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+                let n = 0;
+                for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+                return [id, n];
+            })""")
+        for name, pixel in gemalt:
+            self.assertGreater(pixel, 500, f'{name} ist leer geblieben')
+
+    def test_modellvergleich_faellt_ein_urteil(self):
+        """Zwei Modelle, die 8 Knoten auseinanderliegen, sind keine Planung."""
+        self.pg.evaluate('() => openWetter()')
+        self.pg.wait_for_timeout(500)
+        self.pg.evaluate('() => wxVergleichLaden()')
+        self.pg.wait_for_timeout(900)
+        urteil = self.pg.evaluate("() => document.getElementById('wxVergleichUrteil').textContent")
+        self.assertIn('Spanne', urteil)
+        self.assertIn('uneins', urteil.lower() + ' ' if 'uneins' in urteil else urteil)
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class WetterOhnePosition(Wetterkachel):
+    """Ohne Fix vom Router gibt es "An Bord" nicht — und zwar gar nicht."""
+
+    MIT_POSITION = False
+
+    # Die Prüfungen der Elternklasse laufen hier bewusst NICHT noch einmal:
+    # sie setzen die Position voraus. Nur diese eine gilt.
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+
+    def test_erster_favorit_steht_in_der_kachel(self): pass
+    def test_tippen_auf_den_namen_oeffnet_die_seite_nicht(self): pass
+    def test_tippen_auf_die_kachel_oeffnet_die_seite(self): pass
+    def test_gewaehlter_ort_ueberlebt_das_neuladen(self): pass
+    def test_der_ort_geht_als_koordinate_mit(self): pass
+    def test_fuenf_tage_in_der_kachel(self): pass
+    def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self): pass
+    def test_der_kopf_zeigt_die_aktuelle_stunde(self): pass
+    def test_boeenfaktor_steht_dabei(self): pass
+    def test_beaufort_und_himmelsrichtung(self): pass
+    def test_die_diagramme_zeichnen_wirklich(self): pass
+    def test_modellvergleich_faellt_ein_urteil(self): pass
+
+    def test_tippen_schaltet_durch_und_die_position_haengt_hinten_an(self):
+        gesehen = [self.ort()]
+        for _ in range(2):
+            self.pg.click('#wxOrtKnopf')
+            self.pg.wait_for_timeout(300)
+            gesehen.append(self.ort())
+        self.assertEqual(gesehen, ['Travemünde', 'Fehmarnsund', 'Travemünde'])
 
 
 if __name__ == '__main__':

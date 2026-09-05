@@ -562,13 +562,20 @@
   </section>
 
   <!-- ── Wetter Kachel (Lübeck + Lübecker Bucht) ── -->
-  <section class="card card-wx" id="wxCard">
+  <section class="card card-wx" id="wxCard" onclick="openWetter()" style="cursor:pointer">
     <div class="card-title">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/>
       </svg>
       Wetter
-      <span class="card-link" style="cursor:default">Lübeck · Bucht</span>
+      <!-- Der Ortsname ist ein Schalter, nicht nur eine Beschriftung: ein Tipp
+           darauf geht zum nächsten Favoriten. Ein Tipp irgendwo sonst auf die
+           Kachel öffnet die Seite — deshalb hält er das Ereignis auf. -->
+      <button class="card-link wx-ort-knopf" id="wxOrtKnopf"
+              onclick="event.stopPropagation(); wxOrtWeiter()">
+        <span id="wxOrtName">Wetter</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
     <!-- Normal: 3-Tage-Trend -->
     <div class="wx-grid tile-hide-half" id="wxGrid"></div>
@@ -793,6 +800,7 @@
       <button class="set-nav-btn"        data-cat="laden"   onclick="switchSettingsCat('laden')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Laden</button>
       <button class="set-nav-btn"        data-cat="licht"   onclick="switchSettingsCat('licht')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Licht</button>
       <button class="set-nav-btn"        data-cat="heizung" onclick="switchSettingsCat('heizung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4 4 0 1 0 5 0z"/></svg> Heizung</button>
+      <button class="set-nav-btn"        data-cat="wetter"  onclick="switchSettingsCat('wetter')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/></svg> Wetter</button>
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg> Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg> Netzwerk</button>
       <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 2.6h.1A2 2 0 1 1 11 2.6V3a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.4 9V9a2 2 0 1 1 0 4h-.1z"/></svg> System</button>
@@ -818,6 +826,38 @@
       <div class="settings-actions">
         <span class="settings-feedback" id="sLichtFeedback"></span>
         <button class="btn-primary" onclick="saveLichtNamen()">Speichern</button>
+      </div>
+    </div>
+
+    <!-- Kategorie: Wetter.
+         Bis zu fuenf Orte, dazu das Rechenmodell. Die eigene Position steht
+         NICHT in dieser Liste — sie ist keine Einstellung, sondern ein
+         Messwert, und die Kachel haengt sie beim Durchschalten selbst an. -->
+    <div class="set-pane" id="setPane-wetter">
+      <div class="set-card">
+        <div class="set-card-hd">Orte <span id="sWetterZahl" class="set-card-zahl"></span></div>
+        <div id="sWetterOrte"></div>
+        <div class="set-suche">
+          <input type="text" id="sWetterSuche" class="settings-input" autocomplete="off"
+                 placeholder="Ort suchen, z. B. Heiligenhafen" oninput="wetterSucheTippen()">
+          <div id="sWetterTreffer" class="set-treffer" hidden></div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          Ein Tipp auf den Ortsnamen in der Wetterkachel geht zum nächsten Ort.
+          Hat der Router eine Position, hängt „An Bord“ von selbst hinten an.
+        </div>
+      </div>
+      <div class="set-card">
+        <div class="set-card-hd">Rechenmodell</div>
+        <select id="sWetterModell" class="settings-input" onchange="wxModellSetzen(this.value)"></select>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          „Automatisch“ lässt Open-Meteo je Ort das beste Modell wählen — in
+          Nordeuropa meist ICON, weiter draußen ECMWF. Der Vergleich auf der
+          Wetterseite zeigt, wie weit die Modelle auseinanderliegen.
+        </div>
+      </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="sWetterFeedback"></span>
       </div>
     </div>
 
@@ -1672,6 +1712,61 @@
       <img id="wlForecastImg" src="" style="width:100%;border-radius:8px;display:block" alt="BSH Wasserstandsprognose">
       <div style="font-size:0.7rem;color:var(--text3);margin-top:6px">Quelle: Bundesamt für Seeschifffahrt und Hydrographie — keine offizielle Vorhersage</div>
     </div>
+  </div>
+</div>
+
+<!-- ── Wetter Overlay ───────────────────────────────────────────────────────── -->
+<div id="wxOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeWetter()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="ov-title">Wetter</div>
+    <div class="ov-header-spacer"></div>
+  </div>
+  <div class="ov-body wx-seite">
+
+    <!-- Ort und Modell: beides eine Reihe von Schaltern, weil beides eine
+         Wahl unter wenigen ist und kein Formular. -->
+    <div class="wx-leiste" id="wxOrtLeiste"></div>
+
+    <div id="wxJetzt" class="wx-jetzt"></div>
+
+    <div class="wx-block">
+      <div class="wx-block-kopf">Wind und Böen · 72 Stunden</div>
+      <canvas id="wxWindCanvas" class="wx-canvas" style="height:190px"></canvas>
+      <div class="wx-hinweis">Fläche = Unterschied zwischen Mittelwind und Böe.
+        Pfeile zeigen, wohin der Wind weht. Grau hinterlegt ist die Nacht.</div>
+    </div>
+
+    <div class="wx-block" id="wxWelleBox" hidden>
+      <div class="wx-block-kopf">Seegang</div>
+      <canvas id="wxWelleCanvas" class="wx-canvas" style="height:120px"></canvas>
+    </div>
+
+    <div class="wx-block">
+      <div class="wx-block-kopf">Niederschlag</div>
+      <canvas id="wxRegenCanvas" class="wx-canvas" style="height:90px"></canvas>
+    </div>
+
+    <div class="wx-block">
+      <div class="wx-block-kopf">Die nächsten Tage</div>
+      <div id="wxTage" class="wx-tage"></div>
+    </div>
+
+    <div class="wx-block">
+      <div class="wx-block-kopf">Rechenmodell</div>
+      <div class="wx-leiste" id="wxModellLeiste"></div>
+      <div class="wx-hinweis">Ein Modell allein sagt nichts über seine eigene
+        Sicherheit. Erst der Vergleich zeigt, ob man sich darauf einrichten kann.</div>
+      <button class="btn-secondary wx-knopf" id="wxVergleichKnopf" onclick="wxVergleichLaden()">Modelle vergleichen</button>
+      <div id="wxVergleichBox" hidden>
+        <canvas id="wxVergleichCanvas" class="wx-canvas" style="height:170px"></canvas>
+        <div class="wx-legenden" id="wxVergleichLegende"></div>
+        <div class="wx-urteil" id="wxVergleichUrteil"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
