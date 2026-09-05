@@ -286,11 +286,29 @@ async function dashboardVerlaufLaden() {
 
 /** Die Mittelwerte einer Reihe aus dem Dashboard-Verlauf, oder null. */
 function _reihe(feld) {
+  const p = _reihePunkte(feld);
+  return p ? p.map(x => x.v) : null;
+}
+
+/**
+ * Dieselbe Reihe, aber MIT Zeitstempel.
+ *
+ * Der Unterschied ist nicht kosmetisch. Ohne die Zeit weiss die Fläche nur, wie
+ * viele Punkte es gibt, und verteilt sie gleichmässig über ihre Breite. Liegen
+ * nur zwei Stunden Verlauf vor — weil das Feld neu ist oder der Rechner stand —,
+ * füllen diese zwei Stunden trotzdem das ganze Feld und behaupten damit einen
+ * Tag. Genauso verschwindet eine Nacht ohne Aufzeichnung spurlos, statt als
+ * Lücke dazustehen.
+ */
+function _reihePunkte(feld) {
   const p = _dbVerlauf && _dbVerlauf.punkte;
   if (!p || !p.length) return null;
-  const w = p.map(x => Array.isArray(x[feld]) ? x[feld][0] : x[feld])
-             .filter(v => typeof v === 'number');
-  return w.length >= 3 ? w : null;
+  const raus = [];
+  for (const x of p) {
+    const v = Array.isArray(x[feld]) ? x[feld][0] : x[feld];
+    if (typeof v === 'number' && typeof x.t === 'number') raus.push({ t: x.t, v });
+  }
+  return raus.length >= 3 ? raus : null;
 }
 
 /** Der zuletzt gemessene Wert einer Reihe. */
@@ -360,6 +378,13 @@ function _grob(stunden) {
  * es gibt keine Achsen, keine Beschriftung und nichts abzulesen. Die Frage,
  * die es beantwortet, ist nicht "wie viel", sondern "war das schon länger so".
  *
+ * Gezeichnet wird über der ZEIT, nicht über der Zahl der Punkte. Das ist der
+ * Unterschied zwischen einer Aussage und einer Behauptung: liegen erst zwei
+ * Stunden Verlauf vor, sitzt die Fläche rechts am Rand und nimmt ein Zwölftel
+ * der Breite ein — bei gleichmässiger Verteilung füllte sie das ganze Feld und
+ * behauptete einen Tag, den es nicht gibt. Aus demselben Grund bleibt eine
+ * Lücke eine Lücke, statt von einer geraden Linie überbrückt zu werden.
+ *
  * Als SVG und nicht als Canvas: es skaliert von selbst mit dem Feld mit. Ein
  * Canvas müsste bei jeder Breitenänderung neu gerechnet werden — genau die
  * Falle, die auf der Messwerte-Seite den Größenbeobachter nötig macht.
@@ -369,26 +394,49 @@ function _grob(stunden) {
  * Berg. Wo es keine natürliche Skala gibt (Antwortzeit), wird automatisch
  * skaliert — dann sagt die Fläche wenigstens die Form der Nacht.
  */
-function _wasch(werte, farbe, unten, oben) {
-  if (!werte || werte.length < 3) return '';
+function _wasch(punkte, farbe, unten, oben) {
+  if (!punkte || punkte.length < 3 || !_dbVerlauf) return '';
+  const von = _dbVerlauf.von, bis = _dbVerlauf.bis;
+  if (!(bis > von)) return '';
+
+  const werte = punkte.map(p => p.v);
   const min = unten != null ? unten : Math.min(...werte);
   let max = oben != null ? oben : Math.max(...werte);
   if (!(max > min)) max = min + 1;
-  const n = werte.length;
+  const x = t => ((t - von) / (bis - von) * 100).toFixed(2);
   const y = v => (100 - (Math.max(min, Math.min(max, v)) - min) / (max - min) * 100).toFixed(2);
-  const pkt = werte.map((v, i) => `${(i / (n - 1) * 100).toFixed(2)},${y(v)}`);
-  // Die Kennung muss je Feld verschieden sein, sonst greifen alle Flächen auf
-  // denselben Verlauf zu und tragen dieselbe Farbe.
+
+  // Eine Lücke ist mehr als zweieinhalb Eimerbreiten ohne Punkt. Enger
+  // angesetzt zerfiele die Linie an jedem einzelnen fehlenden Eimer in
+  // Bruchstücke; weiter angesetzt würde eine halbe Nacht überbrückt.
+  const eimer = _dbVerlauf.eimer_s || (bis - von) / Math.max(1, punkte.length);
+  const luecke = eimer * 2.5;
+  const stuecke = [[]];
+  let vorher = null;
+  for (const p of punkte) {
+    if (vorher !== null && p.t - vorher > luecke) stuecke.push([]);
+    stuecke[stuecke.length - 1].push(p);
+    vorher = p.t;
+  }
+
   const kennung = 'wasch' + (_waschZaehler++);
+  let pfade = '';
+  for (const stueck of stuecke) {
+    if (stueck.length < 2) continue;      // ein einzelner Punkt ist keine Linie
+    const pkt = stueck.map(p => `${x(p.t)},${y(p.v)}`);
+    const l = x(stueck[0].t), r = x(stueck[stueck.length - 1].t);
+    pfade += `<path d="M${l},100 L${pkt.join(' L')} L${r},100 Z" fill="url(#${kennung})"/>`
+      + `<polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}"
+          stroke-opacity=".3" stroke-width="1.2" vector-effect="non-scaling-stroke"
+          stroke-linejoin="round"/>`;
+  }
+  if (!pfade) return '';
   return `<div class="ampel-spur"><svg viewBox="0 0 100 100" preserveAspectRatio="none"
       aria-hidden="true">
     <defs><linearGradient id="${kennung}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${farbe}" stop-opacity=".26"/>
       <stop offset="1" stop-color="${farbe}" stop-opacity="0"/>
-    </linearGradient></defs>
-    <path d="M0,100 L${pkt.join(' L')} L100,100 Z" fill="url(#${kennung})"/>
-    <polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}" stroke-opacity=".3"
-      stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    </linearGradient></defs>${pfade}
   </svg></div>`;
 }
 let _waschZaehler = 0;
@@ -477,18 +525,18 @@ function _ampelnBauen(z, v) {
   return '<div class="ampeln">'
     + _ampel('Batterie', battStufe, soc != null ? soc.toFixed(0) : '—',
              soc != null ? '%' : '', battNeben,
-             _wasch(_reihe('soc'), 'var(--green)', 0, 100))
+             _wasch(_reihePunkte('soc'), 'var(--green)', 0, 100))
     // Feste Skala 0…12 statt automatisch: bei einer Skalierung auf die
     // Spannweite saehe eine Nacht zwischen neun und elf Satelliten aus wie ein
     // Absturz. Zwoelf ist die Oberkante — mehr sieht der Empfaenger selten, und
     // was darueber liegt, liegt eben an der Kante.
     + _ampel('GPS', gpsStufe, sats != null ? String(sats) : (pos ? 'Fix' : '—'),
              sats != null ? 'Sat' : '', gpsNeben,
-             _wasch(_reihe('sats'), 'var(--blau)', 0, 12))
+             _wasch(_reihePunkte('sats'), 'var(--blau)', 0, 12))
     + _ampel('Internet', netzStufe, ping != null ? Math.round(ping) : '—',
              ping != null ? 'ms' : '',
              [traegerWort, 'Antwortzeit'].filter(Boolean).join(' · '),
-             _wasch(_reihe('ping_ms'), 'var(--yellow)'))
+             _wasch(_reihePunkte('ping_ms'), 'var(--yellow)'))
     // Nicht bis zur Oberkante: die Erreichbarkeit kennt nur null und eins, und
     // eine Fläche, die zwischen leer und randvoll springt, sieht aus wie ein
     // Fehler in der Anzeige. Auf 40 Prozent gedeckelt wird daraus ein ruhiges
@@ -500,27 +548,33 @@ function _ampelnBauen(z, v) {
 }
 
 /**
- * Die Erreichbarkeit der letzten 24 Stunden als Reihe aus Null und Eins.
+ * Die Erreichbarkeit der letzten 24 Stunden, als Punkte mit Zeitstempel.
  *
  * Anders als die übrigen Flächen kommt diese nicht aus dem Messverlauf,
  * sondern aus den Lücken: eine Reihe "war verbunden" gibt es nicht. Das ist
  * auch die ehrlichere Quelle — während einer Lücke schreibt der Pi nichts auf,
  * eine Verlaufsreihe hätte dort gar keinen Wert und nicht etwa eine Null.
+ *
+ * Der Zeitraum ist derselbe wie der der übrigen Flächen. Nähme diese ihren
+ * eigenen, lägen zwei Felder nebeneinander, die auf verschiedene Achsen
+ * zeichnen — und eine Kerbe säße nicht dort, wo die Delle daneben sitzt.
  */
 function _piSpur(v) {
-  if (!v) return null;
-  const bis = Date.now() / 1000, von = bis - 86400;
+  if (!v || !_dbVerlauf) return null;
+  const von = _dbVerlauf.von, bis = _dbVerlauf.bis;
+  if (!(bis > von)) return null;
   const N = 96;                                 // ein Punkt je Viertelstunde
-  const reihe = new Array(N).fill(1);
+  const schritt = (bis - von) / N;
+  const reihe = Array.from({ length: N }, (_, i) => ({ t: von + i * schritt, v: 1 }));
   for (const l of (v.luecken || [])) {
     const a = Math.max(von, l.ab || 0);
     const e = Math.min(bis, (l.ab || 0) + (l.dauer_s || 0));
     if (!(e > a)) continue;
-    const i0 = Math.max(0, Math.floor((a - von) / 86400 * N));
-    const i1 = Math.min(N, Math.ceil((e - von) / 86400 * N));
-    for (let i = i0; i < i1; i++) reihe[i] = 0;
+    const i0 = Math.max(0, Math.floor((a - von) / schritt));
+    const i1 = Math.min(N, Math.ceil((e - von) / schritt));
+    for (let i = i0; i < i1; i++) reihe[i].v = 0;
   }
-  return reihe.some(x => x === 0) ? reihe : null;   // eine gerade Linie sagt nichts
+  return reihe.some(x => x.v === 0) ? reihe : null;   // eine gerade Linie sagt nichts
 }
 
 // ── Zeile 2 links: Ort und Wetter ──────────────────────────────────────────
