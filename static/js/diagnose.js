@@ -2343,6 +2343,20 @@ const GRUPPEN = [
              { f: 'tank2', n: 'Diesel', farbe: '#fbbf24' }] },
   { schluessel: 'zellen',   name: 'Zellabweichung', einheit: 'V',
     felder: [{ f: 'zelldiff', n: 'Größte Abweichung', farbe: '#a78bfa' }] },
+
+  // Drei getrennte Kurven statt einer: Minuten, Prozent und An/Aus teilen sich
+  // keine Achse. Nebeneinander auf derselben ZEITachse beantworten sie
+  // zusammen die Frage, warum der Router faellt — bricht 2,4 GHz weg und ERST
+  // DANN geht die Laufzeit auf null, hat sich der Funkchip aufgehaengt und der
+  // Watchdog hinterhergeraeumt. Klettert stattdessen der Speicher, ist es der
+  // Speicher.
+  { schluessel: 'rtlauf',   name: 'Router-Laufzeit', einheit: 'min',
+    felder: [{ f: 'rt_lauf', n: 'seit dem Start', farbe: '#22d3ee' }] },
+  { schluessel: 'rtfunk',   name: 'Funkbänder', einheit: 'an',
+    felder: [{ f: 'wl24', n: '2,4 GHz', farbe: '#fb923c' },
+             { f: 'wl5', n: '5 GHz', farbe: '#60a5fa' }] },
+  { schluessel: 'rtram',    name: 'Router-Speicher', einheit: '%',
+    felder: [{ f: 'rt_ram', n: 'belegt', farbe: '#f87171' }] },
 ];
 
 let _messStd = 24;

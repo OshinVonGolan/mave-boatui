@@ -197,6 +197,72 @@ class HerkunftHinterDemWeiterreicher(unittest.TestCase):
         self.assertEqual(self._herkunft(None), '')
 
 
+class RouterWerte(unittest.TestCase):
+    """Die vier Zahlen, mit denen sich der Router-Absturz aufklaeren laesst.
+
+    Der Sinn der Auswahl ist, dass jede eine Erklaerung von einer anderen
+    TRENNT. Deshalb pruefen die Tests nicht nur, dass Zahlen herauskommen,
+    sondern auch, dass nichts Ueberfluessiges mitkommt — eine Datenhalde
+    beantwortet am Ende gar nichts.
+    """
+
+    def _werte(self, netz):
+        import main
+        return main._router_werte(netz)
+
+    def _voll(self, **abweichung):
+        netz = {'gesundheit': {'uptime_s': 2589, 'ram_prozent': 55.31},
+                'radios': [{'band': '2.4GHz', 'up': True, 'kanal': 11},
+                           {'band': '5GHz', 'up': True, 'kanal': 157}]}
+        netz.update(abweichung)
+        return netz
+
+    def test_laufzeit_in_minuten(self):
+        # Minuten, weil man sie so liest. 2589 s sind 43,1 min.
+        self.assertEqual(self._werte(self._voll())['rt_lauf'], 43.1)
+
+    def test_die_vier_und_nichts_sonst(self):
+        self.assertEqual(set(self._werte(self._voll())),
+                         {'rt_lauf', 'rt_ram', 'wl24', 'wl5'})
+
+    def test_baender_getrennt(self):
+        # Der entscheidende Fall: 2,4 GHz weg, 5 GHz laeuft weiter. Genau daran
+        # zeigt sich, ob EIN Radio ausfaellt oder der ganze Funkteil.
+        netz = self._voll(radios=[{'band': '2.4GHz', 'up': False},
+                                  {'band': '5GHz', 'up': True}])
+        w = self._werte(netz)
+        self.assertEqual((w['wl24'], w['wl5']), (0, 1))
+
+    def test_ohne_router_kommt_nichts(self):
+        # Faellt der Router aus, entsteht im Verlauf eine LUECKE. Eine Null
+        # waere hier falsch: sie saehe aus wie eine Messung und behauptete,
+        # der Router habe geantwortet.
+        for leer in (None, {}, {'gesundheit': None, 'radios': []}):
+            self.assertEqual(self._werte(leer), {})
+
+    def test_teilausfall_liefert_was_da_ist(self):
+        # Die Gesundheit fehlt, die Radios antworten: dann fehlen eben zwei
+        # Felder und die anderen beiden stehen trotzdem da.
+        w = self._werte({'radios': [{'band': '2.4GHz', 'up': False}]})
+        self.assertEqual(w, {'wl24': 0})
+
+    def test_unfug_wird_nicht_uebernommen(self):
+        # Der Router liefert seine Zahlen als Zeichenketten, wenn ihm danach
+        # ist. Eine Zeichenkette im Verlauf bringt den Reihen-Endpunkt des
+        # Servers nicht um, aber sie zaehlt dort auch nicht als Messwert —
+        # dann lieber gar nicht erst hineinschreiben.
+        w = self._werte({'gesundheit': {'uptime_s': 'viel', 'ram_prozent': None}})
+        self.assertEqual(w, {})
+
+    def test_wahrheitswerte_gelten_nicht_als_zahl(self):
+        w = self._werte({'gesundheit': {'uptime_s': True, 'ram_prozent': False}})
+        self.assertEqual(w, {})
+
+    def test_unbekanntes_band_wird_uebergangen(self):
+        w = self._werte({'radios': [{'band': '6GHz', 'up': True}]})
+        self.assertEqual(w, {})
+
+
 class Wartungsstand(unittest.TestCase):
     """Wie viele Aufgaben ueberfaellig oder bald faellig sind.
 

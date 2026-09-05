@@ -248,8 +248,53 @@ class ConnectivityMonitor:
                 log.info('Position nicht verfügbar (%s)', e)
                 self._gps_warn_logged = True
 
+        # Wie es dem Router SELBST geht. Bisher wurde nur abgefragt, was er
+        # ueber die Aussenwelt weiss — nie, wie es ihm dabei ergeht.
+        #
+        # Der Anlass ist handfest: das 2,4-GHz-Radio (ath10k, QCA4019) haengt
+        # sich auf, danach setzt der Watchdog den ganzen Router zurueck. Der
+        # einzige Zeuge war ein 8-kB-Ringpuffer im RAM, der nur die letzte
+        # Minute vor dem Absturz behaelt, und das Ereignisprotokoll des Routers
+        # ist seit dem 02.09.2026 beschaedigt. Ohne eigenen Mitschnitt steht man
+        # nach jedem Absturz wieder vor derselben leeren Seite.
+        #
+        # Die Laufzeit ist dabei die wichtigste Zahl ueberhaupt: faellt sie,
+        # hat er neu gestartet. Genauer und billiger laesst sich ein Neustart
+        # nicht feststellen.
+        gesundheit = None
+        try:
+            u = self._router_holen('/api/system/device/usage/status').get('data') or {}
+            speicher = u.get('memory') or {}
+            gesundheit = {
+                'uptime_s':    u.get('uptime_seconds'),
+                'ram_prozent': speicher.get('ram_percentage'),
+            }
+        except Exception as e:
+            if not getattr(self, '_gesund_warn_logged', False):
+                log.info('Router-Gesundheit nicht abrufbar (%s)', e)
+                self._gesund_warn_logged = True
+
+        # Die Radios einzeln. Aus der Client-Liste allein liesse sich nicht
+        # unterscheiden, ob ein Band LEER oder AUS ist — und genau darum geht
+        # es hier: faellt 2,4 GHz vor dem Neustart aus oder mit ihm?
+        radios = []
+        try:
+            for r in (self._router_holen('/api/wireless/devices/status').get('data') or []):
+                radios.append({
+                    'id':    r.get('id'),
+                    'band':  r.get('band'),
+                    'kanal': r.get('channel'),
+                    'up':    bool(r.get('up')),
+                })
+        except Exception as e:
+            if not getattr(self, '_radio_warn_logged', False):
+                log.info('Funkradios nicht abrufbar (%s)', e)
+                self._radio_warn_logged = True
+
         wan_ip = primary.get('ipaddr', '') or ''
         return {
+            'gesundheit':     gesundheit,
+            'radios':         radios,
             'gps':            gps,
             'active_type':    primary.get('network_type', 'unknown'),
             'active_uptime':  primary.get('uptime', 0),

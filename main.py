@@ -556,6 +556,46 @@ def _ereignis_absetzen(art: str, daten: dict) -> None:
         log.debug('Ereignis %s nicht gesendet: %s', art, e)
 
 
+def _router_werte(netz: dict | None) -> dict:
+    """Vier Zahlen zum Router — und bewusst nur diese vier.
+
+    Jede beantwortet eine Frage, die sich sonst nicht beantworten laesst:
+
+      rt_lauf   Wie oft startet er neu? Faellt die Laufzeit, war ein Neustart.
+                Zugleich das Mass dafuer, ob eine Aenderung geholfen hat.
+      wl24      Stirbt 2,4 GHz VOR dem Neustart oder mit ihm? Daran entscheidet
+                sich die Ursache — der Verdacht ist, dass sich die Firmware des
+                Funkchips aufhaengt und der Watchdog danach den ganzen Router
+                zurueckwirft.
+      wl5       Nur 2,4 GHz oder beide Baender? Trennt einen Fehler DIESES
+                Radios von einem des ganzen Funkteils.
+      rt_ram    Die Gegenprobe. Klettert der Speicher vor jedem Absturz gegen
+                hundert, ist es der Speicher und nicht das Radio.
+
+    Alles Weitere — Last, Sendeleistung, Zahl der Clients — waere Ballast: es
+    unterscheidet die Erklaerungen nicht und macht die Zeilen nur groesser, und
+    die gehen ueber Mobilfunk.
+
+    Faellt der Router aus, schlaegt seine Abfrage fehl und hier kommt nichts
+    zurueck. Genau richtig: im Verlauf entsteht dann eine Luecke, und danach
+    beginnt die Laufzeit wieder bei null. Diese beiden Zeichen zusammen SIND
+    der Neustart.
+    """
+    raus: dict = {}
+    gesund = (netz or {}).get('gesundheit') or {}
+    lauf = gesund.get('uptime_s')
+    if isinstance(lauf, (int, float)) and not isinstance(lauf, bool):
+        raus['rt_lauf'] = round(lauf / 60, 1)          # Minuten, wie man es liest
+    ram = gesund.get('ram_prozent')
+    if isinstance(ram, (int, float)) and not isinstance(ram, bool):
+        raus['rt_ram'] = round(ram, 1)
+    for r in ((netz or {}).get('radios') or []):
+        feld = {'2.4GHz': 'wl24', '5GHz': 'wl5'}.get(r.get('band'))
+        if feld:
+            raus[feld] = 1 if r.get('up') else 0
+    return raus
+
+
 def _grob_sammeln(entry: dict) -> None:
     """Sammelt einen Feinwert; bei Minutenwechsel wandert das Mittel in den
     groben Verlauf. Rein rechnerisch, kein Datei- oder Netzzugriff."""
@@ -685,6 +725,8 @@ async def broadcast(data: dict):
     sats = gps.get('satelliten')
     if isinstance(sats, int) and not isinstance(sats, bool):
         entry['sats'] = sats
+    entry.update(_router_werte(netz))
+
     sl = (netz or {}).get('starlink') or {}
     ping = sl.get('ping_ms')
     if isinstance(ping, (int, float)) and not isinstance(ping, bool):
