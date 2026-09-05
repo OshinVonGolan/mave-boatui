@@ -2020,6 +2020,84 @@ async def debug_router_clients():
     return results
 
 
+# Was der Router ueber seine eigene Gesundheit sagt. Die Pfade sind KANDIDATEN
+# und keine Zusicherung: RutOS benennt seine Endpunkte zwischen Fassungen um,
+# und was auf einem RUTX50 antwortet, muss es auf dem naechsten nicht. Deshalb
+# wird probiert und berichtet, was zurueckkommt — statt eine Liste zu pflegen,
+# die auf dem Papier stimmt und am Geraet nicht.
+_ROUTER_DIAGNOSE_PFADE = (
+    # Laufzeit und Neustarts. Die wichtigste Zahl ueberhaupt: eine Laufzeit,
+    # die kleiner ist als der Abstand zur letzten Abfrage, IST ein Neustart.
+    '/api/system/device/status',
+    '/api/system/device/usage/status',
+    '/api/system/status',
+    '/api/system/reboot/status',
+    # Speicher und Waerme — die beiden ueblichen Gruende, aus denen ein kleines
+    # Geraet von selbst neu startet.
+    '/api/system/device/memory/status',
+    '/api/system/device/temperature/status',
+    '/api/system/device/fw/status',
+    # Das Protokoll. Hier steht, WARUM er neu gestartet ist, falls er es sagt.
+    '/api/system/events/status',
+    '/api/system/logs/status',
+    '/api/system/log/status',
+    # Funk: die Radios (2,4 und 5 GHz) und die darauf gehosteten Netze. Genau
+    # hier faellt auf, wenn nach einem Neustart ein Netz nicht wiederkommt.
+    '/api/wireless/devices/status',
+    '/api/wireless/interfaces/status',
+    '/api/wireless/access_points/config',
+    '/api/wireless/devices/config',
+)
+
+
+@app.get('/api/debug/router-diagnose')
+async def debug_router_diagnose(kurz: bool = True):
+    """Was der Router ueber sich selbst hergibt — zum Nachsehen, warum er faellt.
+
+    Ein reiner Leseaufruf; er stellt nichts um. Gedacht fuer die Frage des
+    Eigners: der RUTX50 startet staendig neu, und danach fehlt ein WLAN.
+
+    `kurz=false` liefert die vollen Antworten. In der Vorgabe werden lange
+    Nutzlasten (Protokolle) gekuerzt — sonst kommt ein Megabyte JSON durch die
+    Mobilfunkleitung, und lesen kann man es dann immer noch nicht.
+    """
+    if not conn_mon:
+        raise HTTPException(503, detail='Connectivity-Monitor nicht konfiguriert')
+    hdrs = conn_mon._token_headers()
+    raus: dict = {'zeit': time.time(), 'pfade': {}}
+    for pfad in _ROUTER_DIAGNOSE_PFADE:
+        try:
+            antwort = conn_mon._http(conn_mon._router_host + pfad, headers=hdrs)
+            daten = antwort.get('data') if isinstance(antwort, dict) else antwort
+            if kurz:
+                daten = _diagnose_kuerzen(daten)
+            raus['pfade'][pfad] = {'ok': True, 'data': daten}
+        except Exception as e:
+            # Ein 404 ist hier KEIN Fehler, sondern das Ergebnis: diesen Pfad
+            # gibt es auf dieser Fassung nicht.
+            raus['pfade'][pfad] = {'ok': False, 'fehler': str(e)}
+    return raus
+
+
+def _diagnose_kuerzen(daten, tiefe: int = 0):
+    """Lange Listen und Texte stutzen, Struktur behalten.
+
+    Es geht darum zu sehen, WELCHE Felder es gibt und wie sie aussehen. Die
+    letzten Eintraege eines Protokolls sind dabei die interessanten — bei einem
+    Absturz steht das Entscheidende am Ende.
+    """
+    if isinstance(daten, dict):
+        return {k: _diagnose_kuerzen(v, tiefe + 1) for k, v in daten.items()}
+    if isinstance(daten, list):
+        if len(daten) > 25:
+            return ([f'… {len(daten) - 25} weitere davor …']
+                    + [_diagnose_kuerzen(x, tiefe + 1) for x in daten[-25:]])
+        return [_diagnose_kuerzen(x, tiefe + 1) for x in daten]
+    if isinstance(daten, str) and len(daten) > 400:
+        return daten[:400] + f' … (+{len(daten) - 400} Zeichen)'
+    return daten
+
+
 # 1 MB reicht fuer Wartungsplan und Stauplan um Groessenordnungen. Ohne
 # Obergrenze laege ein 50-MB-Body erst komplett im RAM eines Rechners mit
 # 512 MB, bevor ihn ueberhaupt jemand ablehnen koennte.
