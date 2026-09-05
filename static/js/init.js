@@ -62,7 +62,10 @@ const _chargerPoller = createPoller(refreshChargerStatus, 300000);  // Badge all
 _wxBinden();
 const _pWetter = fetchWetterOrte().then(fetchWeather);
 
-const _pWl = fetchWaterLevel();
+// Pegel: erst die gepflegten Stationen, dann der Stand — sonst holt der
+// erste Abruf den Heimatpegel und der zweite gleich darauf den gewaehlten.
+_wlBinden();
+const _pWl = fetchPegelOrte().then(fetchWaterLevel);
 const _wlPoller      = createPoller(fetchWaterLevel, 600000);  // Wasserstand alle 10 min
 
 // fireNow=false: der erste Abruf steht direkt darueber schon. Sonst liefe jede

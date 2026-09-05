@@ -92,6 +92,8 @@ function switchSettingsCat(cat) {
   if (cat === 'laden')   refreshChargerStatus();
   if (cat === 'display') openDisplaySettings();
   if (cat === 'wetter')  wetterEinstellungenBauen();
+  if (cat === 'pegel')   pegelEinstellungenBauen();
+  if (cat === 'grundriss') grundrissVorschauBauen();
 }
 
 async function fetchSettingsNetwork() {
@@ -653,4 +655,128 @@ async function _wetterOrteSpeichern(orte) {
   } catch (e) {
     if (fb) _fbError(fb, e.message);
   }
+}
+
+
+// ── Einstellungen: Pegel ────────────────────────────────────────────────────
+//
+// Gleiche Form wie die Wetterorte, und aus demselben Grund kein
+// Speichern-Knopf: Hinzufuegen, Loeschen und Verschieben SIND die Aenderung.
+//
+// Gesucht wird bei pegelonline (fuzzyId) — die volle Stationsliste hat rund
+// 700 Eintraege und ein Megabyte, die will der Pi nicht holen.
+
+let _pegelSucheUhr = null;
+
+function pegelEinstellungenBauen() {
+  const liste = $('sPegelListe');
+  const zahl  = $('sPegelZahl');
+  if (!liste) return;
+
+  const gepflegt = _wlGepflegt;
+  const st = gepflegt ? (_wlStationen || []) : [];
+  if (zahl) zahl.textContent = `${st.length} von 5`;
+  liste.innerHTML = gepflegt ? st.map((p, i) => `
+    <div class="set-ort">
+      <div class="set-ort-name">${_wlEsc(p.name)}</div>
+      <button class="set-ort-btn" title="nach oben" ${i === 0 ? 'disabled' : ''}
+              onclick="pegelSchieben(${i}, -1)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></button>
+      <button class="set-ort-btn" title="nach unten" ${i === st.length - 1 ? 'disabled' : ''}
+              onclick="pegelSchieben(${i}, 1)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+      <button class="set-ort-btn set-ort-weg" title="entfernen" onclick="pegelWeg(${i})">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>`).join('')
+    : '<div class="set-ort-leer">Noch kein Pegel gepflegt. Die Kachel zeigt so lange Travemünde.</div>';
+
+  const feld = $('sPegelSuche');
+  if (feld) feld.disabled = st.length >= 5;
+}
+
+function pegelSucheTippen() {
+  clearTimeout(_pegelSucheUhr);
+  _pegelSucheUhr = setTimeout(_pegelSuchen, 350);
+}
+
+async function _pegelSuchen() {
+  const feld = $('sPegelSuche'), box = $('sPegelTreffer');
+  if (!feld || !box) return;
+  const q = feld.value.trim();
+  if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  let d = null;
+  try {
+    d = await fetch('/api/pegel/suche?q=' + encodeURIComponent(q)).then(r => r.ok ? r.json() : null);
+  } catch (_) {}
+  const treffer = (d && d.treffer) || [];
+  box.hidden = false;
+  box.innerHTML = treffer.length ? treffer.map(t => `
+    <button class="set-treffer-zeile" onclick="pegelHinzu(this)"
+            data-name="${_wlEsc(t.name)}" data-uuid="${_wlEsc(t.uuid)}">
+      <b>${_wlEsc(t.name)}</b> <span>${_wlEsc(t.zusatz)}</span></button>`).join('')
+    : '<div class="set-ort-leer">Nichts gefunden.</div>';
+}
+
+/** Die gepflegte Liste — die Vorgabe des Servers zaehlt nicht dazu. */
+function _pegelGepflegt() {
+  return _wlGepflegt ? [...(_wlStationen || [])] : [];
+}
+
+function pegelHinzu(knopf) {
+  const st = _pegelGepflegt();
+  if (st.length >= 5) return;
+  st.push({ name: knopf.dataset.name, uuid: knopf.dataset.uuid });
+  const feld = $('sPegelSuche'), box = $('sPegelTreffer');
+  if (feld) feld.value = '';
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  _pegelSpeichern(st);
+}
+
+function pegelWeg(i) {
+  const st = _pegelGepflegt();
+  st.splice(i, 1);
+  _pegelSpeichern(st);
+}
+
+function pegelSchieben(i, richtung) {
+  const st = _pegelGepflegt();
+  const j = i + richtung;
+  if (j < 0 || j >= st.length) return;
+  [st[i], st[j]] = [st[j], st[i]];
+  _pegelSpeichern(st);
+}
+
+async function _pegelSpeichern(stationen) {
+  const fb = $('sPegelFeedback');
+  try {
+    await fetch('/api/settings', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pegel: { stationen } }),
+    }).then(_jsonOrThrow);
+    // Nach dem Umsortieren kann an der alten Stelle ein anderer Pegel stehen.
+    _wlIndex = 0;
+    await fetchPegelOrte();
+    fetchWaterLevel();
+    pegelEinstellungenBauen();
+    if (fb) _fbOk(fb);
+  } catch (e) {
+    if (fb) _fbError(fb, e.message);
+  }
+}
+
+
+// ── Einstellungen: Grundriss ────────────────────────────────────────────────
+
+/** Kleine Vorschau des gespeicherten Risses — damit man sieht, was man ändert. */
+function grundrissVorschauBauen() {
+  const svg = $('grVorschau');
+  if (svg) grundrissZeichnen(svg, { klasse: 'gr-vorschau-flaeche' });
+  const text = $('grVorschauText');
+  if (!text) return;
+  const g = GRUNDRISS || {};
+  const teile = [];
+  if (g.name) teile.push(g.name);
+  if (g.loa_m) teile.push(`${g.loa_m} m × ${g.breite_m || '?'} m`);
+  teile.push(`${(g.raeume || []).length} Räume`);
+  text.textContent = teile.join(' · ');
 }

@@ -539,7 +539,13 @@
         <path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/>
       </svg>
       Wasserstand
-      <span class="card-link">Details →</span>
+      <!-- Wie bei der Wetterkachel: der Name ist der Schalter zum naechsten
+           Pegel, alles andere auf der Kachel oeffnet die Seite. -->
+      <button class="card-link wx-ort-knopf" id="wlStationKnopf"
+              onclick="event.stopPropagation(); wlStationWeiter()">
+        <span id="wlStationName">Travemünde</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
     <!-- Normal: full info + Verlauf -->
     <div class="wl-tile-body tile-hide-half">
@@ -548,7 +554,6 @@
         <span class="unit">cm NHN</span>
         <span id="wlTileTrend" class="wl-tile-trend"></span>
       </div>
-      <div class="wl-tile-station">Travemünde</div>
       <canvas id="wlTileSpark" class="wl-tile-spark"></canvas>
     </div>
     <!-- Half: compact -->
@@ -801,6 +806,8 @@
       <button class="set-nav-btn"        data-cat="licht"   onclick="switchSettingsCat('licht')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Licht</button>
       <button class="set-nav-btn"        data-cat="heizung" onclick="switchSettingsCat('heizung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4 4 0 1 0 5 0z"/></svg> Heizung</button>
       <button class="set-nav-btn"        data-cat="wetter"  onclick="switchSettingsCat('wetter')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/></svg> Wetter</button>
+      <button class="set-nav-btn"        data-cat="grundriss" onclick="switchSettingsCat('grundriss')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h16l-2 5H6zM6 14V6l6-3 6 3v8"/></svg> Grundriss</button>
+      <button class="set-nav-btn"        data-cat="pegel"   onclick="switchSettingsCat('pegel')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/></svg> Pegel</button>
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg> Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg> Netzwerk</button>
       <button class="set-nav-btn"        data-cat="system"  onclick="switchSettingsCat('system')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 2.6h.1A2 2 0 1 1 11 2.6V3a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.4 9V9a2 2 0 1 1 0 4h-.1z"/></svg> System</button>
@@ -858,6 +865,49 @@
       </div>
       <div class="settings-actions">
         <span class="settings-feedback" id="sWetterFeedback"></span>
+      </div>
+    </div>
+
+    <!-- Kategorie: Pegel.
+         Bis zu fünf Messstellen der WSV. Anders als beim Wetter ist das keine
+         Koordinate, sondern eine Station mit eigenem Nullpunkt — deshalb wird
+         die Kennung mitgespeichert und nicht nur der Name. -->
+    <div class="set-pane" id="setPane-pegel">
+      <div class="set-card">
+        <div class="set-card-hd">Pegel <span id="sPegelZahl" class="set-card-zahl"></span></div>
+        <div id="sPegelListe"></div>
+        <div class="set-suche">
+          <input type="text" id="sPegelSuche" class="settings-input" autocomplete="off"
+                 placeholder="Pegel suchen, z. B. Warnemünde" oninput="pegelSucheTippen()">
+          <div id="sPegelTreffer" class="set-treffer" hidden></div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          Ein Tipp auf den Pegelnamen in der Kachel geht zum nächsten. Der Stand
+          wird in cm über NHN gerechnet, mit dem Nullpunkt des jeweiligen Pegels
+          — sonst wären die Zahlen zweier Pegel nicht vergleichbar.
+          Eine Vorhersagekurve gibt es nur beim BSH und nur für wenige
+          Ostseepegel; wo es keine gibt, fehlt der Block auf der Seite.
+        </div>
+      </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="sPegelFeedback"></span>
+      </div>
+    </div>
+
+    <!-- Kategorie: Grundriss. Hier steht nur der Weg hinein — gezeichnet wird
+         im eigenen Werkzeug, das den ganzen Bildschirm braucht. -->
+    <div class="set-pane" id="setPane-grundriss">
+      <div class="set-card">
+        <div class="set-card-hd">Grundriss des Bootes</div>
+        <div class="gr-vorschau"><svg id="grVorschau" preserveAspectRatio="xMidYMid meet"></svg></div>
+        <div id="grVorschauText" style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.55"></div>
+        <button class="btn-primary" style="margin-top:12px;width:100%"
+                onclick="openGrundrissEditor()">Grundriss bearbeiten</button>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          Der Riss trägt die Räume für den Stauplan und die Geräteseite. Nur
+          Draufsicht — übereinanderliegende Fächer werden nebeneinander
+          eingezeichnet.
+        </div>
       </div>
     </div>
 
@@ -1693,25 +1743,140 @@
     <button class="ov-close-arrow" onclick="closeWaterLevel()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
     </button>
-    <div class="ov-title">Wasserstand Travemünde</div>
+    <div class="ov-title" id="wlDetailTitel">Wasserstand</div>
     <div class="ov-header-spacer"></div>
   </div>
   <div style="padding:16px;max-width:700px;margin:0 auto">
+    <div class="wx-leiste" id="wlStationLeiste"></div>
     <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
       <span id="wlDetailValue" style="font-size:2.2rem;font-weight:700;font-variant-numeric:tabular-nums">-- cm</span>
       <span id="wlDetailTrend" style="font-size:1.1rem;font-weight:600"></span>
       <span id="wlDetailDelta" style="font-size:0.85rem;color:var(--text3)"></span>
     </div>
-    <div style="font-size:0.75rem;color:var(--text3);margin-bottom:16px">Pegel Travemünde · Messung WSV · cm über Pegelnull</div>
+    <div style="font-size:0.75rem;color:var(--text3);margin-bottom:16px" id="wlDetailQuelle">Messung WSV · cm über NHN</div>
     <canvas id="wlCanvas" style="width:100%;height:180px;display:block"></canvas>
-    <div style="margin-top:24px">
+    <div style="margin-top:24px" id="wlPrognoseBlock">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <div style="font-size:0.8rem;color:var(--text3);font-weight:600">Prognose BSH (Lübecker Bucht)</div>
+        <div style="font-size:0.8rem;color:var(--text3);font-weight:600">Vorhersage BSH</div>
         <span id="wlForecastMin" style="display:none;font-size:0.75rem;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--surface2)"></span>
       </div>
       <img id="wlForecastImg" src="" style="width:100%;border-radius:8px;display:block" alt="BSH Wasserstandsprognose">
       <div style="font-size:0.7rem;color:var(--text3);margin-top:6px">Quelle: Bundesamt für Seeschifffahrt und Hydrographie — keine offizielle Vorhersage</div>
     </div>
+  </div>
+</div>
+
+<!-- ── Grundriss-Werkzeug ───────────────────────────────────────────────────── -->
+<div id="grEditorOverlay" class="overlay hidden">
+  <div class="ov-header">
+    <button class="ov-close-arrow" onclick="closeGrundrissEditor()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="ov-title">Grundriss</div>
+    <div class="ov-header-spacer"></div>
+    <span class="settings-feedback" id="geFeedback"></span>
+    <button class="btn-primary" id="geSpeichern" onclick="grundrissSpeichern()" disabled>Speichern</button>
+  </div>
+  <div class="ov-body ge-seite">
+
+    <div class="ge-werkzeuge" id="geWerkzeuge">
+      <button class="ge-wz aktiv" data-werkzeug="auswahl" onclick="_geWerkzeugSetzen('auswahl')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.5 18 2.5-7.5L20.5 11z"/></svg> Auswählen</button>
+      <button class="ge-wz" data-werkzeug="rechteck" onclick="_geWerkzeugSetzen('rechteck')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="1"/></svg> Rechteck</button>
+      <button class="ge-wz" data-werkzeug="vieleck" onclick="_geWerkzeugSetzen('vieleck')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 6-3 10H7L4 9z"/></svg> Vieleck</button>
+      <button class="ge-wz" data-werkzeug="vorlage" onclick="_geWerkzeugSetzen('vorlage')">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Vorlage</button>
+      <span class="ge-trenner"></span>
+      <button class="ge-wz" onclick="geRumpfDialogOeffnen()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 14h16l-2 5H6zM6 14V6l6-3 6 3v8"/></svg> Rumpfform</button>
+      <button class="ge-wz" id="geZurueck" onclick="grundrissZurueck()" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg> Zurück</button>
+    </div>
+
+    <div class="ge-flaeche">
+      <svg id="geSvg" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+
+    <div class="ge-leiste">
+      <div class="set-card">
+        <div class="set-card-hd">Boot</div>
+        <div class="ge-feld"><label for="geName">Name</label>
+          <input type="text" id="geName" class="settings-input" oninput="geMasseGeaendert()"></div>
+        <div class="ge-feld"><label for="geLoa">Länge über alles (m)</label>
+          <input type="number" id="geLoa" class="settings-input" step="0.1" min="1" oninput="geMasseGeaendert()"></div>
+        <div class="ge-feld"><label for="geBreite">Breite (m)</label>
+          <input type="number" id="geBreite" class="settings-input" step="0.1" min="0.5" oninput="geMasseGeaendert()"></div>
+      </div>
+
+      <div class="set-card" id="geRaumBox" hidden>
+        <div class="set-card-hd">Gewählter Raum</div>
+        <div class="ge-feld"><label for="geRaumName">Name</label>
+          <input type="text" id="geRaumName" class="settings-input"
+                 oninput="geRaumNameGeaendert(this.value)"></div>
+        <div class="ge-feld"><label>Farbe</label>
+          <div class="ge-farben" id="geRaumFarben"></div></div>
+        <button class="btn-secondary ge-loeschen" onclick="geRaumLoeschen()">Raum entfernen</button>
+      </div>
+
+      <div class="set-card" id="geVorlageBox">
+        <div class="set-card-hd">Planvorlage</div>
+        <div id="geVorlageLeer" style="font-size:12px;color:var(--text3);line-height:1.55;margin-bottom:10px">
+          Foto oder Scan des Bootsplans hochladen und die Räume darüber
+          nachziehen. Das Bild bleibt auf dem Boot und wird beim Hochladen
+          verkleinert.
+        </div>
+        <label class="btn-secondary ge-datei">
+          <input type="file" accept="image/jpeg,image/png" onchange="geVorlageWaehlen(this)" hidden>
+          Bild wählen</label>
+        <div id="geVorlageFern" hidden style="font-size:12px;color:var(--text3);line-height:1.55">
+          Ein Bild hochladen geht nur direkt am Boot — über den Server wird
+          nur Text durchgereicht, und ein Planfoto über die Mobilfunkverbindung
+          wäre ohnehin die falsche Richtung.
+        </div>
+        <div class="ge-vorlage-an" hidden>
+          <div class="ge-feld" style="margin-top:10px">
+            <label for="geVorlageDeckkraft">Sichtbarkeit</label>
+            <input type="range" id="geVorlageDeckkraft" min="5" max="100" value="50"
+                   oninput="geVorlageDeckkraft(this.value)"></div>
+          <div class="ge-feld">
+            <label for="geVorlageGroesse">Größe</label>
+            <input type="range" id="geVorlageGroesse" min="40" max="600" value="200"
+                   oninput="geVorlageGroesse(this.value)"></div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px">
+            Mit dem Werkzeug „Vorlage“ lässt sich das Bild verschieben.
+          </div>
+          <button class="btn-secondary" style="width:100%" onclick="geVorlageEntfernen()">Vorlage entfernen</button>
+        </div>
+      </div>
+
+      <div class="ge-hilfe">
+        <b>Rechteck:</b> aufziehen. <b>Vieleck:</b> Punkte antippen, letzter Punkt
+        zurück auf den ersten (oder Eingabetaste) schließt die Fläche.
+        <b>Auswählen:</b> Fläche verschieben, Eckpunkte ziehen; Entfernen-Taste
+        löscht. Alles rastet auf ein Raster von 2 Einheiten.
+        <br><br>
+        Nur Draufsicht — übereinanderliegende Fächer werden nebeneinander
+        eingezeichnet.
+      </div>
+    </div>
+
+    <div class="ge-dialog" id="geRumpfDialog" hidden>
+      <div class="ge-dialog-innen">
+        <div class="set-card-hd">Rumpfform</div>
+        <div class="ge-hilfe" style="margin:0 0 12px">
+          Aus Länge und Breite gerechnet, nicht abgezeichnet. Sie muss nicht
+          genau stimmen — sie ist der Rahmen, in den die Räume kommen.
+          <b>Achtung:</b> eine neue Rumpfform verwirft die Möbellinien des alten Risses.
+        </div>
+        <div class="ge-vorlagen" id="geRumpfListe"></div>
+        <div class="settings-actions">
+          <button class="btn-secondary" onclick="geRumpfDialogSchliessen()">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 

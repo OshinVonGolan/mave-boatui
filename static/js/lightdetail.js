@@ -239,6 +239,7 @@ function _ansichtAusAdresse() {
       waterlevel: () => { _wlOverlayAnzeigen(); },
       geraete:    () => { _gerOverlayAnzeigen(); },
       wetter:     () => { _wetterSeiteAnzeigen(); },
+      grundriss:  () => { _geAnzeigen(); },
       stauplan: () => { $('stauplanOverlay').classList.remove('hidden'); renderStauTable(''); },
       monday: () => {
         $('mondayOverlay').classList.remove('hidden');

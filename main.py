@@ -187,6 +187,8 @@ STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 GRUNDRISS_FILE = BASE_DIR / 'grundriss.json'
 GRUNDRISS_VORLAGE = BASE_DIR / 'grundriss.example.json'
+# Das abfotografierte oder eingescannte Original, ueber das gezeichnet wird.
+GRUNDRISS_BILD = BASE_DIR / 'grundriss-vorlage.jpg'
 HEIZUNG_FILE  = BASE_DIR / 'heizung.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 DEVICES_FILE  = BASE_DIR / 'devices.json'
@@ -2380,7 +2382,7 @@ def _grundriss_pruefen(body) -> dict:
     doppelt = {k for k in kennungen if kennungen.count(k) > 1}
     if doppelt:
         raise HTTPException(400, detail=f'raeume: Kennung mehrfach vergeben: {sorted(doppelt)}')
-    return {
+    geprueft = {
         'name':  _text(body.get('name', ''), 60, 'name').strip(),
         'loa_m': _gr_zahl(body.get('loa_m', 0) or 0, 'loa_m'),
         'breite_m': _gr_zahl(body.get('breite_m', 0) or 0, 'breite_m'),
@@ -2390,6 +2392,21 @@ def _grundriss_pruefen(body) -> dict:
         'hintergrund': [_gr_form(f, f'hintergrund[{i}]') for i, f in enumerate(hintergrund)],
         'raeume': geprueft_raeume,
     }
+    # Wo die Planvorlage liegt und wie stark sie durchscheint. Nur Zahlen — das
+    # BILD selbst steht nicht hier drin, sondern in einer eigenen Datei; ein
+    # halbes Megabyte Base64 in der Antwort holt sich sonst jede Seite mit,
+    # die nur die Raumnamen braucht.
+    bild = body.get('bild')
+    if isinstance(bild, dict):
+        geprueft['bild'] = {
+            'x': _gr_zahl(bild.get('x', 0) or 0, 'bild.x'),
+            'y': _gr_zahl(bild.get('y', 0) or 0, 'bild.y'),
+            'w': _gr_zahl(bild.get('w', 0) or 0, 'bild.w'),
+            'h': _gr_zahl(bild.get('h', 0) or 0, 'bild.h'),
+            'deckkraft': min(1.0, max(0.0, _gr_zahl(
+                bild.get('deckkraft', .5), 'bild.deckkraft'))),
+        }
+    return geprueft
 
 
 @app.get('/api/grundriss')
@@ -2404,6 +2421,10 @@ async def get_grundriss():
     daten = read_json(GRUNDRISS_FILE, {})
     if not daten:
         daten = read_json(GRUNDRISS_VORLAGE, {})
+    # Ob eine Planvorlage hinterlegt ist, steht HIER — sonst muesste das
+    # Werkzeug beim Oeffnen erst danach fragen, und ein 404 auf diese Frage
+    # schreibt in jedem Browser einen roten Fehler in die Konsole.
+    daten['hat_vorlage'] = GRUNDRISS_BILD.exists()
     return daten
 
 
@@ -2411,19 +2432,68 @@ async def get_grundriss():
 async def save_grundriss(request: Request):
     geprueft = _grundriss_pruefen(await _json_body(request))
     await _run_blocking(write_json, GRUNDRISS_FILE, geprueft)
-    return geprueft
+    return {**geprueft, 'hat_vorlage': GRUNDRISS_BILD.exists()}
+
+
+# Die Planvorlage: das abfotografierte oder eingescannte Original, ueber das im
+# Werkzeug gezeichnet wird.
+#
+# Verkleinert wird im BROWSER, nicht hier. Pillow und numpy sind auf dem Pi
+# nicht installiert (siehe requirements.txt) — sie dort zu bauen dauert auf
+# einem ARMv6-Kern Stunden. Der Browser kann dasselbe in einem Wimpernschlag,
+# und was ankommt, ist dann schon klein.
+_GR_BILD_MAX = 3 * 1024 * 1024
+_GR_BILD_TYPEN = {'image/jpeg': b'\xff\xd8\xff', 'image/png': b'\x89PNG'}
+
+
+@app.get('/api/grundriss/vorlage', include_in_schema=False)
+async def get_grundriss_bild():
+    if not GRUNDRISS_BILD.exists():
+        raise HTTPException(404, detail='Keine Planvorlage hinterlegt')
+    daten = await _run_blocking(GRUNDRISS_BILD.read_bytes)
+    return Response(content=daten, media_type='image/jpeg',
+                    headers={'Cache-Control': 'no-cache'})
+
+
+@app.put('/api/grundriss/vorlage', include_in_schema=False)
+async def put_grundriss_bild(request: Request):
+    """Die Planvorlage ablegen.
+
+    Geprueft wird nicht der gemeldete Typ, sondern der Dateianfang: ein
+    Browser darf behaupten, was er will, und diese Datei wird spaeter wieder
+    ausgeliefert.
+    """
+    daten = await request.body()
+    if not daten:
+        raise HTTPException(400, detail='Leere Datei')
+    if len(daten) > _GR_BILD_MAX:
+        raise HTTPException(413, detail='Die Vorlage ist zu gross (mehr als 3 MB)')
+    if not any(daten.startswith(m) for m in _GR_BILD_TYPEN.values()):
+        raise HTTPException(400, detail='Nur JPEG oder PNG')
+    await _run_blocking(GRUNDRISS_BILD.write_bytes, daten)
+    return {'ok': True, 'bytes': len(daten)}
+
+
+@app.delete('/api/grundriss/vorlage', include_in_schema=False)
+async def del_grundriss_bild():
+    if GRUNDRISS_BILD.exists():
+        await _run_blocking(GRUNDRISS_BILD.unlink)
+    return {'ok': True}
 
 
 # Bekannte Schluessel je Abschnitt. Unbekannte werden mit 400 abgelehnt, damit
 # presets.json nicht bei jedem Tippfehler um einen Eintrag waechst — geloescht
 # wird dabei nichts, was schon in der Datei steht.
 _SETTINGS_ABSCHNITTE = ('tanks', 'devices', 'batteries', 'wartung', 'lights',
-                        'wetter')
+                        'wetter', 'pegel')
 _TANK_FELDER         = ('name', 'capacity_l', 'color')
 _LICHT_FELDER        = ('name',)
 _WETTER_FELDER       = ('orte', 'modell')
 _WETTER_ORT_FELDER   = ('name', 'lat', 'lon')
 _WETTER_ORTE_MAX     = 5
+_PEGEL_FELDER        = ('stationen',)
+_PEGEL_ST_FELDER     = ('name', 'uuid')
+_PEGEL_MAX           = 5
 _BATTERIE_FELDER     = ('service_instance', 'starter_instance',
                         'primary_source', 'capacity_ah')
 
@@ -2536,6 +2606,46 @@ async def update_settings(body: dict):
                     'lon': round(_zahl(eintrag.get('lon'), -180, 180, f'wetter.orte[{i}].lon'), 4),
                 })
             ziel['orte'] = orte
+
+    if 'pegel' in body:
+        # Dieselbe Ueberlegung wie beim Wetter: der Heimatpegel beantwortet
+        # nicht, ob man im Zielhafen noch ueber die Schwelle kommt. Anders als
+        # beim Wetter ist der Pegel aber KEINE Koordinate, sondern eine
+        # Messstelle mit eigener Kennung — die Zahl allein saehe an der
+        # Nachbarmole schon anders aus.
+        if not isinstance(body['pegel'], dict):
+            raise HTTPException(400, detail='pegel: Objekt erwartet')
+        _unbekannt_ablehnen(body['pegel'], _PEGEL_FELDER, 'pegel')
+        if 'stationen' in body['pegel']:
+            roh = body['pegel']['stationen']
+            if not isinstance(roh, list):
+                raise HTTPException(400, detail='pegel.stationen: Liste erwartet')
+            if len(roh) > _PEGEL_MAX:
+                raise HTTPException(400, detail=f'pegel.stationen: hoechstens '
+                                                f'{_PEGEL_MAX} Pegel')
+            stationen = []
+            for i, eintrag in enumerate(roh):
+                if not isinstance(eintrag, dict):
+                    raise HTTPException(400, detail=f'pegel.stationen[{i}]: Objekt erwartet')
+                _unbekannt_ablehnen(eintrag, _PEGEL_ST_FELDER, f'pegel.stationen[{i}]')
+                name = _text(eintrag.get('name', ''), 48,
+                             f'pegel.stationen[{i}].name').strip()
+                uuid = _text(eintrag.get('uuid', ''), 64,
+                             f'pegel.stationen[{i}].uuid').strip()
+                if not name or not uuid:
+                    raise HTTPException(400, detail=f'pegel.stationen[{i}]: '
+                                                    f'Name und Kennung noetig')
+                # Die Kennung geht in eine URL. Nur das Format, das
+                # pegelonline vergibt — sonst laesst sich darueber ein
+                # beliebiger Pfad anhaengen.
+                if not re.fullmatch(r'[0-9a-fA-F-]{8,64}', uuid):
+                    raise HTTPException(400, detail=f'pegel.stationen[{i}].uuid: '
+                                                    f'keine Pegel-Kennung')
+                stationen.append({'name': name, 'uuid': uuid})
+            ziel = data.setdefault('pegel', {})
+            if not isinstance(ziel, dict):
+                ziel = data['pegel'] = {}
+            ziel['stationen'] = stationen
 
     if 'devices' in body:
         # Die Schluessel sind CAN-Quelladressen (0..255), keine feste Liste —
@@ -2673,14 +2783,39 @@ async def poll_charger():
 
 # ── Wasserstand Travemünde (pegelonline.wsv.de + BSH-Prognose) ───────────────
 
-_wl_cache: dict  = {'data': None, 'ts': 0.0}
-_bsh_cache: dict = {'data': None, 'ts': 0.0}
+# Je Pegel ein Eintrag — wer zwischen seinen Pegeln durchschaltet, soll nicht
+# bei jedem Wechsel warten.
+_wl_cache: dict  = {}
+_bsh_cache: dict = {}
+# Der Pegelnullpunkt aendert sich alle paar Jahrzehnte (Travemuende zuletzt
+# 2019). Einmal je Lauf holen genuegt.
+_gz_cache: dict  = {}
 
-_WL_URL = ('https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/'
-           'TRAVEM%C3%BCNDE/W/measurements.json?start=P1DT0H&includeCurrentMeasurement=true')
-_BSH_URL = 'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve/WVD_Travemuende.png'
-_WL_PNP_M = -5.025          # Pegelnullpunkt Travemünde in m über NHN (Stand 2019-11-01)
+_PEGEL_BASIS = 'https://www.pegelonline.wsv.de/webservices/rest-api/v2'
+_BSH_BASIS   = 'https://www2.bsh.de/aktdat/wvd/ostsee/modellkurve'
+# Vorgabe, solange nichts gepflegt ist. Der Heimatpegel dieses Bootes.
+_PEGEL_VORGABE = {'name': 'Travemünde',
+                  'uuid': 'c7383149-1f77-430d-8bef-c5667be3846b'}
+_WL_PNP_M = -5.025          # Rueckfall: Pegelnullpunkt Travemünde in m über NHN
 _WL_ALARM_NHN_CM = -60      # Alarm wenn Prognose-Minimum unter diesem Wert
+
+
+def _bsh_dateiname(name: str) -> str:
+    """Aus dem Pegelnamen den Namen der BSH-Grafik.
+
+    Das BSH schreibt seine Dateien in Titelschreibweise ohne Umlaute:
+    TRAVEMÜNDE -> Travemuende, WARNEMÜNDE -> Warnemuende. Geprueft an allen
+    29 Ostseepegeln von pegelonline — die drei, fuer die es ueberhaupt eine
+    Kurve gibt, treffen damit.
+    """
+    t = (name or '').strip().lower()
+    for a, b in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue'), ('ß', 'ss')):
+        t = t.replace(a, b)
+    return '-'.join(w.capitalize() for w in t.replace('-', ' ').split())
+
+
+def _bsh_url(name: str) -> str:
+    return f'{_BSH_BASIS}/WVD_{urllib.parse.quote(_bsh_dateiname(name))}.png'
 
 
 def _parse_bsh_forecast(img_bytes: bytes) -> dict | None:
@@ -2739,18 +2874,66 @@ def _parse_bsh_forecast(img_bytes: bytes) -> dict | None:
     return {'min_nhn_cm': min_nhn}
 
 
-def _fetch_bsh_forecast() -> dict | None:
-    with urllib.request.urlopen(_BSH_URL, timeout=15) as r:
-        return _parse_bsh_forecast(r.read())
+def _fetch_bsh_forecast(name: str) -> dict:
+    """Die Vorhersagekurve des BSH — wenn es fuer diesen Pegel eine gibt.
+
+    Es gibt sie fuer sehr wenige: von 29 Ostseepegeln bei pegelonline hat das
+    BSH heute drei (Travemuende, Warnemuende, Koserow) plus Ueckermuende. Statt
+    eine Liste zu pflegen, die still veraltet, wird der Name probiert — 404
+    heisst dann schlicht "keine Vorhersage", und kommt eine dazu, erscheint sie
+    von selbst.
+
+    Wirft, wenn es keine gibt. Gibt `{}` zurueck, wenn es sie gibt, der
+    tiefste Wert daraus aber nicht zu lesen war: das BILD ist dann trotzdem da
+    und wird gezeigt — dafuer braucht es kein Pillow, nur einen Browser.
+    Genau dieser Fall ist auf dem Pi der Normalfall (Pillow und numpy sind
+    dort nicht installiert, siehe requirements.txt).
+    """
+    with urllib.request.urlopen(
+            urllib.request.Request(_bsh_url(name), headers={'User-Agent': 'mave-boatui'}),
+            timeout=15) as r:
+        roh = r.read()
+    try:
+        return _parse_bsh_forecast(roh) or {}
+    except Exception as e:
+        log.warning('BSH-Kurve %s nicht auswertbar: %s', name, e)
+        return {}
 
 
-def _fetch_waterlevel() -> dict:
-    with urllib.request.urlopen(_WL_URL, timeout=10) as r:
-        measurements = json.loads(r.read())
+def _pegel_nullpunkt(uuid: str) -> float:
+    """Wo die Null dieses Pegels liegt, in Metern ueber NHN.
+
+    Ohne diese Zahl ist ein Pegelstand keine Hoehe, sondern eine Hausnummer:
+    527 cm in Warnemuende und 527 cm in Travemuende sind verschiedene
+    Wasserstaende. Sie stand hier fest fuer Travemuende — mit waehlbaren Pegeln
+    geht das nicht mehr.
+    """
+    if uuid in _gz_cache:
+        return _gz_cache[uuid]
+    wert = _WL_PNP_M
+    try:
+        w = _http_json(f'{_PEGEL_BASIS}/stations/{urllib.parse.quote(uuid)}/W.json')
+        gz = (w or {}).get('gaugeZero') or {}
+        if isinstance(gz.get('value'), (int, float)):
+            wert = float(gz['value'])
+    except Exception as e:
+        log.warning('Pegelnullpunkt %s nicht lesbar: %s', uuid, e)
+    _gz_cache[uuid] = wert
+    return wert
+
+
+def _fetch_waterlevel(uuid: str, name: str) -> dict:
+    pnp = _pegel_nullpunkt(uuid)
+    # Ueber _http_json und nicht mit einem eigenen urlopen: dann gibt es EINE
+    # Stelle, an der dieses Programm nach draussen geht — pruefbar, ohne das
+    # halbe Netz nachzubauen.
+    measurements = _http_json(
+        f'{_PEGEL_BASIS}/stations/{urllib.parse.quote(uuid)}/W/measurements.json'
+        '?start=P1DT0H&includeCurrentMeasurement=true', timeout=10)
     if not measurements:
         return {}
     current = measurements[-1]['value']
-    nhn_cm  = round(current / 100 * 100 + _WL_PNP_M * 100)   # cm über NHN
+    nhn_cm  = round(current / 100 * 100 + pnp * 100)         # cm über NHN
     now_ts  = time.time()
     past_v  = None
     for m in reversed(measurements):
@@ -2771,7 +2954,8 @@ def _fetch_waterlevel() -> dict:
         'trend':          trend,
         'delta_cm':       delta,
         'measurements':   chart,
-        'forecast_img':   _BSH_URL,
+        'station':        {'name': name, 'uuid': uuid, 'pnp_m': pnp},
+        'forecast_img':   _bsh_url(name),
     }
 
 
@@ -2940,7 +3124,8 @@ def _spark_bauen() -> dict:
     # weiter, und der Wert kostet nichts — er kommt fertig aus dem
     # Zwischenspeicher von pegelonline. Von hier wird KEIN Abruf ausgeloest,
     # sonst haengt die Statusleiste an einem fremden Dienst.
-    wl = _wl_cache.get('data') or {}
+    erster = (_pegel_liste() or [{}])[0].get('uuid')
+    wl = (_wl_cache.get(erster) or {}).get('data') or {}
     messungen = wl.get('measurements') or []
     if messungen:
         pegel: list = [None] * _SPARK_PUNKTE
@@ -2987,33 +3172,112 @@ async def get_statusleiste_verlauf():
     return daten
 
 
-@app.get('/api/waterlevel')
-async def get_waterlevel():
-    now = time.time()
-    if _wl_cache['data'] and now - _wl_cache['ts'] < 300:
-        return _wl_cache['data']
+def _pegel_liste() -> list:
+    """Die gepflegten Pegel — oder der Heimatpegel, solange keiner gepflegt ist."""
+    roh = (read_json(PRESETS_FILE, {}) or {}).get('pegel') or {}
+    stationen = roh.get('stationen') if isinstance(roh, dict) else None
+    if isinstance(stationen, list) and stationen:
+        return stationen
+    return [dict(_PEGEL_VORGABE)]
+
+
+def _pegel_finden(uuid: str | None) -> dict:
+    """Der gefragte Pegel, sonst der erste. Eine unbekannte Kennung wird NICHT
+    einfach abgerufen: sonst waere jeder Fremdpegel der Welt ueber diese
+    Adresse abrufbar, und der Zwischenspeicher waechst mit jeder Anfrage."""
+    liste = _pegel_liste()
+    if not uuid:
+        return liste[0]
+    for p in liste:
+        if p.get('uuid') == uuid:
+            return p
+    raise HTTPException(400, detail='Unbekannter Pegel')
+
+
+@app.get('/api/pegel/orte')
+async def get_pegel_orte():
+    """Die gepflegten Pegel, in gepflegter Reihenfolge."""
+    return {'stationen': _pegel_liste(),
+            'gepflegt': bool(((read_json(PRESETS_FILE, {}) or {}).get('pegel') or {}).get('stationen'))}
+
+
+@app.get('/api/pegel/suche')
+async def get_pegel_suche(q: str = ''):
+    """Pegel nach Namen suchen.
+
+    `fuzzyId` von pegelonline statt der vollen Stationsliste: die haette rund
+    700 Eintraege und ein Megabyte, und der Pi soll sie weder holen noch
+    durchsuchen.
+    """
+    begriff = (q or '').strip()
+    if len(begriff) < 2:
+        return {'treffer': []}
+    url = f'{_PEGEL_BASIS}/stations.json?fuzzyId={urllib.parse.quote(begriff)}'
     loop = asyncio.get_event_loop()
     try:
-        wl_data = await loop.run_in_executor(None, _fetch_waterlevel)
+        roh = await loop.run_in_executor(None, _http_json, url)
+    except Exception as e:
+        log.warning('Pegelsuche fehlgeschlagen: %s', e)
+        raise HTTPException(503, detail='Pegelsuche nicht verfügbar') from None
+    treffer = []
+    for t in (roh or [])[:12]:
+        gewaesser = ((t.get('water') or {}).get('longname') or '').title()
+        treffer.append({'name': (t.get('longname') or t.get('shortname') or '').title(),
+                        'zusatz': gewaesser, 'uuid': t.get('uuid')})
+    return {'treffer': [t for t in treffer if t['uuid']]}
+
+
+@app.get('/api/waterlevel')
+async def get_waterlevel(station: str | None = None):
+    """Wasserstand eines Pegels. Ohne Angabe: der erste gepflegte.
+
+    Je Pegel ein eigener Zwischenspeicher — wer auf der Kachel zwischen seinen
+    Pegeln durchschaltet, soll nicht bei jedem Wechsel fünf Minuten alte Daten
+    wegwerfen und neu holen.
+    """
+    pegel = _pegel_finden(station)
+    uuid, name = pegel.get('uuid', ''), pegel.get('name', '')
+    now = time.time()
+    eintrag = _wl_cache.get(uuid)
+    if eintrag and now - eintrag['ts'] < 300:
+        return eintrag['data']
+    loop = asyncio.get_event_loop()
+    try:
+        wl_data = await loop.run_in_executor(None, _fetch_waterlevel, uuid, name)
     except Exception as e:
         log.warning('Wasserstand-Fetch fehlgeschlagen: %s', e)
-        if _wl_cache['data']:
-            return _wl_cache['data']
+        if eintrag:
+            return eintrag['data']
         raise HTTPException(503, detail='Wasserstand nicht verfügbar')
-    # BSH-Prognose: eigener Cache mit 30-Minuten TTL (Bild aktualisiert ~1x/h)
-    bsh = _bsh_cache['data']
-    if bsh is None or now - _bsh_cache['ts'] >= 1800:
+
+    # BSH-Prognose: eigener Zwischenspeicher je Pegel, 30 Minuten (das Bild
+    # wird etwa stuendlich neu gerechnet). Fuer die allermeisten Pegel gibt es
+    # keine — der Fehlschlag wird MITGESPEICHERT, sonst laeuft die Anwendung
+    # alle fuenf Minuten in denselben 404.
+    bsh_eintrag = _bsh_cache.get(uuid)
+    if not bsh_eintrag or now - bsh_eintrag['ts'] >= 1800:
         try:
-            bsh = await loop.run_in_executor(None, _fetch_bsh_forecast)
-            _bsh_cache['data'] = bsh
-            _bsh_cache['ts']   = now
+            bsh = await loop.run_in_executor(None, _fetch_bsh_forecast, name)
         except Exception as e:
-            log.warning('BSH-Prognose-Fetch fehlgeschlagen: %s', e)
-    if isinstance(bsh, dict) and 'min_nhn_cm' in bsh:
+            log.info('Keine BSH-Vorhersage für %s: %s', name, e)
+            bsh = None
+        bsh_eintrag = {'data': bsh, 'ts': now}
+        if len(_bsh_cache) > 12:
+            _bsh_cache.clear()
+        _bsh_cache[uuid] = bsh_eintrag
+    bsh = bsh_eintrag['data']
+    if bsh is None:
+        # Es gibt keine Kurve fuer diesen Pegel. Dann darf auch kein Bild
+        # angeboten werden — sonst steht auf der Seite ein leerer Rahmen mit
+        # kaputtem Verweis.
+        wl_data.pop('forecast_img', None)
+    elif 'min_nhn_cm' in bsh:
         wl_data['forecast_min_nhn_cm'] = bsh['min_nhn_cm']
         wl_data['forecast_alarm']      = bsh['min_nhn_cm'] < _WL_ALARM_NHN_CM
-    _wl_cache['data'] = wl_data
-    _wl_cache['ts']   = now
+
+    if len(_wl_cache) > 12:
+        _wl_cache.clear()
+    _wl_cache[uuid] = {'data': wl_data, 'ts': now}
     return wl_data
 
 

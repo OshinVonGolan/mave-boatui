@@ -21,6 +21,7 @@ Aufruf:
 
     ./venv/bin/python -m unittest test_zeichnen -v
 """
+import base64
 import datetime
 import json
 import os
@@ -1165,6 +1166,551 @@ class WetterOhnePosition(Wetterkachel):
             self.pg.wait_for_timeout(300)
             gesehen.append(self.ort())
         self.assertEqual(gesehen, ['Travemünde', 'Fehmarnsund', 'Travemünde'])
+
+
+# ── Wasserstand ────────────────────────────────────────────────────────────
+
+WL_TRAVE = 'c7383149-1f77-430d-8bef-c5667be3846b'
+WL_WARNE = '220ff4c6-83da-4a1b-9c13-dfee5a2a8798'
+WL_KIEL  = '3ad4013f-644b-47f5-a641-44b332bfecb2'
+
+WL_ORTE = {'stationen': [{'name': 'Travemünde', 'uuid': WL_TRAVE},
+                         {'name': 'Warnemünde', 'uuid': WL_WARNE},
+                         {'name': 'Kiel-Holtenau', 'uuid': WL_KIEL}],
+           'gepflegt': True}
+
+
+def _wl_stand(uuid):
+    """Drei Pegel mit klar verschiedenen Zahlen — sonst faellt nicht auf, wenn
+    beim Umschalten der alte Wert stehen bleibt."""
+    jetzt = datetime.datetime.now(datetime.timezone.utc)
+    tabelle = {WL_TRAVE: (11, 514.0, -5.025, 'Travemünde'),
+               WL_WARNE: (28, 526.0, -4.979, 'Warnemünde'),
+               WL_KIEL:  (9,  509.0, -4.997, 'Kiel-Holtenau')}
+    nhn, cm, pnp, name = tabelle[uuid]
+    reihe = [{'ts': (jetzt - datetime.timedelta(minutes=(60 - i) * 10)).isoformat(),
+              'v': cm + (i % 7) - 3} for i in range(60)]
+    d = {'current_cm': cm, 'current_nhn_cm': nhn, 'trend': 'stable', 'delta_cm': 1.0,
+         'measurements': reihe,
+         'station': {'name': name, 'uuid': uuid, 'pnp_m': pnp}}
+    # Nur Travemuende hat eine BSH-Kurve — wie in Wirklichkeit.
+    if uuid == WL_TRAVE:
+        d['forecast_img'] = 'https://example.invalid/WVD_Travemuende.png'
+        d['forecast_min_nhn_cm'] = -20
+        d['forecast_alarm'] = False
+    return d
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Pegelkachel(Pruefstand):
+    """Pegel durchschalten — und was dabei NICHT stehen bleiben darf."""
+
+    ORTE = WL_ORTE
+    BREMSE_MS = 0          # kuenstliche Verzoegerung des Abrufs
+
+    def setUp(self):
+        self.pg = self._browser.new_page(viewport={'width': 1280, 'height': 900})
+        self.fehler = []
+        self.pg.on('pageerror', lambda e: self.fehler.append(str(e)[:250]))
+        self.wl_abrufe = []
+        self._wl_routen()
+        self.pg.goto(self.basis + '/', wait_until='domcontentloaded', timeout=30000)
+        self.pg.wait_for_timeout(2000)
+        if self.pg.evaluate("() => !!document.querySelector('.anmeldung:not(.hidden)')"):
+            self.pg.fill('#anmName', KONTO)
+            self.pg.fill('#anmPw', PASSWORT)
+            self.pg.click('#anmKnopf')
+            self.pg.wait_for_timeout(4000)
+        self.pg.evaluate('(d) => handleData(d)', NUTZLAST)
+        self.pg.wait_for_timeout(600)
+
+    def tearDown(self):
+        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
+        self.pg.close()
+
+    def _wl_routen(self):
+        def orte(route):
+            route.fulfill(status=200, content_type='application/json',
+                          body=json.dumps(self.ORTE))
+
+        def stand(route):
+            self.wl_abrufe.append(route.request.url)
+            uuid = route.request.url.split('station=')[-1] if 'station=' in route.request.url \
+                else self.ORTE['stationen'][0]['uuid']
+            if self.BREMSE_MS:
+                time.sleep(self.BREMSE_MS / 1000)
+            route.fulfill(status=200, content_type='application/json',
+                          body=json.dumps(_wl_stand(uuid)))
+
+        # Das Vorhersagebild darf nicht wirklich geladen werden.
+        self.pg.route('**/WVD_*.png', lambda r: r.fulfill(
+            status=200, content_type='image/png', body=b''))
+        self.pg.route('**/api/pegel/orte', orte)
+        self.pg.route('**/api/waterlevel*', stand)
+
+    # ── Werkzeug ───────────────────────────────────────────────────────────
+
+    def name(self):
+        return self.pg.evaluate("() => document.getElementById('wlStationName').textContent")
+
+    def wert(self):
+        return self.pg.evaluate("() => document.getElementById('wlTileVal').textContent")
+
+    def weiter(self):
+        self.pg.click('#wlStationKnopf')
+        self.pg.wait_for_timeout(500)
+
+    # ── Prüfungen ──────────────────────────────────────────────────────────
+
+    def test_erster_pegel_steht_in_der_kachel(self):
+        self.assertEqual(self.name(), 'Travemünde')
+        self.assertEqual(self.wert(), '+11')
+
+    def test_tippen_schaltet_durch(self):
+        gesehen = [(self.name(), self.wert())]
+        for _ in range(3):
+            self.weiter()
+            gesehen.append((self.name(), self.wert()))
+        self.assertEqual(gesehen, [('Travemünde', '+11'), ('Warnemünde', '+28'),
+                                   ('Kiel-Holtenau', '+9'), ('Travemünde', '+11')])
+
+    def test_tippen_auf_den_namen_oeffnet_die_seite_nicht(self):
+        self.weiter()
+        self.assertTrue(self.pg.evaluate(
+            "() => document.getElementById('wlOverlay').classList.contains('hidden')"))
+
+    def test_tippen_auf_die_kachel_oeffnet_die_seite(self):
+        self.pg.click('#wlTileSpark')
+        self.pg.wait_for_timeout(600)
+        self.assertFalse(self.pg.evaluate(
+            "() => document.getElementById('wlOverlay').classList.contains('hidden')"))
+        self.assertEqual(self.pg.evaluate('() => location.hash'), '#waterlevel')
+
+    def test_der_pegel_geht_als_kennung_mit(self):
+        self.wl_abrufe.clear()
+        self.weiter()
+        self.assertTrue(any(WL_WARNE in u for u in self.wl_abrufe),
+                        f'abgerufen wurde: {self.wl_abrufe}')
+
+    def test_gewaehlter_pegel_ueberlebt_das_neuladen(self):
+        self.weiter()
+        self.pg.reload(wait_until='domcontentloaded')
+        self.pg.wait_for_timeout(4000)
+        self.assertEqual(self.name(), 'Warnemünde')
+
+    def test_die_seite_traegt_den_namen_und_den_nullpunkt(self):
+        self.pg.evaluate('() => openWaterLevel()')
+        self.pg.wait_for_timeout(600)
+        self.assertEqual(self.pg.evaluate("() => document.getElementById('wlDetailTitel').textContent"),
+                         'Wasserstand Travemünde')
+        self.assertIn('-5.025',
+                      self.pg.evaluate("() => document.getElementById('wlDetailQuelle').textContent"))
+
+    def test_vorhersageblock_nur_wo_es_eine_kurve_gibt(self):
+        """Fuer die allermeisten Pegel gibt es keine — dann faellt der ganze
+        Block weg statt einen leeren Rahmen zu zeigen."""
+        self.pg.evaluate('() => openWaterLevel()')
+        self.pg.wait_for_timeout(600)
+        sichtbar = lambda: self.pg.evaluate(
+            "() => !document.getElementById('wlPrognoseBlock').hidden")
+        self.assertTrue(sichtbar(), 'Travemünde hat eine Kurve')
+        # Auf der offenen Seite wird ueber die Pegelreihe umgeschaltet — die
+        # Kachel liegt darunter und nimmt keine Klicks an.
+        self.pg.click('#wlStationLeiste .wx-chip:nth-child(2)')
+        self.pg.wait_for_timeout(700)
+        self.assertFalse(sichtbar(), 'Warnemünde hat hier keine')
+
+    def test_beim_umschalten_wird_der_wert_geleert(self):
+        """Bis die Antwort da ist, darf NICHT der alte Wert unter dem neuen
+        Namen stehen.
+
+        pegelonline braucht beim ersten Abruf eines Pegels mehrere Sekunden. So
+        lange sah die Kachel fertig aus und zeigte den falschen Pegel — der
+        gefährlichste Zustand, den eine Anzeige haben kann.
+
+        Gemessen wird SYNCHRON, im selben Schritt wie der Aufruf: danach ist
+        die Antwort womöglich schon da, und dann wäre nichts mehr zu sehen.
+        """
+        self.assertEqual(self.wert(), '+11')
+        sofort = self.pg.evaluate("""() => {
+            _wlIndex = 1; _wlNamenSetzen(); fetchWaterLevel();
+            return document.getElementById('wlTileVal').textContent;
+        }""")
+        self.assertEqual(sofort, '--', 'der alte Wert steht unter dem neuen Namen')
+        self.pg.wait_for_timeout(700)
+        self.assertEqual(self.wert(), '+28')
+
+    def test_zurueck_auf_einen_bekannten_pegel_zeigt_sofort(self):
+        """Was schon geholt wurde, liegt im Browser — sonst wäre jeder Rückweg
+        wieder ein Wartezeichen."""
+        self.weiter()                          # Warnemünde holen
+        self.pg.wait_for_timeout(500)
+        self.weiter()                          # Kiel
+        self.pg.wait_for_timeout(500)
+        self.weiter()                          # zurück auf Travemünde
+        sofort = self.pg.evaluate(
+            "() => document.getElementById('wlTileVal').textContent")
+        self.assertEqual(sofort, '+11')
+
+    def test_ein_einziger_pegel_zeigt_keinen_pfeil(self):
+        """Ein Pfeil, der nirgendwo hinfuehrt, ist eine Luege."""
+        self.pg.evaluate("""() => {
+            _wlStationen = [{ name: 'Nur einer', uuid: 'x' }];
+            _wlIndex = 0; _wlNamenSetzen();
+        }""")
+        self.assertEqual(self.pg.evaluate(
+            "() => document.querySelector('#wlStationKnopf svg').style.display"), 'none')
+        self.assertTrue(self.pg.evaluate(
+            "() => document.getElementById('wlStationLeiste').hidden"))
+
+
+# ── Grundriss-Werkzeug ─────────────────────────────────────────────────────
+
+def _test_png(w: int, h: int) -> bytes:
+    """Ein echtes PNG, von Hand gebaut — Pillow ist hier nicht installiert."""
+    import struct
+    import zlib
+
+    def block(typ, daten):
+        return (struct.pack('>I', len(daten)) + typ + daten
+                + struct.pack('>I', zlib.crc32(typ + daten) & 0xffffffff))
+
+    roh = b''
+    for y in range(h):
+        zeile = bytes([(x * 7 + y * 3) % 256 if (x // 8 + y // 8) % 2 else 240
+                       for x in range(w) for _ in range(3)])
+        roh += b'\x00' + zeile
+    return (b'\x89PNG\r\n\x1a\n'
+            + block(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+            + block(b'IDAT', zlib.compress(roh))
+            + block(b'IEND', b''))
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Grundrisswerkzeug(Pruefstand):
+    """Räume zeichnen, verschieben, löschen — und was dabei gespeichert wird.
+
+    Der Riss trägt die Räume für den Stauplan und die Geräteseite. Bis hierher
+    war er 250 Zeilen SVG in index.html, gezeichnet für DIESES Boot. Das
+    Werkzeug ist der Weg, ihn ohne Entwickler zu ändern.
+    """
+
+    def setUp(self):
+        self.pg = self._browser.new_page(viewport={'width': 1280, 'height': 950})
+        self.fehler = []
+        self.pg.on('pageerror', lambda e: self.fehler.append(str(e)[:250]))
+        self.pg.on('dialog', lambda d: d.accept())
+        self.gespeichert = []
+        # PUT geht beim Pruefserver ins Leere (er reicht nur GET ans Boot
+        # durch). Hier wird die Antwort gefaelscht — der ECHTE Pruefer bekommt
+        # das Ergebnis am Ende trotzdem zu sehen, in Python.
+        def speichern(route):
+            rumpf = json.loads(route.request.post_data or '{}')
+            self.gespeichert.append(rumpf)
+            route.fulfill(status=200, content_type='application/json',
+                          body=json.dumps(rumpf))
+        self.pg.route('**/api/grundriss', lambda r:
+                      speichern(r) if r.request.method == 'PUT' else r.fallback())
+
+        # Die Planvorlage: hochgeladen wird in den Speicher dieses Tests.
+        self.vorlage = None
+
+        def vorlage(route):
+            if route.request.method == 'PUT':
+                self.vorlage = route.request.post_data_buffer
+                route.fulfill(status=200, content_type='application/json',
+                              body=json.dumps({'ok': True, 'bytes': len(self.vorlage or b'')}))
+            elif route.request.method == 'DELETE':
+                self.vorlage = None
+                route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
+            elif self.vorlage:
+                route.fulfill(status=200, content_type='image/jpeg', body=self.vorlage)
+            else:
+                route.fulfill(status=404, body='')
+        self.pg.route('**/api/grundriss/vorlage*', vorlage)
+        self.pg.goto(self.basis + '/', wait_until='domcontentloaded', timeout=30000)
+        self.pg.wait_for_timeout(2000)
+        if self.pg.evaluate("() => !!document.querySelector('.anmeldung:not(.hidden)')"):
+            self.pg.fill('#anmName', KONTO)
+            self.pg.fill('#anmPw', PASSWORT)
+            self.pg.click('#anmKnopf')
+            self.pg.wait_for_timeout(4000)
+        self.pg.evaluate('() => openGrundrissEditor()')
+        self.pg.wait_for_timeout(700)
+        self.kasten = self.pg.locator('#geSvg').bounding_box()
+
+    def tearDown(self):
+        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
+        self.pg.close()
+
+    # ── Werkzeug ───────────────────────────────────────────────────────────
+
+    def punkt(self, fx, fy):
+        k = self.kasten
+        return (k['x'] + k['width'] * fx, k['y'] + k['height'] * fy)
+
+    def zahl(self):
+        return self.pg.evaluate('() => _geRiss.raeume.length')
+
+    def werkzeug(self, name):
+        self.pg.click(f'[data-werkzeug="{name}"]')
+        self.pg.wait_for_timeout(150)
+
+    def rechteck(self, x0, y0, x1, y1):
+        self.werkzeug('rechteck')
+        a, b = self.punkt(x0, y0)
+        c, d = self.punkt(x1, y1)
+        self.pg.mouse.move(a, b)
+        self.pg.mouse.down()
+        self.pg.mouse.move(c, d, steps=8)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(300)
+
+    # ── Prüfungen ──────────────────────────────────────────────────────────
+
+    def test_das_werkzeug_arbeitet_auf_einer_kopie(self):
+        """Erst Speichern macht die Änderung echt. Ohne das wäre jeder
+        Fehlgriff sofort im Stauplan und auf der Geräteseite zu sehen."""
+        vorher = self.pg.evaluate('() => GRUNDRISS.raeume.length')
+        self.rechteck(.35, .60, .65, .70)
+        self.assertEqual(self.zahl(), vorher + 1)
+        self.assertEqual(self.pg.evaluate('() => GRUNDRISS.raeume.length'), vorher)
+
+    def test_rechteck_aufziehen_legt_einen_raum_an(self):
+        vorher = self.zahl()
+        self.rechteck(.35, .60, .65, .70)
+        self.assertEqual(self.zahl(), vorher + 1)
+        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.t'), 'rechteck')
+
+    def test_ein_tipp_ohne_bewegung_ist_kein_raum(self):
+        """Sonst legt jeder Fehlgriff eine unsichtbare Null-Fläche an."""
+        vorher = self.zahl()
+        self.werkzeug('rechteck')
+        a, b = self.punkt(.5, .5)
+        self.pg.mouse.click(a, b)
+        self.pg.wait_for_timeout(300)
+        self.assertEqual(self.zahl(), vorher)
+
+    def test_vieleck_mit_der_eingabetaste_schliessen(self):
+        vorher = self.zahl()
+        self.werkzeug('vieleck')
+        for fx, fy in ((.35, .74), (.65, .74), (.60, .84), (.40, .84)):
+            self.pg.mouse.click(*self.punkt(fx, fy))
+            self.pg.wait_for_timeout(120)
+        self.pg.keyboard.press('Enter')
+        self.pg.wait_for_timeout(300)
+        self.assertEqual(self.zahl(), vorher + 1)
+        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.t'), 'vieleck')
+        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.punkte.length'), 4)
+
+    def test_zwei_punkte_sind_keine_flaeche(self):
+        self.werkzeug('vieleck')
+        for fx, fy in ((.4, .8), (.6, .8)):
+            self.pg.mouse.click(*self.punkt(fx, fy))
+            self.pg.wait_for_timeout(120)
+        vorher = self.zahl()
+        self.pg.keyboard.press('Enter')
+        self.pg.wait_for_timeout(250)
+        self.assertEqual(self.zahl(), vorher)
+
+    def test_umbenennen_und_faerben(self):
+        self.rechteck(.35, .60, .65, .70)
+        self.pg.fill('#geRaumName', 'Achterpiek')
+        self.pg.wait_for_timeout(250)
+        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).name'), 'Achterpiek')
+        self.pg.click('#geRaumFarben .ge-farbe:nth-child(3)')
+        self.pg.wait_for_timeout(200)
+        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).farbe'), '#60a5fa')
+
+    def test_entfernen_taste_loescht_den_gewaehlten_raum(self):
+        self.rechteck(.35, .60, .65, .70)
+        n = self.zahl()
+        # Nach dem Aufziehen steht der Zeiger im Namensfeld — dort loescht die
+        # Taste Buchstaben und keine Raeume. Erst zurueck auf die Flaeche.
+        self.pg.evaluate('() => document.getElementById("geRaumName").blur()')
+        self.pg.keyboard.press('Delete')
+        self.pg.wait_for_timeout(250)
+        self.assertEqual(self.zahl(), n - 1)
+        self.assertIsNone(self.pg.evaluate('() => _geAuswahl'))
+
+    def test_zurueck_nimmt_den_letzten_schritt_zurueck(self):
+        self.rechteck(.35, .60, .65, .70)
+        n = self.zahl()
+        self.pg.click('#geZurueck')
+        self.pg.wait_for_timeout(250)
+        self.assertEqual(self.zahl(), n - 1)
+
+    def test_nichts_liegt_ausserhalb_der_zeichenflaeche(self):
+        """Was draußen liegt, ist unsichtbar — und damit weder wiederzufinden
+        noch zu löschen. Der Zeiger geht über den Rand hinaus, die Fläche nicht."""
+        # Innerhalb anfangen (sonst nimmt die Fläche den Druck gar nicht an)
+        # und weit nach links hinausziehen.
+        self.rechteck(.30, .60, -.45, .70)
+        f = self.pg.evaluate('() => _geRaum(_geAuswahl).form')
+        self.assertGreaterEqual(f['x'], 0)
+        self.assertLessEqual(f['x'] + f['w'], self.pg.evaluate('() => _geRiss.ansicht.w'))
+
+    def test_rumpfform_setzt_das_seitenverhaeltnis(self):
+        self.pg.fill('#geLoa', '9')
+        self.pg.fill('#geBreite', '3')
+        self.pg.click('button:has-text("Rumpfform")')
+        self.pg.wait_for_timeout(400)
+        self.pg.click('.ge-vorlage[data-vorlage="fahrten"]')
+        self.pg.wait_for_timeout(400)
+        a = self.pg.evaluate('() => _geRiss.ansicht')
+        self.assertAlmostEqual(a['h'] / a['w'], 3.0, places=1)
+        self.assertTrue(self.pg.evaluate('() => !!_geRiss.rumpf'))
+
+    def test_raeume_ziehen_beim_rumpfwechsel_mit(self):
+        """Sonst säßen sie danach alle im Vorschiff, obwohl sich am Boot
+        nichts geändert hat."""
+        self.rechteck(.35, .60, .65, .70)
+        vorher = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
+        self.pg.fill('#geLoa', '20')
+        self.pg.fill('#geBreite', '4')
+        self.pg.click('button:has-text("Rumpfform")')
+        self.pg.wait_for_timeout(400)
+        self.pg.click('.ge-vorlage[data-vorlage="modern"]')
+        self.pg.wait_for_timeout(400)
+        nach = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
+        self.assertAlmostEqual(vorher['y'] / vorher['h'], nach['y'] / nach['h'], places=2)
+
+    def test_alle_sechs_rumpfformen_sind_gueltige_pfade(self):
+        """Sie gehen als SVG in den Browser und durch die Prüfung des Pi.
+        Ein Zeichen zu viel, und der Riss lässt sich nicht mehr speichern."""
+        pfade = self.pg.evaluate("""() => _GE_RUMPF_VORLAGEN.map(v =>
+            [v.id, geRumpfPfad({ w: 200, h: 680, ...v })])""")
+        self.assertEqual(len(pfade), 6)
+        import main as _main
+        for kennung, d in pfade:
+            self.assertTrue(_main._GR_PFAD.match(d), f'{kennung}: {d[:60]}')
+            self.assertTrue(d.endswith('Z'), kennung)
+
+    def test_gespeichert_wird_was_der_pi_zurueckgibt(self):
+        """Der Pi prüft und schneidet zurecht. Was er antwortet, ist ab dann
+        die Wahrheit — nicht die Arbeitskopie im Browser."""
+        self.rechteck(.35, .60, .65, .70)
+        self.pg.click('#geSpeichern')
+        self.pg.wait_for_timeout(600)
+        self.assertEqual(len(self.gespeichert), 1)
+        geschickt = self.gespeichert[0]
+        self.assertEqual(self.pg.evaluate('() => GRUNDRISS.raeume.length'),
+                         len(geschickt['raeume']))
+        self.assertTrue(self.pg.evaluate('() => document.getElementById("geSpeichern").disabled'),
+                        'nach dem Speichern gibt es nichts mehr zu speichern')
+
+    def test_das_geschickte_besteht_die_pruefung_des_pi(self):
+        """Der eigentliche Test: was das Werkzeug baut, muss der Prüfer
+        annehmen. Sonst merkt man es erst beim Speichern am Boot."""
+        self.rechteck(.35, .60, .65, .70)
+        self.werkzeug('vieleck')
+        for fx, fy in ((.35, .76), (.65, .76), (.60, .86), (.40, .86)):
+            self.pg.mouse.click(*self.punkt(fx, fy))
+            self.pg.wait_for_timeout(120)
+        self.pg.keyboard.press('Enter')
+        self.pg.wait_for_timeout(250)
+        self.pg.click('button:has-text("Rumpfform")')
+        self.pg.wait_for_timeout(400)
+        self.pg.click('.ge-vorlage[data-vorlage="klassisch"]')
+        self.pg.wait_for_timeout(400)
+        self.pg.click('#geSpeichern')
+        self.pg.wait_for_timeout(600)
+
+        import main as _main
+        geprueft = _main._grundriss_pruefen(self.gespeichert[0])
+        self.assertEqual(len(geprueft['raeume']), len(self.gespeichert[0]['raeume']))
+        self.assertTrue(geprueft['rumpf'])
+
+
+    # ── Planvorlage ────────────────────────────────────────────────────────
+
+    def _vorlage_hochladen(self, w=600, h=1600):
+        # Der Prüfserver ist ein SERVER, und über den geht kein Bild — deshalb
+        # blendet das Werkzeug den Knopf dort aus. Hier wird die Lage am Boot
+        # nachgestellt, denn genau die soll geprüft werden.
+        self.pg.evaluate("() => { _quelle.art = 'direkt'; _geVorlageLeiste(); }")
+        pfad = pathlib.Path(tempfile.mkdtemp(prefix='mave-plan-')) / 'plan.png'
+        pfad.write_bytes(_test_png(w, h))
+        self.pg.set_input_files('#geVorlageBox input[type=file]', str(pfad))
+        self.pg.wait_for_timeout(2000)
+        return pfad
+
+    def test_vorlage_wird_verkleinert_hochgeladen(self):
+        """Verkleinert wird im Browser: Pillow gibt es auf dem Pi nicht, und
+        ein Handyfoto hat acht Megapixel.
+
+        Gemessen wird die KANTENLÄNGE, nicht die Dateigröße. Ein Bild aus
+        lauter Rauschen — wie das Prüfbild hier — wird als JPEG größer als als
+        PNG, und das wäre trotzdem kein Fehler: verkleinert ist es dann
+        immer noch.
+        """
+        self._vorlage_hochladen(600, 1600)
+        self.assertIsNotNone(self.vorlage, 'nichts hochgeladen')
+        self.assertTrue(self.vorlage.startswith(b'\xff\xd8\xff'), 'kein JPEG')
+        masse = self.pg.evaluate("""async (b64) => {
+            const bild = new Image();
+            await new Promise(ok => { bild.onload = ok;
+                                      bild.src = 'data:image/jpeg;base64,' + b64; });
+            return [bild.width, bild.height];
+        }""", base64.b64encode(self.vorlage).decode())
+        self.assertLessEqual(max(masse), 1400, f'nicht verkleinert: {masse}')
+        # Und das Seitenverhältnis bleibt: 600 zu 1600.
+        self.assertAlmostEqual(masse[0] / masse[1], 600 / 1600, places=2)
+
+    def test_vorlage_erscheint_im_riss(self):
+        self._vorlage_hochladen()
+        self.assertTrue(self.pg.evaluate("() => !!document.querySelector('#geSvg image')"))
+        bild = self.pg.evaluate('() => _geRiss.bild')
+        self.assertGreater(bild['w'], 0)
+        self.assertGreater(bild['h'], 0)
+
+    def test_vorlage_passt_sich_in_die_flaeche_ein(self):
+        """Sie soll beim ersten Mal ganz zu sehen sein und ihr Verhältnis
+        behalten — von da aus wird geschoben."""
+        self._vorlage_hochladen(600, 1600)
+        b = self.pg.evaluate('() => _geRiss.bild')
+        a = self.pg.evaluate('() => _geRiss.ansicht')
+        self.assertAlmostEqual(b['w'] / b['h'], 600 / 1600, places=1)
+        self.assertLessEqual(b['w'], a['w'] + 1)
+        self.assertLessEqual(b['h'], a['h'] + 1)
+
+    def test_regler_aendern_sichtbarkeit_und_groesse(self):
+        self._vorlage_hochladen()
+        vorher = self.pg.evaluate('() => _geRiss.bild')
+        self.pg.evaluate('() => { geVorlageDeckkraft(90); geVorlageGroesse(100); }')
+        self.pg.wait_for_timeout(200)
+        nach = self.pg.evaluate('() => _geRiss.bild')
+        self.assertAlmostEqual(nach['deckkraft'], .9)
+        self.assertEqual(nach['w'], 100)
+        # Die Mitte bleibt stehen, sonst wandert das Bild beim Regeln davon.
+        self.assertAlmostEqual(vorher['x'] + vorher['w'] / 2, nach['x'] + nach['w'] / 2, delta=1)
+
+    def test_vorlage_entfernen(self):
+        self._vorlage_hochladen()
+        self.pg.evaluate('() => geVorlageEntfernen()')
+        self.pg.wait_for_timeout(600)
+        self.assertIsNone(self.vorlage)
+        self.assertFalse(self.pg.evaluate("() => !!document.querySelector('#geSvg image')"))
+        self.assertIsNone(self.pg.evaluate('() => _geRiss.bild || null'))
+
+    def test_die_platzierung_wird_mitgespeichert(self):
+        self._vorlage_hochladen()
+        self.pg.click('#geSpeichern')
+        self.pg.wait_for_timeout(600)
+        self.assertIn('bild', self.gespeichert[-1])
+        import main as _main
+        geprueft = _main._grundriss_pruefen(self.gespeichert[-1])
+        self.assertEqual(set(geprueft['bild']), {'x', 'y', 'w', 'h', 'deckkraft'})
+
+
+    def test_ueber_den_server_wird_das_hochladen_gar_nicht_erst_angeboten(self):
+        """Der Durchleiter nimmt nur JSON und höchstens 256 kB. Einen Knopf
+        anzubieten, der dann scheitert, ist schlechter als keiner."""
+        self.pg.evaluate("() => { _quelle.art = 'server_live'; _geVorlageLeiste(); }")
+        self.assertTrue(self.pg.evaluate(
+            "() => document.querySelector('#geVorlageBox .ge-datei').hidden"))
+        self.assertFalse(self.pg.evaluate(
+            "() => document.getElementById('geVorlageFern').hidden"))
 
 
 if __name__ == '__main__':

@@ -87,7 +87,8 @@ function _wxOrtListe() {
 
 function _wxOrt() {
   const liste = _wxOrtListe();
-  if (_wxIndex >= liste.length) _wxIndex = 0;
+  // Auch nach unten prüfen: im localStorage kann alles stehen.
+  if (!(_wxIndex >= 0 && _wxIndex < liste.length)) _wxIndex = 0;
   return liste[_wxIndex];
 }
 
@@ -210,7 +211,12 @@ function fetchWeather() {
   const ort = _wxOrt();
   const schluessel = _wxSchluessel(ort);
   const bekannt = _wxCache.get(schluessel);
-  if (bekannt) { _wxData = bekannt; _renderWeather(); _renderWetterSeite(); }
+  // Ohne Zwischenspeicher fuer diesen Ort: erst LEEREN. Sonst stehen ein paar
+  // Sekunden lang die Zahlen des vorherigen Ortes unter dem neuen Namen — und
+  // das ist schlimmer als ein Strich, weil es aussieht, als waere es fertig.
+  _wxData = bekannt || null;
+  _renderWeather();
+  _renderWetterSeite();
 
   const p = new URLSearchParams();
   if (ort.lat != null) { p.set('lat', ort.lat.toFixed(4)); p.set('lon', ort.lon.toFixed(4)); }
@@ -278,7 +284,17 @@ function _renderWetterSeite() {
 
   const d = _wxData;
   const kopf = $('wxJetzt');
-  if (!d) { if (kopf) kopf.innerHTML = '<div class="wx-leer">Wetter wird geholt…</div>'; return; }
+  if (!d) {
+    if (kopf) kopf.innerHTML = '<div class="wx-leer">Wetter wird geholt…</div>';
+    // Die Leinwaende zeigen sonst weiter den vorherigen Ort.
+    for (const id of ['wxWindCanvas', 'wxWelleCanvas', 'wxRegenCanvas']) {
+      const c = $(id);
+      if (c && c.width) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    }
+    const tab = $('wxTage');
+    if (tab) tab.innerHTML = '';
+    return;
+  }
 
   const jetzt = _wxStundeJetzt();
   const heute = (d.tage || [])[0] || {};

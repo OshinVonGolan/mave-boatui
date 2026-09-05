@@ -17,7 +17,7 @@ JS_FILES = [
     'alarms.js', 'alarmton.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
     'wandbetrieb.js', 'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
-    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
+    'orte.js', 'grundrisseditor.js', 'topologie.js', 'geraete.js', 'init.js',
 ]
 
 # Das Logbuch hat sein eigenes, kleines Buendel. wandbetrieb.js steht in beiden:

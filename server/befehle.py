@@ -60,7 +60,17 @@ DURCHLEITEN: tuple[tuple[str, str, str], ...] = (
     ('PUT',  '/api/wartung',                   r.EINSTELLEN),
     ('PUT',  '/api/stauplan',                  r.EINSTELLEN),
     ('PUT',  '/api/devices/registry',          r.EINSTELLEN),
-    ('POST', '/api/settings',                  r.EINSTELLEN),
+    # PATCH und nicht POST: der Pi bietet /api/settings nur als PATCH an. Hier
+    # stand POST, und damit liess sich aus der Ferne KEINE Einstellung aendern
+    # — der Server nahm den Aufruf an und das Boot antwortete mit 405. Aufgefallen
+    # beim Einbau der Wetterorte und der Pegelliste, die beide hier durchmuessen.
+    ('PATCH', '/api/settings',                 r.EINSTELLEN),
+    # Der Grundriss wie der Stauplan daneben: eine gepflegte Liste, die auch
+    # aus der Ferne zu aendern sein soll. Das BILD dazu bewusst nicht — der
+    # Durchleiter nimmt nur JSON und hoechstens 256 kB, und ein Planfoto ueber
+    # die Mobilfunkverbindung des Bootes zu schicken waere ohnehin die falsche
+    # Richtung. Die Vorlage wird am Boot hochgeladen.
+    ('PUT',  '/api/grundriss',                 r.EINSTELLEN),
     ('POST', '/api/alarms/rules',              r.EINSTELLEN),
     # Fernwartung
     ('POST', '/api/system/time-sync',          r.FERNWARTEN),

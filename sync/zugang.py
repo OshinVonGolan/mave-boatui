@@ -178,6 +178,17 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     ('*',    r'^/api/pgn/',                  r.EINSTELLEN),
     ('*',    r'^/api/alarms/rules',          r.EINSTELLEN),
     ('PUT',  r'^/api/(wartung|stauplan)$',   r.EINSTELLEN),
+    # Der Grundriss ist keine Bedienung, sondern der Aufbau des Bootes: Raeume,
+    # Namen, Umriss. An ihm haengen Stauplan und Geraeteseite — wer ihn
+    # umzeichnet, aendert, wo fuer ALLE die Dinge liegen. Deshalb dieselbe
+    # Schwelle wie fuer die uebrigen Einstellungen und nicht die Vorgabe fuer
+    # schreibende Aufrufe (Schalten), unter die er sonst fiele.
+    #
+    # Die Planvorlage (das abfotografierte Original) gehoert dazu, in JEDER
+    # Methode: sie ist nur im Zeichenwerkzeug zu sehen, und dort kommt ohnehin
+    # nur hin, wer einstellen darf.
+    ('PUT',  r'^/api/grundriss$',            r.EINSTELLEN),
+    ('*',    r'^/api/grundriss/vorlage$',    r.EINSTELLEN),
     # Wartungsplan und Bootsaufgaben gehen einen Gast nichts an. Sie sagen,
     # was an dieser Anlage kaputt ist, was ansteht und was sie gekostet hat —
     # das ist eine Aussage ueber das BOOT und seinen Zustand, nicht ueber die

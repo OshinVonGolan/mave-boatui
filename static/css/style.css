@@ -1358,6 +1358,79 @@
     .set-treffer-zeile span { color: var(--text3); font-size: 12px; }
     html[data-zeiger="fein"] .set-treffer-zeile:hover { background: var(--surface); }
 
+    /* Vorschau in den Einstellungen: nur ansehen, nicht anfassen. */
+    .gr-vorschau { background: var(--surface2); border-radius: 10px; padding: 8px;
+      display: flex; justify-content: center; }
+    .gr-vorschau svg { width: 100%; max-height: 260px; }
+    .gr-vorschau-flaeche { pointer-events: none; }
+
+    /* ── Grundriss-Werkzeug ── */
+    /* Drei Bereiche: Werkzeuge oben, Zeichenfläche links, Angaben rechts. Am
+       Telefon fällt die Spalte weg und alles steht untereinander — der Riss
+       ist hoch und schmal, daneben passt dort ohnehin nichts. */
+    .ge-seite { display: grid; gap: 12px; align-content: start;
+      grid-template-columns: 1fr; max-width: 1100px; margin: 0 auto; width: 100%; }
+    @media (min-width: 860px) {
+      .ge-seite { grid-template-columns: 1fr 300px;
+        grid-template-areas: "wz wz" "flaeche leiste"; }
+      .ge-werkzeuge { grid-area: wz; }
+      .ge-flaeche   { grid-area: flaeche; }
+      .ge-leiste    { grid-area: leiste; }
+    }
+    .ge-werkzeuge { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .ge-wz {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text2);
+      border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 13px;
+      font-weight: 600; cursor: pointer; display: inline-flex; align-items: center;
+      gap: 6px; -webkit-tap-highlight-color: transparent;
+    }
+    .ge-wz.aktiv { background: var(--accent); border-color: var(--accent); color: #04121c; }
+    .ge-wz:disabled { opacity: .4; cursor: default; }
+    html[data-zeiger="fein"] .ge-wz:not(.aktiv):not(:disabled):hover { border-color: var(--accent); color: var(--text); }
+    .ge-trenner { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+
+    .ge-flaeche { background: var(--surface); border-radius: var(--radius);
+      padding: 10px; display: flex; justify-content: center; }
+    /* Die Höhe gibt das Maß vor, die Breite folgt dem Riss. Andersherum (100 %
+       Breite) war das Element viel breiter als das Boot: die Zeichnung stand
+       als schmaler Streifen in der Mitte, und rundherum lag Fläche, auf der
+       ein Tipp ins Nichts ging. */
+    #geSvg { height: 70vh; width: auto; max-width: 100%;
+      touch-action: none; display: block; }
+
+    .ge-leiste { display: flex; flex-direction: column; gap: 12px; }
+    .ge-feld { margin-bottom: 10px; }
+    .ge-feld label { display: block; font-size: 12px; color: var(--text3);
+      font-weight: 600; margin-bottom: 4px; }
+    .ge-feld .settings-input { width: 100%; max-width: none; }
+    .ge-farben { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ge-farbe { width: 26px; height: 26px; border-radius: 8px; border: 2px solid transparent;
+      cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .ge-farbe.aktiv { border-color: var(--text); }
+    .ge-loeschen { width: 100%; }
+    .ge-hilfe { font-size: 12px; color: var(--text3); line-height: 1.6; padding: 0 2px; }
+    /* Ein <label> um ein verstecktes <input type=file>: der Knopf des
+       Browsers laesst sich nicht gestalten, ein Label schon. */
+    .ge-datei { display: block; width: 100%; text-align: center; cursor: pointer; }
+    #geVorlageDeckkraft, #geVorlageGroesse { width: 100%; accent-color: var(--accent); }
+
+    /* Der Rumpfdialog liegt über der Fläche und nicht daneben: die Wahl ist
+       ein Schritt für sich, und danach ist der alte Riss ein anderer. */
+    .ge-dialog { position: fixed; inset: 0; z-index: 60; display: flex;
+      align-items: center; justify-content: center; padding: 16px;
+      background: rgba(2, 8, 20, .72); }
+    .ge-dialog-innen { background: var(--surface); border-radius: var(--radius);
+      padding: 16px; max-width: 640px; width: 100%; max-height: 86vh; overflow-y: auto; }
+    .ge-vorlagen { display: grid; gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+    .ge-vorlage { background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 10px 6px; cursor: pointer; color: var(--text2);
+      font: inherit; font-size: 12px; font-weight: 600; display: flex;
+      flex-direction: column; align-items: center; gap: 6px;
+      -webkit-tap-highlight-color: transparent; }
+    .ge-vorlage svg { width: 100%; height: 150px; }
+    html[data-zeiger="fein"] .ge-vorlage:hover { border-color: var(--accent); color: var(--text); }
+
     /* ── Wasserstand tile ── */
     .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .wl-tile-spark { flex: 1; width: 100%; min-height: 48px; display: block; }
@@ -2046,14 +2119,18 @@
       border-radius: 8px; padding: 10px 20px; font-size: 14px; font-weight: 600;
       cursor: pointer; transition: background .15s; font-family: inherit;
     }
-    .btn-primary:hover { background: var(--accent2); }
+    /* Nur mit einem echten Zeiger — sonst bleibt der zuletzt angetippte Knopf
+       hell stehen, bis man woanders hintippt (siehe `_zeigerartMerken`).
+       Dieselbe Regel gilt fuer die uebrigen Schalter dieser Oberflaeche; hier
+       stehen erst die beiden allgemeinen. */
+    html[data-zeiger="fein"] .btn-primary:hover { background: var(--accent2); }
     .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
     .btn-secondary {
       background: var(--surface2); color: var(--text); border: 1px solid var(--border);
       border-radius: 8px; padding: 7px 14px; font-size: 13px; font-weight: 600;
       cursor: pointer; transition: background .15s, border-color .15s; font-family: inherit;
     }
-    .btn-secondary:hover { background: var(--surface); border-color: var(--accent2); }
+    html[data-zeiger="fein"] .btn-secondary:hover { background: var(--surface); border-color: var(--accent2); }
     .settings-feedback {
       font-size: 13px; color: var(--green); margin-right: auto;
       align-self: center; opacity: 0; transition: opacity .3s;

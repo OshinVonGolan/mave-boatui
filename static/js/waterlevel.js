@@ -1,6 +1,80 @@
-// ── Wasserstand Travemünde ──────────────────────────────────────────────────
+// ── Wasserstand ─────────────────────────────────────────────────────────────
+//
+// Bis zu fünf Pegel, durchgeschaltet mit einem Tipp auf den Namen — dieselbe
+// Bediengrammatik wie bei der Wetterkachel. Der Heimatpegel beantwortet nicht,
+// ob man im Zielhafen abends noch über die Schwelle kommt.
+//
+// Anders als beim Wetter ist ein Pegel keine Koordinate, sondern eine
+// Messstelle mit eigener Kennung: die Zahl allein sähe an der Nachbarmole
+// schon anders aus, weil jeder Pegel seinen eigenen Nullpunkt hat. Deshalb
+// rechnet der Pi sie in cm über NHN um, mit dem Nullpunkt DIESES Pegels.
 
 let _wlData = null;
+let _wlStationen = [{ name: 'Travemünde', uuid: '' }];
+// Ob die Liste GEPFLEGT ist oder nur die Vorgabe des Servers. Der Unterschied
+// zaehlt in den Einstellungen: dort soll "noch nichts eingetragen" stehen und
+// nicht ein Eintrag, den niemand angelegt hat.
+let _wlGepflegt = false;
+let _wlIndex = 0;
+
+const _WL_SPEICHER = 'mave.pegel.station';
+// Beim Durchschalten soll die Kachel nicht bei jedem Tipp leer werden.
+const _wlCache = new Map();
+
+function _wlEsc(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function _wlStation() {
+  if (!(_wlIndex >= 0 && _wlIndex < _wlStationen.length)) _wlIndex = 0;
+  return _wlStationen[_wlIndex] || { name: '', uuid: '' };
+}
+
+/** Ein Tipp auf den Pegelnamen: einen weiter. */
+function wlStationWeiter(richtung = 1) {
+  const n = _wlStationen.length;
+  if (n < 2) return;
+  _wlIndex = ((_wlIndex + richtung) % n + n) % n;
+  try { localStorage.setItem(_WL_SPEICHER, String(_wlIndex)); } catch (_) {}
+  _wlNamenSetzen();
+  fetchWaterLevel();
+}
+
+function _wlNamenSetzen() {
+  const st = _wlStation();
+  const feld = $('wlStationName');
+  if (feld) feld.textContent = st.name;
+  // Bei nur einem Pegel ist der Pfeil eine Lüge — dann bleibt der Name Text.
+  const pfeil = $('wlStationKnopf') && $('wlStationKnopf').querySelector('svg');
+  if (pfeil) pfeil.style.display = _wlStationen.length > 1 ? '' : 'none';
+  const titel = $('wlDetailTitel');
+  if (titel) titel.textContent = st.name ? `Wasserstand ${st.name}` : 'Wasserstand';
+  const leiste = $('wlStationLeiste');
+  if (leiste) {
+    leiste.hidden = _wlStationen.length < 2;
+    leiste.innerHTML = _wlStationen.map((p, i) =>
+      `<button class="wx-chip${i === _wlIndex ? ' aktiv' : ''}" data-index="${i}">${_wlEsc(p.name)}</button>`).join('');
+  }
+}
+
+/** Die gepflegten Pegel — einmal beim Start und nach dem Speichern. */
+function fetchPegelOrte() {
+  return fetch('/api/pegel/orte')
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (!d || !Array.isArray(d.stationen) || !d.stationen.length) return;
+      _wlStationen = d.stationen;
+      _wlGepflegt  = !!d.gepflegt;
+      try {
+        const i = parseInt(localStorage.getItem(_WL_SPEICHER), 10);
+        if (!isNaN(i)) _wlIndex = i;
+      } catch (_) {}
+      _wlNamenSetzen();
+    })
+    .catch(() => {});
+}
 
 function _trendArrow(trend) {
   if (trend === 'rising')  return '↑';
@@ -54,10 +128,18 @@ function _wlRange(pts) {
   return { min, max };
 }
 
-function _renderWlChart(measurements) {
+/**
+ * Der Verlauf auf der Detailseite — in cm über NHN, wie die große Zahl darüber.
+ *
+ * Vorher stand hier der rohe Pegelstand: die Überschrift sagte „+12 cm NHN",
+ * die Achse daneben „515". Zwei Zahlen für denselben Wasserstand, und keine
+ * davon falsch — aber zusammen unlesbar. Seit der Pegelnullpunkt vom Pegel
+ * selbst kommt, lässt sich die Achse mitrechnen.
+ */
+function _renderWlChart(measurements, versatzCm = 0) {
   const canvas = $('wlCanvas');
   if (!canvas) return;
-  const pts = _wlPoints(measurements);
+  const pts = _wlPoints(measurements).map(p => ({ f: p.f, v: p.v + versatzCm }));
   if (pts.length < 2) return;
   const dpr = window.devicePixelRatio || 1;
   const W   = canvas.offsetWidth  || 600;
@@ -84,7 +166,8 @@ function _renderWlChart(measurements) {
   for (let i = 0; i <= 4; i++) {
     const y = pad.t + (i / 4) * cH;
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cW, y); ctx.stroke();
-    const label = Math.round(max - i * (max - min) / 4);
+    const wert = Math.round(max - i * (max - min) / 4);
+    const label = i === 0 ? `${wert > 0 ? '+' : ''}${wert} cm` : String(wert);
     ctx.fillStyle = 'rgba(128,128,128,0.7)';
     ctx.font = `${10}px sans-serif`;
     ctx.textAlign = 'right';
@@ -129,7 +212,21 @@ function _renderWlChart(measurements) {
   }
 }
 
+function _wlOffen() {
+  const o = $('wlOverlay');
+  return o && !o.classList.contains('hidden');
+}
+
+/**
+ * Die Detailseite fuellen.
+ *
+ * Nur wenn sie offen ist, und das ist kein Feinschliff: hier haengt das
+ * Vorhersagebild des BSH dran, rund 330 kB. Bei jedem Abruf im Hintergrund
+ * (alle zehn Minuten) waere das ein Drittel Megabyte ueber die Mobilfunk-
+ * verbindung des Bootes, fuer ein Bild, das niemand ansieht.
+ */
 function _updateWlOverlay(data) {
+  if (!_wlOffen()) return;
   const val   = $('wlDetailValue');
   const trend = $('wlDetailTrend');
   const delta = $('wlDetailDelta');
@@ -158,10 +255,39 @@ function _updateWlOverlay(data) {
       fcmin.style.display = 'none';
     }
   }
+  // Für die allermeisten Pegel gibt es keine BSH-Kurve — dann fällt der
+  // ganze Block weg statt einen leeren Rahmen zu zeigen.
+  const block = $('wlPrognoseBlock');
+  if (block) block.hidden = !data.forecast_img;
   if (img && data.forecast_img) {
     img.src = data.forecast_img + '?t=' + Math.floor(Date.now() / 300000);
   }
-  _renderWlChart(data.measurements);
+  const quelle = $('wlDetailQuelle');
+  if (quelle) {
+    const pnp = data.station && data.station.pnp_m;
+    quelle.textContent = 'Messung WSV · cm über NHN'
+      + (pnp != null ? ` · Pegelnull ${pnp.toFixed(3)} m NHN` : '');
+  }
+  const pnp = data.station && data.station.pnp_m;
+  _renderWlChart(data.measurements, pnp != null ? pnp * 100 : 0);
+}
+
+/** Alles auf Strich — solange die Antwort fuer diesen Pegel noch aussteht. */
+function _wlLeeren() {
+  for (const id of ['wlTileVal', 'wlTileValH', 'wlDetailValue']) {
+    const el = $(id);
+    if (el) el.textContent = id === 'wlDetailValue' ? '-- cm' : '--';
+  }
+  for (const id of ['wlTileTrend', 'wlTileTrendH', 'wlDetailTrend', 'wlDetailDelta']) {
+    const el = $(id);
+    if (el) el.textContent = '';
+  }
+  for (const id of ['wlTileSpark', 'wlCanvas']) {
+    const c = $(id);
+    if (c && c.width) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  }
+  const block = $('wlPrognoseBlock');
+  if (block) block.hidden = true;
 }
 
 function _updateWlTile(data) {
@@ -218,15 +344,40 @@ function _renderWlSpark(measurements) {
 }
 
 function fetchWaterLevel() {
+  const st = _wlStation();
+  const bekannt = _wlCache.get(st.uuid);
+  // Ohne Zwischenspeicher erst leeren: sonst steht die Zahl des vorherigen
+  // Pegels unter dem neuen Namen, und zwar so lange, wie pegelonline braucht.
+  _wlData = bekannt || null;
+  if (bekannt) { _updateWlTile(bekannt); _updateWlOverlay(bekannt); }
+  else _wlLeeren();
+
   // gibt das Promise zurueck: der gemeinsame Start wartet darauf
-  return fetch('/api/waterlevel')
+  return fetch('/api/waterlevel' + (st.uuid ? '?station=' + encodeURIComponent(st.uuid) : ''))
     .then(r => r.ok ? r.json() : null)
     .then(d => {
       if (!d) return;
+      _wlCache.set(st.uuid, d);
+      // Die Antwort kann zu einem Pegel gehoeren, von dem laengst
+      // weggetippt wurde. Dann in den Speicher, aber nicht auf den Schirm.
+      if (_wlStation().uuid !== st.uuid) return;
       _wlData = d;
       _updateWlTile(d);
+      _updateWlOverlay(d);
     })
     .catch(() => {});
+}
+
+function _wlBinden() {
+  const leiste = $('wlStationLeiste');
+  if (leiste) leiste.addEventListener('click', e => {
+    const k = e.target.closest('[data-index]');
+    if (!k) return;
+    _wlIndex = parseInt(k.dataset.index, 10) || 0;
+    try { localStorage.setItem(_WL_SPEICHER, String(_wlIndex)); } catch (_) {}
+    _wlNamenSetzen();
+    fetchWaterLevel();
+  });
 }
 
 function openWaterLevel() {
@@ -245,8 +396,11 @@ function openWaterLevel() {
 // nachgeholt, sonst bliebe die Ansicht leer.
 function _wlOverlayAnzeigen() {
   $('wlOverlay').classList.remove('hidden');
+  _wlNamenSetzen();
   _updateWlOverlay(_wlData);
-  if (!_wlData) fetch('/api/waterlevel').then(r => r.ok ? r.json() : null).then(d => { if (d) { _wlData = d; _updateWlOverlay(d); } }).catch(() => {});
+  // Liegen noch keine Daten vor, holt fetchWaterLevel sie fuer den gewaehlten
+  // Pegel — der eigene Abruf hier holte immer den ersten.
+  if (!_wlData) fetchWaterLevel();
 }
 
 function closeWaterLevel() {
