@@ -1377,9 +1377,11 @@ function updateStatusBar(data) {
 // und demselben mitlaufenden Streifen. Eine Bedienung, die man einmal lernt,
 // soll ueberall dasselbe bedeuten.
 
-// Eine Sekunde. Zwei waren gemessen zu lang — man haelt den Finger drauf und
-// glaubt, es passiere nichts.
-const _SB_HALTEN_MS = 1000;
+// Eine Drittelsekunde. Erst zwei, dann eine — beides fuehlte sich an, als
+// passiere nichts. So kurz geht es hier, weil ein Tipp auf diese Felder nur
+// weiterschaltet: greift das Halten versehentlich, landet man eine Seite
+// weiter statt etwas geschaltet zu haben.
+const _SB_HALTEN_MS = 330;
 let _sbHalten = null;          // {uhr, feld, gehalten}
 
 function _sbHaltenBinden() {
@@ -1565,10 +1567,22 @@ function _sbRenderTank(data) {
     // Ohne eigene Farbe bleibt es beim Zustandsfarbton aus dem Stylesheet.
     bar.style.color = c.color || '';
   }
-  // Die Zahl auch. Ein blauer Balken unter einer gruenen Zahl sind zwei
-  // Aussagen ueber denselben Tank.
+  // Die Zahl traegt die Farbe auch — aber nicht dieselbe.
+  //
+  // Die eingestellten Tankfarben sind fuer eine FLAECHE gedacht: Wasser ist
+  // ein sattes Dunkelblau (#1a5fb4), und das als Schrift auf dunklem Grund ist
+  // kaum zu lesen. Der Balken darf dunkel sein, er liegt bei 18 % Deckkraft
+  // hinter allem; die Zahl muss lesbar bleiben.
+  //
+  // Deshalb wird die Farbe zur Schriftfarbe hin aufgehellt: color-mix haelt den
+  // Farbton (man erkennt Wasser von Diesel) und holt die Helligkeit von der
+  // normalen Schrift. Das rechnet der Browser, nicht wir — und es stimmt in
+  // jedem Farbschema, auch im Nachtmodus.
   const zahl = document.getElementById('sbT1');
-  if (zahl) zahl.style.color = c.color || '';
+  if (zahl) {
+    zahl.style.color = c.color
+      ? `color-mix(in srgb, ${c.color} 45%, var(--text))` : '';
+  }
   // Mehrere Tanks: sagen, dass hier etwas zu tippen ist.
   const feld = document.getElementById('sbTankItem');
   if (feld) {

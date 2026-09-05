@@ -381,8 +381,13 @@ class AnsichtInDerAdresse(Pruefstand):
         gelaufen ist. `_sparkPoller` entsteht als eines der letzten Dinge in
         init.js — steht er, ist die Adresse ausgewertet.
         """
-        self.pg.wait_for_function("() => typeof _sparkPoller !== 'undefined'",
-                                  timeout=25000)
+        # try/catch: `const _sparkPoller` ist bis zu seiner Zeile in der
+        # zeitlichen Totzone, und `typeof` WIRFT dort eine ReferenceError,
+        # statt 'undefined' zu liefern. Ohne den Fang scheitert die Pruefung
+        # zufaellig, je nachdem wie schnell das Buendel durchlaeuft.
+        self.pg.wait_for_function(
+            "() => { try { return typeof _sparkPoller !== 'undefined'; }"
+            "        catch (_) { return false; } }", timeout=25000)
         self.pg.wait_for_timeout(300)
 
     def test_verbindungsseite_ueberlebt_das_neuladen(self):
@@ -599,18 +604,18 @@ class HaltenOeffnetDetail(Pruefstand):
         self.assertFalse(self.offen(), 'ein Tipp soll keine Seite öffnen')
 
     def test_halten_oeffnet(self):
-        self.halten(2400)
+        self.halten(700)
         self.assertTrue(self.offen())
 
     def test_halten_schaltet_nicht_zusaetzlich_weiter(self):
         """Beides zugleich wäre Unsinn: man landet auf der Detailseite und
         hätte nebenbei die Auswahl darunter verstellt."""
         vorher = self.label()
-        self.halten(2400)
+        self.halten(700)
         self.assertEqual(self.label(), vorher)
 
     def test_zu_kurz_oeffnet_nicht(self):
-        self.halten(350)
+        self.halten(120)
         self.assertFalse(self.offen())
 
     def test_nur_felder_mit_seite(self):
@@ -664,19 +669,73 @@ class Lichtkreise(Pruefstand):
             "        const b = chBezeichnung(8); lightsConfig['8'] = alt; return b; }"),
             'Relais')
 
-    def test_zu_langer_name_faellt_auf_drei_buchstaben(self):
-        """Wie viel hineingeht, haengt an der Groesse der Kachel — also
-        nachmessen statt auf eine Zeichenzahl raten. "Kom" laesst sich noch
-        zuordnen, ein abgeschnittenes "Kombüs" sieht nach Fehler aus."""
+    def test_passt_einer_nicht_gehen_alle_nach_unten(self):
+        """Alle oder keiner: eine Reihe, in der zwei Namen innen und drei
+        darunter stehen, sieht nach Fehler aus. Und unten steht der ganze Name
+        (gekürzt vom Stylesheet), statt innen drei Buchstaben hochkant."""
+        innen = lambda: self.pg.evaluate(          # noqa: E731
+            "() => document.getElementById('channelsRow').classList.contains('namen-innen')")
+        self.assertTrue(innen(), 'hier ist Platz, die Namen gehören in die Balken')
+
         self.pg.evaluate("""() => {
             lightsConfig['1'] = { name: 'Ein wirklich absurd langer Raumname '
                                         + 'der niemals in einen Balken passt' };
             chNamenPassend();
         }""")
-        namen = self.pg.evaluate(
-            "() => [...document.querySelectorAll('.ch-name')].map(e => e.textContent)")
-        self.assertEqual(namen[0], 'Kombüse', 'was passt, bleibt ganz')
-        self.assertEqual(namen[1], 'Ein')
+        self.assertFalse(innen())
+        self.assertEqual(self.pg.evaluate(
+            "() => [...document.querySelectorAll('.ch-name')].map(e => e.textContent)"),
+            [''] * 5, 'in den Balken darf dann nichts mehr stehen')
+        unten = self.pg.evaluate(
+            "() => [...document.querySelectorAll('.ch-name-unten')].map(e => e.textContent)")
+        self.assertEqual(unten[0], 'Kombüse')
+        self.assertTrue(unten[1].startswith('Ein wirklich absurd'))
+
+    def test_relais_zeigt_beim_halten_die_richtung(self):
+        """Der Balken faehrt dorthin, wo er nach dem Schalten steht — man sieht
+        WAS gleich passiert, nicht nur DASS etwas passiert."""
+        x, y = self.kasten(8)
+        self.pg.evaluate("() => { _wideCh[8] = 0; updateChannels(_wideCh); }")
+        self.pg.wait_for_timeout(200)
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(120)
+        hoehe = self.pg.evaluate("() => document.getElementById('chBar8').style.height")
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(300)
+        self.assertEqual(hoehe, '100%', 'aus -> der Balken muss hochlaufen')
+
+        # Zu frueh losgelassen heisst: kurzer Tipp, und der oeffnet die
+        # Steuerseite. Sie liegt dann ueber der Kachel, und der naechste Griff
+        # ginge ins Leere.
+        self.pg.evaluate("() => closeLightDetail()")
+        self.pg.wait_for_timeout(300)
+
+        # Und andersherum.
+        self.pg.evaluate("() => { _wideCh[8] = 1; updateChannels(_wideCh); }")
+        self.pg.wait_for_timeout(200)
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(120)
+        hoehe = self.pg.evaluate("() => document.getElementById('chBar8').style.height")
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(300)
+        self.pg.evaluate("() => closeLightDetail()")
+        self.assertEqual(hoehe, '0%', 'an -> der Balken muss herunterlaufen')
+
+    def test_zu_frueh_losgelassen_faellt_zurueck(self):
+        """Der angefangene Lauf war eine Ankündigung, keine Schaltung."""
+        x, y = self.kasten(8)
+        self.pg.evaluate("() => { _wideCh[8] = 0; updateChannels(_wideCh); }")
+        self.pg.wait_for_timeout(200)
+        self.pg.mouse.move(x, y)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(100)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(400)
+        self.assertEqual(self.pg.evaluate("() => _wideCh[8]"), 0)
+        self.assertEqual(
+            self.pg.evaluate("() => document.getElementById('chBar8').style.height"), '0%')
 
     def test_ziehen_rechnet_die_bewegung(self):
         """Nicht die Position: wer unten auf den Balken tippt, will nicht, dass
@@ -727,7 +786,7 @@ class Lichtkreise(Pruefstand):
 
         self.pg.mouse.move(x, y)
         self.pg.mouse.down()
-        self.pg.wait_for_timeout(2400)
+        self.pg.wait_for_timeout(700)
         self.pg.mouse.up()
         self.pg.wait_for_timeout(400)
         self.assertNotEqual(self.pg.evaluate("() => _wideCh[8]"), vorher)

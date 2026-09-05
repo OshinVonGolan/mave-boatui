@@ -2,6 +2,11 @@
 
 const VISIBLE_CH = [0, 1, 2, 3, 8]; // PWM 1–4 + relay
 
+// Wie schmal ein Balken hoechstens sein darf, damit senkrechte Schrift darin
+// ueberhaupt Sinn ergibt. Darunter ist die Zeile schmaler als die Schrift hoch
+// ist.
+const _CH_NAME_MIN_BREITE_PX = 22;
+
 function buildChannelBars() {
   const row = $('channelsRow'), lbl = $('channelsLabel');
   row.innerHTML = '';
@@ -18,10 +23,7 @@ function buildChannelBars() {
     // der Fuellung und bleibt damit bei jedem Stand lesbar.
     const name = document.createElement('span');
     name.className = 'ch-name'; name.id = `chName${i}`;
-    // Fuer das Halten am Relais: ein Streifen, der in zwei Sekunden volllaeuft.
-    const halten = document.createElement('div');
-    halten.className = 'ch-halten'; halten.id = `chHalten${i}`;
-    wrap.append(bar, halten, name);
+    wrap.append(bar, name);
     row.appendChild(wrap);
   });
   _chGesteBinden(row);
@@ -40,21 +42,54 @@ buildChannelBars();
  * Drei Buchstaben sind die letzte Stufe vor gar nichts: "Kom" laesst sich noch
  * zuordnen, ein abgeschnittenes "Kombüs" sieht nach Fehler aus.
  */
+/**
+ * Die Namen dorthin schreiben, wo sie GANZ hinpassen.
+ *
+ * Zuerst der Versuch im Balken, senkrecht — das sieht gut aus, solange der
+ * ganze Name hineingeht. Muesste auch nur EINER davon auf drei Buchstaben
+ * gekuerzt werden, wandern ALLE unter die Balken: dort stehen sie waagerecht
+ * und werden vom Stylesheet mit Auslassungszeichen gekuerzt, was sich normal
+ * liest. Am Telefon ist die Kachel breit und flach, dort trifft das fast immer
+ * zu; auf dem Wandtablet sind die Balken hoch, dort steht der Name innen.
+ *
+ * Alle oder keiner — eine Reihe, in der zwei Namen innen und drei darunter
+ * stehen, sieht nach Fehler aus.
+ *
+ * Gemessen statt geraten: wie viel hineingeht, haengt an Kachelbreite,
+ * Kanalzahl und Schriftgroesse, und die Kachel aendert ihre Groesse
+ * (Spaltenwahl, Drehen, Kiosk-Raster).
+ */
 function chNamenPassend() {
+  const reihe = $('channelsRow');
+  const unten = $('channelsLabel');
+  if (!reihe) return;
+
+  // Erst hineinschreiben und nachmessen.
+  let innen = true;
   VISIBLE_CH.forEach(i => {
-    const el = $(`chName${i}`);
-    const wrap = el?.parentElement;
+    const el = $(`chName${i}`), wrap = el?.parentElement;
     if (!el || !wrap) return;
     const voll = chName(i);
-    // Ohne Namen bleibt der Balken ein Balken.
-    if (!voll) { el.textContent = ''; return; }
-    // Schmaler als eine Zeile Schrift: da geht senkrecht gar nichts.
-    if (wrap.clientWidth < 18) { el.textContent = ''; return; }
     el.textContent = voll;
+    if (!voll) return;                       // ohne Namen nichts zu pruefen
+    if (wrap.clientWidth < _CH_NAME_MIN_BREITE_PX) { innen = false; return; }
     // Senkrechte Schrift: die Laenge des Textes liegt in der Hoehe.
-    if (el.scrollHeight <= wrap.clientHeight) return;
-    el.textContent = voll.slice(0, 3);
-    if (el.scrollHeight > wrap.clientHeight) el.textContent = '';
+    if (el.scrollHeight > wrap.clientHeight) innen = false;
+  });
+
+  reihe.classList.toggle('namen-innen', innen);
+  if (unten) unten.innerHTML = '';
+  if (innen) return;
+
+  // Passt nicht: alle nach unten.
+  VISIBLE_CH.forEach(i => {
+    const el = $(`chName${i}`);
+    if (el) el.textContent = '';
+    if (!unten) return;
+    const feld = document.createElement('div');
+    feld.className = 'ch-name-unten';
+    feld.textContent = chName(i);
+    unten.appendChild(feld);
   });
 }
 
@@ -89,9 +124,11 @@ window.addEventListener('resize', chNamenPassend);
 
 const _CH_WEG_PX      = 150;   // Fingerweg fuer den ganzen Bereich 0..255
 const _CH_ZUG_AB_PX   = 4;     // darunter ist es ein Tipp, kein Zug
-const _CH_HALTEN_MS   = 1000;  // Relais: so lange halten zum Schalten.
-                               // Zwei Sekunden waren zu lang — dieselbe
-                               // Dauer wie in der Statusleiste.
+// Relais: so lange halten zum Schalten. Erst zwei Sekunden, dann eine, jetzt
+// eine Drittel — dieselbe Dauer wie in der Statusleiste. So kurz vertretbar,
+// weil der Balken vom ersten Moment an mitlaeuft: man SIEHT, dass gerade
+// geschaltet wird, und kann den Finger noch wegnehmen.
+const _CH_HALTEN_MS   = 330;
 
 let _chZug = null;             // {ch, startY, startWert, gezogen}
 let _chKlickSchlucken = false;
@@ -107,16 +144,24 @@ function _chGesteBinden(row) {
     row.classList.add('zieht');
 
     if (ch >= 8) {
-      // Relais: erst nach zwei Sekunden. Ohne die Wartezeit schaltete es
-      // jedes Mal mit, wenn jemand die Detailseite oeffnen wollte.
-      const streifen = $(`chHalten${ch}`);
-      if (streifen) {
-        streifen.style.transition = `height ${_CH_HALTEN_MS}ms linear`;
-        streifen.style.height = '100%';
+      // Relais: erst nach dem Halten. Ohne die Wartezeit schaltete es jedes
+      // Mal mit, wenn jemand die Detailseite oeffnen wollte.
+      //
+      // Die Fuellung laeuft in die Richtung, in die es GEHT: ist das Relais
+      // an, faehrt der Balken herunter; ist es aus, herauf. Man sieht damit
+      // waehrend des Haltens, was gleich passiert, statt nur dass etwas
+      // passiert — und beim Loslassen steht der Balken schon dort, wo der neue
+      // Zustand ihn haben will.
+      const an = (_wideCh[ch] ?? 0) > 0;
+      const bar = $(`chBar${ch}`);
+      if (bar) {
+        bar.style.transition = `height ${_CH_HALTEN_MS}ms linear`;
+        bar.style.height = an ? '0%' : '100%';
       }
+      _chZug.relaisZiel = !an;
       _chZug.halteUhr = setTimeout(() => {
         _chZug && (_chZug.gezogen = true);        // Klick danach schlucken
-        _chHaltenZuruecksetzen(ch);
+        if (_chZug) _chZug.relaisGeschaltet = true;
         if (typeof _toggleRelayFromWide === 'function') _toggleRelayFromWide();
         if (navigator.vibrate) navigator.vibrate(20);
       }, _CH_HALTEN_MS);
@@ -126,7 +171,20 @@ function _chGesteBinden(row) {
   const beenden = e => {
     if (!_chZug) return;
     clearTimeout(_chZug.halteUhr);
-    _chHaltenZuruecksetzen(_chZug.ch);
+    if (_chZug.ch >= 8) {
+      const bar = $(`chBar${_chZug.ch}`);
+      if (bar) {
+        if (_chZug.relaisGeschaltet) {
+          // Geschaltet: der Balken steht schon richtig, er bleibt einfach.
+          bar.style.transition = '';
+        } else {
+          // Losgelassen, bevor es soweit war — zurueck auf den echten Stand.
+          bar.style.transition = 'height .15s ease';
+          const an = (_wideCh[_chZug.ch] ?? 0) > 0;
+          bar.style.height = an ? '100%' : '0%';
+        }
+      }
+    }
     _chKlickSchlucken = _chZug.gezogen;
     _chZug = null;
     row.classList.remove('zieht');
@@ -144,7 +202,15 @@ function _chGesteBinden(row) {
     if (!_chZug.gezogen) {
       _chZug.gezogen = true;
       clearTimeout(_chZug.halteUhr);                // aus Halten wird Ziehen
-      _chHaltenZuruecksetzen(_chZug.ch);
+      if (_chZug.ch >= 8) {
+        // Das Relais bleibt, wo es war: der angefangene Lauf war eine
+        // Ankuendigung, keine Schaltung.
+        const bar = $(`chBar${_chZug.ch}`);
+        if (bar) {
+          bar.style.transition = 'height .15s ease';
+          bar.style.height = (_wideCh[8] ?? 0) > 0 ? '100%' : '0%';
+        }
+      }
     }
     if (_chZug.ch >= 8) return;                     // das Relais kennt kein Dazwischen
     const wert = Math.max(0, Math.min(255,
@@ -168,12 +234,9 @@ function _chGesteBinden(row) {
   }, true);
 }
 
-function _chHaltenZuruecksetzen(ch) {
-  const streifen = $(`chHalten${ch}`);
-  if (!streifen) return;
-  streifen.style.transition = 'height .15s ease';
-  streifen.style.height = '0%';
-}
+// _chHaltenZuruecksetzen und ein eigener Fuellstreifen standen hier. Beide sind
+// entfallen: das Relais benutzt jetzt SEINEN EIGENEN Balken als Anzeige, und
+// der zeigt dabei gleich die Richtung, in die geschaltet wird.
 
 // Aktueller Kanal-Zustand für die Wide-Slider (mit echtem Gerätezustand synchron,
 // damit ein Slider-Move nicht das Relais oder andere Kanäle überschreibt).

@@ -1406,19 +1406,21 @@
       pointer-events: none; user-select: none;
       white-space: nowrap; overflow: hidden;
     }
-    /* Zu schmal fuer Buchstaben: dann lieber nichts als Buchstabensalat. */
-    @media (max-width: 380px) { .ch-name { display: none; } }
 
-    /* Das Relais schaltet erst nach zwei Sekunden Halten. Ohne sichtbares
-       Fuellen fuehlten sich diese zwei Sekunden wie ein Fehler an. */
-    .ch-halten {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 0; z-index: 1;
-      background: color-mix(in srgb, var(--accent) 45%, transparent);
-      pointer-events: none;
+    /* Unter den Balken, wenn diese zu schmal fuer senkrechte Schrift sind
+       (siehe _CH_NAME_INNEN_AB_PX in lights.js). Waagerecht liest sich der
+       Name normal, auch wenn weniger davon zu sehen ist. */
+    .channels-label { display: flex; gap: 5px; margin-top: 5px; }
+    .channels-row.namen-innen + .channels-label { display: none; }
+    .ch-name-unten {
+      flex: 1; min-width: 0; text-align: center;
+      font-size: 10px; font-weight: 600; color: var(--text2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    /* Die Nummernzeile unter den Balken ist entfallen: die Namen stehen jetzt
-       in den Balken, und "1 2 3 4 R" darunter sagte ohnehin niemandem etwas. */
-    .channels-label { display: none; }
+
+    /* Die Nummernzeile unter den Balken ist entfallen: "1 2 3 4 R" sagte
+       ohnehin niemandem etwas. An ihrer Stelle stehen dort jetzt die Namen —
+       aber nur auf schmalen Balken, siehe oben. */
     .divider { height: 1px; background: var(--border); margin: 0 -4px; }
 
     /* ── Full-screen overlay (shared base) ── */
