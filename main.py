@@ -648,6 +648,22 @@ async def broadcast(data: dict):
     if isinstance(gps.get('lat'), (int, float)) and isinstance(gps.get('lon'), (int, float)):
         entry['lat'] = gps['lat']
         entry['lon'] = gps['lon']
+    # Die Zahl der Satelliten gehoert eigenstaendig in den Verlauf. Sie
+    # beantwortet eine andere Frage als die Position: die sagt, WO das Boot lag,
+    # die Satelliten sagen, wie gut der Empfaenger sah — ob der Empfang ueber
+    # Nacht wegbrach oder ob er die ganze Zeit knapp war.
+    #
+    # Nur MIT Fix, und das ist eine Einschraenkung, die man kennen muss:
+    # `_gps_lesen` wirft die ganze Meldung weg, wenn kein Fix zustande kam
+    # (bewusst — eine alte Position, die aussieht wie eine aktuelle, ist auf
+    # einem Boot schlimmer als gar keine). Die Satellitenzahl faellt dabei mit
+    # weg. Im Verlauf fehlen deshalb genau die Zeiten ohne Fix, statt dort eine
+    # kleine Zahl zu zeigen. Das getrennt zu retten hiesse, den Rueckgabewert
+    # von `_gps_lesen` zu aendern — und dann muessten alle Stellen, die "es gibt
+    # eine Position" an dieser Meldung festmachen, gleich mit angefasst werden.
+    sats = gps.get('satelliten')
+    if isinstance(sats, int) and not isinstance(sats, bool):
+        entry['sats'] = sats
     sl = (netz or {}).get('starlink') or {}
     ping = sl.get('ping_ms')
     if isinstance(ping, (int, float)) and not isinstance(ping, bool):

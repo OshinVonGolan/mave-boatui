@@ -468,8 +468,13 @@ function _ampelnBauen(z, v) {
     + _ampel('Batterie', battStufe, soc != null ? soc.toFixed(0) : '—',
              soc != null ? '%' : '', battNeben,
              _wasch(_reihe('soc'), 'var(--green)', 0, 100))
+    // Feste Skala 0…12 statt automatisch: bei einer Skalierung auf die
+    // Spannweite saehe eine Nacht zwischen neun und elf Satelliten aus wie ein
+    // Absturz. Zwoelf ist die Oberkante — mehr sieht der Empfaenger selten, und
+    // was darueber liegt, liegt eben an der Kante.
     + _ampel('GPS', gpsStufe, sats != null ? String(sats) : (pos ? 'Fix' : '—'),
-             sats != null ? 'Sat' : '', gpsNeben)
+             sats != null ? 'Sat' : '', gpsNeben,
+             _wasch(_reihe('sats'), 'var(--blau)', 0, 12))
     + _ampel('Internet', netzStufe, ping != null ? Math.round(ping) : '—',
              ping != null ? 'ms' : '',
              [traegerWort, 'Antwortzeit'].filter(Boolean).join(' · '),
