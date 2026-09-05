@@ -817,5 +817,103 @@ class Lichtkreise(Pruefstand):
             'nach dem Halten soll nicht auch noch die Seite aufgehen')
 
 
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class ZeigerartStattMedienabfrage(Pruefstand):
+    """Das angetippte Feld der Statusleiste darf nicht hell stehen bleiben.
+
+    Der Eigner hat es zweimal gemeldet: nach dem Doppeltipp öffnet sich die
+    Detailseite, und das Feld darunter leuchtet weiter. Der Grund war nicht der
+    Tastaturfokus (der wird längst weggenommen), sondern `:hover` — auf
+    Berührgeräten bleibt der am zuletzt angetippten Element haften, bis man
+    woanders hintippt.
+
+    `@media (hover: hover)` fängt das NICHT ab: iPadOS meldet dort `hover:
+    hover`, obwohl kein Zeiger existiert, und Tablets mit Stift oder
+    angesteckter Tastatur ebenso. Genau diese Lage hat dieser Prüfstand von
+    selbst — ein Chromium am Schreibtisch meldet `hover: hover` und `pointer:
+    fine`, und die Berührung kommt hier als Ereignis mit `pointerType:
+    'touch'` herein. Anders gesagt: die Medienabfrage sagt Maus, das Gerät
+    sagt Finger. Wer der Abfrage glaubt, fällt durch.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.pg.evaluate('(d) => handleData(d)', NUTZLAST)
+        self.pg.wait_for_timeout(200)
+        self.cdp = self.pg.context.new_cdp_session(self.pg)
+        self.cdp.send('DOM.enable')
+        self.cdp.send('CSS.enable')
+
+    # ── Werkzeug ───────────────────────────────────────────────────────────
+
+    def hover_erzwingen(self, sel: str) -> None:
+        """`:hover` setzen, ohne einen Zeiger zu bewegen.
+
+        Mit der Maus hinzufahren würde die Messung zerstören: das Programm
+        merkt sich daran ja gerade, dass ein Zeiger da ist.
+        """
+        wurzel = self.cdp.send('DOM.getDocument')['root']['nodeId']
+        knoten = self.cdp.send('DOM.querySelector',
+                               {'nodeId': wurzel, 'selector': sel})['nodeId']
+        self.cdp.send('CSS.forcePseudoState',
+                      {'nodeId': knoten, 'forcedPseudoClasses': ['hover']})
+
+    def grund(self, sel: str = '#sbBattItem') -> str:
+        return self.pg.evaluate(
+            "(s) => getComputedStyle(document.querySelector(s)).backgroundColor", sel)
+
+    def zeigerart(self) -> str:
+        return self.pg.evaluate("() => document.documentElement.dataset.zeiger")
+
+    def beruehren(self, sel: str = '#sbBattItem') -> None:
+        """Ein Fingertipp, wie ihn das Tablet meldet."""
+        self.pg.evaluate("""(s) => {
+            const z = document.querySelector(s), r = z.getBoundingClientRect();
+            const lage = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+                           bubbles: true, cancelable: true,
+                           pointerId: 7, pointerType: 'touch', isPrimary: true };
+            for (const art of ['pointerdown', 'pointerup'])
+                z.dispatchEvent(new PointerEvent(art, lage));
+            z.click();
+        }""", sel)
+        self.pg.wait_for_timeout(120)
+
+    # ── Prüfungen ──────────────────────────────────────────────────────────
+
+    def test_die_medienabfrage_sagt_hier_maus(self):
+        """Ohne diese Voraussetzung prüft der Rest der Klasse nichts."""
+        self.assertTrue(self.pg.evaluate(
+            "() => matchMedia('(hover: hover) and (pointer: fine)').matches"),
+            'der Prüfstand stellt die Lage nicht mehr nach')
+
+    def test_nach_beruehrung_faerbt_hover_nicht_mehr(self):
+        ruhe = self.grund()
+        self.beruehren()
+        self.assertEqual(self.zeigerart(), 'grob')
+        self.hover_erzwingen('#sbBattItem')
+        self.pg.wait_for_timeout(300)          # die Überblendung abwarten
+        self.assertEqual(self.grund(), ruhe,
+                         'das angetippte Feld leuchtet nach')
+
+    def test_mit_maus_faerbt_hover_weiterhin(self):
+        """Am Schreibtisch ist die Hervorhebung erwünscht — sie muss bleiben."""
+        ruhe = self.grund()
+        self.beruehren()                       # erst auf 'grob' bringen
+        self.pg.mouse.move(600, 400)
+        self.pg.wait_for_timeout(120)
+        self.assertEqual(self.zeigerart(), 'fein')
+        self.hover_erzwingen('#sbBattItem')
+        self.pg.wait_for_timeout(300)
+        self.assertNotEqual(self.grund(), ruhe,
+                            'mit der Maus soll das Feld unter dem Zeiger heller sein')
+
+    def test_beruehrung_bekommt_keine_eigene_hervorhebung(self):
+        """Der Browser malt sonst zusätzlich seine eigene über das Feld."""
+        self.assertEqual(
+            self.pg.evaluate("""() => getComputedStyle(document.getElementById('sbBattItem'))
+                                        .getPropertyValue('-webkit-tap-highlight-color')"""),
+            'rgba(0, 0, 0, 0)')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1375,6 +1375,37 @@ function updateStatusBar(data) {
   _sbRenderWartung();
 }
 
+// ── Womit wird gerade bedient? ──────────────────────────────────────────────
+// Medienabfragen taugen dafuer nicht. iPadOS meldet `hover: hover`, obwohl kein
+// Zeiger existiert; Tablets mit Stift oder angesteckter Tastatur melden es
+// auch. Wer seine Hover-Effekte daran haengt, laesst auf genau diesen Geraeten
+// das zuletzt angetippte Feld hell stehen — dort bleibt `:hover` haften, bis
+// man woanders hintippt, und das ueberlebt sogar eine Detailseite, die sich
+// darueber schiebt.
+//
+// Deshalb: die Medienabfrage nur als erste Vermutung, danach zaehlt, was
+// wirklich passiert ist. `data-zeiger` am Wurzelelement, CSS haengt daran.
+
+function _zeigerartMerken() {
+  const setzen = art => {
+    if (document.documentElement.dataset.zeiger !== art)
+      document.documentElement.dataset.zeiger = art;
+  };
+  // Erste Vermutung, damit eine Maus nicht bis zur ersten Bewegung ohne
+  // Rueckmeldung bleibt.
+  setzen(matchMedia('(hover: hover) and (pointer: fine)').matches ? 'fein' : 'grob');
+
+  // In der Erfassungsphase, damit kein stopPropagation unterwegs die Antwort
+  // verschluckt.
+  addEventListener('pointerdown',
+                   e => setzen(e.pointerType === 'mouse' ? 'fein' : 'grob'), true);
+  // Bewegung ohne Druck kann nur ein Zeiger. Beruehrungen melden hier zwar
+  // ebenfalls `pointermove`, aber nur mit aufliegendem Finger — der Typ
+  // unterscheidet sie trotzdem.
+  addEventListener('pointermove',
+                   e => { if (e.pointerType === 'mouse') setzen('fein'); }, true);
+}
+
 // ── Doppeltipp oeffnet die Detailseite ──────────────────────────────────────
 // Die Felder schalten beim Tippen durch. Der Weg zur Detailseite lief erst
 // ueber langes Druecken — erst zwei Sekunden, dann eine, dann eine Drittel, und
@@ -1399,8 +1430,9 @@ function _sbHaltenBinden() {
   leiste.addEventListener('click', e => {
     const feld = e.target.closest('.sb-item');
     if (!feld) return;
-    // Sonst leuchtet das Feld auf der Detailseite weiter, weil der Knopf den
-    // Tastaturfokus behaelt — sichtbar als heller Block hinter der Seite.
+    // Der Knopf behaelt sonst den Tastaturfokus und traegt seinen Rahmen mit
+    // auf die Detailseite. (Das Nachleuchten des HINTERGRUNDS kam woanders her
+    // — siehe `_zeigerartMerken` weiter oben.)
     feld.blur();
 
     const weiter = window[feld.dataset.weiter];

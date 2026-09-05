@@ -920,12 +920,23 @@
     .sb-item.sb-idle .sb-balken { color: var(--text3); }
     /* Der Inhalt gehoert ueber den Graphen. */
     .sb-lbl, .sb-val, .sb-sub { position: relative; z-index: 1; }
-    /* NUR beim Zeigen, nicht beim Anfassen.
-       `:hover` bleibt auf Beruehrgeraeten am zuletzt angetippten Feld haengen,
-       bis man woanders hintippt — das Feld leuchtete dann dauerhaft heller als
-       seine Nachbarn und sah aus, als waere dort etwas ausgewaehlt. */
-    @media (hover: hover) {
-      .sb-item:hover { background: var(--surface2); }
+    /* NUR mit einem echten Zeiger, nicht beim Anfassen — und die Frage, was
+       gerade benutzt wird, beantwortet `_zeigerartMerken()` in display.js am
+       tatsaechlichen Eingabegeraet, nicht die Medienabfrage.
+
+       Denn `:hover` bleibt auf Beruehrgeraeten am zuletzt angetippten Feld
+       haengen, bis man woanders hintippt: das Feld leuchtete noch, als die
+       Detailseite schon darueber lag. `@media (hover: hover)` fing das nicht
+       ab — iPadOS meldet dort `hover: hover`, obwohl kein Zeiger da ist, und
+       Tablets mit Stift oder angesteckter Tastatur ebenso.
+
+       Darunter zeichnet der Browser zusaetzlich eine eigene Hervorhebung auf
+       das angetippte Element (`-webkit-tap-highlight-color`). Die steht
+       ausserhalb dieser Regeln und wird deshalb getrennt abgeschaltet. */
+    html[data-zeiger="fein"] .sb-item:hover { background: var(--surface2); }
+
+    .sb-item, .card[onclick], .ch-bar-wrap, button {
+      -webkit-tap-highlight-color: transparent;
     }
     .sb-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     /* Zeilenhoehen bewusst in ganzen Pixeln: mit "normal" ist die Zeile
