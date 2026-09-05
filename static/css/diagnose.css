@@ -1066,6 +1066,43 @@ main {
 .es-zeile input:disabled { cursor: default; }
 .es-zeile:has(input:disabled) { cursor: default; opacity: .7; }
 
+/* ── Zeitleiste der Messwerte ───────────────────────────────────────────── */
+/* Zwei Pfeile, zwei Felder, ein Rueckweg ins Jetzt. Bewusst KEIN Ziehbalken
+   ueber dem Graphen: der laesst sich mit der Maus fein bedienen und mit dem
+   Daumen gar nicht, und diese Seite wird auch auf dem Telefon geoeffnet. */
+.zeitleiste {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.zl-pfeil {
+  background: none; border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text2); font-family: inherit; font-size: 15px; line-height: 1;
+  padding: 7px 11px; cursor: pointer;
+}
+.zl-pfeil:hover { border-color: var(--text3); color: var(--text); }
+.zl-navi { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.zl-feld {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--text3); min-width: 0;
+}
+.zl-feld input { min-width: 0; }
+.zl-feld input {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text); font-family: inherit; font-size: 12.5px;
+  padding: 6px 9px; font-variant-numeric: tabular-nums;
+  /* Chrome faerbt das Kalendersymbol schwarz — auf dunklem Grund unsichtbar. */
+  color-scheme: dark;
+}
+.zl-feld input:focus { outline: none; border-color: var(--accent); }
+.zl-hinweis { font-size: 11px; color: var(--text3); margin-left: auto; }
+@media (max-width: 700px) {
+  /* Schmal teilen sich die beiden Datumsfelder eine Zeile; die Knoepfe stehen
+     darueber. Zwei Zeilen statt fuenf. */
+  .zl-feld { flex: 1 1 46%; }
+  .zl-feld > span { display: none; }      /* das Format sagt schon, was gemeint ist */
+  .zl-hinweis { margin-left: 0; flex: 1 1 100%; }
+}
+
 /* ── Aufbau: die Nachschlageseite ───────────────────────────────────────── */
 /* Zum LESEN gebaut, nicht zum Ablesen. Deshalb Fliesstext in Lesebreite statt
    Kacheln, und die Zahlen in Tabellenform mit ihrer Quelle daneben: wer nicht

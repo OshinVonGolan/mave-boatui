@@ -241,6 +241,20 @@ class Speicher:
         return [{'folge': z['folge'], 'zeit': z['zeit'], **json.loads(z['daten'])}
                 for z in reversed(zeilen)]
 
+    def verlauf_zeitraum(self) -> dict:
+        """Von wann bis wann ueberhaupt Verlauf vorliegt.
+
+        Damit die Oberflaeche einen Zeitraum ANBIETEN kann, statt ins Leere
+        blaettern zu lassen. Geparkte Eintraege (ohne Zeitbezug, weil die Uhr
+        des Bootes beim Aufschreiben noch nicht stand) bleiben aussen vor — sie
+        haben keinen Platz auf einer Zeitachse, solange sie nicht eingeordnet
+        sind.
+        """
+        z = self._db.execute(
+            'SELECT MIN(zeit) AS a, MAX(zeit) AS b, COUNT(*) AS n '
+            'FROM verlauf WHERE zeit IS NOT NULL').fetchone()
+        return {'von': z['a'], 'bis': z['b'], 'anzahl': int(z['n'] or 0)}
+
     def geparkt_anzahl(self) -> int:
         return self._db.execute('SELECT COUNT(*) AS n FROM geparkt').fetchone()['n']
 

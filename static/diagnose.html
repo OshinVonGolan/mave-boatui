@@ -216,10 +216,30 @@
             <button class="zw-knopf an" data-std="24">24 Std</button>
             <button class="zw-knopf" data-std="168">7 Tage</button>
             <button class="zw-knopf" data-std="720">30 Tage</button>
+            <button class="zw-knopf" data-alles="1">alles</button>
           </div>
           <button class="knopf stumm" onclick="exportOeffnen()">Daten holen</button>
         </div>
       </div>
+      <!-- Die drei Knoepfe stehen beieinander und nicht um die Felder herum:
+           beim Umbrechen auf schmalen Schirmen bekaeme sonst jedes Element
+           seine eigene Zeile, und die Leiste waere fuenf Zeilen hoch. So
+           bleibt sie zwei. -->
+      <div class="zeitleiste">
+        <div class="zl-navi">
+          <button class="zl-pfeil" onclick="messSchieben(-1)"
+                  title="einen Zeitraum zurück" aria-label="zurück">‹</button>
+          <button class="zl-pfeil" onclick="messSchieben(1)"
+                  title="einen Zeitraum vor" aria-label="vor">›</button>
+          <button class="zw-knopf" id="messJetzt" onclick="messJetzt()">jetzt</button>
+        </div>
+        <label class="zl-feld"><span>von</span>
+          <input type="datetime-local" id="messVon" onchange="messSpanne()"></label>
+        <label class="zl-feld"><span>bis</span>
+          <input type="datetime-local" id="messBis" onchange="messSpanne()"></label>
+        <span class="zl-hinweis" id="messVorhanden"></span>
+      </div>
+
       <section class="tafel">
         <div class="reihen-kopf">
           <span class="hinweis" id="messStand"></span>

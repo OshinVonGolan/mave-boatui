@@ -193,6 +193,38 @@ class LueckenDeutung(Basis):
         self.assertIn('nicht Buch', l['grund'])
 
 
+class VerlaufZeitraum(Basis):
+    """Von wann bis wann Verlauf vorliegt.
+
+    Die Oberflaeche braucht das, um einen Zeitraum ANZUBIETEN, statt ins Leere
+    blaettern zu lassen.
+    """
+
+    def test_leer_heisst_leer_und_nicht_null(self):
+        # None und nicht 0: eine Null waere der 01.01.1970 und die Oberflaeche
+        # boete siebenundfuenfzig Jahre Nichts zum Durchblaettern an.
+        self.assertEqual(self.s.verlauf_zeitraum(),
+                         {'von': None, 'bis': None, 'anzahl': 0})
+
+    def test_erster_und_letzter_eintrag(self):
+        self.s.verlauf_anhaengen([
+            {'folge': 1, 'zeit': JETZT, 'daten': {'v': 1}},
+            {'folge': 2, 'zeit': JETZT + 3600, 'daten': {'v': 2}},
+            {'folge': 3, 'zeit': JETZT - 60, 'daten': {'v': 3}},   # nachgeliefert
+        ])
+        self.assertEqual(self.s.verlauf_zeitraum(),
+                         {'von': JETZT - 60, 'bis': JETZT + 3600, 'anzahl': 3})
+
+    def test_geparkte_zaehlen_nicht_mit(self):
+        # Ein Eintrag ohne Zeitbezug hat keinen Platz auf einer Zeitachse.
+        self.s.verlauf_anhaengen([
+            {'folge': 1, 'zeit': JETZT, 'daten': {'v': 1}},
+            {'folge': 2, 'mono': 30.0, 'daten': {'v': 2}},
+        ])
+        z = self.s.verlauf_zeitraum()
+        self.assertEqual((z['von'], z['bis'], z['anzahl']), (JETZT, JETZT, 1))
+
+
 class MerkerUndAlarme(Basis):
     """Die Ablage hinter dem Alarmvorhang im Logbuch.
 

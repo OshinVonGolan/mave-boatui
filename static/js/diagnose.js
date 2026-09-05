@@ -159,7 +159,20 @@ async function start() {
   $('messZeit').addEventListener('click', e => {
     const k = e.target.closest('.zw-knopf');
     if (!k) return;
-    _messStd = Number(k.dataset.std);
+    if (k.dataset.alles) {
+      // Der ganze vorhandene Verlauf. Die Grenzen kommen vom Server, nicht aus
+      // einer geratenen Zahl — sonst boete der Knopf Zeitraeume an, in denen
+      // nie etwas aufgeschrieben wurde.
+      const z = (_daten.diagnose || {}).verlauf_zeitraum || {};
+      if (z.von && z.bis) {
+        _messDauer = Math.max(3600, z.bis - z.von);
+        _messBis = z.bis;
+        _messFolgt = false;
+      }
+    } else {
+      _messDauer = Number(k.dataset.std) * 3600;
+      _messFolgt = true;
+    }
     $('messZeit').querySelectorAll('.zw-knopf').forEach(b => b.classList.toggle('an', b === k));
     messwerteLaden();
   });
@@ -2367,18 +2380,37 @@ const GRUPPEN = [
              { f: 'rt_cpu', n: 'Last', farbe: '#fbbf24' }] },
 ];
 
-let _messStd = 24;
+// Der gezeigte Zeitraum.
+//
+// Vorher stand hier nur "die letzten N Stunden". Das genuegt, solange man
+// ausschliesslich vorwaerts lebt — sobald man blaettern oder ein Datum eingeben
+// kann, ist "jetzt minus X" keine Beschreibung mehr, sondern eine Bewegung.
+// Deshalb ein echtes Fenster aus zwei Zeitpunkten.
+//
+// `_messFolgt` ist der Unterschied zwischen beidem: solange es gilt, haengt das
+// Fenster am rechten Rand und wandert beim Nachladen mit. Wer blaettert oder
+// ein Datum eintraegt, loest es — sonst risse ihn der Zwei-Minuten-Takt jedes
+// Mal zurueck in die Gegenwart, mitten im Hinsehen.
+let _messDauer = 24 * 3600;    // Breite des Fensters in Sekunden
+let _messBis   = null;         // rechter Rand; null heisst "jetzt"
+let _messFolgt = true;
 let _messDaten = null;
 let _aus = new Set();          // abgewählte Gruppen
 
+/** Das Fenster als Sekundenpaar — die einzige Stelle, die das ausrechnet. */
+function _messFenster() {
+  const bis = _messFolgt ? Date.now() / 1000 : _messBis;
+  return { von: Math.floor(bis - _messDauer), bis: Math.ceil(bis) };
+}
+
 async function messwerteLaden() {
-  const bis = Date.now() / 1000;
-  const von = bis - _messStd * 3600;
+  const { von, bis } = _messFenster();
   const feld = $('reihen');
   feld.innerHTML = '<div class="mess-leer">wird geladen…</div>';
-  const d = await hole(`/api/verlauf/reihen?von=${Math.floor(von)}&bis=${Math.ceil(bis)}&punkte=700`);
+  const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=700`);
   if (!d) { feld.innerHTML = '<div class="mess-leer">Keine Daten abrufbar.</div>'; return; }
   _messDaten = d;
+  zeichneZeitleiste();
   zeichneMesswerte();
 }
 
@@ -2554,9 +2586,101 @@ function gruppeUmschalten(schluessel) {
   zeichneMesswerte();
 }
 
+// ── Die Zeitleiste ─────────────────────────────────────────────────────────
+// Blaettern, Datum eintragen, zurueck ins Jetzt. Bewusst KEIN Ziehbalken ueber
+// dem Graphen: der laesst sich mit der Maus fein bedienen und mit dem Daumen
+// gar nicht, und diese Seite wird auch auf dem Telefon geoeffnet. Zwei Pfeile
+// und zwei Felder koennen beide.
+
+/** Sekunden -> "2026-09-05T18:30" fuer ein datetime-local-Feld. */
+function _fuerFeld(s) {
+  const d = new Date(s * 1000);
+  // Ortszeit, nicht UTC: das Feld zeigt sie so an, und toISOString() waere um
+  // die Zeitzone verschoben — im Sommer um zwei Stunden.
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+       + `T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Die Felder und den Hinweis auf den Stand des Fensters bringen. */
+function zeichneZeitleiste() {
+  const { von, bis } = _messFenster();
+  const v = $('messVon'), b = $('messBis');
+  // Nicht ueberschreiben, waehrend jemand darin tippt — sonst springt ihm die
+  // Eingabe unter den Fingern weg, sobald der Zwei-Minuten-Takt nachlaedt.
+  if (v && document.activeElement !== v) v.value = _fuerFeld(von);
+  if (b && document.activeElement !== b) b.value = _fuerFeld(bis);
+  const j = $('messJetzt');
+  if (j) j.classList.toggle('an', _messFolgt);
+
+  const feld = $('messVorhanden');
+  if (!feld) return;
+  const z = (_daten.diagnose || {}).verlauf_zeitraum || {};
+  feld.textContent = (z.von && z.bis)
+    ? `vorhanden ab ${zeitpunkt(z.von)}`
+    : '';
+}
+
+/**
+ * Um ein ganzes Fenster vor oder zurueck.
+ *
+ * Um die eigene Breite und nicht um einen festen Tag: wer sechs Stunden
+ * ansieht, will sechs Stunden weiter, und wer dreissig Tage ansieht, dreissig.
+ */
+function messSchieben(richtung) {
+  const { bis } = _messFenster();
+  const neu = bis + richtung * _messDauer;
+  const jetzt = Date.now() / 1000;
+  // Ueber die Gegenwart hinaus gibt es nichts. Dort heftet es sich wieder an —
+  // dann laeuft die Anzeige weiter mit, statt an einem toten Rand zu stehen.
+  if (neu >= jetzt) {
+    _messFolgt = true;
+    _messBis = null;
+  } else {
+    _messFolgt = false;
+    _messBis = neu;
+  }
+  _voreinstellungLoesen();
+  messwerteLaden();
+}
+
+/** Zurueck an den rechten Rand. */
+function messJetzt() {
+  _messFolgt = true;
+  _messBis = null;
+  messwerteLaden();
+}
+
+/** Zwei eingetragene Zeitpunkte uebernehmen. */
+function messSpanne() {
+  const v = Date.parse($('messVon').value) / 1000;
+  const b = Date.parse($('messBis').value) / 1000;
+  if (!isFinite(v) || !isFinite(b)) return;
+  if (b <= v) {
+    // Umgekehrt eingetragen. Nicht kommentarlos tauschen und auch nicht stumm
+    // verwerfen — die Felder zeigen wieder, was wirklich gilt.
+    zeichneZeitleiste();
+    return;
+  }
+  _messDauer = b - v;
+  _messBis = b;
+  // Reicht das Fenster bis in die Gegenwart, laeuft es weiter mit.
+  _messFolgt = b >= Date.now() / 1000 - 60;
+  _voreinstellungLoesen();
+  messwerteLaden();
+}
+
+/** Keine der Voreinstellungen trifft mehr zu — dann soll auch keine leuchten. */
+function _voreinstellungLoesen() {
+  const w = $('messZeit');
+  if (!w) return;
+  const passt = [...w.querySelectorAll('.zw-knopf')].find(
+    k => _messFolgt && !k.dataset.alles && Number(k.dataset.std) * 3600 === _messDauer);
+  w.querySelectorAll('.zw-knopf').forEach(k => k.classList.toggle('an', k === passt));
+}
+
 function exportOeffnen() {
-  const bis = Math.ceil(Date.now() / 1000);
-  const von = Math.floor(bis - _messStd * 3600);
+  const { von, bis } = _messFenster();
   popZeigen(`
     <div class="pop-titel">Daten holen</div>
     <p style="color:var(--text2);font-size:13px;line-height:1.5;margin:0 0 16px">

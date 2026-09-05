@@ -1118,6 +1118,7 @@ def verlauf_export(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
 def diagnose(k: dict = Depends(braucht_oberflaeche(r.DIAGNOSE))) -> JSONResponse:
     return JSONResponse({
         'verlauf_stand': speicher.verlauf_stand(),
+        'verlauf_zeitraum': speicher.verlauf_zeitraum(),
         'geparkt': speicher.geparkt_anzahl(),
         'sitzungen': speicher.sitzungen(seit=time.time() - 30 * 86400),
         'ereignisse': speicher.ereignisse(grenze=50),
