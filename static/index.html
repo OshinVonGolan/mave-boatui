@@ -86,12 +86,6 @@
          Einstellungen und der Burger — und zwei Menues, die sich gegenseitig
          ueberlagerten, wenn beide offen waren. -->
 
-    <!-- Wandbetrieb: Bildschirm anlassen (nur wo ein Geraet fest haengt) und
-         Nachtmodus. Inhalt aus wandbetrieb.js — was hier steht, haengt vom
-         Geraet ab, und zwei Faelle in HTML vorzuhalten hiesse, sie doppelt zu
-         pflegen. -->
-    <div class="wand-knoepfe" id="wandKnoepfe"></div>
-
     <!-- EINE Anzeige fuer die Verbindung, nicht drei. Vorher sagte der Chip
          woher die Daten kommen, ein Punkt daneben ob der Draht steht und eine
          Antenne wie gut das Internet ist — drei Zeichen fuer eine Frage.
@@ -99,6 +93,13 @@
     <button class="quelle-chip neutral" id="quelleChip" onclick="toggleQuelle(event)"
             title="Verbindung"></button>
     <div class="quelle-pop hidden" id="quellePop"></div>
+
+    <!-- Wandbetrieb: Bildschirm anlassen (nur wo ein Geraet fest haengt) und
+         Nachtmodus. Steht zwischen Verbindung und Alarmen — links davon, was
+         von aussen kommt, rechts davon, was Aufmerksamkeit verlangt; dazwischen
+         die beiden Schalter fuer den Bildschirm, vor dem man gerade steht.
+         Inhalt aus wandbetrieb.js: was hier erscheint, haengt vom Geraet ab. -->
+    <div class="wand-knoepfe" id="wandKnoepfe"></div>
 
     <!-- Die Alarme bleiben. Ein Alarm, den man erst in einem Menue findet,
          ist kein Alarm — deshalb steht er hier UND nicht im Menue. -->

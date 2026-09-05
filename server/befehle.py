@@ -102,7 +102,18 @@ class Vermittlung:
     def verbunden(self, ws) -> None:
         self._ws = ws
 
-    def getrennt(self) -> None:
+    def getrennt(self, ws=None) -> None:
+        """Die Leitung ist weg.
+
+        Mit `ws` sagt der Aufrufer, WELCHE — und dann wird nur aufgeraeumt,
+        wenn es noch die aktuelle ist. Ohne diese Pruefung riss ein
+        Verbindungsabbruch, auf den der Pi sofort neu verbindet, die frische
+        Leitung gleich mit: das Aufraeumen der alten laeuft NACH dem Aufbau der
+        neuen, und es setzte `_ws` bedingungslos auf None. Danach stand die
+        Vermittlung still, obwohl ueber die neue Leitung Daten hereinkamen.
+        """
+        if ws is not None and self._ws is not ws:
+            return
         self._ws = None
         # Wer noch wartet, wartet umsonst — das gehoert gesagt, nicht
         # ausgesessen, sonst haengt die Oberflaeche bis zur Frist.

@@ -302,6 +302,91 @@ class ImBrowser(unittest.TestCase):
         finally:
             seite.close()
 
+    # ── In welchem Modus die Seite laeuft ──────────────────────────────────
+
+    def test_im_browser_erkannt(self):
+        """Ohne Installation ist es ein Browser — und dann endet ein ueber das
+        Menue geholter Vollbild beim Sperren. Genau das muss die Seite sagen
+        koennen, sonst sieht man ihr den Unterschied nicht an."""
+        lage = self.pg.evaluate('() => wandLage()')
+        self.assertEqual(lage['art'], 'browser')
+        self.assertFalse(lage['gut'])
+        self.assertIn('endet', lage['folge'])
+
+    def test_vollbild_installation_erkannt(self):
+        """Im installierten Vollbild ist die Sache erledigt — dann darf die
+        Seite nichts mehr anmahnen."""
+        seite = self._browser.new_page()
+        try:
+            seite.emulate_media(media='screen')
+            seite.add_init_script("""
+                const echt = window.matchMedia;
+                window.matchMedia = q => q.includes('display-mode: fullscreen')
+                    ? { matches: true, addEventListener() {}, addListener() {} }
+                    : echt.call(window, q);
+            """)
+            seite.route('**/*', lambda route: route.fulfill(
+                status=200, content_type='text/html',
+                body='<div id="wandKnoepfe"></div>'))
+            seite.goto('http://mave.pruefstand/wand')
+            seite.add_script_tag(content=(JS / 'wandbetrieb.js').read_text())
+            lage = seite.evaluate('() => wandLage()')
+            self.assertEqual(lage['art'], 'fullscreen')
+            self.assertTrue(lage['gut'])
+            seite.evaluate('() => wandStart()')
+            self.assertIsNone(seite.query_selector('#wandBand'))
+        finally:
+            seite.close()
+
+    def test_band_nur_auf_wand(self):
+        """Auf der normalen Seite hat der Hinweis nichts zu suchen — dort ist
+        die Bordansicht das Thema, nicht ihre Installation."""
+        self.pg.evaluate('() => wandStart()')
+        self.assertIsNone(self.pg.query_selector('#wandBand'))
+
+    def test_band_auf_wand_mit_angebot(self):
+        seite = self._browser.new_page()
+        try:
+            seite.route('**/*', lambda route: route.fulfill(
+                status=200, content_type='text/html',
+                body='<div id="wandKnoepfe"></div>'))
+            seite.goto('http://mave.pruefstand/wand')
+            seite.add_script_tag(content=(JS / 'wandbetrieb.js').read_text())
+            seite.evaluate('() => wandStart()')
+            band = seite.query_selector('#wandBand')
+            self.assertIsNotNone(band, 'Auf /wand fehlt der Hinweis')
+            self.assertIn('Wandfassung', band.inner_html())
+            # Ohne Angebot von Chrome kein Knopf, der nichts tut — dann der Weg
+            # ueber das Browsermenue.
+            self.assertNotIn('wandInstallieren()', band.inner_html())
+            self.assertIn('Startbildschirm', band.inner_html())
+            # Meldet sich Chrome doch, wird daraus ein richtiger Knopf.
+            seite.evaluate("""() => {
+                _installAngebot = { prompt() {}, userChoice: Promise.resolve({}) };
+                _wandBandSetzen();
+            }""")
+            self.assertIn('wandInstallieren()',
+                          seite.query_selector('#wandBand').inner_html())
+        finally:
+            seite.close()
+
+    def test_band_laesst_sich_wegklicken(self):
+        seite = self._browser.new_page()
+        try:
+            seite.route('**/*', lambda route: route.fulfill(
+                status=200, content_type='text/html',
+                body='<div id="wandKnoepfe"></div>'))
+            seite.goto('http://mave.pruefstand/wand')
+            seite.add_script_tag(content=(JS / 'wandbetrieb.js').read_text())
+            seite.evaluate('() => wandStart()')
+            seite.click('#wandBand .wb-zu')
+            self.assertIsNone(seite.query_selector('#wandBand'))
+            # Und bleibt weg, auch wenn sich sonst etwas aendert.
+            seite.evaluate('() => _wandBandSetzen()')
+            self.assertIsNone(seite.query_selector('#wandBand'))
+        finally:
+            seite.close()
+
     def test_ohne_wandgeraet_nur_der_mond(self):
         """Der Wachschalter ist fuer fest montierte Geraete. Der Nachtmodus
         gilt ueberall — nachts sitzt man genauso am Laptop am Kartentisch."""

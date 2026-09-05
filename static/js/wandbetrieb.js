@@ -274,6 +274,126 @@ function _wandKnopfSetzen() {
   feld.innerHTML = html;
 }
 
+// ── Wie diese Seite gerade laeuft ──────────────────────────────────────────
+//
+// Der Vollbild-Schalter im Menue holt sich den Vollbild ueber die
+// Fullscreen-API. Der ist ein VORUEBERGEHENDER Zustand: sperrt sich das Tablet,
+// ist er weg, und zurueckholen darf ihn nur ein Fingergriff — keine Seite darf
+// das von sich aus. Dauerhaft geht es nur ueber eine INSTALLIERTE Anwendung mit
+// `display: fullscreen` im Manifest; die startet immer ohne Leisten, auch nach
+// dem Entsperren.
+//
+// Der Haken daran war bisher: man sieht der Seite nicht an, welcher der beiden
+// Faelle vorliegt. Wer /wand im Browser aufmacht, bekommt exakt dieselbe Seite
+// zu sehen wie vorher und haelt die Sache fuer erledigt. Deshalb sagt es die
+// Anwendung jetzt selbst — und bietet die Installation gleich mit an, statt auf
+// das richtige Menue im Browser zu hoffen.
+
+const _WAND_ADRESSE = '/wand';
+
+function anzeigeArt() {
+  for (const art of ['fullscreen', 'standalone', 'minimal-ui']) {
+    if (matchMedia(`(display-mode: ${art})`).matches) return art;
+  }
+  if (window.navigator.standalone) return 'standalone';   // iOS kennt das andere nicht
+  return 'browser';
+}
+
+const _ART_TEXT = {
+  fullscreen:   'als eigene App im Vollbild',
+  standalone:   'als eigene App',
+  'minimal-ui': 'als eigene App mit schmaler Leiste',
+  browser:      'im Browser',
+};
+
+/** Ein Satz darueber, wie es gerade laeuft — und was das fuer das Sperren heisst. */
+function wandLage() {
+  const art = anzeigeArt();
+  const gut = art === 'fullscreen';
+  return {
+    art, gut,
+    text: _ART_TEXT[art] || art,
+    folge: gut
+      ? 'Der Vollbild übersteht das Sperren.'
+      : 'Ein über das Menü geholter Vollbild endet, sobald der Bildschirm gesperrt wird.',
+    kannInstallieren: !!_installAngebot,
+  };
+}
+
+// Chrome meldet sich, wenn die Anwendung installierbar ist. Das Ereignis kommt
+// genau einmal und muss aufgehoben werden — spaeter laesst es sich nicht mehr
+// herbeirufen.
+let _installAngebot = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _installAngebot = e;
+  _wandBandSetzen();
+  if (typeof _dspWandStand === 'function') _dspWandStand();
+});
+
+window.addEventListener('appinstalled', () => {
+  _installAngebot = null;
+  _wandBandSetzen();
+  if (typeof _dspWandStand === 'function') _dspWandStand();
+  _wandSagen('Installiert — die App startet ab jetzt im Vollbild');
+});
+
+/** Chromes eigenen Installationsdialog oeffnen. */
+async function wandInstallieren() {
+  if (!_installAngebot) {
+    _wandSagen('Dieser Browser bietet die Installation nicht von sich aus an');
+    return;
+  }
+  const angebot = _installAngebot;
+  _installAngebot = null;                 // ein Angebot laesst sich nur einmal zeigen
+  try {
+    angebot.prompt();
+    const { outcome } = await angebot.userChoice;
+    if (outcome !== 'accepted') _wandSagen('Nicht installiert');
+  } catch (e) {
+    console.debug('Installation nicht moeglich:', e && e.message);
+  }
+  _wandBandSetzen();
+  if (typeof _dspWandStand === 'function') _dspWandStand();
+}
+
+// ── Das Band auf /wand ─────────────────────────────────────────────────────
+// Nur dort, und nur solange die Sache nicht erledigt ist. Wer /wand aufruft,
+// will genau eine Auskunft: bin ich jetzt fertig oder nicht.
+
+let _bandWeg = false;
+
+function wandBandSchliessen() {
+  _bandWeg = true;
+  document.getElementById('wandBand')?.remove();
+}
+
+function _wandBandSetzen() {
+  const soll = location.pathname === _WAND_ADRESSE && !_bandWeg
+               && anzeigeArt() !== 'fullscreen';
+  let band = document.getElementById('wandBand');
+  if (!soll) { band?.remove(); return; }
+  if (!band) {
+    band = document.createElement('div');
+    band.id = 'wandBand';
+    document.body.appendChild(band);
+  }
+  const lage = wandLage();
+  band.innerHTML = `
+    <div class="wb-text">
+      <b>Wandfassung</b> — läuft gerade ${lage.text}.
+      ${lage.folge}
+    </div>
+    ${_installAngebot
+      ? '<button type="button" class="wb-haupt" onclick="wandInstallieren()">'
+        + 'Als Vollbild-App installieren</button>'
+      : '<div class="wb-weg-text">Über das Browsermenü „Zum Startbildschirm '
+        + 'hinzufügen“ installieren.</div>'}
+    <button type="button" class="wb-zu" onclick="wandBandSchliessen()"
+            aria-label="Hinweis schließen">✕</button>`;
+}
+
 function wandStart() {
   _wandLaden();
   if (_wand.nacht === 'an') nachtSetzen(true);
@@ -284,5 +404,6 @@ function wandStart() {
   _nachtUhr = setInterval(_nachtPruefen, 300000);
   if (_wand.wachhalten) _wachHolen();
   _wandKnopfSetzen();
+  _wandBandSetzen();
   window.addEventListener('resize', _wandKnopfSetzen);
 }

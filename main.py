@@ -814,6 +814,38 @@ def _durchgereicht(request: Request):
     return konten.konto_nach_name(name)
 
 
+# Loopback-Adressen. Steht hier eine davon in `request.client.host`, sitzt der
+# Aufrufer nicht wirklich dort — dann steht ein Gegenstueck auf demselben
+# Rechner davor und reicht weiter.
+_EIGENER_RECHNER = ('127.0.0.1', '::1', '::ffff:127.0.0.1')
+
+
+def _herkunft_vom_client(request: Request) -> str:
+    """Die Adresse, von der eine Sitzung wirklich kommt.
+
+    Seit auf dem Pi nginx die Verschluesselung uebernimmt und an uvicorn
+    weiterreicht, ist `request.client.host` fuer JEDE Sitzung ueber HTTPS
+    127.0.0.1. Damit stand in der Anwesenheitsliste bei allen dasselbe, und der
+    Abgleich gegen die Geraeteliste des Routers konnte gar nicht treffen — die
+    kennt Bordadressen, keine Loopback-Adresse.
+
+    Der weitergereichten Adresse wird NUR geglaubt, wenn der unmittelbare
+    Gegenueber der eigene Rechner ist. Sonst duerfte sich jeder im Bordnetz mit
+    einem selbstgeschriebenen Kopf eine beliebige Herkunft geben — und die
+    Herkunft entscheidet mit darueber, wie eine Sitzung angezeigt wird.
+
+    Reicht uvicorn die Adresse schon selbst durch (--proxy-headers ist seine
+    Vorgabe), steht sie hier bereits richtig und dieser Weg greift nicht.
+    """
+    direkt = request.client.host if request.client else ''
+    if direkt not in _EIGENER_RECHNER:
+        return direkt
+    # X-Forwarded-For kann eine Kette sein; der erste Eintrag ist der Ursprung.
+    kette = request.headers.get('x-forwarded-for', '')
+    erster = kette.split(',')[0].strip()
+    return erster or (request.headers.get('x-real-ip', '') or '').strip() or direkt
+
+
 @app.post('/api/login')
 async def login(request: Request):
     """Anmelden — gegen die Kontenkopie, die vom Server kam.
@@ -827,7 +859,7 @@ async def login(request: Request):
         token, k = konten.anmelden(
             str(daten.get('name', '')), str(daten.get('passwort', '')),
             kiosk=bool(daten.get('kiosk')),
-            herkunft=(request.client.host if request.client else ''),
+            herkunft=_herkunft_vom_client(request),
             geraet=zg.geraet_aus_ua(request.headers.get('user-agent', '')))
     except Exception as e:
         log.warning('Anmeldung an Bord gescheitert für %r', daten.get('name'))
@@ -841,7 +873,7 @@ async def login(request: Request):
         asyncio.create_task(sync.sitzung_melden(kennung, {
             'konto': k['name'], 'seit': time.time(), 'zuletzt': time.time(),
             'kiosk': bool(daten.get('kiosk')),
-            'herkunft': (request.client.host if request.client else ''),
+            'herkunft': _herkunft_vom_client(request),
             'geraet': zg.geraet_aus_ua(request.headers.get('user-agent', '')),
         }))
     except Exception as e:

@@ -296,12 +296,25 @@ async def sync(ws: WebSocket) -> None:
     except Exception:
         log.exception('Verbindung zum Boot abgebrochen')
     finally:
-        _vermittlung.getrennt()
-        _verbindung.update(sitzung=None, seit=None)
-        # Den offenen Oberflaechen sagen, dass ab jetzt nur noch die Kopie
-        # gilt. Ohne das zeigen sie weiter Live-Werte und bieten Schalter an,
-        # die niemand mehr entgegennimmt.
-        await _an_zuschauer(_stand_fuer_zuschauer())
+        # Nur aufraeumen, wenn DIESE Verbindung noch die aktuelle ist.
+        #
+        # Reisst die Leitung ab und der Pi ist sofort wieder da — bei Mobilfunk
+        # der Normalfall —, laeuft dieser Block NACH dem hallo der neuen
+        # Verbindung. Bedingungslos ausgefuehrt erklaerte er sie fuer tot: das
+        # Logbuch zeigte "Das Boot ist nicht verbunden" ueber Werten, die zwei
+        # Sekunden alt waren, und die Fernwartung nahm keine Befehle mehr an.
+        # Erst der naechste echte Abbruch haette das geheilt.
+        _vermittlung.getrennt(ws)
+        # Nur der Vergleich, kein Sonderfall fuer `sitzung is None`: eine
+        # Verbindung, die vor dem hallo stirbt, darf den Zustand einer anderen
+        # nicht loeschen. Steht ohnehin nichts da, ist der Vergleich wahr und
+        # das Zuruecksetzen ein Nichts.
+        if _verbindung['sitzung'] == sitzung:
+            _verbindung.update(sitzung=None, seit=None)
+            # Den offenen Oberflaechen sagen, dass ab jetzt nur noch die Kopie
+            # gilt. Ohne das zeigen sie weiter Live-Werte und bieten Schalter
+            # an, die niemand mehr entgegennimmt.
+            await _an_zuschauer(_stand_fuer_zuschauer())
 
 
 async def _hallo(ws: WebSocket, n: dict) -> int:

@@ -147,6 +147,56 @@ class GeraetenamenAusDemRouter(unittest.TestCase):
         self.assertEqual(namen, {})
 
 
+class HerkunftHinterDemWeiterreicher(unittest.TestCase):
+    """Von welcher Adresse eine Sitzung wirklich kommt.
+
+    Seit nginx auf dem Pi die Verschluesselung uebernimmt, steht in
+    `request.client.host` bei jeder HTTPS-Sitzung 127.0.0.1 — und damit trifft
+    der Abgleich gegen die Geraeteliste des Routers nie.
+    """
+
+    class _Anfrage:
+        def __init__(self, direkt, kopfzeilen=None):
+            self.client = type('C', (), {'host': direkt})() if direkt else None
+            self.headers = kopfzeilen or {}
+
+    def _herkunft(self, direkt, kopfzeilen=None):
+        import main
+        return main._herkunft_vom_client(self._Anfrage(direkt, kopfzeilen))
+
+    def test_direkte_verbindung_bleibt_wie_sie_ist(self):
+        self.assertEqual(self._herkunft('192.168.1.196'), '192.168.1.196')
+
+    def test_hinter_dem_weiterreicher_zaehlt_der_weitergereichte_wert(self):
+        self.assertEqual(
+            self._herkunft('127.0.0.1', {'x-forwarded-for': '192.168.1.196'}),
+            '192.168.1.196')
+
+    def test_aus_einer_kette_der_erste(self):
+        self.assertEqual(
+            self._herkunft('::1', {'x-forwarded-for': '192.168.1.196, 10.0.0.1'}),
+            '192.168.1.196')
+
+    def test_x_real_ip_als_zweiter_weg(self):
+        self.assertEqual(self._herkunft('127.0.0.1', {'x-real-ip': '192.168.1.155'}),
+                         '192.168.1.155')
+
+    def test_fremder_kopf_wird_nicht_geglaubt(self):
+        # Der Gegenueber ist NICHT der eigene Rechner. Wuerde der Kopf hier
+        # zaehlen, koennte sich jeder im Bordnetz eine beliebige Herkunft geben.
+        self.assertEqual(
+            self._herkunft('192.168.1.9', {'x-forwarded-for': '192.168.1.196'}),
+            '192.168.1.9')
+
+    def test_ohne_kopf_bleibt_die_loopback_adresse_stehen(self):
+        # Lieber ehrlich 127.0.0.1 als eine erfundene Adresse: dann sieht man
+        # in der Liste, dass der Weiterreicher nichts durchgibt.
+        self.assertEqual(self._herkunft('127.0.0.1'), '127.0.0.1')
+
+    def test_ohne_gegenueber_leer(self):
+        self.assertEqual(self._herkunft(None), '')
+
+
 class Wartungsstand(unittest.TestCase):
     """Wie viele Aufgaben ueberfaellig oder bald faellig sind.
 

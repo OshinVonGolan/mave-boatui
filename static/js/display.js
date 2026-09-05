@@ -176,7 +176,7 @@ function _kachelbreite(spalten) {
   const main = document.querySelector('main');
   if (!main || spalten < 1) return 0;
   const cs = getComputedStyle(main);
-  const gap = parseFloat(cs.columnGap) || 16;
+  const gap = parseFloat(cs.columnGap) || 10;   // Rueckfall = --gap in style.css
   const innen = main.clientWidth - (parseFloat(cs.paddingLeft) || 0)
                                  - (parseFloat(cs.paddingRight) || 0);
   return Math.round((innen - (spalten - 1) * gap) / spalten);
@@ -506,12 +506,12 @@ function _applyGrid() {
 
   main.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
-  let rowH = 0, gap = 16, massstab = 1;
+  let rowH = 0, gap = 10, massstab = 1;        // Rueckfall = --gap in style.css
   if (cols === 1) {
     main.style.gridAutoRows = 'auto';
   } else {
     const cs    = getComputedStyle(main);
-    gap         = parseFloat(cs.columnGap)    || 16;
+    gap         = parseFloat(cs.columnGap)    || 10;
     const padL  = parseFloat(cs.paddingLeft)  || 0;
     const padR  = parseFloat(cs.paddingRight) || 0;
     const inner = main.clientWidth - padL - padR;
@@ -1092,15 +1092,7 @@ function openDisplaySettings() {
 
     <div class="set-card">
       <div class="set-card-hd">Vollbild am Wandtablet</div>
-      <div style="font-size:12px;color:var(--text3);line-height:1.55">
-        Der Vollbild-Schalter im Menü gilt bis zum nächsten Sperren des
-        Bildschirms — mehr darf eine Webseite nicht, den Vollbild gewährt nur
-        ein Fingergriff. Dauerhaft geht es über eine eigene Installation:
-        <a href="/wand" style="color:var(--accent)">/wand</a> aufrufen und von
-        dort zum Startbildschirm hinzufügen. Diese Fassung startet immer ohne
-        Browserleiste, auch nach dem Entsperren. Die bisherige Installation
-        bleibt daneben bestehen.
-      </div>
+      <div id="dspWandStand"></div>
     </div>
 
     ${_PROFILES.map(p => `
@@ -1124,7 +1116,42 @@ function openDisplaySettings() {
   $('dspProfileSel').value = _dsp.activeProfile;
   $('dspSpaltenSel').value = _dsp.spalten || 'auto';
   $('dspWandSel').value = _dsp.wandschalter || 'auto';
+  _dspWandStand();
   _spaltenHinweis();
+}
+
+/**
+ * Wie die Anwendung auf DIESEM Geraet gerade laeuft — und was noch fehlt.
+ *
+ * Ohne diese Zeile war der Zustand nicht feststellbar: /wand sieht im Browser
+ * genau aus wie die normale Seite, und ob die Installation geglueckt ist,
+ * merkte man erst beim naechsten Sperren des Bildschirms.
+ */
+function _dspWandStand() {
+  const feld = $('dspWandStand');
+  if (!feld || typeof wandLage !== 'function') return;
+  const lage = wandLage();
+  const knopf = lage.kannInstallieren
+    ? '<button class="btn-primary" style="margin-top:10px" onclick="wandInstallieren()">'
+      + 'Als Vollbild-App installieren</button>'
+    : (lage.gut ? ''
+       : '<div style="font-size:12px;color:var(--text3);margin-top:10px">Dieser '
+         + 'Browser bietet die Installation nicht von sich aus an — dann über '
+         + 'sein Menü „Zum Startbildschirm hinzufügen“, aufgerufen unter '
+         + '<a href="/wand" style="color:var(--accent)">/wand</a>.</div>');
+  feld.innerHTML = `
+    <div class="settings-row" style="border-bottom:none;padding-bottom:6px">
+      <span class="settings-label">Läuft gerade</span>
+      <b style="color:${lage.gut ? 'var(--green)' : 'var(--yellow)'}">${lage.text}</b>
+    </div>
+    <div style="font-size:12px;color:var(--text3);line-height:1.55">
+      ${lage.folge}
+      ${lage.gut ? '' : ' Den Vollbild gewährt nur ein Fingergriff — keine Seite '
+        + 'darf ihn sich selbst zurückholen. Dauerhaft geht es nur über eine '
+        + 'eigene Installation mit Vollbild im Manifest. Die bisherige '
+        + 'Installation bleibt daneben bestehen.'}
+    </div>
+    ${knopf}`;
 }
 
 /** Was die gewaehlte Spaltenzahl auf DIESEM Bildschirm bedeutet.

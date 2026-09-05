@@ -77,7 +77,13 @@ function _bordansicht() {
 
 async function start() {
   // Vor allem anderen: der Nachtmodus soll stehen, bevor irgendetwas leuchtet.
-  wandStart();
+  //
+  // Geprueft, weil `wandbetrieb.js` zum BORDbuendel gehoert und diagnose.html
+  // es nicht laedt. Ohne die Pruefung starb das ganze Logbuch in dieser Zeile —
+  // eine weisse Seite, weil ein Nachtmodus fehlt. Soll er auch hier gelten,
+  // braucht es das Skript UND die zugehoerigen Regeln: der Filter haengt an
+  // `html` und steht in style.css, die das Logbuch ebenfalls nicht laedt.
+  if (typeof wandStart === 'function') wandStart();
   const z = await (await fetch('/api/zugang', { cache: 'no-store' })).json().catch(() => null);
   if (!z) return;
   if (!z.angemeldet) { anmeldungZeigen(); return; }
@@ -729,7 +735,12 @@ function _geraeteBauen() {
     // im fremden Netz, oder der Router schweigt), tritt die Gattung nach oben:
     // eine leere erste Zeile wäre schlimmer als eine ungenaue.
     const name = s.geraet_name || s.geraet || 'unbekanntes Gerät';
-    const neben = [s.anzeigename || s.konto, s.herkunft,
+    // Eine Loopback-Adresse sagt einem Leser nichts — sie bedeutet nur, dass
+    // ein Weiterreicher davorsteht und die echte Adresse nicht durchgereicht
+    // hat. Dann steht dort lieber gar nichts als eine Zahl, die nach Auskunft
+    // aussieht und keine ist.
+    const adresse = /^(127\.|::1$|::ffff:127\.)/.test(s.herkunft || '') ? null : s.herkunft;
+    const neben = [s.anzeigename || s.konto, adresse,
                    s.geraet_name ? s.geraet : null,
                    s.fern ? 'über den Server' : null,
                    s.kiosk ? 'Kiosk' : null,
@@ -786,6 +797,19 @@ function zeichneUeberblick() {
   }
 }
 
+// Die Kachelserver von OpenStreetMap werden von Freiwilligen betrieben und
+// lehnen Anfragen OHNE Referer ab ("Access blocked" statt einer Karte). Der
+// Server schickt aber `Referrer-Policy: no-referrer` — richtig so, das soll er
+// auch weiter tun: die Adresse einer Logbuchseite hat niemanden ausserhalb
+// etwas anzugehen.
+//
+// Die Ausnahme gehoert deshalb genau hierhin und nirgendwo sonst. Ein
+// `referrerpolicy` am Bildelement schlaegt die Vorgabe des Dokuments, und
+// `strict-origin-when-cross-origin` gibt nur den Ursprung heraus — den Namen
+// des Servers, ohne Pfad und ohne Abfrage. Das ist genau das, was die
+// Kachelserver zur Zuordnung verlangen, und keinen Halbsatz mehr.
+const KACHEL_REFERRER = 'strict-origin-when-cross-origin';
+
 // ── Die kleine Karte im Dashboard ──────────────────────────────────────────
 // Eine eigene Leaflet-Instanz, nicht die der Positionsseite: zwei Karten in
 // einem Dokument sind für Leaflet kein Problem, EINE Karte in zwei Feldern
@@ -821,10 +845,10 @@ function dbKarteZeichnen() {
       boxZoom: false, keyboard: false, touchZoom: false,
     });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, className: 'karte-grund',
+      maxZoom: 18, className: 'karte-grund', referrerPolicy: KACHEL_REFERRER,
     }).addTo(_dbKarte);
     L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
-                { maxZoom: 18 }).addTo(_dbKarte);
+                { maxZoom: 18, referrerPolicy: KACHEL_REFERRER }).addTo(_dbKarte);
     feld.style.cursor = 'pointer';
     feld.addEventListener('click', () => { location.hash = 'position'; });
     feld.title = 'Zur Positionsseite';
@@ -1139,14 +1163,14 @@ function karteZeichnen() {
     feld.innerHTML = '';
     _karte = L.map(feld, { zoomControl: true, attributionControl: true });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, className: 'karte-grund',
+      maxZoom: 18, className: 'karte-grund', referrerPolicy: KACHEL_REFERRER,
       attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(_karte);
     // Die Seezeichen liegen als durchsichtige Schicht darüber und bleiben
     // ungedimmt — sie sind der Grund, warum es OpenSeaMap und nicht irgendeine
     // Karte ist.
     L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
-      maxZoom: 18, opacity: 1,
+      maxZoom: 18, opacity: 1, referrerPolicy: KACHEL_REFERRER,
       attribution: '&copy; <a href="https://openseamap.org">OpenSeaMap</a>',
     }).addTo(_karte);
     _karte.setView([54.0, 10.5], 8);
