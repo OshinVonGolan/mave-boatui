@@ -1070,6 +1070,43 @@ main {
 /* Zwei Pfeile, zwei Felder, ein Rueckweg ins Jetzt. Bewusst KEIN Ziehbalken
    ueber dem Graphen: der laesst sich mit der Maus fein bedienen und mit dem
    Daumen gar nicht, und diese Seite wird auch auf dem Telefon geoeffnet. */
+/* Der Bereichsschieber. Zwei Griffe auf einer Spur, die den gesamten
+   vorhandenen Verlauf zeigt; das Band dazwischen ist der gezeigte Ausschnitt.
+   Er ist das GROBE Werkzeug — hinziehen, wo es ungefaehr war —, die Felder
+   darunter das genaue. Beide zusammen, weil beides vorkommt. */
+.zl-schiene { margin: 2px 0 14px; }
+.zls-spur {
+  position: relative; height: 30px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  /* Der Griff soll auch am aeussersten Rand noch ganz auf der Spur liegen. */
+  margin: 0 11px;
+  touch-action: none;      /* sonst scrollt das Telefon, statt zu ziehen */
+}
+.zls-band {
+  position: absolute; top: -1px; bottom: -1px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 8px; cursor: grab;
+}
+.zls-band:active { cursor: grabbing; }
+.zls-griff {
+  position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+  border-radius: 50%; border: 2px solid var(--bg);
+  background: var(--accent); padding: 0; cursor: ew-resize;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  /* Der sichtbare Punkt ist 22 px; die Flaeche zum Anfassen ist groesser —
+     mit dem Daumen trifft man 22 px nicht zuverlaessig. */
+  outline-offset: 4px;
+}
+.zls-griff::before {
+  content: ''; position: absolute; inset: -9px; border-radius: 50%;
+}
+.zls-griff:focus-visible { outline: 2px solid var(--text); }
+.zls-marken {
+  display: flex; justify-content: space-between; margin: 5px 12px 0;
+  font-size: 10.5px; color: var(--text3); font-variant-numeric: tabular-nums;
+}
+
 .zeitleiste {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-bottom: 14px;

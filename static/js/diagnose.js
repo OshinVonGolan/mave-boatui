@@ -204,6 +204,8 @@ async function start() {
     }
   }
 
+  _schieneVerdrahten();
+
   // Die Hoehe des Ueberblicks an Kopfzeile und Innenabstand fuehren — er soll
   // genau einen Bildschirm fuellen, ohne dass man rollen muss.
   _ueberblickHoeheFuehren();
@@ -2613,12 +2615,154 @@ function zeichneZeitleiste() {
   const j = $('messJetzt');
   if (j) j.classList.toggle('an', _messFolgt);
 
+  zeichneSchiene();
   const feld = $('messVorhanden');
   if (!feld) return;
   const z = (_daten.diagnose || {}).verlauf_zeitraum || {};
   feld.textContent = (z.von && z.bis)
     ? `vorhanden ab ${zeitpunkt(z.von)}`
     : '';
+}
+
+// ── Der Bereichsschieber ───────────────────────────────────────────────────
+// Zwei Griffe auf einer Spur, die den GESAMTEN vorhandenen Verlauf zeigt. Das
+// Band dazwischen ist der Ausschnitt, den die Graphen zeigen; es laesst sich
+// als Ganzes verschieben.
+//
+// Selbst gebaut und nicht mit zwei <input type=range> uebereinandergelegt: die
+// koennen nicht aneinander anstossen, und der obere fraesse die Klicks des
+// unteren. Ein paar Zeigerereignisse sind ehrlicher als ein Stapel Tricks.
+
+// Das kleinste Fenster. Darunter zeigt der Graph nur noch Rauschen, und die
+// beiden Griffe liegen uebereinander.
+const SCHIENE_MIN_S = 300;
+
+let _zieht = null;      // 'a' | 'b' | 'band' | null
+
+/** Der Zeitraum, den die Spur abbildet: alles Vorhandene, mindestens bis jetzt. */
+function _schieneRaum() {
+  const z = (_daten.diagnose || {}).verlauf_zeitraum || {};
+  if (!z.von || !z.bis) return null;
+  const jetzt = Date.now() / 1000;
+  const von = z.von;
+  // Bis jetzt und nicht bis zum letzten Eintrag: sonst laege der rechte Griff
+  // bei laufender Anzeige staendig ein Stueck vor dem Rand, obwohl "jetzt"
+  // gemeint ist.
+  const bis = Math.max(z.bis, jetzt);
+  return bis > von ? { von, bis } : null;
+}
+
+function zeichneSchiene() {
+  const w = $('messSchiene');
+  if (!w) return;
+  const raum = _schieneRaum();
+  if (!raum) { w.hidden = true; return; }
+  w.hidden = false;
+  const { von, bis } = _messFenster();
+  const anteil = t => Math.max(0, Math.min(1, (t - raum.von) / (raum.bis - raum.von))) * 100;
+  const a = anteil(von), b = anteil(bis);
+  $('messBand').style.left = a + '%';
+  $('messBand').style.width = Math.max(0, b - a) + '%';
+  $('messGriffA').style.left = a + '%';
+  $('messGriffB').style.left = b + '%';
+  $('messSpurVon').textContent = zeitpunkt(raum.von);
+  $('messSpurBis').textContent = zeitpunkt(raum.bis);
+}
+
+/** Bildschirm-x auf einen Zeitpunkt der Spur abbilden. */
+function _schieneZeit(x) {
+  const raum = _schieneRaum();
+  const spur = $('messSpur');
+  if (!raum || !spur) return null;
+  const r = spur.getBoundingClientRect();
+  const anteil = Math.max(0, Math.min(1, (x - r.left) / r.width));
+  return raum.von + anteil * (raum.bis - raum.von);
+}
+
+function _schieneStart(e, was) {
+  const raum = _schieneRaum();
+  if (!raum) return;
+  e.preventDefault();
+  _zieht = was;
+  const { von, bis } = _messFenster();
+  _ziehStart = { x: e.clientX, von, bis, raum };
+  e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId);
+}
+let _ziehStart = null;
+
+function _schieneZieht(e) {
+  if (!_zieht || !_ziehStart) return;
+  const raum = _ziehStart.raum;
+  let { von, bis } = _ziehStart;
+  if (_zieht === 'band') {
+    // Als Ganzes verschieben, ohne die Breite zu aendern — und nicht ueber die
+    // Raender der Spur hinaus.
+    const proPixel = (raum.bis - raum.von) / $('messSpur').getBoundingClientRect().width;
+    let versatz = (e.clientX - _ziehStart.x) * proPixel;
+    versatz = Math.max(raum.von - von, Math.min(raum.bis - bis, versatz));
+    von += versatz; bis += versatz;
+  } else {
+    const t = _schieneZeit(e.clientX);
+    if (t === null) return;
+    // Die Griffe stossen aneinander an, statt sich zu ueberholen. Ein Fenster
+    // mit negativer Breite gibt es nicht.
+    if (_zieht === 'a') von = Math.min(t, bis - SCHIENE_MIN_S);
+    else bis = Math.max(t, von + SCHIENE_MIN_S);
+  }
+  _messDauer = bis - von;
+  _messBis = bis;
+  // Reicht der rechte Griff bis an den Rand der Spur, laeuft die Anzeige
+  // weiter mit — genau wie beim Blaettern.
+  _messFolgt = bis >= raum.bis - 60;
+  zeichneSchiene();
+  zeichneZeitleiste();
+}
+
+function _schieneEnde() {
+  if (!_zieht) return;
+  _zieht = null; _ziehStart = null;
+  _voreinstellungLoesen();
+  // Erst beim Loslassen laden. Bei jedem Pixel nachzufragen hiesse, den Pi
+  // waehrend eines Ziehens mit hundert Abfragen zu belegen.
+  messwerteLaden();
+}
+
+function _schieneVerdrahten() {
+  const spur = $('messSpur');
+  if (!spur) return;
+  $('messGriffA').addEventListener('pointerdown', e => _schieneStart(e, 'a'));
+  $('messGriffB').addEventListener('pointerdown', e => _schieneStart(e, 'b'));
+  $('messBand').addEventListener('pointerdown', e => _schieneStart(e, 'band'));
+  // Auf der Spur selbst: den naechstgelegenen Griff dorthin holen. Wer neben
+  // das Band tippt, meint diese Stelle — und nicht "nichts passiert".
+  spur.addEventListener('pointerdown', e => {
+    if (e.target !== spur) return;
+    const t = _schieneZeit(e.clientX);
+    const { von, bis } = _messFenster();
+    _schieneStart(e, Math.abs(t - von) < Math.abs(t - bis) ? 'a' : 'b');
+    _schieneZieht(e);
+  });
+  window.addEventListener('pointermove', _schieneZieht);
+  window.addEventListener('pointerup', _schieneEnde);
+  window.addEventListener('pointercancel', _schieneEnde);
+  // Mit der Tastatur: ein Zehntel der Spur je Tastendruck.
+  for (const [id, was] of [['messGriffA', 'a'], ['messGriffB', 'b']]) {
+    $(id).addEventListener('keydown', e => {
+      const schritt = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+      if (!schritt) return;
+      e.preventDefault();
+      const raum = _schieneRaum();
+      if (!raum) return;
+      let { von, bis } = _messFenster();
+      const d = schritt * (raum.bis - raum.von) / 10;
+      if (was === 'a') von = Math.max(raum.von, Math.min(von + d, bis - SCHIENE_MIN_S));
+      else bis = Math.min(raum.bis, Math.max(bis + d, von + SCHIENE_MIN_S));
+      _messDauer = bis - von; _messBis = bis;
+      _messFolgt = bis >= raum.bis - 60;
+      _voreinstellungLoesen();
+      messwerteLaden();
+    });
+  }
 }
 
 /**

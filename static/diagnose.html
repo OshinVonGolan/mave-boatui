@@ -225,6 +225,19 @@
            beim Umbrechen auf schmalen Schirmen bekaeme sonst jedes Element
            seine eigene Zeile, und die Leiste waere fuenf Zeilen hoch. So
            bleibt sie zwei. -->
+      <!-- Der Schieber steht ueber den Feldern: er ist das grobe Werkzeug
+           (hinziehen, wo es ungefaehr war), die Felder sind das genaue. Die
+           Spur zeigt den GESAMTEN vorhandenen Verlauf, das Band darin den
+           gezeigten Ausschnitt. -->
+      <div class="zl-schiene" id="messSchiene" hidden>
+        <div class="zls-spur" id="messSpur">
+          <div class="zls-band" id="messBand"></div>
+          <button class="zls-griff" id="messGriffA" aria-label="Anfang des Zeitraums"></button>
+          <button class="zls-griff" id="messGriffB" aria-label="Ende des Zeitraums"></button>
+        </div>
+        <div class="zls-marken"><span id="messSpurVon"></span><span id="messSpurBis"></span></div>
+      </div>
+
       <div class="zeitleiste">
         <div class="zl-navi">
           <button class="zl-pfeil" onclick="messSchieben(-1)"
