@@ -1386,8 +1386,10 @@ function updateStatusBar(data) {
 // rechtzeitig, wird das Weiterschalten des ersten zurueckgenommen und die Seite
 // geoeffnet: man landet dort, wo man beim Antippen stand.
 
-const _SB_DOPPEL_MS = 320;
-let _sbLetzterTipp = { feld: null, zeit: 0 };
+// Kurz genug, dass das Weiterschalten nicht traege wirkt, lang genug fuer
+// einen bequemen Doppeltipp.
+const _SB_DOPPEL_MS = 240;
+let _sbWartend = null;      // {feld, los, uhr} — ein Tipp, der noch abwartet
 
 function _sbHaltenBinden() {
   const leiste = document.getElementById('statusBar');
@@ -1396,22 +1398,40 @@ function _sbHaltenBinden() {
 
   leiste.addEventListener('click', e => {
     const feld = e.target.closest('.sb-item');
-    const ziel = feld?.dataset.detail;
-    if (!ziel) return;
-    const jetzt = Date.now();
-    const doppelt = _sbLetzterTipp.feld === feld
-                 && jetzt - _sbLetzterTipp.zeit < _SB_DOPPEL_MS;
-    _sbLetzterTipp = doppelt ? { feld: null, zeit: 0 } : { feld, zeit: jetzt };
-    if (!doppelt) return;
+    if (!feld) return;
+    // Sonst leuchtet das Feld auf der Detailseite weiter, weil der Knopf den
+    // Tastaturfokus behaelt — sichtbar als heller Block hinter der Seite.
+    feld.blur();
 
-    // ZWEI Schritte zurueck, nicht einer: beide Tipps haben weitergeschaltet.
-    // Der Knopf traegt seinen eigenen onclick, der vor diesem Horcher laeuft —
-    // wenn wir hier ankommen, steht die Anzeige also schon zwei Schritte
-    // weiter als beim ersten Antippen.
     const weiter = window[feld.dataset.weiter];
-    if (typeof weiter === 'function') weiter(-2);
-    const fn = window[ziel];
-    if (typeof fn === 'function') fn();
+    if (typeof weiter !== 'function') return;   // hat nichts durchzuschalten
+    const ziel = window[feld.dataset.detail];
+
+    // Zweiter Tipp auf dasselbe Feld: der erste hat noch nicht geschaltet, und
+    // das soll er auch nicht mehr. Nur die Seite geht auf.
+    if (_sbWartend && _sbWartend.feld === feld) {
+      clearTimeout(_sbWartend.uhr);
+      _sbWartend = null;
+      if (typeof ziel === 'function') ziel();
+      return;
+    }
+    // Ein wartender Tipp auf einem ANDEREN Feld wird jetzt eingeloest — sonst
+    // haengt er in der Luft, waehrend man schon woanders ist.
+    if (_sbWartend) {
+      clearTimeout(_sbWartend.uhr);
+      _sbWartend.los();
+      _sbWartend = null;
+    }
+
+    const los = () => weiter(1);
+    // Ohne Detailseite gibt es nichts abzuwarten — dann sofort.
+    if (typeof ziel !== 'function') { los(); return; }
+
+    // MIT Detailseite wartet der Tipp die Doppeltipp-Frist ab. Sofort zu
+    // schalten und beim zweiten Tipp zurueckzunehmen war der erste Versuch:
+    // es funktionierte, aber die Anzeige sprang dabei sichtbar hin und her.
+    _sbWartend = { feld, los, uhr: setTimeout(() => { _sbWartend = null; los(); },
+                                              _SB_DOPPEL_MS) };
   });
 }
 
@@ -1552,33 +1572,26 @@ function _sbRenderTank(data) {
       // Gemacht mit background-size: der Balken ist nur `anteil` breit, sein
       // Hintergrundbild wird auf die volle Feldbreite gestreckt und links
       // verankert. Sichtbar ist genau der linke Ausschnitt.
-      // Zwei Verlaeufe uebereinander, jeder mit einer eigenen Aufgabe.
+      // Waagerecht, und das Dunkel liegt an der Kante.
       //
-      // Der HINTERGRUND ist derselbe wie bei den Verlaufsgraphen nebenan:
-      // dieselbe Farbe, oben bei 22 % Deckkraft, nach unten auf null
-      // auslaufend (dort steht `stop-opacity .22` bei 0 und 0 bei .85). Damit
-      // sieht das Feld aus wie seine Nachbarn und nicht wie ein Farbklotz.
+      // Erst lief er senkrecht (wie die Flaeche eines Verlaufsgraphen, oben
+      // satt, nach unten auslaufend) mit einer waagerechten Maske darueber.
+      // Das sah aus wie die Nachbarn, sagte aber das Falsche: der dunkelste
+      // Punkt lag oben links, waehrend der Pegel rechts steht.
       //
-      // Die MASKE traegt die Aussage: sie laeuft von voll nach leer und ist
-      // ueber das ganze FELD gespannt, nicht ueber den Balken. Jede Stelle
-      // gehoert damit fest zu einem Stand — der Balken wird nach rechts hin
-      // duenner, weil dort das leere Ende liegt.
+      // Jetzt geht der Verlauf nur waagerecht und ist an den BALKEN gebunden:
+      // links laeuft er aus, an der rechten Kante — dort, wo der Stand
+      // abzulesen ist — steht er am dichtesten. Die Deckkraft steckt in den
+      // Farbstopps, wie bei den Graphen auch, damit beides zusammenpasst.
       const verlauf =
-        `linear-gradient(to bottom,
-           color-mix(in srgb, ${c.color} 22%, transparent) 0%,
-           color-mix(in srgb, ${c.color} 0%, transparent) 85%)`;
-      const maske = 'linear-gradient(to right, #000 0%, rgba(0,0,0,.18) 100%)';
+        `linear-gradient(to right,
+           color-mix(in srgb, ${c.color} 5%, transparent) 0%,
+           color-mix(in srgb, ${c.color} 13%, transparent) 55%,
+           color-mix(in srgb, ${c.color} 26%, transparent) 100%)`;
       bar.style.background = verlauf;
       bar.style.backgroundRepeat = 'no-repeat';
       bar.style.backgroundSize = '100% 100%';
-      // Nur die Maske wird auf die volle Feldbreite gestreckt und links
-      // verankert. Null waere eine Division durch null.
-      const breit = `${(100 / Math.max(anteil, 1) * 100).toFixed(1)}% 100%`;
-      bar.style.maskImage = maske;
-      bar.style.webkitMaskImage = maske;
-      bar.style.maskRepeat = bar.style.webkitMaskRepeat = 'no-repeat';
-      bar.style.maskPosition = bar.style.webkitMaskPosition = 'left';
-      bar.style.maskSize = bar.style.webkitMaskSize = breit;
+      bar.style.maskImage = bar.style.webkitMaskImage = '';
       bar.classList.add('mit-verlauf');
     } else {
       bar.style.background = '';

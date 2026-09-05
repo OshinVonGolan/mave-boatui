@@ -592,7 +592,7 @@ class DoppeltippOeffnetDetail(Pruefstand):
 
     def test_einzelner_tipp_schaltet_nur_weiter(self):
         self.pg.mouse.click(self.x, self.y)
-        self.pg.wait_for_timeout(500)
+        self.pg.wait_for_timeout(600)          # die Doppeltipp-Frist abwarten
         self.assertEqual(self.label(), 'Starter')
         self.assertFalse(self.offen(), 'ein einzelner Tipp soll keine Seite öffnen')
 
@@ -601,19 +601,25 @@ class DoppeltippOeffnetDetail(Pruefstand):
         self.pg.wait_for_timeout(500)
         self.assertTrue(self.offen())
 
-    def test_doppeltipp_nimmt_das_weiterschalten_zurueck(self):
-        """Man landet dort, wo man beim Antippen stand — nicht zwei Schritte
-        weiter."""
+    def test_doppeltipp_schaltet_gar_nicht(self):
+        """Nicht vor und wieder zurück: der erste Tipp wartet die Frist ab, und
+        kommt der zweite, schaltet er gar nicht erst. Sonst sprang die Anzeige
+        sichtbar hin und her."""
         vorher = self.label()
-        self.pg.mouse.click(self.x, self.y, click_count=2, delay=40)
-        self.pg.wait_for_timeout(500)
+        zwischen = []
+        self.pg.mouse.click(self.x, self.y)
+        zwischen.append(self.label())          # sofort danach: noch unveraendert
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(700)
+        self.assertEqual(zwischen[0], vorher, 'der erste Tipp hat schon geschaltet')
         self.assertEqual(self.label(), vorher)
+        self.assertTrue(self.offen())
 
     def test_zu_langsam_ist_kein_doppeltipp(self):
         self.pg.mouse.click(self.x, self.y)
-        self.pg.wait_for_timeout(600)
+        self.pg.wait_for_timeout(700)
         self.pg.mouse.click(self.x, self.y)
-        self.pg.wait_for_timeout(400)
+        self.pg.wait_for_timeout(700)
         self.assertFalse(self.offen())
         self.assertEqual(self.label(), 'Service', 'zweimal getippt, zweimal weiter')
 
@@ -622,6 +628,15 @@ class DoppeltippOeffnetDetail(Pruefstand):
         auch nichts vortäuschen."""
         self.assertIsNone(self.pg.evaluate(
             "() => document.getElementById('sbTankItem').dataset.detail ?? null"))
+
+    def test_kein_nachleuchten_auf_der_detailseite(self):
+        """Der Knopf behält sonst den Tastaturfokus, und das Feld leuchtet als
+        heller Block hinter der geöffneten Seite weiter."""
+        self.pg.mouse.click(self.x, self.y, click_count=2, delay=40)
+        self.pg.wait_for_timeout(500)
+        self.assertTrue(self.offen())
+        self.assertFalse(self.pg.evaluate(
+            "() => document.activeElement === document.getElementById('sbBattItem')"))
 
     def test_kein_halten_mehr(self):
         self.pg.mouse.move(self.x, self.y)
