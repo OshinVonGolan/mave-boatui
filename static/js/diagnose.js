@@ -2443,6 +2443,7 @@ async function messwerteLaden() {
   const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=700`);
   if (!d) { feld.innerHTML = '<div class="mess-leer">Keine Daten abrufbar.</div>'; return; }
   _messDaten = d;
+  _deckung = { von, bis };
   zeichneZeitleiste();
   zeichneMesswerte();
 }
@@ -2689,22 +2690,55 @@ let _zieht = null;      // 'a' | 'b' | 'band' | null
 // fuer einen Tag und 66 fuer sieben, also fluessig; wird der Verlauf in einem
 // Jahr traege, kommen eben weniger Bilder statt einer Warteschlange.
 const ZIEH_TAKT_MS = 70;
+// Wie viel mehr geholt wird, als gerade zu sehen ist: das Dreifache, also je
+// eine Fensterbreite links und rechts als Vorrat.
+//
+// Das ist der Unterschied zwischen "es ruckelt weniger" und "es ruckelt
+// nicht". Am laufenden Server gemessen kostet eine Antwort fuer sieben Tage
+// 217 ms — jede Zeigerbewegung darauf warten zu lassen, kann nicht fluessig
+// werden. Und die Punktzahl half nicht: 200 statt 700 Stuetzstellen sparten
+// ganze 29 ms, weil die Arbeit an den ZEILEN haengt und nicht an den Punkten.
+//
+// Mit Vorrat kostet Verschieben und Verkleinern gar keine Abfrage mehr; nur
+// wer ueber den Rand hinauszieht, wartet einmal. Die Aufloesung bleibt dabei
+// gleich: dreifache Breite, dreifach viele Stuetzstellen.
+const ZIEH_VORRAT = 1.0;
+const ZIEH_PUNKTE = 200;
+
 let _ziehBedarf = false;
 let _ziehLaeuft = false;
 let _ziehZuletzt = 0;
+let _deckung = null;      // welchen Zeitraum die vorliegenden Punkte abdecken
+
+/** Reicht, was schon da ist, fuer das gezeigte Fenster? */
+function _gedeckt() {
+  if (!_deckung || !_messDaten) return false;
+  const { von, bis } = _messFenster();
+  return von >= _deckung.von && bis <= _deckung.bis;
+}
 
 async function _ziehNachladen() {
   if (_ziehLaeuft) return;
+  if (_gedeckt()) { _ziehBedarf = false; return; }   // nichts zu holen
   const wartet = ZIEH_TAKT_MS - (Date.now() - _ziehZuletzt);
   if (wartet > 0) { setTimeout(() => { if (_ziehBedarf) _ziehNachladen(); }, wartet); return; }
   _ziehBedarf = false;
   _ziehLaeuft = true;
   try {
     const { von, bis } = _messFenster();
-    // Weniger Punkte als sonst: waehrend des Ziehens sieht niemand 700
-    // Stuetzstellen, und die Antwort wird spuerbar schneller.
-    const d = await hole(`/api/verlauf/reihen?von=${von}&bis=${bis}&punkte=200`);
-    if (d && _zieht) { _messDaten = d; zeichneMesswerte(); }
+    const rand = (bis - von) * ZIEH_VORRAT;
+    const a = Math.floor(von - rand), b = Math.ceil(bis + rand);
+    const punkte = Math.round(ZIEH_PUNKTE * (1 + 2 * ZIEH_VORRAT));
+    const d = await hole(`/api/verlauf/reihen?von=${a}&bis=${b}&punkte=${punkte}`);
+    if (d && _zieht) {
+      _deckung = { von: a, bis: b };
+      // Die Punkte decken mehr ab, als gezeigt wird; die Achse bleibt das
+      // Fenster. Was daneben liegt, zeichnet der Canvas ausserhalb seiner
+      // Kante — und die Hochwertskala rechnet ohnehin nur mit dem Sichtbaren.
+      const f = _messFenster();
+      _messDaten = { ...d, von: f.von, bis: f.bis };
+      zeichneMesswerte();
+    }
   } finally {
     _ziehLaeuft = false;
     _ziehZuletzt = Date.now();
@@ -2794,8 +2828,7 @@ function _schieneZieht(e) {
   // Kurve folgt dem Griff, statt in Stufen nachzurucken. Die neuen Daten
   // ersetzen sie, sobald sie eintreffen.
   _achseNachziehen();
-  _ziehBedarf = true;
-  _ziehNachladen();
+  if (!_gedeckt()) { _ziehBedarf = true; _ziehNachladen(); }
 }
 
 /** Dieselben Punkte, neue Achse. Kein Netz, kein Warten. */

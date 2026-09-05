@@ -230,14 +230,25 @@ class Speicher:
             self._db.commit()
         return umgezogen
 
-    def verlauf(self, seit: float | None = None, grenze: int = 5000) -> list[dict]:
-        if seit is None:
-            zeilen = self._db.execute(
-                'SELECT * FROM verlauf ORDER BY zeit DESC LIMIT ?', (grenze,)).fetchall()
-        else:
-            zeilen = self._db.execute(
-                'SELECT * FROM verlauf WHERE zeit >= ? ORDER BY zeit DESC LIMIT ?',
-                (seit, grenze)).fetchall()
+    def verlauf(self, seit: float | None = None, grenze: int = 5000,
+                bis: float | None = None) -> list[dict]:
+        """Verlaufseintraege im Zeitraum, aelteste zuerst.
+
+        `bis` ist keine Bequemlichkeit, sondern spart echte Arbeit. Ohne obere
+        Grenze las diese Abfrage ALLES seit `seit` — wer im Logbuch ein Fenster
+        von einem Tag zwanzig Tage in der Vergangenheit ansieht, bekam zwanzig
+        Tage aus der Datenbank, und der Aufrufer warf neunzehn davon weg. Jede
+        dieser Zeilen wurde vorher noch durch json.loads geschickt.
+        """
+        bedingungen, werte = [], []
+        if seit is not None:
+            bedingungen.append('zeit >= ?'); werte.append(seit)
+        if bis is not None:
+            bedingungen.append('zeit <= ?'); werte.append(bis)
+        wo = (' WHERE ' + ' AND '.join(bedingungen)) if bedingungen else ''
+        werte.append(grenze)
+        zeilen = self._db.execute(
+            f'SELECT * FROM verlauf{wo} ORDER BY zeit DESC LIMIT ?', werte).fetchall()
         return [{'folge': z['folge'], 'zeit': z['zeit'], **json.loads(z['daten'])}
                 for z in reversed(zeilen)]
 

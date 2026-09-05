@@ -1027,8 +1027,9 @@ def verlauf_reihen(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
     if bis - von > 400 * 86400:
         raise HTTPException(400, detail='Mehr als 400 Tage gibt der Verlauf nicht her.')
 
-    roh = speicher.verlauf(seit=von, grenze=200000)
-    roh = [e for e in roh if e.get('zeit') and von <= e['zeit'] <= bis]
+    # Beide Grenzen in die Abfrage: das Nachfiltern hier hat frueher genau die
+    # Zeilen weggeworfen, deren Auspacken schon bezahlt war.
+    roh = speicher.verlauf(seit=von, bis=bis, grenze=200000)
     if not roh:
         return JSONResponse({'von': von, 'bis': bis, 'punkte': [], 'felder': [],
                              'roh_anzahl': 0})
