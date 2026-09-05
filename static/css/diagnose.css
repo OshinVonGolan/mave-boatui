@@ -1066,6 +1066,112 @@ main {
 .es-zeile input:disabled { cursor: default; }
 .es-zeile:has(input:disabled) { cursor: default; opacity: .7; }
 
+/* ── Aufbau: die Nachschlageseite ───────────────────────────────────────── */
+/* Zum LESEN gebaut, nicht zum Ablesen. Deshalb Fliesstext in Lesebreite statt
+   Kacheln, und die Zahlen in Tabellenform mit ihrer Quelle daneben: wer nicht
+   glaubt, was dasteht, soll nachsehen koennen, ohne zu suchen. */
+.aufbau { display: flex; flex-direction: column; gap: 16px; }
+.au-text {
+  margin: 0 0 14px; font-size: 13.5px; line-height: 1.65; color: var(--text2);
+  max-width: 74ch;
+}
+.au-text b { color: var(--text); font-weight: 600; }
+.au-gruppe {
+  margin: 24px 0 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .11em;
+  text-transform: uppercase; color: var(--accent);
+}
+.au-gruppe:first-of-type { margin-top: 4px; }
+
+/* Die drei Namen. Der eigene bekommt eine Kante — man soll auf einen Blick
+   sehen, wo man gerade steht, ohne die Adresszeile zu lesen. */
+.au-namen { display: flex; flex-direction: column; gap: 1px; }
+.au-name {
+  padding: 13px 15px; border-radius: 10px; background: var(--surface2);
+  border-left: 3px solid transparent;
+}
+.au-name.hier { border-left-color: var(--accent); }
+.au-name-kopf { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.au-name code {
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 13px; color: var(--text); font-weight: 600;
+}
+.au-rolle { font-size: 11px; color: var(--text3); }
+.au-marke {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 5px; padding: 1px 6px; margin-left: auto;
+}
+.au-name p {
+  margin: 7px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text2);
+  max-width: 74ch;
+}
+
+.au-flaechen { display: flex; flex-direction: column; gap: 1px; }
+.au-flaeche { padding: 13px 0; border-top: 1px solid var(--border); }
+.au-flaeche:first-child { border-top: none; padding-top: 0; }
+.au-flaeche-kopf { display: flex; align-items: baseline; gap: 11px; }
+.au-flaeche-kopf b { font-size: 14px; }
+.au-flaeche-kopf code {
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 11.5px; color: var(--text3);
+}
+.au-flaeche p {
+  margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text2);
+  max-width: 74ch;
+}
+
+/* Der Weg der Daten als Kette. Vier Stufen, drei Pfeile — im Schmalbild
+   untereinander, dann drehen sich die Pfeile mit. */
+.au-weg {
+  display: flex; align-items: stretch; gap: 10px; margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.au-stufe {
+  flex: 1 1 150px; min-width: 0; padding: 12px 14px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.au-stufe b { font-size: 13px; }
+.au-stufe span { font-size: 11.5px; color: var(--text3); line-height: 1.45; }
+.au-pfeil {
+  flex: 0 0 auto; align-self: center; width: 14px; height: 14px;
+  border-right: 2px solid var(--border); border-top: 2px solid var(--border);
+  transform: rotate(45deg);
+}
+@media (max-width: 720px) {
+  .au-weg { flex-direction: column; }
+  .au-pfeil { transform: rotate(135deg); }
+}
+
+/* Die Takte. Drei Spalten: was, wie oft, woher die Zahl stammt. */
+.au-takte { display: flex; flex-direction: column; }
+.au-takt {
+  /* Die Quellenspalte bekommt, was sie braucht — abgeschnitten waere sie
+     wertlos: sie steht da, damit man nachschlagen kann, ohne zu suchen.
+     Nachgeben muss die Beschreibung, die notfalls umbricht. */
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline; gap: 14px; padding: 8px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  font-size: 12.5px;
+}
+.au-takt:first-child { border-top: none; }
+.au-was { color: var(--text); min-width: 0; }
+.au-neben { display: block; font-size: 11px; color: var(--text3); margin-top: 1px; }
+.au-wert {
+  font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+  color: var(--text);
+}
+.au-quelle {
+  font-family: var(--mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 10.5px; color: var(--text3); text-align: right; white-space: nowrap;
+}
+/* Schmal faellt die Quellenspalte weg — sie ist Beleg, nicht Inhalt, und
+   zwaenge den Rest sonst in zwei Zeichen Breite. */
+@media (max-width: 720px) {
+  .au-takt { grid-template-columns: minmax(0, 1fr) auto; }
+  .au-quelle { display: none; }
+}
+
 /* ── Alarme seit dem letzten Blick ──────────────────────────────────────── */
 /* Ueber allem, weil ein uebersehener Alarm der teuerste Fehler dieser
    Oberflaeche waere. Deshalb auch kein stiller Streifen am Rand, sondern etwas,

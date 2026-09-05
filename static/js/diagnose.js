@@ -15,6 +15,15 @@ let _alleAusfaelle = false;
 let _daten = { verbindung: null, diagnose: null, konten: null,
                zustand: null, anwesend: null };
 
+// Die Takte dieser Oberflaeche. Mit Namen und nicht als nackte Zahl im
+// setInterval, weil die Aufbauseite sie ANZEIGT — eine abgeschriebene Zahl
+// waere in einem halben Jahr falsch, und eine falsche Zahl auf einer
+// Nachschlageseite ist schlimmer als gar keine.
+const LOGBUCH_TAKT_MS    = 30000;    // Dashboard: Zustand, Verbindung, Anwesenheit
+const LOGBUCH_VERLAUF_MS = 300000;   // die 24-Stunden-Flaechen hinter den Ampeln
+const LOGBUCH_MESS_MS    = 120000;   // die Messwerte-Seite
+const WETTER_ALTER_S     = 900;      // ab wann ein Wetterwert neu geholt wird
+
 // ── Formate ────────────────────────────────────────────────────────────────
 
 function zeitpunkt(s) {
@@ -194,12 +203,12 @@ async function start() {
   await alarmeLaden();
   await dashboardVerlaufLaden();
   await messwerteLaden();
-  setInterval(laden, 30000);
+  setInterval(laden, LOGBUCH_TAKT_MS);
   // Der Verlauf fuers Dashboard aendert sich langsam — ein Punkt je neun
   // Minuten. Alle fuenf Minuten nachzuladen reicht und kostet den Pi wenig.
-  setInterval(dashboardVerlaufLaden, 300000);
+  setInterval(dashboardVerlaufLaden, LOGBUCH_VERLAUF_MS);
   // Messwerte seltener: sie ändern sich langsam und kosten mehr.
-  setInterval(messwerteLaden, 120000);
+  setInterval(messwerteLaden, LOGBUCH_MESS_MS);
 }
 
 // ── Die Schiene im Schmalbild ──────────────────────────────────────────────
@@ -236,6 +245,7 @@ function seiteZeigen(name) {
   // ist ihr Feld null Pixel breit und sie bliebe grau.
   if (name === 'ueberblick') dbKarteZeigen();
   if (name === 'einstellungen') zeichneEinstellungen();
+  if (name === 'aufbau') zeichneAufbau();
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
@@ -889,7 +899,7 @@ function wetterPruefen(pos) {
   const weit = !_wetterOrt
     || Math.abs(_wetterOrt.lat - pos.lat) > 0.02
     || Math.abs(_wetterOrt.lon - pos.lon) > 0.02;
-  const alt = !_wetterOrt || jetzt - _wetterOrt.t > 900;
+  const alt = !_wetterOrt || jetzt - _wetterOrt.t > WETTER_ALTER_S;
   if (_wetter === 'laedt' || !(weit || alt)) return;
   _wetterOrt = { lat: pos.lat, lon: pos.lon, t: jetzt };
   wetterLaden(pos.lat, pos.lon);
@@ -990,6 +1000,189 @@ async function alarmeGesehen() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stand: _alarmStand }),
   }).catch(() => {});
+}
+
+// ── Aufbau: wie die Teile zusammenhängen ───────────────────────────────────
+// Eine Nachschlageseite, keine Anzeige. Sie beantwortet die Fragen, die man
+// sich nach einem halben Jahr selbst nicht mehr beantworten kann: Welcher Name
+// führt wohin? Warum gibt es drei Oberflächen? Wie alt ist das, was ich sehe?
+//
+// Die Zahlen stehen NICHT frei in der Seite, sondern nennen jede ihre Quelle
+// im Quelltext. Ein Test liest die genannten Stellen und vergleicht — driftet
+// der Code, faellt der Test um, nicht der Leser auf eine alte Zahl herein.
+// Eine Dokumentationsseite, die still veraltet, ist schlimmer als keine.
+
+const AUFBAU_TAKTE = {
+  bordnetz: [
+    { was: 'Messwerte vom Bus', wert: '200 ms', neben: 'zugeschoben, nicht abgefragt',
+      quelle: 'can_reader.py:RUNDRUF_TAKT_S' },
+    { was: 'nach einem Schaltbefehl', wert: '50 ms', neben: 'drei Sekunden lang',
+      quelle: 'can_reader.py:EILFENSTER_TAKT_S' },
+    { was: 'Heizung, Detailseite', wert: '3 s', quelle: 'static/js/heizung.js:hzDetailPoller' },
+    { was: 'Netzwerk-Fenster', wert: '5 s', quelle: 'static/js/alarms.js:netTimer' },
+    { was: 'Geräteseite', wert: '10 s', quelle: 'static/js/geraete.js:_gerPoller' },
+    { was: 'Heizungskachel', wert: '15 s', quelle: 'static/js/heizung.js:hzPoller' },
+    { was: 'Verbindung', wert: '25 s', quelle: 'static/js/init.js:_connPoller' },
+    { was: 'Update-Stand', wert: '60 s', quelle: 'static/js/init.js:_versionPoller' },
+    { was: 'Tageswerte', wert: '2 min', quelle: 'static/js/battery.js:_dailyPoller' },
+    { was: 'Sparklines der Statusleiste', wert: '2 min', quelle: 'static/js/init.js:_sparkPoller' },
+    { was: 'Ladegerät-Abzeichen', wert: '5 min', quelle: 'static/js/init.js:_chargerPoller' },
+    { was: 'Wasserstand', wert: '10 min', quelle: 'static/js/init.js:_wlPoller' },
+    { was: 'Wetter', wert: '30 min', quelle: 'static/js/weather.js:_wxPoller' },
+  ],
+  server: [
+    { was: 'Zustand, volle Übertragung', wert: '10 s', neben: 'Starlink, Kabel oder WLAN',
+      quelle: 'sync/protokoll.py:BETRIEBSARTEN.voll' },
+    { was: 'Zustand, gedrosselt', wert: '60 s', neben: 'Mobilfunk oder unbekannter Uplink',
+      quelle: 'sync/protokoll.py:BETRIEBSARTEN.gedrosselt' },
+    { was: 'Alarme', wert: 'sofort', neben: 'in beiden Betriebsarten' },
+    { was: 'Verlauf', wert: 'laufend', neben: 'Minutenmittel, ab dem Stand des Servers' },
+  ],
+  logbuch: [
+    { was: 'Dashboard, Ampeln und Karten', wert: '30 s', quelle: 'static/js/diagnose.js:LOGBUCH_TAKT_MS' },
+    { was: 'die 24-Stunden-Flächen', wert: '5 min', quelle: 'static/js/diagnose.js:LOGBUCH_VERLAUF_MS' },
+    { was: 'Messwerte-Seite', wert: '2 min', quelle: 'static/js/diagnose.js:LOGBUCH_MESS_MS' },
+    { was: 'Wetter', wert: '15 min', neben: 'oder sobald das Boot 2 km gewandert ist',
+      quelle: 'static/js/diagnose.js:WETTER_ALTER_S' },
+    { was: 'Alarmvorhang', wert: 'beim Öffnen', neben: 'einmal je Besuch' },
+  ],
+};
+
+/**
+ * Die drei Namen, aus dem eigenen abgeleitet — nicht fest eingetragen.
+ *
+ * Fest eingetragen waeren sie beim naechsten Umzug falsch, und niemand wuesste
+ * warum. Abgeleitet wird nur, wenn der eigene Name auch wirklich einer der drei
+ * IST: hinter einer IP-Adresse oder einem Testnamen ergaebe die Ableitung
+ * "mave.127.0.0.1" — eine Adresse, die es nicht gibt und die niemand tippen
+ * sollte. Dann steht dort lieber der blosse Rollenname.
+ */
+function _aufbauNamen() {
+  const h = location.hostname;
+  const treffer = h.match(/^(logbuch|mave|pi\.mave)\.(.+\..+)$/);
+  const stamm = treffer ? treffer[2] : null;
+  const voll = (teil) => stamm ? teil + '.' + stamm : teil + '.…';
+  return [
+    { name: voll('mave'), rolle: 'Bordansicht',
+      wohin: 'Im Bordnetz biegt der Router den Namen auf den Pi um. Draußen zeigt er '
+           + 'auf den Server. Eine Herkunft, eine Installation — dieselbe App an Bord '
+           + 'und unterwegs.' },
+    { name: voll('pi.mave'), rolle: 'immer der Pi',
+      wohin: 'Zeigt immer auf den Bordrechner, wird nie umgebogen. Der Weg, der auch '
+           + 'dann noch trägt, wenn am Router etwas verstellt ist — und bei der '
+           + 'Fehlersuche will man wissen, mit wem man spricht.' },
+    { name: voll('logbuch'), rolle: 'immer der Server',
+      wohin: 'Diagnose und Fernwartung, nie umgebogen. Sonst wäre das Logbuch '
+           + 'ausgerechnet an Bord nicht erreichbar — und dort sitzt man, wenn man '
+           + 'nachsehen will, warum etwas nicht stimmt. Der eigene Name hält '
+           + 'nebenbei das mächtige Verwalter-Cookie vom Bordrechner fern.' },
+  ];
+}
+
+const AUFBAU_OBERFLAECHEN = [
+  { name: 'Bordansicht', wo: 'mave… /',
+    text: 'Die eigentliche Anwendung: Messwerte, Licht, Heizung, Schalten. Hängt am '
+        + 'WebSocket und bekommt Zustände zugeschoben, statt zu fragen.' },
+  { name: 'Wandmonitor', wo: 'mave… /wand',
+    text: 'Dieselbe Seite, ein anderes Manifest. Sperrt sich das Tablet, ist ein über '
+        + 'requestFullscreen() geholtes Vollbild danach weg, und die Seite darf es '
+        + 'nicht selbst zurückholen — das gewährt nur ein Fingergriff. Eine als '
+        + 'fullscreen INSTALLIERTE Anwendung startet dagegen immer ohne '
+        + 'Browserleiste, auch nach dem Entsperren. Dazu Bildschirm-Wachhalten und '
+        + 'Nachtmodus.' },
+  { name: 'Logbuch', wo: 'logbuch… /',
+    text: 'Dieses Werkzeug. Ein eigenes Bündel, das nichts aus dem Bordbündel lädt — '
+        + 'auf dem Pi Zero zählt jedes Kilobyte im Startpaket, und das Logbuch läuft '
+        + 'ohnehin nur auf dem Server. Es beantwortet eine andere Frage: nicht wie es '
+        + 'dem Boot jetzt geht, sondern wie es ihm ergangen ist.' },
+];
+
+function zeichneAufbau() {
+  const feld = $('aufbau');
+  if (!feld) return;
+  const v = _daten.verbindung || {};
+  const z = _daten.zustand || {};
+  const hier = location.hostname;
+
+  const art = v.betriebsart || null;
+  const artZeile = art === 'voll' ? AUFBAU_TAKTE.server[0] : AUFBAU_TAKTE.server[1];
+
+  const takt = (liste) => liste.map(t => `<div class="au-takt">
+    <span class="au-was">${esc(t.was)}${t.neben ? `<span class="au-neben">${esc(t.neben)}</span>` : ''}</span>
+    <span class="au-wert">${esc(t.wert)}</span>
+    ${t.quelle ? `<span class="au-quelle">${esc(t.quelle)}</span>` : '<span></span>'}
+  </div>`).join('');
+
+  feld.innerHTML = `
+    <section class="tafel">
+      <div class="tafel-kopf"><h2>Die drei Namen</h2>
+        <span class="hinweis">Sie sind gerade auf ${esc(hier)}</span></div>
+      <p class="au-text">Ein Name für die Anwendung, einer für den Bordrechner, einer
+        für den Server. Der erste wird umgebogen, die anderen beiden nie.</p>
+      <div class="au-namen">${_aufbauNamen().map(n => `
+        <div class="au-name${n.name === hier ? ' hier' : ''}">
+          <div class="au-name-kopf">
+            <code>${esc(n.name)}</code>
+            <span class="au-rolle">${esc(n.rolle)}</span>
+            ${n.name === hier ? '<span class="au-marke">hier</span>' : ''}
+          </div>
+          <p>${esc(n.wohin)}</p>
+        </div>`).join('')}</div>
+    </section>
+
+    <section class="tafel">
+      <div class="tafel-kopf"><h2>Drei Oberflächen</h2></div>
+      <div class="au-flaechen">${AUFBAU_OBERFLAECHEN.map(o => `
+        <div class="au-flaeche">
+          <div class="au-flaeche-kopf"><b>${esc(o.name)}</b><code>${esc(o.wo)}</code></div>
+          <p>${esc(o.text)}</p>
+        </div>`).join('')}</div>
+    </section>
+
+    <section class="tafel">
+      <div class="tafel-kopf"><h2>Der Weg der Daten</h2>
+        <span class="hinweis">${v.verbunden
+          ? (art ? 'Betriebsart ' + esc(art) : 'verbunden') : 'Boot nicht verbunden'}</span></div>
+      <div class="au-weg">
+        <div class="au-stufe"><b>NMEA-2000-Bus</b><span>Geräte melden von sich aus</span></div>
+        <div class="au-pfeil" aria-hidden="true"></div>
+        <div class="au-stufe"><b>Bordrechner</b><span>liest mit, prüft Alarme, schreibt Verlauf</span></div>
+        <div class="au-pfeil" aria-hidden="true"></div>
+        <div class="au-stufe"><b>Server</b><span>hält die Kopie, wenn das Boot schweigt</span></div>
+        <div class="au-pfeil" aria-hidden="true"></div>
+        <div class="au-stufe"><b>dieses Fenster</b><span>fragt alle 30 Sekunden nach</span></div>
+      </div>
+      <p class="au-text">Der Bordrechner baut die Verbindung auf, nicht der Server: der Pi
+        hängt hinter Mobilfunk-NAT und ist von außen nicht erreichbar. Über dieselbe
+        Leitung gehen Befehle zurück.</p>
+      <p class="au-text">Was Sie hier sehen, ist deshalb zweimal verzögert — einmal durch
+        den Takt des Bootes, einmal durch den des Logbuchs. Bei voller Übertragung sind
+        das im schlechtesten Fall rund 40 Sekunden, über Mobilfunk rund 90.
+        ${art ? `Gerade gilt <b>${esc(artZeile.wert)}</b> (${esc(artZeile.neben || '')}).` : ''}</p>
+    </section>
+
+    <section class="tafel">
+      <div class="tafel-kopf"><h2>Wie oft etwas neu wird</h2>
+        <span class="hinweis">jede Zahl nennt ihre Stelle im Quelltext</span></div>
+
+      <h3 class="au-gruppe">Im Bordnetz, direkt am Pi</h3>
+      <p class="au-text">Die Messwerte werden zugeschoben, nicht abgefragt. Alles, was
+        nicht am Bus hängt, fragt für sich — und steht still, solange die Seite im
+        Hintergrund liegt.</p>
+      <div class="au-takte">${takt(AUFBAU_TAKTE.bordnetz)}</div>
+
+      <h3 class="au-gruppe">Vom Boot zum Server</h3>
+      <p class="au-text">Der Takt hängt am Uplink und lässt sich in den Einstellungen der
+        Bordansicht von Hand festlegen. Wichtig: die Abfragen oben laufen unterwegs
+        weiter und werden zum Boot durchgereicht — ein offener Bord-Monitor erzeugt über
+        Mobilfunk deutlich mehr Verkehr, als der Zustandstakt vermuten lässt.</p>
+      <div class="au-takte">${takt(AUFBAU_TAKTE.server)}</div>
+
+      <h3 class="au-gruppe">Im Logbuch</h3>
+      <p class="au-text">Reines Abfragen, kein WebSocket. Diese Seite wird selten geöffnet;
+        eine offene Leitung dafür wäre Aufwand ohne Gegenwert.</p>
+      <div class="au-takte">${takt(AUFBAU_TAKTE.logbuch)}</div>
+    </section>`;
 }
 
 // ── Einstellungen des Logbuchs ─────────────────────────────────────────────
@@ -1334,6 +1527,11 @@ async function laden() {
   zeichneZustand();
   zeichneUeberblick();
   if (_seite === 'position') { zeichnePosition(); if (_karte) karteZeichnen(); }
+  // Die Aufbauseite zeigt die geltende Betriebsart und ob das Boot dranhaengt.
+  // Ohne diese Zeile stuende dort, was beim Seitenaufbau bekannt war — und das
+  // war nichts, weil die Seite aus der Adresse heraus VOR dem ersten Laden
+  // gezeigt wird.
+  if (_seite === 'aufbau') zeichneAufbau();
   zeichneStreifen();
   zeichneZahlen();
   zeichneAusfaelle();

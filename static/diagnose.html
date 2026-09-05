@@ -96,6 +96,16 @@
         <span class="sl-neben">Wettermodell</span></span>
     </button>
 
+    <button class="sl-knopf" data-seite="aufbau">
+      <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="16" width="7" height="5" rx="1.5"/>
+        <rect x="3" y="16" width="7" height="5" rx="1.5"/><path d="M6.5 8v8M17.5 16V11H6.5"/>
+      </svg></span>
+      <span class="sl-text"><span class="sl-name">Aufbau</span>
+        <span class="sl-neben">Namen, Oberflächen, Takte</span></span>
+    </button>
+
     <div class="sl-gruppe" id="slGruppeSystem" hidden>System</div>
     <button class="sl-knopf" data-seite="aenderungen" id="slAenderungen" hidden>
       <span class="sl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -301,6 +311,14 @@
     </section>
 
     <!-- Änderungen -->
+    <section class="seite" data-seite="aufbau" hidden>
+      <div class="seiten-kopf">
+        <h1>Aufbau</h1>
+        <span class="hinweis">wie die Teile zusammenhängen</span>
+      </div>
+      <div class="aufbau" id="aufbau"></div>
+    </section>
+
     <section class="seite" data-seite="einstellungen" hidden>
       <div class="seiten-kopf">
         <h1>Einstellungen</h1>
