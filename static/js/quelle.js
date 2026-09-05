@@ -78,10 +78,16 @@ function quelleAusDaten(d) {
   if (!d || typeof d !== 'object') return;
   let art;
   if (d.quelle === 'server') {
-    // Bei WebSocket-Frames fehlt `boot_verbunden` — die kommen aber nur
-    // zustande, WEIL das Boot gerade sendet. Nur ein ausdrueckliches false
-    // bedeutet also "Kopie".
-    art = d.boot_verbunden === false ? 'server_kopie' : 'server_live';
+    // Fehlt `boot_verbunden`, wird NICHT auf "live" geraten, sondern
+    // behalten, was zuletzt bekannt war. Genau dieses Raten liess die
+    // Warnung verschwinden: der Server schickte beim Verbinden einen Frame
+    // ohne das Feld, und aus "Boot ist weg" wurde stillschweigend "live" —
+    // alte Werte sahen danach aus wie frische. Der Server fuellt das Feld
+    // inzwischen ueberall; diese Zeile ist der Guertel zum Hosentraeger, und
+    // sie faellt im Zweifel auf die vorsichtige Seite.
+    art = d.boot_verbunden === false ? 'server_kopie'
+        : d.boot_verbunden === true ? 'server_live'
+        : (_quelle.boot === false ? 'server_kopie' : 'server_live');
   } else if (d.quelle) {
     return;  // fremdes Feld, nicht raten
   } else {

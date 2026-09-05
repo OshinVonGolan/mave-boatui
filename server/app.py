@@ -1702,12 +1702,22 @@ async def oberflaeche_ws(ws: WebSocket) -> None:
     await ws.accept()
     _zuschauer.add(ws)
     try:
-        z = speicher.zustand()
-        if z:
-            daten = dict(z['daten'])
-            daten['quelle'] = 'server'
-            daten['alter_s'] = z['alter_s']
-            await ws.send_json(daten)
+        # Der erste Frame ging bisher von Hand zusammengebaut hinaus — mit
+        # `quelle` und `alter_s`, aber OHNE `boot_verbunden`. Genau daran macht
+        # die Oberflaeche fest, ob sie noch Live-Werte zeigt: sie deutet ein
+        # fehlendes Feld als "live", weil ein weitergereichter Frame nur dann
+        # entsteht, wenn das Boot gerade sendet.
+        #
+        # Fuer DIESEN Frame gilt das nicht. Er wird beim Verbinden verschickt,
+        # ob das Boot dranhaengt oder nicht. Die Folge war die verschwindende
+        # Warnung: die Seite holte per /api/status korrekt "nicht verbunden",
+        # zeigte die gelbe Wolke — und der erste Frame nahm sie eine Sekunde
+        # spaeter wieder weg. Danach sahen alte Werte aus wie frische.
+        #
+        # `_stand_fuer_zuschauer()` gibt es genau dafuer; im Docstring steht die
+        # Regel, an die sich diese Stelle nicht gehalten hat.
+        if speicher.zustand():
+            await ws.send_json(_stand_fuer_zuschauer())
         while True:
             # Die Oberflaeche schickt nichts ausser gelegentlichen Lebenszeichen.
             await ws.receive_text()
