@@ -582,14 +582,20 @@ def _router_werte(netz: dict | None) -> dict:
     der Neustart.
     """
     raus: dict = {}
-    gesund = (netz or {}).get('gesundheit') or {}
+    # Eine Ebene tiefer, unter 'router'. `_fetch_router()` liefert den inneren
+    # Teil, aber im Betrieb kommt hier der ganze Status an — und der packt ihn
+    # neben Starlink unter 'router'. Genau daran ist die erste Fassung
+    # gescheitert: gegen `_fetch_router()` geprueft sah alles richtig aus, im
+    # Verlauf stand nichts.
+    r_ = (netz or {}).get('router') or {}
+    gesund = r_.get('gesundheit') or {}
     lauf = gesund.get('uptime_s')
     if isinstance(lauf, (int, float)) and not isinstance(lauf, bool):
         raus['rt_lauf'] = round(lauf / 60, 1)          # Minuten, wie man es liest
     ram = gesund.get('ram_prozent')
     if isinstance(ram, (int, float)) and not isinstance(ram, bool):
         raus['rt_ram'] = round(ram, 1)
-    for r in ((netz or {}).get('radios') or []):
+    for r in (r_.get('radios') or []):
         feld = {'2.4GHz': 'wl24', '5GHz': 'wl5'}.get(r.get('band'))
         if feld:
             raus[feld] = 1 if r.get('up') else 0
