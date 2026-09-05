@@ -193,10 +193,20 @@ async function saveCurrentAsPreset(idx) {
 
 // ── Hash routing (back-gesture support) ────────────────────────────────────
 
-window.addEventListener('popstate', () => {
-  _closeAllOverlays();
+/**
+ * Die Ansicht herstellen, die in der Adresse steht.
+ *
+ * Gibt zurueck, ob es eine bekannte Ansicht war. Wird von ZWEI Seiten
+ * gebraucht: von der Zurueck-Geste und beim Laden der Seite. Frueher stand die
+ * Zuordnung nur im popstate-Horcher — und der feuert beim Neuladen nicht. Wer
+ * auf der Verbindungsseite neu lud, landete auf der Startseite, waehrend in der
+ * Adresse weiter #connectivity stand: die Seite behauptete etwas anderes, als
+ * sie zeigte.
+ */
+function _ansichtAusAdresse() {
   const hash = location.hash.slice(1);
-  if (hash) {
+  if (!hash) return false;
+  {
     const map = {
       // renderDeviceTiles muss mit: ueber diesen Pfad (Zurueck-Taste, direkter
       // Aufruf von #battery) lief es frueher nicht, die drei Karten oben
@@ -235,9 +245,35 @@ window.addEventListener('popstate', () => {
         else renderMondayBoard(_mondayData);
       },
     };
-    if (map[hash]) map[hash]();
+    if (!map[hash]) return false;
+    map[hash]();
+    return true;
   }
+}
+
+window.addEventListener('popstate', () => {
+  _closeAllOverlays();
+  _ansichtAusAdresse();
 });
+
+/**
+ * Beim Laden: steht eine Ansicht in der Adresse, wird sie geoeffnet.
+ *
+ * Davor werden zwei Eintraege in die Historie gelegt — erst die nackte Seite,
+ * dann die Ansicht. Ohne das haette die Zurueck-Geste nach einem Neuladen
+ * nichts, wohin sie zurueck koennte, und wuerde die Anwendung verlassen statt
+ * die Ansicht zu schliessen.
+ *
+ * Kennt niemand den Namen, wird die Adresse aufgeraeumt: ein Verweis, der ins
+ * Leere zeigt, soll nicht in der Adresszeile stehen bleiben.
+ */
+function _adresseBeimStart() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+  history.replaceState(null, '', location.pathname);
+  history.pushState({ overlay: hash }, '', '#' + hash);
+  if (!_ansichtAusAdresse()) history.replaceState(null, '', location.pathname);
+}
 
 // ── Time sync ──────────────────────────────────────────────────────────────
 

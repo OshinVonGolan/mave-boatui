@@ -340,5 +340,87 @@ class VollbildAngebot(Pruefstand):
             self.pg.evaluate("() => { delete document.fullscreenElement; }")
 
 
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class AnsichtInDerAdresse(Pruefstand):
+    """Neu laden auf einer Unterseite muss dort wieder herauskommen.
+
+    Die Zuordnung Adresse → Ansicht hing nur am popstate-Horcher, und der feuert
+    beim Neuladen nicht: wer auf der Verbindungsseite neu lud, landete auf der
+    Startseite, während in der Adresse weiter #connectivity stand.
+    """
+
+    def neu_laden(self, hash_: str):
+        """Laden, anmelden, und warten, bis die Seite WIRKLICH steht.
+
+        Das Warten ist nicht Bequemlichkeit: die Adresse wird erst ausgewertet,
+        wenn der Ladeschirm faellt (bis dahin vergehen im schlechtesten Fall
+        acht Sekunden), und das Anmelden laedt die Seite noch einmal neu. Wer
+        vorher nachsieht, misst den Zwischenzustand.
+        """
+        self.pg.goto(self.basis + '/' + hash_, wait_until='domcontentloaded',
+                     timeout=30000)
+        # RICHTIG neu laden. Der Sprung von / auf /#irgendwas bleibt im selben
+        # Dokument — die Seite laedt dabei NICHT neu, init.js laeuft nicht noch
+        # einmal, und geprueft waere der Zurueck-Weg statt des Neuladens. Genau
+        # dieser Unterschied ist der Fehler, um den es hier geht.
+        self.pg.reload(wait_until='domcontentloaded', timeout=30000)
+        self._init_abwarten()
+        if self.pg.evaluate("() => !!document.querySelector('.anmeldung:not(.hidden)')"):
+            self.pg.fill('#anmName', KONTO)
+            self.pg.fill('#anmPw', PASSWORT)
+            self.pg.click('#anmKnopf')          # das laedt die Seite neu
+            self.pg.wait_for_load_state('domcontentloaded')
+            self._init_abwarten()
+
+    def _init_abwarten(self):
+        """Warten, bis init.js durchgelaufen ist.
+
+        NICHT auf den Ladeschirm warten: den nimmt nach vier Sekunden die
+        Notbremse in index.html weg, unabhaengig davon, ob das Buendel schon
+        gelaufen ist. `_sparkPoller` entsteht als eines der letzten Dinge in
+        init.js — steht er, ist die Adresse ausgewertet.
+        """
+        self.pg.wait_for_function("() => typeof _sparkPoller !== 'undefined'",
+                                  timeout=25000)
+        self.pg.wait_for_timeout(300)
+
+    def test_verbindungsseite_ueberlebt_das_neuladen(self):
+        self.neu_laden('#connectivity')
+        self.assertFalse(self.pg.evaluate(
+            "() => $('connInetOverlay').classList.contains('hidden')"),
+            'nach dem Neuladen steht die Startseite statt der Verbindungsseite')
+        self.assertEqual(self.pg.evaluate('() => location.hash'), '#connectivity')
+
+    def test_auch_die_alarme(self):
+        self.neu_laden('#alarms')
+        self.assertFalse(self.pg.evaluate(
+            "() => $('alarmOverlay').classList.contains('hidden')"))
+
+    def test_zurueck_schliesst_die_ansicht_statt_die_app_zu_verlassen(self):
+        """Nach einem Neuladen gäbe es sonst nichts, wohin zurück führen kann."""
+        self.neu_laden('#connectivity')
+        self.pg.go_back()
+        self.pg.wait_for_timeout(1200)
+        self.assertTrue(self.pg.evaluate(
+            "() => $('connInetOverlay').classList.contains('hidden')"))
+        self.assertEqual(self.pg.evaluate('() => location.hash'), '')
+
+    def test_unbekannter_name_raeumt_die_adresse_auf(self):
+        """Ein Verweis ins Leere soll nicht in der Adresszeile stehen bleiben."""
+        self.neu_laden('#gibtesnicht')
+        z = self.pg.evaluate("""() => ({
+            hash: location.hash, href: location.href,
+            init: typeof _sparkPoller, fn: typeof _adresseBeimStart,
+            eintraege: history.length,
+        })""")
+        self.assertEqual(z['hash'], '', f'Zustand: {z}')
+
+    def test_ohne_hash_bleibt_die_startseite(self):
+        self.neu_laden('')
+        self.assertTrue(self.pg.evaluate(
+            "() => $('connInetOverlay').classList.contains('hidden')"))
+
+
 if __name__ == '__main__':
     unittest.main()

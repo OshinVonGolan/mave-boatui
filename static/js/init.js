@@ -5,6 +5,12 @@ _kopfhoeheFuehren();   // --header-h an der echten Kopfzeilenhoehe fuehren
 _leisteKompaktFuehren();  // Statusleiste schrumpft beim Scrollen an die Kopfzeile
 _vollbildFuehren();       // Vollbild nach einem Neuladen wieder herstellen
 wandStart();              // Bildschirm-anlassen-Schalter und Nachtmodus
+// Steht eine Ansicht in der Adresse, wird sie SOFORT geoeffnet — nicht erst,
+// wenn der Ladeschirm faellt. Der kann bis zu acht Sekunden stehen, und so
+// lange auf der Startseite zu sitzen, obwohl in der Adresse etwas anderes
+// steht, ist genau der Zustand, den das hier beheben soll. Verdeckt ist die
+// Ansicht ohnehin: der Ladeschirm liegt darueber, bis alles da ist.
+_adresseBeimStart();
 const _presetsFertig = Promise.resolve(loadPresets());
 
 // Service Worker anmelden. Erst dadurch bietet Chrome die Anwendung als
