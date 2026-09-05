@@ -367,10 +367,29 @@ function _burgerHaupt() {
     + eintrag(_BM_SVG.stauplan, 'Stauplan', 'openStauplan()')
     + '<div class="burger-trenner"></div>'
     + eintrag(_BM_SVG.ordnen, 'Kacheln anordnen', 'kachelnOrdnenAn(true)')
-    + eintrag(_BM_SVG.vollbild,
-              (typeof _vollbildAktiv === 'function' && _vollbildAktiv()) ? 'Vollbild verlassen' : 'Vollbild',
-              'vollbildUmschalten()')
+    // In der installierten Wandfassung faellt der Eintrag weg. Sie laeuft
+    // ohnehin ohne Leisten, die Fullscreen-API haette dem nichts hinzuzufuegen
+    // — und ein "Vollbild verlassen", nach dem der Bildschirm trotzdem voll
+    // bleibt, waere ein Schalter, der luegt.
+    + (_wandVollbild() ? ''
+       : eintrag(_BM_SVG.vollbild,
+                 (typeof _vollbildAktiv === 'function' && _vollbildAktiv())
+                   ? 'Vollbild verlassen' : 'Vollbild',
+                 'vollbildUmschalten()'))
     + eintrag(_BM_SVG.einst, 'Einstellungen', 'openSettings()');
+}
+
+/** Laeuft die Anwendung als installierte Wandfassung (Manifest-Vollbild)?
+ *
+ *  Die Abfrage `display-mode: fullscreen` allein genuegt NICHT: sie ist auch
+ *  wahr, waehrend man selbst ueber die Fullscreen-API im Vollbild steht. Wuerde
+ *  der Eintrag in diesem Fall verschwinden, gaebe es keinen Weg mehr hinaus —
+ *  man haette sich im Vollbild eingesperrt. Also: nur wenn NICHT die API dafuer
+ *  gesorgt hat, kommt es aus dem Manifest.
+ */
+function _wandVollbild() {
+  if (typeof _vollbildAktiv === 'function' && _vollbildAktiv()) return false;
+  return typeof anzeigeArt === 'function' && anzeigeArt() === 'fullscreen';
 }
 
 function _burgerKonto() {

@@ -65,8 +65,13 @@ def freier_port() -> int:
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
-class Zeichenaufwand(unittest.TestCase):
-    """Ein eigener Server, ein eigener Browser, ein Konto."""
+class Pruefstand(unittest.TestCase):
+    """Ein eigener Server, ein eigener Browser, ein Konto — sonst nichts.
+
+    Traegt selbst keine Pruefungen: die beiden Klassen darunter teilen sich den
+    Aufbau, sollen aber nicht die Pruefungen der jeweils anderen mitlaufen
+    lassen.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -145,6 +150,11 @@ class Zeichenaufwand(unittest.TestCase):
             } finally { window[n] = echt; }
             return zahl;
         }""", [name, laeufe, daten or NUTZLAST])
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Zeichenaufwand(Pruefstand):
+    """Was bei jedem Datensatz NICHT mehr laeuft."""
 
     # ── Die Kopfzeile ──────────────────────────────────────────────────────
 
@@ -266,6 +276,68 @@ class Zeichenaufwand(unittest.TestCase):
             try { _renderBattWideChart(true); } finally { delete canvas.offsetWidth; }
             return gerufen;
         }"""))
+
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class VollbildAngebot(Pruefstand):
+    """Wann die Schaltfläche „Vollbild wiederherstellen" erscheinen darf.
+
+    Sie hing an `document.fullscreenElement`. In der installierten Wandfassung
+    ist der Bildschirm voll, ohne dass die Fullscreen-API je beteiligt war —
+    das Feld bleibt leer, und die Schaltfläche stand dauerhaft unten auf der
+    Seite und bot etwas an, das längst da war.
+    """
+
+    def vollbild_vortaeuschen(self, an: bool):
+        """`display-mode: fullscreen` vortäuschen, ohne die API zu benutzen —
+        genau die Lage der installierten Wandfassung."""
+        self.pg.evaluate("""(an) => {
+            if (!window._echtesMatchMedia) window._echtesMatchMedia = window.matchMedia;
+            window.matchMedia = q => (an && q.includes('display-mode: fullscreen'))
+                ? { matches: true, addEventListener() {}, addListener() {} }
+                : window._echtesMatchMedia.call(window, q);
+        }""", an)
+
+    def test_pille_im_browser_wenn_gewuenscht(self):
+        self.pg.evaluate("""() => {
+            localStorage.setItem('mave_vollbild', '1');
+            _vollbildPilleSetzen();
+        }""")
+        self.assertIsNotNone(self.pg.query_selector('#vollbildPille'))
+
+    def test_keine_pille_in_der_wandfassung(self):
+        self.vollbild_vortaeuschen(True)
+        self.pg.evaluate("""() => {
+            localStorage.setItem('mave_vollbild', '1');
+            document.getElementById('vollbildPille')?.remove();
+            _vollbildPilleSetzen();
+        }""")
+        self.assertIsNone(self.pg.query_selector('#vollbildPille'),
+                          'Die Wandfassung bekommt ein Angebot, das nichts zu bieten hat')
+
+    def test_menueeintrag_faellt_in_der_wandfassung_weg(self):
+        self.vollbild_vortaeuschen(True)
+        html = self.pg.evaluate("() => { burgerBauen(); return $('burgerMenu').innerHTML; }")
+        self.assertNotIn('vollbildUmschalten()', html)
+
+    def test_aber_nicht_waehrend_man_selbst_im_vollbild_steht(self):
+        """Sonst gäbe es keinen Weg mehr hinaus — man hätte sich eingesperrt.
+
+        `display-mode: fullscreen` ist auch dann wahr, wenn die Fullscreen-API
+        dafür gesorgt hat; nur dann muss der Eintrag bleiben.
+        """
+        self.vollbild_vortaeuschen(True)
+        self.pg.evaluate("""() => {
+            Object.defineProperty(document, 'fullscreenElement', {
+                configurable: true, get: () => document.documentElement });
+        }""")
+        try:
+            html = self.pg.evaluate("() => { burgerBauen(); return $('burgerMenu').innerHTML; }")
+            self.assertIn('vollbildUmschalten()', html)
+            self.assertIn('Vollbild verlassen', html)
+        finally:
+            self.pg.evaluate("() => { delete document.fullscreenElement; }")
 
 
 if __name__ == '__main__':

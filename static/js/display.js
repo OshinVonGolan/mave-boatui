@@ -837,6 +837,27 @@ function _vollbildAktiv() {
   return !!(document.fullscreenElement || document.webkitFullscreenElement);
 }
 
+/**
+ * Laeuft der Bildschirm gerade ohne Browserleisten?
+ *
+ * Das ist NICHT dasselbe wie `_vollbildAktiv()`. Es gibt zwei Wege dorthin, und
+ * nur der eine ist an der Fullscreen-API abzulesen:
+ *
+ *   1. Der Schalter im Menue holt sich den Vollbild ueber `requestFullscreen()`.
+ *      Dann steht `document.fullscreenElement`.
+ *   2. Die installierte Wandfassung startet ohne Leisten, weil ihr Manifest
+ *      `display: fullscreen` sagt. Die API war daran nie beteiligt —
+ *      `document.fullscreenElement` bleibt LEER, obwohl der Bildschirm voll ist.
+ *
+ * Fall 2 kostete den Eigner eine Meldung: die Schaltflaeche „Vollbild
+ * wiederherstellen" stand dauerhaft unten auf der Seite und bot an, einen
+ * Zustand herzustellen, der laengst da war.
+ */
+function _ohneLeisten() {
+  if (_vollbildAktiv()) return true;
+  return typeof anzeigeArt === 'function' && anzeigeArt() === 'fullscreen';
+}
+
 async function vollbildUmschalten() {
   try {
     if (_vollbildAktiv()) {
@@ -888,7 +909,11 @@ function _vollbildFuehren() {
 
 function _vollbildPilleSetzen() {
   const gewuenscht = localStorage.getItem(_VOLLBILD_KEY) === '1';
-  const zeigen = gewuenscht && !_vollbildAktiv();
+  // `_ohneLeisten` und nicht `_vollbildAktiv`: in der installierten
+  // Wandfassung ist der Bildschirm voll, ohne dass die Fullscreen-API je im
+  // Spiel war. Sonst stuende hier dauerhaft ein Angebot, das nichts zu bieten
+  // hat.
+  const zeigen = gewuenscht && !_ohneLeisten();
   let pille = document.getElementById('vollbildPille');
   if (!zeigen) { pille?.remove(); return; }
   if (pille) return;

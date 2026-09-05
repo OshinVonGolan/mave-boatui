@@ -41,11 +41,22 @@ from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
 from jsonio import read_json, write_json
 
-def _git_semver() -> str:
-    """Returns semver tag (e.g. '1.5.3') if HEAD is exactly on a tag, else ''."""
+# Nur Tags, die auch eine Fassung BEZEICHNEN. Im Verzeichnis stehen daneben
+# Sicherungsmarken wie `geraeteseite-vor-umbau` — Ruecksprungpunkte vor einem
+# groesseren Umbau, und die gehoeren dorthin. `git describe` nimmt aber ohne
+# Filter den zuletzt gesetzten Tag, ganz gleich wie er heisst: aus v1.60.0 plus
+# vier Aenderungen wurde so ploetzlich ".4", weil in
+# `geraeteseite-vor-umbau` kein Punkt steht, von dem sich eine Hauptnummer
+# abtrennen liesse. Der Filter loest das an der Wurzel, statt Marken zu
+# verbieten, die ihren Zweck haben.
+_FASSUNGS_TAGS = 'v[0-9]*'
+
+
+def _git_semver(ref: str = 'HEAD') -> str:
+    """Returns semver tag (e.g. '1.5.3') if the ref is exactly on a tag, else ''."""
     try:
         r = subprocess.run(
-            ['git', 'describe', '--tags', '--exact-match', 'HEAD'],
+            ['git', 'describe', '--tags', '--exact-match', '--match', _FASSUNGS_TAGS, ref],
             cwd=Path(__file__).parent, capture_output=True, text=True, timeout=5,
         )
         return r.stdout.strip().lstrip('v') if r.returncode == 0 else ''
@@ -63,30 +74,38 @@ def _git_hash() -> str:
     except Exception:
         return ''
 
-def _fassung() -> str:
-    """Die laufende Fassung, fortlaufend gezaehlt.
+def _fassung(ref: str = 'HEAD') -> str:
+    """Die laufende Fassung eines Standes, fortlaufend gezaehlt.
 
-    Steht HEAD genau auf einem Tag, gilt der Tag. Sonst wird ab dem letzten Tag
-    weitergezaehlt: 1.59.0 + 42 Aenderungen = 1.59.42. Vorher hiess alles nach
-    einem Tag gleich, und "welche Fassung laeuft da eigentlich" war nicht zu
-    beantworten.
+    Steht der Stand genau auf einem Fassungs-Tag, gilt der Tag. Sonst wird ab
+    dem letzten weitergezaehlt: 1.60.0 + 42 Aenderungen = 1.60.42. Vorher hiess
+    alles nach einem Tag gleich, und "welche Fassung laeuft da eigentlich" war
+    nicht zu beantworten.
+
+    Mit `ref` laesst sich dieselbe Rechnung auf die Gegenstelle anwenden. Das
+    ist der Grund fuer den Parameter: die Fernfassung wurde bisher aus dem
+    QUELLTEXT der Gegenstelle gelesen, mit einem Muster fuer die alte Schreibart
+    `VERSION = _git_semver() or '1.59.0'`. Seit die Fassung aus Git kommt, gibt
+    es diese Zeile nicht mehr — das Muster traf ins Leere und die Fernfassung
+    blieb leer. Zweimal dasselbe auf zwei Wegen auszurechnen war der Fehler.
     """
-    genau = _git_semver()
+    genau = _git_semver(ref)
     if genau:
         return genau
     try:
-        tag = subprocess.run(['git', 'describe', '--tags', '--abbrev=0'],
+        tag = subprocess.run(['git', 'describe', '--tags', '--abbrev=0',
+                              '--match', _FASSUNGS_TAGS, ref],
                              cwd=Path(__file__).parent, capture_output=True,
                              text=True, timeout=5).stdout.strip()
-        seit = subprocess.run(['git', 'rev-list', '--count', f'{tag}..HEAD'],
+        seit = subprocess.run(['git', 'rev-list', '--count', f'{tag}..{ref}'],
                               cwd=Path(__file__).parent, capture_output=True,
                               text=True, timeout=5).stdout.strip()
-        if tag and seit.isdigit():
-            haupt, _, _ = tag.lstrip('v').rpartition('.')
+        haupt, _, _ = tag.lstrip('v').rpartition('.')
+        if haupt and seit.isdigit():
             return f'{haupt}.{seit}'
     except Exception:
         pass
-    return '1.59.0'
+    return '1.60.0'
 
 
 VERSION  = _fassung()
@@ -96,11 +115,6 @@ GIT_HASH = _git_hash()
 # Wird periodisch in einem Thread aktualisiert, damit der Endpunkt nie blockiert.
 _remote_ver = {'ts': 0.0, 'version': '', 'hash': '', 'up_to_date': None}
 
-def _parse_version_fallback(text: str) -> str:
-    """Liest die lesbare Version aus  VERSION = _git_semver() or 'x.y.z'  ."""
-    m = re.search(r"_git_semver\(\)\s*or\s*'([^']+)'", text)
-    return m.group(1) if m else ''
-
 def _refresh_remote_version() -> bool:
     """Gleicht den Remote-Stand ab. Liefert True, wenn das geklappt hat."""
     try:
@@ -108,9 +122,11 @@ def _refresh_remote_version() -> bool:
         h = subprocess.run(['git', 'rev-parse', '--short', '@{u}'],
                            cwd=Path(__file__).parent, capture_output=True, text=True, timeout=10)
         rhash = h.stdout.strip() if h.returncode == 0 else ''
-        show = subprocess.run(['git', 'show', '@{u}:main.py'],
-                              cwd=Path(__file__).parent, capture_output=True, text=True, timeout=10)
-        rver = _parse_version_fallback(show.stdout) if show.returncode == 0 else ''
+        # Dieselbe Rechnung wie fuer den eigenen Stand, nur auf den Stand der
+        # Gegenstelle angewandt. Frueher wurde dafuer deren main.py geholt und
+        # eine Zeichenkette herausgesucht — ein zweiter Weg zum selben Ergebnis,
+        # und der eine ueberlebte die Umstellung auf Git-Fassungen nicht.
+        rver = _fassung('@{u}') if rhash else ''
         _remote_ver.update(ts=time.time(), version=rver, hash=rhash,
                            up_to_date=((rhash == GIT_HASH) if rhash else None))
         return fetch.returncode == 0 and bool(rhash)
