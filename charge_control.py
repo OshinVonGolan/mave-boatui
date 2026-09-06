@@ -43,9 +43,14 @@ _DEFAULT_SETTINGS: dict = {
         #                hört von selbst auf zu drücken, der Ladezyklus startet
         #                nicht neu, und ein ausgefallener Pi hinterlässt einen
         #                harmlosen Zustand statt eines abgeschalteten Laders.
+        #                Mit hold_auto zieht sich die Haltespannung selbst nach.
+        #   'profil'   — auf ein anderes Ladeprofil umschalten (hold_profile_id).
+        #                Die von Hand gepflegte Fassung: keine eigene Spannung,
+        #                sondern eines der fünf Profile.
         #   'aus'      — Lader abschalten. Harter Stopp, aber jedes
         #                Wiedereinschalten beginnt erneut mit Bulk.
         'hold_mode':         'spannung',
+        'hold_profile_id':    4,      # gilt nur bei hold_mode 'profil'
         # Haltespannung selbst ermitteln statt fest vorzugeben. Aus, bis sie
         # jemand einschaltet — eine Regelung, die von sich aus an den
         # Ladespannungen dreht, darf nicht die Vorgabe sein.
@@ -151,7 +156,7 @@ _NACHSETZ_ABSTAND_S = 1800.0
 _NACHSETZ_MAX       = 3
 
 # Zulässige Werte für harbor.hold_mode.
-_HALTEARTEN = ('spannung', 'aus')
+_HALTEARTEN = ('spannung', 'profil', 'aus')
 
 # So viele Ladeprofile gibt es, fest. Die Liste hat immer genau diese Länge:
 # eine Auswahl, die je nach gespeichertem Stand mal drei und mal fünf Einträge
@@ -387,7 +392,7 @@ class ChargeController:
         """
         h       = self._settings.get('harbor', {})
         manuell = _num(h.get('hold_voltage'), 13.2)
-        if h.get('hold_auto') is not True:
+        if h.get('hold_auto') is not True or h.get('hold_mode') not in (None, 'spannung'):
             return manuell
         gelernt = self._state.get('hold_learned_v')
         if isinstance(gelernt, bool) or not isinstance(gelernt, (int, float)):
@@ -427,6 +432,8 @@ class ChargeController:
             # Sollwerte unverändert stehen lassen, nur abschalten — so muss beim
             # Wiedereinschalten nichts ins Flash zurückgeschrieben werden.
             return abs_v, flt_v, False
+        if art == 'profil':
+            return (*self._profil_spannungen(h.get('hold_profile_id')), True)
         hold_v = self._haltespannung()
         return hold_v, hold_v, True
 
@@ -651,9 +658,11 @@ class ChargeController:
         h = self._settings.get('harbor', {})
         if h.get('hold_auto') is not True:
             return False
-        if h.get('hold_mode') == 'aus':
-            # Bei abgeschaltetem Lader sagt die Spannung nichts ueber den
-            # Ladezustand aus — dann gibt es auch nichts zu lernen.
+        if h.get('hold_mode') not in (None, 'spannung'):
+            # Nur die Haltespannung wird ermittelt. Bei abgeschaltetem Lader
+            # sagt die Spannung nichts ueber den Ladezustand aus, und ein von
+            # Hand gewaehltes Halteprofil soll nicht hinter dem Ruecken des
+            # Eigners verschoben werden.
             return False
 
         jetzt = time.monotonic()

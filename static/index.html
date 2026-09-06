@@ -1110,12 +1110,17 @@
         </div>
         <div class="settings-row">
           <label class="settings-label" for="sChgHoldMode">Halten durch</label>
-          <select class="settings-input narrow" id="sChgHoldMode" style="width:auto;min-width:158px">
-            <option value="spannung">Haltespannung</option>
+          <select class="settings-input narrow" id="sChgHoldMode" style="width:auto;min-width:236px">
+            <option value="spannung">Haltespannung (automatisch)</option>
+            <option value="profil">Anderes Ladeprofil</option>
             <option value="aus">Lader aus</option>
           </select>
         </div>
-        <div style="font-size:12px;color:var(--text3);margin:8px 0 10px">Zwei feste Profile: bis zum Ziel-SOC wird mit Absorption und Erhaltung geladen, ab dem Ziel-SOC gilt die Haltespannung. Geschrieben wird nur beim Umschalten, denn die Sollwerte liegen im Flash des Ladegeräts. „Lader aus“ stoppt hart, startet den Ladezyklus beim Wiedereinschalten aber neu.</div>
+        <div class="settings-row" id="sChgHoldProfileRow">
+          <label class="settings-label" for="sChgHoldProfile">Halteprofil</label>
+          <select class="settings-input narrow" id="sChgHoldProfile" style="width:auto;min-width:158px"></select>
+        </div>
+        <div id="sChgHafenHinweis" style="font-size:12px;color:var(--text3);margin:8px 0 10px"></div>
       </div>
 
       <!-- Vollladung -->

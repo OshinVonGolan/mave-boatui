@@ -486,7 +486,7 @@ function _chgProfilZeilen(profile) {
 function _chgProfilAuswahl(profile) {
   const eintraege = profile.map(pr =>
     `<option value="${pr.id}">${_esc(pr.name ?? ('Profil ' + pr.id))}</option>`).join('');
-  for (const id of ['sChgHarborProfile', 'sChgFullProfile']) {
+  for (const id of ['sChgHarborProfile', 'sChgFullProfile', 'sChgHoldProfile']) {
     const el = $(id);
     if (el) el.innerHTML = eintraege;
   }
@@ -513,6 +513,13 @@ function _populateChargerInputs() {
   if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
   if ($('sChgHoldV'))        $('sChgHoldV').value       = s.harbor?.hold_voltage  ?? 13.2;
   if ($('sChgHoldMode'))     $('sChgHoldMode').value    = s.harbor?.hold_mode     ?? 'spannung';
+  if ($('sChgHoldProfile'))  $('sChgHoldProfile').value = String(s.harbor?.hold_profile_id ?? 4);
+  _chgHalteartZeigen();
+  const art = $('sChgHoldMode');
+  if (art && !art.dataset.gebunden) {
+    art.dataset.gebunden = '1';
+    art.addEventListener('change', () => { _chgHalteartZeigen(); _chgHoldAutoInfo(); });
+  }
   if ($('sChgHoldAuto'))     $('sChgHoldAuto').checked  = s.harbor?.hold_auto === true;
   _chgHoldAutoInfo();
   const auto = $('sChgHoldAuto');
@@ -565,6 +572,37 @@ function _populateChargerInputs() {
  * er zuletzt nachgezogen wurde — sonst sieht man nur ein Feld, das sich nicht
  * mehr auswirkt, und weiss nicht, was der Regler tatsaechlich benutzt.
  */
+/**
+ * Zeigt nur, was zur gewaehlten Halteart gehoert.
+ *
+ * Bei "Anderes Ladeprofil" sind Haltespannung und Selbstermittlung ohne
+ * Wirkung — sie stehen zu lassen waere eine Einladung, an etwas zu drehen,
+ * das nichts tut.
+ */
+const HAFEN_HINWEIS = {
+  spannung: 'Bis zum Ziel-SOC wird mit dem Ladeprofil geladen, ab dem Ziel-SOC gilt die '
+          + 'Haltespannung. Der Lader bleibt an und hört von selbst auf zu drücken — '
+          + 'fällt der Pi aus, hinterlässt er damit einen harmlosen Zustand.',
+  profil:   'Bis zum Ziel-SOC wird mit dem Ladeprofil geladen, ab dem Ziel-SOC mit dem '
+          + 'Halteprofil. Beide Spannungspaare pflegst du selbst unter „Ladeprofile“.',
+  aus:      'Bis zum Ziel-SOC wird mit dem Ladeprofil geladen, ab dem Ziel-SOC wird der '
+          + 'Lader abgeschaltet. Das stoppt hart, startet den Ladezyklus beim '
+          + 'Wiedereinschalten aber neu — und ein ausgefallener Pi ließe den Lader aus.',
+};
+
+function _chgHalteartZeigen() {
+  const art     = $('sChgHoldMode')?.value ?? 'spannung';
+  const zeigen  = (el, ja) => { const r = el?.closest('.settings-row'); if (r) r.hidden = !ja; };
+  zeigen($('sChgHoldProfile'), art === 'profil');
+  zeigen($('sChgHoldV'),       art === 'spannung');
+  zeigen($('sChgHoldAuto'),    art === 'spannung');
+  const hinweis = $('sChgHafenHinweis');
+  if (hinweis) {
+    hinweis.textContent = (HAFEN_HINWEIS[art] || HAFEN_HINWEIS.spannung)
+      + ' Geschrieben wird nur beim Umschalten, denn die Sollwerte liegen im Flash des Ladegeräts.';
+  }
+}
+
 function _chgHoldAutoInfo() {
   const el = $('sChgHoldAutoInfo');
   if (!el) return;
@@ -606,7 +644,9 @@ async function saveChargerSettings() {
     harbor:  {
       target_soc:   _intOr($('sChgTargetSoc')?.value,    80),
       hold_voltage: _floatOr($('sChgHoldV')?.value,      13.2),
-      hold_mode:    $('sChgHoldMode')?.value === 'aus' ? 'aus' : 'spannung',
+      hold_mode:    ['aus', 'profil'].includes($('sChgHoldMode')?.value)
+                      ? $('sChgHoldMode').value : 'spannung',
+      hold_profile_id: _intOr($('sChgHoldProfile')?.value, 4),
       hold_auto:    $('sChgHoldAuto')?.checked === true,
       profile_id:   _intOr($('sChgHarborProfile')?.value, 2),
     },

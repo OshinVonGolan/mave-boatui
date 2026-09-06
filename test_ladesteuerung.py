@@ -71,6 +71,29 @@ class HaltenBeiZiel(Basis):
         for d in r.device_setpoints():
             self.assertIs(d['on'], False, f"{d['label']} haette abschalten muessen")
 
+    def test_halten_ueber_ein_anderes_profil(self):
+        # Die von Hand gepflegte Fassung: kein eigener Spannungswert, sondern
+        # eines der fuenf Profile.
+        profile = [dict(pr) for pr in cc._DEFAULT_SETTINGS['profile']]
+        profile[2] = {**profile[2], 'absorption_v': 13.35, 'float_v': 13.25}
+        r = self._regler(settings={'profile': profile,
+                                   'harbor': {'hold_mode': 'profil', 'hold_profile_id': 3}})
+        r.update_soc(85)
+        for d in r.device_setpoints():
+            self.assertIs(d['on'], True)
+            self.assertAlmostEqual(d['absorption_v'], 13.35, places=3)
+            self.assertAlmostEqual(d['float_v'],      13.25, places=3)
+
+    def test_beim_halteprofil_wird_nichts_selbst_ermittelt(self):
+        # Ein von Hand gewaehltes Profil soll nicht hinter dem Ruecken des
+        # Eigners verschoben werden.
+        r = self._regler(settings={'harbor': {'hold_mode': 'profil', 'hold_auto': True}})
+        r.update_soc(85, 0.0)
+        r._halte_seit    = time.monotonic() - 10 * 3600
+        r._halte_geladen = True
+        self.assertFalse(r.update_soc(85, 0.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
     def test_unbekannte_halteart_faellt_auf_spannung_zurueck(self):
         r = self._regler(settings={'harbor': {'hold_mode': 'quatsch'}})
         r.update_soc(85)
