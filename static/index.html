@@ -1805,8 +1805,12 @@
     <div class="wx-block">
       <div class="wx-block-kopf">Wind und Böen · 72 Stunden</div>
       <canvas id="wxWindCanvas" class="wx-canvas" style="height:190px"></canvas>
-      <div class="wx-hinweis">Fläche = Unterschied zwischen Mittelwind und Böe.
-        Pfeile zeigen, wohin der Wind weht. Grau hinterlegt ist die Nacht.</div>
+      <!-- Die Unterschrift folgt dem Bild: seit es ZWEI Bänder sind (Wind bis
+           zum Boden, Böe bis hinunter zur Windlinie) wäre „Fläche = der
+           Unterschied" falsch. -->
+      <div class="wx-hinweis">Blau ist der Mittelwind, orange die Böe darüber —
+        das orange Band ist der Unterschied. Pfeile zeigen, wohin der Wind
+        weht. Grau hinterlegt ist die Nacht.</div>
     </div>
 
     <div class="wx-block" id="wxWelleBox" hidden>

@@ -394,7 +394,36 @@ function _wxTagStreifen() {
   ctx.strokeStyle = akzent; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // 4. Die Boee nur als Linie. Die Flaeche dazwischen war ein brauner Fleck.
+  // 4. Die Boee: ein eigenes Band von ihrer Linie hinunter bis zur Windlinie,
+  //    darueber die Linie selbst. Es UEBERLAPPT die Windflaeche nicht — der
+  //    braune Fleck von frueher kam davon, dass beides uebereinander lag.
+  //    Genauso auf der Detailseite (siehe _wxWindZeichnen).
+  const boeWerte = st.map(s => (s.boe != null ? s.boe : s.wind)).filter(v => v != null);
+  const windWerte = st.map(s => s.wind).filter(v => v != null);
+  const boeZug = (rueckwaerts, feld, anhaengen) => {
+    let auf = !!anhaengen;                 // Rueckweg: lineTo, nicht moveTo
+    for (let k = 0; k < n + 1; k++) {
+      const i = rueckwaerts ? n - k : k;
+      const v = feld(st[i]);
+      if (v == null) continue;
+      auf ? ctx.lineTo(xOf(i), yOf(v)) : ctx.moveTo(xOf(i), yOf(v));
+      auf = true;
+    }
+    return auf;
+  };
+  if (boeWerte.length && windWerte.length) {
+    ctx.beginPath();
+    if (boeZug(false, s => (s.boe != null ? s.boe : s.wind))) {
+      boeZug(true, s => s.wind, true);
+      ctx.closePath();
+      const bg = ctx.createLinearGradient(0, yOf(Math.max(...boeWerte)),
+                                          0, yOf(Math.min(...windWerte)));
+      bg.addColorStop(0, 'rgba(251,146,60,.26)');
+      bg.addColorStop(1, 'rgba(251,146,60,.02)');
+      ctx.fillStyle = bg;
+      ctx.fill();
+    }
+  }
   ctx.beginPath();
   let erste = true;
   st.forEach((s, i) => {
@@ -855,27 +884,62 @@ function _wxWindZeichnen(stunden) {
   const yOf = v => pad.t + (1 - v / max) * cH;
   _wxSkala(r, max, 'kn');
 
-  // Böen als Fläche über dem Wind: die Fläche IST der Unterschied, und der
-  // ist die Auskunft. Zwei Linien nebeneinander liest man nicht so.
-  ctx.beginPath();
-  let start = true;
-  stunden.forEach((s, i) => {
-    const v = s.boe != null ? s.boe : s.wind;
-    if (v == null) return;
-    start ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
-    start = false;
-  });
-  for (let i = stunden.length - 1; i >= 0; i--) {
-    const v = stunden[i].wind;
-    if (v == null) continue;
-    ctx.lineTo(xOf(i), yOf(v));
+  // ZWEI Baender, nicht eine Unterschiedsflaeche: unten der Wind bis zum
+  // Boden, darueber die Boee bis hinunter zur Windlinie. Jedes ist an SEINER
+  // Linie am dichtesten und laeuft von ihr weg aus.
+  //
+  // Vorher war hier nur der Unterschied gefuellt, waehrend die Kachel den
+  // Wind fuellte — derselbe Verlauf, zwei Aufbauten (Eignermeldung:
+  // verwirrend). Jetzt sehen beide gleich aus.
+  const akzent = _wxFarbe('--accent', '#38bdf8');
+  const boden = pad.t + cH;
+
+  // `anhaengen` ist der Unterschied zwischen einer Flaeche und einem Dreieck:
+  // der Rueckweg eines Bandes muss mit lineTo beginnen. Faengt er mit moveTo
+  // an, reisst der Pfad in der Mitte auf, und closePath verbindet einfach
+  // Anfang und Ende — gefuellt wird dann eine Flaeche, die es nicht gibt.
+  const zug = (feld, rueckwaerts, anhaengen) => {
+    const n = stunden.length;
+    let auf = !!anhaengen;
+    for (let k = 0; k < n; k++) {
+      const i = rueckwaerts ? n - 1 - k : k;
+      const v = feld(stunden[i]);
+      if (v == null) continue;
+      auf ? ctx.lineTo(xOf(i), yOf(v)) : ctx.moveTo(xOf(i), yOf(v));
+      auf = true;
+    }
+    return auf;
+  };
+  const flaeche = (vonOben, bisUnten, farbe, y0, y1) => {
+    ctx.beginPath();
+    if (!vonOben()) return;
+    bisUnten();
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, _wxAlpha(farbe, .30));
+    g.addColorStop(1, _wxAlpha(farbe, .02));
+    ctx.fillStyle = g;
+    ctx.fill();
+  };
+
+  const windWerte = stunden.map(s => s.wind).filter(v => v != null);
+  const boeWerte  = stunden.map(s => s.boe != null ? s.boe : s.wind).filter(v => v != null);
+
+  // Wind bis zum Boden
+  if (windWerte.length) {
+    flaeche(() => zug(s => s.wind, false),
+            () => { ctx.lineTo(xOf(stunden.length - 1), boden); ctx.lineTo(xOf(0), boden); },
+            akzent, yOf(Math.max(...windWerte)), boden);
   }
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(251,146,60,0.22)';   // orange, wie die Warnfarbe
-  ctx.fill();
+  // Boee hinunter bis zur Windlinie
+  if (boeWerte.length && windWerte.length) {
+    flaeche(() => zug(s => (s.boe != null ? s.boe : s.wind), false),
+            () => zug(s => s.wind, true, true),
+            '#fb923c', yOf(Math.max(...boeWerte)), yOf(Math.min(...windWerte)));
+  }
 
   _wxLinie(r, stunden.map(s => s.boe), yOf, 'rgba(251,146,60,0.85)', 1.4);
-  _wxLinie(r, stunden.map(s => s.wind), yOf, _wxFarbe('--accent', '#38bdf8'), 2.2);
+  _wxLinie(r, stunden.map(s => s.wind), yOf, akzent, 2.2);
 
   // Windpfeile alle drei Stunden, unten im Bild. Ohne Richtung ist eine
   // Windvorhersage die Hälfte wert — eine Drehung von SW auf NW kann aus

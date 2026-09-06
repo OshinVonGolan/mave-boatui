@@ -1289,7 +1289,12 @@
       min-width: 0; }
     .wx-k-luft { justify-self: end; }
     .wx-k-pfeil, .wx-k-ikon { line-height: 0; align-self: center; flex: none; }
-    .wx-k-pfeil { color: var(--accent); }
+    /* NICHT in der Akzentfarbe: die gehoert der Windgeschwindigkeit — der
+       Linie im Verlauf und der grossen Zahl daneben. Ein Pfeil in derselben
+       Farbe sah aus, als gehoerte er zur Zahl (Eignermeldung). Er zeigt aber
+       eine Richtung und keinen Betrag, also traegt er die Schriftfarbe, wie
+       der Pfeil im Feld „Richtung" auf der Detailseite auch. */
+    .wx-k-pfeil { color: var(--text); }
     .wx-k-ikon  { color: var(--text2); }
 
     .wx-k-gross { font-size: 34px; font-weight: 800; line-height: 1;
