@@ -1307,7 +1307,7 @@ function _sparkLuecken(werte) {
  */
 function _sparkSvg(werte, opt, id) {
   const echt = werte.filter(v => typeof v === 'number');
-  const nichts = { bild: '', blende: null };
+  const nichts = { bild: '' };
   if (echt.length < 2) return nichts;    // ein Punkt ist kein Verlauf
   const dTief = Math.min(...echt), dHoch = Math.max(...echt);
   const mind  = opt.spanne || 1;
@@ -1328,10 +1328,30 @@ function _sparkSvg(werte, opt, id) {
     tief = dTief - (spanne - (dHoch - dTief)) / 2;
   }
   const basis = tief;
-  const reihe = _sparkLuecken(werte);
+  // ÜBER DIE VOLLE BREITE, immer.
+  //
+  // Vorher lag eine feste Zeitachse zugrunde: 24 Stunden, und eine Reihe, die
+  // erst spaeter beginnt, fuellte das Feld nur zum Teil. Das sah zweimal
+  // falsch aus, auf zwei Arten: erst als senkrechte Wand („links
+  // abgeschnitten"), dann als Blende („geht nicht ueber die ganze Breite") —
+  // beides Eignermeldungen zur selben Ursache.
+  //
+  // Jetzt gibt die Reihe den Ausschnitt vor und nicht die Uhr: was da ist,
+  // wird ueber die volle Feldbreite gezogen. Erfunden wird dabei nichts, nur
+  // gedehnt; und weil im Streifen keine Zeitachse steht, behauptet auch nichts
+  // eine Dauer. Der Preis: zwei Felder koennen verschieden lange Zeitraeume
+  // zeigen. Fuer einen Hintergrundverlauf, den man im Vorbeigehen liest, ist
+  // das der bessere Tausch.
+  //
+  // Luecken MITTEN in dem, was da ist, bleiben Luecken — dort war wirklich
+  // nichts, und das gehoert gezeigt.
+  const roh = _sparkLuecken(werte);
+  let a = 0, b = roh.length - 1;
+  while (a <= b && typeof roh[a] !== 'number') a++;
+  while (b >= a && typeof roh[b] !== 'number') b--;
+  const reihe = roh.slice(a, b + 1);
   const n = reihe.length;
   let linien = '', flaechen = '';
-  let erster = -1;                        // erster gezeichneter Stuetzpunkt
   let i = 0;
   while (i < n) {
     if (typeof reihe[i] !== 'number') { i++; continue; }
@@ -1340,25 +1360,10 @@ function _sparkSvg(werte, opt, id) {
     if (j > i) {                          // laengere Luecken bleiben Luecken
       const a = _sparkAbschnitt(reihe, i, j, basis, spanne, n);
       linien += a.linie; flaechen += ` ${a.flaeche}`;
-      if (erster < 0) erster = i;
     }
     i = j + 1;
   }
   if (!flaechen) return nichts;
-  // Faengt die Reihe erst mitten im Fenster an — eine Messgroesse, die es vor
-  // acht Stunden noch nicht gab —, dann stand der Verlauf als senkrechte Wand
-  // mitten im Feld und sah aus, als waere er links abgeschnitten. Er laeuft
-  // jetzt nach links aus, wie der Fuellbalken daneben auch: rechts ist jetzt,
-  // nach links wird es vage.
-  //
-  // Die Blende macht eine CSS-Maske auf dem UMGEBENDEN Element, keine
-  // SVG-Maske im Bild. Grund ist das Anzeigegeraet: das SVG wird mit
-  // preserveAspectRatio="none" waagerecht gestreckt, und eine SVG-Maske in
-  // gestrecktem Benutzerkoordinatenraum ist genau die Ecke, in der Safari
-  // schon oefter danebenlag. Prozente auf dem Element treffen dagegen immer
-  // die sichtbare Breite. Zurueck kommt deshalb nicht nur das Bild.
-  const x0 = erster > 0 && n > 1 ? (erster / (n - 1)) * 100 : 0;
-  const bis = x0 > 0 ? Math.min(x0 + 14, 100) : 0;
   const bild = `<svg viewBox="0 0 100 ${SPARK_H}" preserveAspectRatio="none" focusable="false">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="currentColor" stop-opacity=".22"/>
@@ -1369,7 +1374,7 @@ function _sparkSvg(werte, opt, id) {
       stroke-width="1" vector-effect="non-scaling-stroke"
       stroke-linejoin="round" stroke-linecap="round"/>
   </svg>`;
-  return { bild, blende: x0 > 0 ? [x0, bis] : null };
+  return { bild };
 }
 
 function _sparkZeichnen() {
@@ -1383,23 +1388,11 @@ function _sparkZeichnen() {
     const g = Array.isArray(werte)
       ? _sparkSvg(werte, { tief: zahl('tief'), hoch: zahl('hoch'),
                            spanne: +el.dataset.spanne || 1 }, 'spk_' + reihe)
-      : { bild: '', blende: null };
+      : { bild: '' };
     // Nur schreiben, wenn sich wirklich etwas geaendert hat: der Streifen wird
     // bei jedem Broadcast angefasst, und innerHTML kostet jedes Mal Umbruch —
     // auf dem anzeigenden Geraet, nicht auf dem Pi.
     if (el.innerHTML !== g.bild) el.innerHTML = g.bild;
-    // Dasselbe fuer die Anlaufblende: sie aendert sich nur, wenn die Reihe an
-    // einer anderen Stelle anfaengt. Verglichen wird an einem kurzen
-    // Schluessel, nicht am zurueckgelesenen Stil — den schreibt der Browser um.
-    const schluessel = g.blende ? g.blende.map(v => v.toFixed(1)).join(':') : '';
-    if (el.dataset.blende !== schluessel) {
-      el.dataset.blende = schluessel;
-      const maske = g.blende
-        ? `linear-gradient(to right, transparent ${g.blende[0].toFixed(1)}%,`
-          + ` #000 ${g.blende[1].toFixed(1)}%)`
-        : '';
-      el.style.maskImage = el.style.webkitMaskImage = maske;
-    }
   });
 }
 

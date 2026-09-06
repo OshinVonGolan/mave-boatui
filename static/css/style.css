@@ -647,11 +647,18 @@
        diese Sperre baut sich die Seite beim Neuladen stueckweise auf. Mit
        opacity statt display bleibt das Layout gerechnet — Canvas-Breiten
        stimmen also von Anfang an, was bei display:none nicht der Fall waere. */
-    /* Waehrend des Starts: die Oberflaeche liegt unscharf darunter, davor ein
-       Ladekreis. Vorher wurde sie schlicht ausgeblendet — das war ruhiger, aber
-       man sah eine leere Seite und wusste nicht, ob noch etwas kommt. Unscharf
-       zeigt, dass gleich etwas da ist, und verhindert trotzdem, dass man
-       halbfertige Zahlen abliest. */
+    /* Waehrend des Starts liegt die Oberflaeche unscharf darunter. Das bleibt
+       so — es gefaellt (Eignerwort: „fand das verwischte aber sehr chick") und
+       zeigt, dass gleich etwas da ist, ohne dass man halbfertige Zahlen
+       ablesen kann.
+       Was RAUS ist, ist das Weganimieren. Einen Weichzeichner ueber die ganze
+       Seite Bild fuer Bild aufzuloesen ist die teuerste Bewegung, die diese
+       Oberflaeche kennt: gemessen bei vierfacher Drosselung 45 ms im
+       schlimmsten Bild, also drei ausgelassene. Genau das war das Ruckeln beim
+       Uebergang („er springt einen kleinen Moment zur Seite"). Ein STEHENDER
+       Weichzeichner wird einmal gerechnet und kostet danach nichts.
+       Beim Freigeben faellt er in einem Schritt weg, waehrend der Schirm noch
+       davorliegt — bewegt wird nur dessen Deckkraft, und das ist billig. */
     html.startet main,
     html.startet .statusbar {
       filter: blur(7px);
@@ -659,13 +666,19 @@
       pointer-events: none;
       user-select: none;
     }
-    main, .statusbar { transition: filter .35s ease, opacity .35s ease; }
 
     .ladeschirm {
       position: fixed; inset: 0; z-index: 250;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 16px; pointer-events: none;
-      background: color-mix(in srgb, var(--bg) 45%, transparent);
+      /* Halbdeckend, damit die unscharfe Oberflaeche darunter zu sehen ist.
+         Etwas kraeftiger als frueher (45 %): die Kacheln packen sich beim Start
+         zweimal um, waehrend ihre Quellen eintreffen (gemessen: bei 165 und
+         216 ms wandert die Wechselrichterkachel von x=90 nach 500 und wieder
+         zurueck). Bei 45 % war dieses Umspringen zu sehen; bei 72 % ahnt man
+         nur noch Flaechen — der Weichzeichner bleibt sichtbar, das Ruecken
+         nicht. */
+      background: color-mix(in srgb, var(--bg) 72%, transparent);
       transition: opacity .3s ease;
     }
     /* Sobald der Start freigegeben ist, ist die Klasse weg — dann auch der
@@ -711,7 +724,6 @@
       color: var(--text3); text-align: center; max-width: 260px; line-height: 1.4;
     }
     .lade-text[hidden] { display: none; }
-    main, .statusbar { opacity: 1; transition: opacity .18s ease; }
 
     /* ── Kacheln anordnen ─────────────────────────────────────────────────
        Eigener Modus statt dauerhaftem Ziehen: am Kartentisch haengt ein
@@ -2696,6 +2708,10 @@
     }
     .meldungen > * { pointer-events: auto; }
     .meldungen:empty { display: none; }
+    /* Waehrend des Starts nicht. Sie lagen ueber dem Ladeschirm und waren die
+       einzige Unruhe auf einer sonst stillen Flaeche — und was sie zu sagen
+       haben, gilt ohnehin erst, wenn etwas angekommen ist. */
+    html.startet .meldungen { display: none; }
 
     .kopie-banner {
       display: flex; align-items: center; gap: 9px;

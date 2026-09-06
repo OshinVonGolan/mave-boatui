@@ -595,11 +595,14 @@ class Verlaufsgraphen(Pruefstand):
             _sparkDaten = { serien: { pruef: w } };
             _sparkZeichnen();
             const p = el.querySelectorAll('path');
+            const zahlen = p[1]
+              ? [...p[1].getAttribute('d').matchAll(/[ML] ([\d.]+)/g)].map(m => +m[1])
+              : [];
             return {
               leer: !el.innerHTML,
               linie: p[1] ? p[1].getAttribute('d') : null,
-              blende: el.dataset.blende,
-              maske: el.style.maskImage,
+              von: zahlen.length ? Math.min(...zahlen) : null,
+              bis: zahlen.length ? Math.max(...zahlen) : null,
             };
         }""", [werte, ds])
 
@@ -632,32 +635,30 @@ class Verlaufsgraphen(Pruefstand):
         self.assertEqual(self.pg.evaluate('() => _sparkLuecken([1, null, null, 4])'),
                          [1, None, None, 4])
 
-    # ── Linker Rand ────────────────────────────────────────────────────────
+    # ── Volle Breite ───────────────────────────────────────────────────────
 
-    def test_reihe_die_spaeter_beginnt_laeuft_nach_links_aus(self):
-        werte = [None] * 21 + [12.6 + (i % 5) / 10 for i in range(39)]
-        g = self.graph(werte)
-        # 21 von 59 Abständen — dort fängt die Reihe an, dort fängt die Blende an.
-        self.assertEqual(g['blende'].split(':')[0], f'{21 / 59 * 100:.1f}')
-        self.assertIn('linear-gradient', g['maske'])
-        self.assertIn('transparent', g['maske'])
+    def test_der_verlauf_fuellt_immer_die_ganze_breite(self):
+        """Zweimal gemeldet, auf zwei Arten: erst als senkrechte Wand („links
+        abgeschnitten"), dann als Blende („geht nicht über die ganze Breite").
+        Dieselbe Ursache — eine feste Zeitachse, die die Reihe nicht füllt.
+        Jetzt gibt die Reihe den Ausschnitt vor."""
+        spaet = [None] * 21 + [12.6 + (i % 5) / 10 for i in range(39)]
+        for name, werte in (('voll', [10 + i % 7 for i in range(60)]),
+                            ('spaet beginnend', spaet),
+                            ('frueh endend', [5 + i % 4 for i in range(20)] + [None] * 40)):
+            g = self.graph(werte)
+            self.assertEqual((g['von'], g['bis']), (0, 100),
+                             f'{name}: Pfad geht von {g["von"]} bis {g["bis"]}')
 
-    def test_volle_reihe_bekommt_keine_blende(self):
-        """Was von links bis rechts durchgeht, soll auch so aussehen."""
-        g = self.graph([10 + i % 7 for i in range(60)])
-        self.assertEqual(g['blende'], '')
-        self.assertIn(g['maske'], ('', 'none'))
-
-    def test_blende_bleibt_im_feld(self):
-        """Beginnt die Reihe ganz rechts, darf die Blende nicht hinauslaufen."""
-        g = self.graph([None] * 55 + [4, 5, 6, 7, 8])
-        self.assertEqual(g['blende'].split(':')[1], '100.0')
-
-    def test_blende_verschwindet_wieder(self):
-        """Sonst hinge sie am Feld, wenn es auf eine volle Reihe umschaltet."""
-        self.graph([None] * 21 + [12.6] * 39)
-        g = self.graph([10 + i % 7 for i in range(60)])
-        self.assertEqual(g['blende'], '')
+    def test_gedehnt_wird_nur_die_zeit_und_kein_wert_erfunden(self):
+        """Die vorhandenen Punkte behalten ihre Höhe — nur ihr Abstand ändert
+        sich. Sonst wäre aus „keine Daten" ein Messwert geworden."""
+        werte = [None] * 30 + [0.0] * 15 + [100.0] * 15
+        g = self.graph(werte, tief=0, hoch=100)
+        hoehen = [float(x) for x in re.findall(r'[ML] [\d.]+ ([\d.]+)', g['linie'])]
+        # Unten (0) und oben (100) muessen beide vorkommen, dazwischen nichts.
+        self.assertAlmostEqual(max(hoehen), 31.5, places=1)   # Nulllinie
+        self.assertAlmostEqual(min(hoehen), 0.0, places=1)    # Vollausschlag
 
     def test_ohne_werte_bleibt_das_feld_leer(self):
         self.assertTrue(self.graph([None] * 60)['leer'])
