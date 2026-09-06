@@ -40,6 +40,7 @@ from sync import zugang as zg
 from sync import rechte as rechte_modul
 from heating import StokerClient, StokerFehler
 from history_store import HistoryStore
+from nmea2000 import cs_stufe
 from jsonio import read_json, write_json
 
 # Nur Tags, die auch eine Fassung BEZEICHNEN. Im Verzeichnis stehen daneben
@@ -458,6 +459,13 @@ sync = sync_client.SyncClient(
     verlauf_holen=lambda ab, grenze: grob_store.ab_folge(ab, grenze),
     verlauf_stand=grob_store.hoechste_folge,
     conn_status=(conn_mon.get_status if conn_mon else (lambda: None)),
+    # Die Heizung schreibt der Pi NICHT mit: der Hub fuehrt seinen Verlauf
+    # selbst und tiefer (minuetlich 24 h bis taeglich 13 Monate). Der Pi ist
+    # hier nur der Bote — an den Hub kommt allein das Bordnetz heran, der
+    # Server nicht. Ohne Heizung im Netz liefert der Griff nichts, und dann
+    # passiert schlicht nichts.
+    heizung_saetze=heizung.verlauf_nachschub,
+    heizung_raeume=heizung.raumnamen,
     schalter=lambda: _sync_konfig().get('schalter', 'auto'),
     konten_stand=_konten_stand,
     konten_uebernehmen=_konten_uebernehmen,
@@ -696,6 +704,49 @@ def _router_werte(netz: dict | None) -> dict:
     return raus
 
 
+# Woher der Ladezustand je Geraet kommt. Der Name links ist das Feld im
+# Verlauf, rechts steht die Gruppe im Zustand.
+_LADER_QUELLEN = (('cs_lader', 'charger'),   # Smart IP43 (Landstrom)
+                  ('cs_solar', 'solar'),     # MPPT 75/15
+                  ('cs_orion', 'orion'))     # Orion XS (DC-DC)
+
+# Ab wann der letzte Stand eines Laders nicht mehr als Aussage gilt. Die Werte
+# im Zustand werden bewusst NICHT auf None gesetzt, wenn ein Geraet verstummt
+# (das wuerde die Anzeigen brechen) — im Verlauf waere ein eingefrorener
+# Zustand aber eine Luege: er saehe aus wie eine Messung von jetzt.
+_LADER_FRIST_S = 60.0
+
+
+def _lader_werte(data: dict) -> dict:
+    """Ladesteuerung und Geraetezustaende fuer den Verlauf.
+
+    Zwei Sichten auf dieselbe Sache, und beide werden gebraucht: was die
+    Steuerung VORGIBT (ld_*, aus charge_control) und was die Lader daraus
+    MACHEN (cs_*, ihr gemeldeter Ladezustand). Erst zusammen beantworten sie
+    die Frage, warum die Bank nicht voll wurde — stand der Sollwert zu tief
+    oder hing der Lader in Bulk fest?
+    """
+    raus = charge_ctrl.verlaufswerte()
+    for feld, quelle in _LADER_QUELLEN:
+        gruppe = data.get(quelle) or {}
+        alter  = gruppe.get('_age_s')
+        if not isinstance(alter, (int, float)) or isinstance(alter, bool) \
+                or alter > _LADER_FRIST_S:
+            continue                     # stumm — dann steht hier nichts
+        stufe = cs_stufe(gruppe.get('cs'))
+        if stufe is not None:
+            raus[feld] = stufe
+    return raus
+
+
+# Felder, die eine SCHLUESSELZAHL tragen und keine Messgroesse. Fuer sie gilt in
+# der Minutenmittelung der LETZTE Wert und nicht der Mittelwert: zwischen Bulk
+# (2) und Float (4) liegt Absorption (3) — genau die stuende in der Minute, in
+# der von Bulk auf Float gewechselt wurde, und sie hat nie stattgefunden.
+def _ist_stufe(feld: str) -> bool:
+    return feld == 'ld_modus' or feld.startswith('cs_')
+
+
 def _grob_sammeln(entry: dict) -> None:
     """Sammelt einen Feinwert; bei Minutenwechsel wandert das Mittel in den
     groben Verlauf. Rein rechnerisch, kein Datei- oder Netzzugriff."""
@@ -732,8 +783,14 @@ def _grob_sammeln(entry: dict) -> None:
         if k in ('ts', 'n') or not isinstance(v, (int, float)) or isinstance(v, bool):
             continue
         eintrag = _grob_eimer.setdefault(k, [0.0, 0])
-        eintrag[0] += v
-        eintrag[1] += 1
+        if _ist_stufe(k):
+            # Ueberschreiben statt aufsummieren: geteilt durch eins kommt am
+            # Ende genau dieser Wert wieder heraus, ohne dass die Mittelung
+            # unten davon wissen muss.
+            eintrag[0], eintrag[1] = float(v), 1
+        else:
+            eintrag[0] += v
+            eintrag[1] += 1
 
 
 async def broadcast(data: dict):
@@ -852,6 +909,10 @@ async def broadcast(data: dict):
     if isinstance(sats, int) and not isinstance(sats, bool):
         entry['sats'] = sats
     entry.update(_router_werte(netz))
+    # Was der Ladung aufgetragen war und was die Lader daraus gemacht haben.
+    # Steht hier und nicht weiter oben bei den Ladequellen, weil es keine
+    # Messung ist, sondern die ABSICHT — und die kommt nicht vom CAN-Bus.
+    entry.update(_lader_werte(data))
 
     sl = (netz or {}).get('starlink') or {}
     ping = sl.get('ping_ms')
@@ -4049,6 +4110,7 @@ async def sync_stand():
         'verlauf_stand': grob_store.hoechste_folge(),
         'gesendet': {'zustand': sync.zustand_gesendet,
                      'verlauf': sync.verlauf_gesendet,
+                     'heizung': sync.heizung_gesendet,
                      'befehle': sync.befehle_ausgefuehrt},
     }
 

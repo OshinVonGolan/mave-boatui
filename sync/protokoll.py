@@ -34,6 +34,7 @@ EREIGNIS = 'ereignis'   # Alarm, Stoerung, Systemereignis — sofort
 QUITTUNG = 'quittung'   # Ergebnis eines Befehls
 SITZUNG  = 'sitzung'     # eine neue Anmeldung an Bord, damit der Server sie kennt
 PUSH     = 'push'        # ein Geraet moechte benachrichtigt werden — der Server sendet
+HEIZUNG  = 'heizung'     # Verlaufssaetze der Heizung, vom Hub geholt und weitergereicht
 
 # Server -> Pi
 STAND    = 'stand'      # "ich habe Verlauf bis Folge N", dazu Kontenrevision
@@ -44,7 +45,8 @@ KONTEN   = 'konten'     # die Kontenkopie, damit der Pi ohne Internet anmelden k
 PING     = 'ping'
 PONG     = 'pong'
 
-_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, SITZUNG, PUSH, PING, PONG})
+_VOM_PI      = frozenset({HALLO, ZUSTAND, VERLAUF, EREIGNIS, QUITTUNG, SITZUNG, PUSH,
+                          HEIZUNG, PING, PONG})
 _VOM_SERVER  = frozenset({STAND, BEFEHL, KONTEN, PING, PONG})
 _MIT_FOLGE   = frozenset({VERLAUF, EREIGNIS})
 
@@ -85,7 +87,8 @@ def hallo(geraet: str, fassung: int, version: str, verlauf_folge: int,
     }, wand=wand, mono=mono, gestellt=gestellt)
 
 
-def stand(verlauf_bis: int, konten_stand: str = '', push_schluessel: str = '') -> dict:
+def stand(verlauf_bis: int, konten_stand: str = '', push_schluessel: str = '',
+          heizung_bis: float = 0.0) -> dict:
     """Die Antwort des Servers: bis wohin er den Verlauf hat.
 
     `konten_stand` ist eine Kennung des Kontenbestands, kein Zaehler — ein
@@ -99,10 +102,39 @@ def stand(verlauf_bis: int, konten_stand: str = '', push_schluessel: str = '') -
     fragt es den Pi nach dem oeffentlichen Schluessel — den kennt aber nur der
     Server, der auch sendet. Ein eigener Abruf dafuer waere ein zweites Rohr
     fuer eine Zeichenkette, die ohnehin bei jedem Verbinden vorbeikommt.
+
+    `heizung_bis` ist die Zeit des juengsten Heizungssatzes, den der Server hat.
+    Sie ist die Wasserlinie fuer den Nachschub: der Hub fuehrt den
+    Heizungsverlauf selbst und tief (minuetlich 24 h, viertelstuendlich 30
+    Tage, stuendlich 45 Tage, taeglich 13 Monate), der Pi holt ab dieser Zeit
+    weiter. Deshalb braucht der Pi dafuer KEINEN eigenen Merker: nach einem
+    Ausfall — seinem eigenen oder dem der Leitung — sagt der Server, wo er
+    steht, und der Hub hat die Luecke noch. Sie wird nachgereicht statt
+    verloren zu sein.
     """
     return umschlag(STAND, {'verlauf_bis': int(verlauf_bis),
                             'konten_stand': str(konten_stand or ''),
-                            'push_schluessel': str(push_schluessel or '')})
+                            'push_schluessel': str(push_schluessel or ''),
+                            'heizung_bis': float(heizung_bis or 0.0)})
+
+
+def heizung(saetze: list, aufloesung: str, raeume: dict | None = None) -> dict:
+    """Ein Buendel Heizungssaetze, so wie sie vom Hub kommen.
+
+    Ohne Folgenummer, und das ist der Unterschied zum Verlauf des Bootes: die
+    Saetze tragen die ABSOLUTE Zeit des Hubs, und die ist ihr Schluessel. Zwei
+    Uebertragungen desselben Zeitraums koennen sich deshalb nicht verdoppeln,
+    und ein Buendel, das unterwegs verlorengeht, holt der naechste Durchlauf
+    von selbst nach — er fragt ja beim Server, wo der steht.
+
+    `raeume` faehrt die Namen mit ({"0": "Salon"}). Der Hub nummeriert seine
+    Raeume nur; ohne die Namen staende im Logbuch 'Raum 0' und niemand wuesste,
+    welcher gemeint ist. Sie sind klein und aendern sich fast nie — sie kosten
+    also nichts und ersparen einen eigenen Abruf.
+    """
+    return umschlag(HEIZUNG, {'saetze': saetze,
+                              'aufloesung': str(aufloesung or ''),
+                              'raeume': raeume or {}})
 
 
 def sitzung(kennung: str, daten: dict, beendet: bool = False) -> dict:

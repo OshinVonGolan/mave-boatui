@@ -63,6 +63,24 @@ CREATE TABLE IF NOT EXISTS sitzung (
     -- aus — auch die nach einem Neustart des SERVERS.
     lauf_id   TEXT
 );
+-- Der Verlauf der Heizung. Er wird NICHT an Bord mitgeschrieben, sondern beim
+-- Stoker-Hub geholt: der fuehrt ihn selbst und tiefer, als der Pi es je taete
+-- (minuetlich 24 h, viertelstuendlich 30 Tage, stuendlich 45 Tage, taeglich 13
+-- Monate). Der Pi ist nur der Bote — er kommt an den Hub heran, der Server
+-- nicht.
+--
+-- Schluessel ist die Zeit des Hubs und nicht eine Folgenummer: die Saetze
+-- entstehen dort, nicht hier, und derselbe Zeitraum darf zweimal ankommen,
+-- ohne sich zu verdoppeln. `aufloesung` steht dabei, weil ein nachgereichter
+-- Satz aus der Stundenebene etwas anderes ist als ein minuetlicher: er ist ein
+-- Mittelwert ueber eine Stunde, und wer die Kurve deutet, soll das wissen.
+CREATE TABLE IF NOT EXISTS heizung (
+    zeit       REAL PRIMARY KEY,
+    aufloesung TEXT,
+    daten      TEXT NOT NULL,
+    empfangen  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS push_abo (
     endpunkt  TEXT PRIMARY KEY,
     konto     TEXT NOT NULL,
@@ -268,6 +286,58 @@ class Speicher:
 
     def geparkt_anzahl(self) -> int:
         return self._db.execute('SELECT COUNT(*) AS n FROM geparkt').fetchone()['n']
+
+    # ── Heizung ─────────────────────────────────────────────────────────────
+
+    def heizung_stand(self) -> float:
+        """Zeit des juengsten Heizungssatzes. Null heisst: noch gar keiner da.
+
+        Das ist die Wasserlinie, die dem Pi genannt wird. Er holt beim Hub ab
+        dort weiter — und deshalb braucht er selbst keinen Merker: nach einem
+        Ausfall sagt der Server, wo er steht, und der Hub hat die Luecke noch.
+        """
+        z = self._db.execute('SELECT MAX(zeit) AS m FROM heizung').fetchone()['m']
+        return float(z or 0.0)
+
+    def heizung_anhaengen(self, saetze: list[dict], aufloesung: str = '') -> int:
+        """Heizungssaetze ablegen; gibt zurueck, wie viele geschrieben wurden.
+
+        Jeder Satz braucht `zeit` (Sekunden seit 1970, vom Hub) und `daten`.
+        Doppelte fallen still weg — der Schluessel ist die Zeit, und dasselbe
+        Zeitfenster zweimal zu schicken ist kein Fehler, sondern der Normalfall
+        nach einem Verbindungsabriss.
+        """
+        jetzt, neu = time.time(), 0
+        with self._lock:
+            for s in saetze:
+                zeit = s.get('zeit')
+                if not isinstance(zeit, (int, float)) or isinstance(zeit, bool) or zeit <= 0:
+                    continue
+                daten = s.get('daten')
+                if not isinstance(daten, dict) or not daten:
+                    continue
+                self._db.execute(
+                    'INSERT OR IGNORE INTO heizung (zeit, aufloesung, daten, empfangen) '
+                    'VALUES (?, ?, ?, ?)',
+                    (float(zeit), str(aufloesung or ''),
+                     json.dumps(daten, ensure_ascii=False), jetzt))
+                neu += 1
+            self._db.commit()
+        return neu
+
+    def heizung(self, seit: float | None = None, bis: float | None = None,
+                grenze: int = 200000) -> list[dict]:
+        """Heizungssaetze im Zeitraum, aelteste zuerst — wie `verlauf`."""
+        bedingungen, werte = [], []
+        if seit is not None:
+            bedingungen.append('zeit >= ?'); werte.append(seit)
+        if bis is not None:
+            bedingungen.append('zeit <= ?'); werte.append(bis)
+        wo = (' WHERE ' + ' AND '.join(bedingungen)) if bedingungen else ''
+        werte.append(grenze)
+        zeilen = self._db.execute(
+            f'SELECT * FROM heizung{wo} ORDER BY zeit DESC LIMIT ?', werte).fetchall()
+        return [{'zeit': z['zeit'], **json.loads(z['daten'])} for z in reversed(zeilen)]
 
     # ── Ereignisse ──────────────────────────────────────────────────────────
 

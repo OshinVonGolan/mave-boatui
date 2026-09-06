@@ -84,6 +84,42 @@ und `websockets` sind im Haus, und es geht um ein Boot.
 | Verlauf | die **Minutenmittel**, die es schon gibt (`history_min.ndjson`), mit Folgenummer |
 | Nachliefern | der Server nennt beim Verbinden seinen Stand, der Pi schickt ab dort weiter |
 | Ereignisse | Alarme sofort, sie sind der Grund für Push |
+| Heizung | die Sätze des **Stoker-Hubs**, vom Pi abgeholt und weitergereicht |
+
+### Der Heizungsverlauf wird nicht mitgeschrieben, sondern geholt
+
+Der Hub führt seinen Verlauf selbst und tiefer, als der Pi es je täte:
+minütlich 24 Stunden, viertelstündlich 30 Tage, stündlich 45 Tage, täglich 13
+Monate, je Satz für **jeden** Raum Ist-, Soll- und Vorlauftemperatur und die
+Gebläsedrehzahl, dazu Zustand, Leistung und Vorlauf der Heizung selbst. Ein
+zweiter Mitschnitt an Bord könnte davon nichts besser machen, nur älter.
+
+Was fehlte, war der **Weg nach draußen**: an den Hub kommt allein das Bordnetz
+heran, der Server im Internet nicht. Der Pi ist deshalb nur der Bote.
+
+Wo angesetzt wird, sagt der Server (`heizung_bis` im Handschlag). Der Pi führt
+dafür **keinen eigenen Merker** — und genau deshalb schließt sich eine Lücke
+von selbst: war er zwei Tage aus, nennt der Server seinen alten Stand, der Hub
+hat die zwei Tage noch, und sie werden nachgereicht. Ein eigener Mitschnitt an
+Bord hätte für diese Zeit nichts.
+
+Welche Ebene geholt wird, folgt dem **Alter** der Lücke und nicht ihrer Länge:
+wer eine drei Tage alte Lücke minütlich anfragt, bekommt nichts — nicht weil
+nichts da wäre, sondern weil er in der falschen Ebene sucht. Steht der
+Anschluss wieder, fällt der nächste Durchlauf von selbst auf die feinste Ebene
+zurück.
+
+Auf dem Server liegen die Sätze in einer eigenen Tabelle, mit der **Zeit des
+Hubs** als Schlüssel statt einer Folgenummer: sie entstehen dort und nicht
+hier, und derselbe Zeitraum darf zweimal ankommen, ohne sich zu verdoppeln.
+Sätze, die der Hub als zeitlich unsicher markiert (er hat keine gepufferte
+Uhr), werden schon an Bord weggelassen — sie lägen sonst irgendwo auf der
+Zeitachse, und das ist schlimmer als eine Lücke.
+
+Für die Messwerte-Seite ist die zweite Quelle unsichtbar: eingedampft wird nach
+Zeit, beide Quellen tragen ihre eigene, und beide liegen damit auf derselben
+Achse. Erst dadurch lässt sich sehen, dass der Verbrauch stieg, **während** die
+Heizung lief.
 
 Drei Ereignisarten gehören zu einem Alarm, und alle drei müssen hinaus:
 `alarm` (er tritt auf), `alarm_quittiert` (jemand an Bord hat ihn zur Kenntnis
@@ -472,6 +508,41 @@ durchsichtige Fläche — dieselbe Sprache wie in der Statusleiste der
 Bordansicht. Sie beantwortet nebenbei "war das schon länger so?", ohne dass ein
 Diagramm Platz kostet. Die Wartung bekommt keine: ein Wartungsplan hat keinen
 Tagesverlauf, und eine Fläche wäre dort reine Dekoration.
+
+### Was auf der Messwerte-Seite steht
+
+Die Reihen liegen alle an **einer** Zeitachse — das ist der Unterschied zur
+Bordansicht: dort liest man einen Wert im Vorbeigehen ab, hier sucht man
+Zusammenhänge.
+
+Neben den Messwerten des Bootes (Ladestand, Spannungen, Ströme, Ladequellen,
+Tanks, Zellen, Router) stehen dort zwei Dinge, die **keine** Messung sind:
+
+**Die Ladesteuerung.** Bis dahin zeigte der Verlauf nur, *was* die Batterie
+getan hat, nicht, was ihr aufgetragen war. Hinterher ließ sich damit nicht
+unterscheiden, ob ein Lader nichts tat, weil nichts zu tun war, oder weil die
+Steuerung ihn heruntergesetzt hatte. Aufgeschrieben werden deshalb der gewählte
+Modus (`ld_modus`), im Hafen-Modus Ziel-Ladestand, Halten, Lader-ein und ob der
+Solar-Vorrang gerade **wirkt** (`ld_ziel_soc`, `ld_halten`, `ld_an`,
+`ld_vorrang`), die Sollspannungen je Gerät (`ld_abs_*`, `ld_flt_*`) und
+daneben, was der Smart IP43 als seine eigenen Sollwerte zurückmeldet
+(`ld_ist_abs`, `ld_ist_flt`) — laufen die beiden auseinander, hat jemand den
+Lader von Hand verstellt. Dazu der Zustand jedes Ladegeräts (`cs_*`).
+
+Felder, die im jeweiligen Modus **nichts bedeuten**, fehlen: Ziel-Ladestand und
+Halten gibt es nur im Hafen-Modus. Eine Linie, die etwas behauptet, was gerade
+nicht gilt, wäre schlimmer als eine Lücke.
+
+Zwei Feldarten tragen eine **Schlüsselzahl** und keine Messgröße — der Modus
+und die Gerätezustände. Für sie gilt in der Minutenmittelung der letzte Wert
+und nicht der Mittelwert: zwischen Bulk und Float läge sonst Absorption, und
+die hat nie stattgefunden. Die Zustände sind dafür auf eine Stufenleiter
+umgesetzt (aus, startet, Bulk, Absorption, Float …) statt die Rohcodes von
+Victron zu zeichnen — 245 heißt dort "Starting" und läge in einer Kurve über
+allem anderen.
+
+**Die Heizung** (`hz_*`), die nicht von Bord kommt, sondern vom Hub — siehe
+Abschnitt 2.
 
 ### Alarme seit dem letzten Blick
 

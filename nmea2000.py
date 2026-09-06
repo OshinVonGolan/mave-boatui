@@ -454,6 +454,38 @@ _CHARGER_CS = {
 _INVERTER_CS = {0: 'Aus', 1: 'Eco', 2: 'Fehler', 9: 'Aktiv'}
 
 
+# Der Ladezustand als STUFE — nur so laesst er sich zeichnen.
+#
+# Die Rohwerte oben sind Kennungen und keine Skala: 'Starting' ist 245 und
+# liegt damit zwischen 'Equalise' (7) und 'Ext. Control' (252). Eine Kurve aus
+# diesen Zahlen zeigt beim Einschalten des Laders einen Ausschlag ueber die
+# ganze Hoehe und driftet danach am unteren Rand; man sieht dann nur noch den
+# Ausschlag und nichts mehr vom Laden selbst.
+#
+# Sortiert wird deshalb nach dem, was der Lader TUT, von aus bis
+# ausgeglichen. Der Fehler steht ganz oben: er ist kein Ladezustand, aber er
+# soll aus der Kurve herausstechen und nicht zwischen Aus und Bulk verschwinden.
+#
+# ACHTUNG: die Namen stehen ein zweites Mal in static/js/diagnose.js
+# (CS_STUFEN) — die Reihenfolge muss dieselbe bleiben, sonst beschriftet das
+# Logbuch die Kurve falsch.
+CS_STUFEN = ('Aus', 'Startet', 'Bulk', 'Absorption', 'Float', 'Storage',
+             'Equalise', 'Auto-Equalise', 'Ext. Steuerung', 'Fehler')
+_CS_STUFE = {0: 0, 245: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 247: 7, 252: 8, 2: 9}
+
+
+def cs_stufe(cs) -> int | None:
+    """Rohen Ladezustand in eine zeichenbare Stufe uebersetzen.
+
+    None fuer alles Unbekannte — im Verlauf fehlt der Wert dann, und die Kurve
+    hat an dieser Stelle eine Luecke. Das ist die ehrliche Auskunft: eine Null
+    hiesse 'Aus', und das waere geraten.
+    """
+    if isinstance(cs, bool) or not isinstance(cs, int):
+        return None
+    return _CS_STUFE.get(cs)
+
+
 _MPPT_MODE = {0: 'Aus', 1: 'Begrenzt', 2: 'Aktiv'}
 
 _ORION_OR_BITS = {

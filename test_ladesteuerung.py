@@ -730,5 +730,89 @@ class BalanceLauf(Basis):
         self.assertIsNone(r._state['balance_zurueck'])
 
 
+class VerlaufswerteFuersLogbuch(Basis):
+    """Was von der Ladesteuerung in den Verlauf geht.
+
+    Der Verlauf traegt ausschliesslich Zahlen — gemittelt, verdichtet und
+    gezeichnet wird nur, was sich rechnen laesst. Ein versehentlich
+    mitgegebener String oder ein bool faellt in der Minutenmittelung
+    stillschweigend heraus, und im Logbuch fehlt dann eine Kurve, ohne dass
+    irgendwo ein Fehler auftaucht. Deshalb prueft der erste Test die FORM.
+    """
+
+    def test_alles_sind_zahlen(self):
+        for modus in ('harbor', 'full'):
+            for feld, wert in self._regler({'mode': modus}).verlaufswerte().items():
+                self.assertIsInstance(wert, (int, float), feld)
+                self.assertNotIsInstance(wert, bool, feld)
+
+    def test_der_modus_steht_als_zahl_darin(self):
+        for modus, zahl in (('harbor', 1), ('full', 2)):
+            self.assertEqual(self._regler({'mode': modus}).verlaufswerte()['ld_modus'], zahl)
+
+    def test_je_eingeschaltetem_geraet_zwei_spannungen(self):
+        w = self._regler({'mode': 'full'}).verlaufswerte()
+        # ip43 und mppt sind an, orion ist aus — ein ausgeschaltetes Geraet
+        # bekommt keine Sollwerte und darf deshalb auch keine Kurve haben.
+        self.assertEqual({f for f in w if f.startswith(('ld_abs_', 'ld_flt_'))},
+                         {'ld_abs_ip43', 'ld_flt_ip43', 'ld_abs_mppt', 'ld_flt_mppt'})
+
+    def test_hafen_felder_gibt_es_nur_im_hafen(self):
+        # Ziel-SOC, Halten und Solar-Vorrang gelten allein im Hafen-Modus. In
+        # der Vollladung eine Linie zu zeichnen hiesse, etwas zu behaupten, was
+        # gerade nicht gilt — die Kurve hat dort eine Luecke, und das stimmt.
+        w = self._regler({'mode': 'full'}).verlaufswerte()
+        for feld in ('ld_ziel_soc', 'ld_halten', 'ld_an', 'ld_vorrang'):
+            self.assertNotIn(feld, w)
+
+    def test_beim_laden_wirkt_der_solar_vorrang(self):
+        r = self._regler({'mode': 'harbor'},
+                         hafenprofil(13.8, 13.3, target_soc=80, soc_hysteresis_pct=3))
+        r.update_soc(50)
+        w = r.verlaufswerte()
+        self.assertEqual((w['ld_halten'], w['ld_an'], w['ld_vorrang']), (0, 1, 1))
+        # Und er steht nicht nur als Eins da, sondern ist an den Sollwerten
+        # abzulesen: der Landlader liegt um den Offset tiefer als das Solar.
+        self.assertLess(w['ld_abs_ip43'], w['ld_abs_mppt'])
+
+    def test_am_ziel_faellt_der_vorrang_weg(self):
+        r = self._regler({'mode': 'harbor'},
+                         hafenprofil(13.8, 13.3, target_soc=80, soc_hysteresis_pct=3))
+        r.update_soc(85)
+        w = r.verlaufswerte()
+        self.assertEqual((w['ld_halten'], w['ld_vorrang']), (1, 0))
+        # Beim Halten gilt fuer alle derselbe Wert — sonst laege der Landlader
+        # unter der Ruhespannung und waere faktisch aus.
+        self.assertEqual(w['ld_abs_ip43'], w['ld_abs_mppt'])
+
+    def test_ohne_vorrang_keine_eins(self):
+        r = self._regler({'mode': 'harbor'},
+                         {**hafenprofil(13.8, 13.3, target_soc=80),
+                          'solar_priority_offset_v': 0.0})
+        r.update_soc(50)
+        self.assertEqual(r.verlaufswerte()['ld_vorrang'], 0)
+
+    def test_das_ziel_steht_im_verlauf(self):
+        r = self._regler({'mode': 'harbor'}, hafenprofil(13.8, 13.3, target_soc=75))
+        self.assertEqual(r.verlaufswerte()['ld_ziel_soc'], 75.0)
+
+    def test_rueckmeldung_nur_wenn_gelesen(self):
+        # Ohne Rueckmeldung des Laders fehlt sie — eine Null hiesse 'null Volt'.
+        r = self._regler({'mode': 'harbor'})
+        self.assertNotIn('ld_ist_abs', r.verlaufswerte())
+        with mock.patch.object(cc, 'write_json'):
+            r.update_actual_setpoints(14.2, 13.5)
+        w = r.verlaufswerte()
+        self.assertEqual((w['ld_ist_abs'], w['ld_ist_flt']), (14.2, 13.5))
+
+    def test_feldnamen_bleiben_harmlos(self):
+        # Die Geraete-Kennungen kommen aus den Einstellungen und koennen alles
+        # enthalten, was durch JSON passt. Im Verlauf werden daraus
+        # Spaltennamen — in CSV-Export und Graphen.
+        self.assertEqual(cc._feldname('Smart IP43!'), 'smartip4')
+        self.assertEqual(cc._feldname(''), 'lader')
+        self.assertEqual(cc._feldname('../etc'), 'etc')
+
+
 if __name__ == '__main__':
     unittest.main()

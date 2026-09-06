@@ -405,5 +405,98 @@ class Wartungsstand(unittest.TestCase):
         self.assertEqual((stand['ueberfaellig'], stand['bald'], stand['gesamt']), (0, 0, 0))
 
 
+class LadeWerte(unittest.TestCase):
+    """Was die Ladegeraete melden, als zeichenbare Stufe.
+
+    Die Rohcodes von Victron sind Kennungen und keine Skala: 'Starting' ist
+    245. Eine Kurve daraus zeigt beim Einschalten einen Ausschlag ueber die
+    ganze Hoehe und danach nichts mehr vom Laden selbst.
+    """
+
+    def setUp(self):
+        import main
+        self.main = main
+
+    def _cs(self, daten):
+        return {f: w for f, w in self.main._lader_werte(daten).items()
+                if f.startswith('cs_')}
+
+    def test_die_stufen_stehen_in_der_reihenfolge_des_ladens(self):
+        import nmea2000
+        # Aus < Startet < Bulk < Absorption < Float — das ist der Sinn der
+        # Uebersetzung, und nur so bedeutet ein Anstieg der Kurve etwas.
+        stufen = [nmea2000.cs_stufe(c) for c in (0, 245, 3, 4, 5)]
+        self.assertEqual(stufen, sorted(stufen))
+        self.assertEqual(len(set(stufen)), 5)
+
+    def test_frische_zustaende_kommen_mit(self):
+        self.assertEqual(
+            self._cs({'charger': {'cs': 4, '_age_s': 1.2},
+                      'solar':   {'cs': 3, '_age_s': 0.4}}),
+            {'cs_lader': 3, 'cs_solar': 2})
+
+    def test_ein_stummes_geraet_schreibt_nichts(self):
+        # Der Zustand BEHAELT den letzten Wert, wenn ein Geraet verstummt —
+        # sonst braechen die Anzeigen. Im Verlauf waere er eine Luege: er saehe
+        # aus wie eine Messung von jetzt.
+        self.assertEqual(self._cs({'charger': {'cs': 4, '_age_s': 900.0}}), {})
+        self.assertEqual(self._cs({'charger': {'cs': 4, '_age_s': None}}), {})
+        self.assertEqual(self._cs({'charger': {'cs': 4}}), {})
+
+    def test_unbekannter_code_wird_nicht_geraten(self):
+        # Lieber eine Luecke in der Kurve als eine Null, die 'Aus' hiesse.
+        self.assertEqual(self._cs({'charger': {'cs': 99, '_age_s': 1.0}}), {})
+        self.assertEqual(self._cs({'charger': {'cs': None, '_age_s': 1.0}}), {})
+        self.assertEqual(self._cs({'charger': {'cs': True, '_age_s': 1.0}}), {})
+
+    def test_die_absicht_der_steuerung_ist_immer_dabei(self):
+        # Auch ohne einen einzigen Lader am Bus: der Modus ist eine Einstellung
+        # und keine Messung.
+        self.assertIn('ld_modus', self.main._lader_werte({}))
+
+
+class MinutenmittelUndStufen(unittest.TestCase):
+    """Ein Mittelwert aus Schluesselzahlen waere eine Zahl, die nichts bezeichnet.
+
+    Zwischen Bulk (2) und Float (4) liegt Absorption (3) — genau die stuende in
+    der Minute, in der von Bulk auf Float gewechselt wurde, und sie hat nie
+    stattgefunden. Messgroessen dagegen SOLLEN gemittelt werden: eine
+    Stichprobe je Minute wuerde die kurze Spitze entweder verschlucken oder zur
+    ganzen Minute erklaeren.
+    """
+
+    MINUTE = 1788000000        # glatt durch 60 teilbar
+
+    def setUp(self):
+        import main
+        self.main = main
+        main._grob_eimer  = {}
+        main._grob_minute = -1
+
+    def test_stufe_nimmt_den_letzten_wert_die_messung_den_mittelwert(self):
+        m = self.main
+        for i, (modus, spannung) in enumerate(((1, 13.0), (1, 13.4), (3, 14.1))):
+            m._grob_sammeln({'ts': self.MINUTE + i,
+                             'ld_modus': modus, 'cs_lader': 2, 'voltage': spannung})
+        m._grob_sammeln({'ts': self.MINUTE + 60, 'ld_modus': 3})   # Minutenwechsel
+        mittel = m.history_grob[-1]
+        self.assertEqual(mittel['ld_modus'], 3)
+        self.assertEqual(mittel['cs_lader'], 2)
+        self.assertAlmostEqual(mittel['voltage'], 13.5, places=3)
+
+    def test_die_stufen_bleiben_ganze_zahlen(self):
+        m = self.main
+        m._grob_sammeln({'ts': self.MINUTE, 'ld_modus': 1})
+        m._grob_sammeln({'ts': self.MINUTE + 30, 'ld_modus': 2})
+        m._grob_sammeln({'ts': self.MINUTE + 60, 'ld_modus': 2})
+        self.assertEqual(m.history_grob[-1]['ld_modus'], 2.0)
+
+    def test_nur_stufen_sind_ausgenommen(self):
+        self.assertTrue(self.main._ist_stufe('ld_modus'))
+        self.assertTrue(self.main._ist_stufe('cs_solar'))
+        for feld in ('ld_halten', 'ld_abs_ip43', 'ld_ziel_soc', 'voltage', 'soc'):
+            self.assertFalse(self.main._ist_stufe(feld), feld)
+
+
 if __name__ == '__main__':
     unittest.main()

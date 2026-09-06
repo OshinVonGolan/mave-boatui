@@ -87,6 +87,26 @@ _DEFAULT_SETTINGS: dict = {
 # zurueck — lieber geregelt laden als unbegrenzt.
 _MODI = ('harbor', 'full', 'balance')
 
+# Derselbe Modus als Zahl, fuer den Verlauf. Der traegt ausschliesslich Zahlen:
+# gemittelt, verdichtet und gezeichnet wird nur, was sich rechnen laesst, und
+# eine Zeichenkette faellt in jeder dieser Stufen stillschweigend heraus.
+# Die Reihenfolge ist die des Ladeeifers, damit die Kurve etwas bedeutet.
+#
+# ACHTUNG: die Namen stehen ein zweites Mal in static/js/diagnose.js
+# (MODUS_STUFEN) — beide muessen zusammenpassen.
+_MODUS_ZAHL = {'harbor': 1, 'full': 2, 'balance': 3}
+
+
+def _feldname(kennung) -> str:
+    """Geraete-Kennung zu einem Feldnamen fuer den Verlauf.
+
+    Die Kennungen kommen aus den Einstellungen und koennen alles enthalten, was
+    durch JSON passt. Im Verlauf werden daraus Spaltennamen, die in CSV-Export
+    und Graphen auftauchen — deshalb bleibt nur, was unverfaenglich ist.
+    """
+    sauber = ''.join(c for c in str(kennung).lower() if c.isalnum())
+    return sauber[:8] or 'lader'
+
 
 _DEFAULT_STATE: dict = {
     'mode':                'harbor',
@@ -487,6 +507,65 @@ class ChargeController:
             'device_setpoints':    self.device_setpoints(),
             'settings':            self._settings,
         }
+
+    def verlaufswerte(self) -> dict:
+        """Was von der Ladesteuerung in den Verlauf gehoert — nur Zahlen.
+
+        Bisher stand im Verlauf ausschliesslich, WAS die Batterie getan hat,
+        nicht, was ihr AUFGETRAGEN war. Hinterher liess sich damit nicht
+        unterscheiden, ob der Lader nichts tat, weil nichts zu tun war, oder
+        weil die Steuerung ihn heruntergesetzt hatte — und genau das ist die
+        Frage, mit der man ins Logbuch schaut.
+
+        Geschrieben wird nur, was im jeweiligen Modus etwas BEDEUTET. Ziel-SOC,
+        Halten und Solar-Vorrang gibt es allein im Hafen-Modus; sie in der
+        Vollladung mitzuschreiben ergaebe eine Linie, die etwas behauptet, was
+        gerade nicht gilt. Im Verlauf fehlen sie dann — das ist die Auskunft.
+
+        Die Felder:
+
+          ld_modus     1 Hafen, 2 Vollladung, 3 Balance (siehe _MODUS_ZAHL)
+          ld_halten    1, sobald der Ziel-SOC erreicht ist (nur Hafen)
+          ld_an        1, wenn die Lader eingeschaltet sein sollen (nur Hafen)
+          ld_vorrang   1, wenn der Solar-Vorrang gerade WIRKT (nur Hafen)
+          ld_ziel_soc  der Ladestand, auf den gehalten wird (nur Hafen)
+          ld_abs_<x>   Absorptionsspannung, die Geraet <x> bekommen soll
+          ld_flt_<x>   dessen Erhaltungsspannung
+          ld_ist_abs   was der Smart IP43 als seinen Sollwert zurueckmeldet
+          ld_ist_flt   dito Erhaltung
+
+        Soll und Ist getrennt, weil sie auseinanderlaufen koennen: verstellt
+        jemand den Lader mit der Victron-App, steht es genau hier — zwei
+        Kurven, die sich trennen.
+        """
+        modus = self._state['mode']
+        raus: dict = {'ld_modus': _MODUS_ZAHL.get(modus, 0)}
+
+        for s in self.device_setpoints():
+            kurz = _feldname(s['id'])
+            raus[f'ld_abs_{kurz}'] = s['absorption_v']
+            raus[f'ld_flt_{kurz}'] = s['float_v']
+
+        if modus == 'harbor':
+            # Dieselbe Rechnung wie in device_setpoints(), und bewusst NICHT
+            # aus deren Ergebnis zurueckgeschlossen: was der Solar-Vorrang
+            # bewirkt, ist ein Abstand zwischen zwei Geraeten — bei nur einem
+            # eingeschalteten Geraet waere daraus nichts abzulesen.
+            soc         = self._last_soc
+            halten      = self._holding_for(soc) if soc is not None else False
+            ein         = self._harbor_profile(halten)[2]
+            offset      = _num(self._settings.get('solar_priority_offset_v'), 0.3)
+            h           = self._settings.get('harbor', {})
+            raus['ld_halten']   = 1 if halten else 0
+            raus['ld_an']       = 1 if ein else 0
+            raus['ld_vorrang']  = 1 if (ein and not halten and offset > 0) else 0
+            raus['ld_ziel_soc'] = round(_num(h.get('target_soc'), 80), 1)
+
+        for feld, wert in (('ld_ist_abs', self._state.get('actual_absorption_v')),
+                           ('ld_ist_flt', self._state.get('actual_float_v'))):
+            if isinstance(wert, (int, float)) and not isinstance(wert, bool):
+                raus[feld] = round(float(wert), 3)
+        return raus
 
     def device_setpoints(self) -> list[dict]:
         """Gibt pro aktiviertem Gerät die effektiven Spannungs-Sollwerte zurück.

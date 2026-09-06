@@ -262,6 +262,8 @@ async def sync(ws: WebSocket) -> None:
                     log.warning('Push-Abo vom Boot abgewiesen: %s', e)
             elif typ == p.VERLAUF:
                 _verlauf(n, wand, mono, gestellt)
+            elif typ == p.HEIZUNG:
+                _heizung(n)
             elif typ == p.EREIGNIS:
                 d = n['daten'] or {}
                 speicher.ereignis_anhaengen(
@@ -334,7 +336,8 @@ async def _hallo(ws: WebSocket, n: dict) -> int:
     # ganze Nachliefer-Logik.
     verteilung = konten.zum_verteilen() if konten else {'konten': [], 'stand': ''}
     await ws.send_json(p.stand(speicher.verlauf_stand(), verteilung['stand'],
-                               push.oeffentlicher_schluessel))
+                               push.oeffentlicher_schluessel,
+                               speicher.heizung_stand()))
     # Die Kontenkopie geht gleich mit. Sie ist klein (ein paar Zeilen je Konto)
     # und der Pi braucht sie, BEVOR sich jemand an Bord anmelden will — sie
     # erst auf Nachfrage zu schicken hiesse, die erste Anmeldung im Bordnetz
@@ -393,6 +396,44 @@ def _verlauf(n: dict, wand, mono, gestellt) -> None:
         if erg['geparkt']:
             log.info('%d Eintraege geparkt (Boot hatte noch keine gestellte Uhr)',
                      erg['geparkt'])
+
+
+# Wie die Raumnamen des Hubs abgelegt werden. Ein Merker und keine eigene
+# Tabelle: es sind zehn kurze Zeichenketten, die sich fast nie aendern.
+_HEIZUNG_RAEUME = 'heizung_raeume'
+
+
+def _heizung_raeume() -> dict:
+    """Die zuletzt gemeldeten Raumnamen. Leer, solange der Hub keine geschickt hat."""
+    try:
+        return json.loads(speicher.merker(_HEIZUNG_RAEUME, vorgabe='') or '{}')
+    except ValueError:
+        return {}
+
+
+def _heizung(n: dict) -> None:
+    """Ein Buendel Heizungssaetze vom Hub ablegen.
+
+    Anders als beim Verlauf des Bootes wird hier NICHTS zeitlich aufgeloest:
+    die Saetze kommen mit der absoluten Zeit des Hubs, und der Pi laesst
+    unsichere schon an Bord weg (der Hub markiert sie selbst). Ein Satz ohne
+    verlaessliche Zeit gehoert in keinen Verlauf — er waere an einer Stelle
+    einsortiert, an der er nicht war.
+    """
+    d = n['daten'] or {}
+    saetze = d.get('saetze')
+    if not isinstance(saetze, list) or not saetze:
+        return
+    speicher.heizung_anhaengen(saetze, str(d.get('aufloesung') or ''))
+    raeume = d.get('raeume')
+    if isinstance(raeume, dict) and raeume:
+        # Nur bei Aenderung schreiben: die Namen fahren bei JEDEM Buendel mit,
+        # und eine Zeile je Buendel in die Datenbank zu schreiben waere Unfug.
+        alt = speicher.merker(_HEIZUNG_RAEUME, vorgabe='')
+        neu = json.dumps(raeume, ensure_ascii=False, sort_keys=True)
+        if neu != alt:
+            speicher.merker_setzen(_HEIZUNG_RAEUME, neu)
+            log.info('Raumnamen der Heizung uebernommen: %s', neu)
 
 
 # ── Was die PWA sieht ───────────────────────────────────────────────────────
@@ -1033,14 +1074,21 @@ def verlauf_reihen(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
     # Beide Grenzen in die Abfrage: das Nachfiltern hier hat frueher genau die
     # Zeilen weggeworfen, deren Auspacken schon bezahlt war.
     roh = speicher.verlauf(seit=von, bis=bis, grenze=200000)
-    if not roh:
+    # Die Heizung kommt aus einer eigenen Tabelle — sie wird nicht an Bord
+    # mitgeschrieben, sondern beim Hub geholt, und ihre Saetze liegen auf einem
+    # anderen Takt. Fuer die Anzeige ist das gleichgueltig: eingedampft wird
+    # nach ZEIT, und beide Quellen tragen ihre eigene. Erst dadurch liegen
+    # Raumtemperatur und Batteriestrom auf DERSELBEN Achse — und genau dafuer
+    # sieht man in ein Logbuch.
+    heiz = speicher.heizung(seit=von, bis=bis, grenze=200000)
+    if not roh and not heiz:
         return JSONResponse({'von': von, 'bis': bis, 'punkte': [], 'felder': [],
-                             'roh_anzahl': 0})
+                             'roh_anzahl': 0, 'heizung_raeume': {}})
 
     breite = (bis - von) / punkte
     eimer: dict = {}
     felder: set = set()
-    for e in roh:
+    for e in roh + heiz:
         i = min(int((e['zeit'] - von) / breite), punkte - 1)
         fach = eimer.setdefault(i, {})
         for feld, wert in e.items():
@@ -1067,8 +1115,12 @@ def verlauf_reihen(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
         'von': von, 'bis': bis,
         'felder': sorted(felder),
         'punkte': punkte_raus,
-        'roh_anzahl': len(roh),
+        'roh_anzahl': len(roh) + len(heiz),
         'eimer_s': round(breite, 1),
+        # Die Namen der Raeume, damit in der Legende nicht 'Raum 0' steht. Sie
+        # kommen vom Hub und aendern sich fast nie; fehlen sie, beschriftet die
+        # Oberflaeche mit der Nummer.
+        'heizung_raeume': _heizung_raeume(),
     })
 
 
@@ -1091,6 +1143,12 @@ def verlauf_export(von: float = Query(0, ge=0), bis: float = Query(0, ge=0),
     von = von or (bis - 7 * 86400)
     roh = [e for e in speicher.verlauf(seit=von, grenze=400000)
            if e.get('zeit') and von <= e['zeit'] <= bis]
+    # Die Heizung gehoert in denselben Export. Ihre Saetze liegen auf einem
+    # anderen Takt als die des Bootes, sie stehen also in eigenen Zeilen — die
+    # Spalten daneben bleiben dort leer. Sie zu mitteln, nur damit die Tabelle
+    # huebscher aussieht, waere erfundene Genauigkeit.
+    roh = sorted(roh + speicher.heizung(seit=von, bis=bis, grenze=400000),
+                 key=lambda e: e['zeit'])
 
     felder = sorted({f for e in roh for f, w in e.items()
                      if f not in ('folge', 'zeit', 'mono')

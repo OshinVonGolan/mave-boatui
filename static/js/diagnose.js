@@ -2367,9 +2367,45 @@ start();
 // glatter, würde aber genau das verschlucken, weswegen man hier hinschaut: die
 // kurze Spitze, den Einbruch, den Ausreißer.
 
+// ── Die Heizung ────────────────────────────────────────────────────────────
+// Sie wird nicht an Bord mitgeschrieben, sondern beim Stoker-Hub geholt: der
+// fuehrt seinen Verlauf selbst und tiefer, als der Pi es je taete. Fuer diese
+// Seite ist das gleichgueltig — die Saetze liegen auf derselben Zeitachse wie
+// alles andere, und genau darum geht es hier.
+//
+// Zehn Raumplaetze fuehrt der Hub, ob sie belegt sind oder nicht. Angelegt
+// werden alle zehn, gezeichnet nur die, die im Verlauf vorkommen — dasselbe
+// Verfahren wie bei den Zellspannungen.
+const HZ_RAEUME = 10;
+
+/** Die Farbe eines Raums. Gleichmaessig auf dem Farbkreis, damit kein Raum
+ *  wichtiger aussieht als ein anderer; die Solllinie ist der blasse Zwilling
+ *  der Istlinie — so gehoeren die beiden sichtbar zusammen. */
+function hzFarbe(nr, blass) {
+  const ton = Math.round(nr * 360 / HZ_RAEUME);
+  return blass ? `hsl(${ton} 45% 76%)` : `hsl(${ton} 55% 58%)`;
+}
+
+/** Ein Feld je Raumplatz. `raum` und `endung` bleiben am Feld stehen: sobald
+ *  die Namen vom Hub da sind, wird die Beschriftung damit ersetzt. */
+function hzRaumFelder(art, endung, blass) {
+  const felder = [];
+  for (let i = 0; i < HZ_RAEUME; i++) {
+    felder.push({ f: `hz_r${i}_${art}`, raum: i, endung,
+                  n: `Raum ${i}${endung}`, farbe: hzFarbe(i, blass) });
+  }
+  return felder;
+}
+
 const GRUPPEN = [
+  // Der Ziel-SOC liegt bewusst NEBEN dem Ladestand und nicht in einer eigenen
+  // Reihe: die Frage im Hafen-Modus lautet 'hat die Regelung ihr Ziel
+  // gehalten', und die beantwortet erst der Abstand der beiden Linien. Er
+  // fehlt in den Zeiten, in denen nicht im Hafen-Modus geladen wurde — dort
+  // gab es kein Ziel.
   { schluessel: 'ladung',   name: 'Ladestand',  einheit: '%',
-    felder: [{ f: 'soc', n: 'Ladestand', farbe: '#34d399' }] },
+    felder: [{ f: 'soc', n: 'Ladestand', farbe: '#34d399' },
+             { f: 'ld_ziel_soc', n: 'Ziel (Hafen)', farbe: '#94a3b8' }] },
   { schluessel: 'spannung', name: 'Spannung',   einheit: 'V',
     felder: [{ f: 'voltage', n: 'Bordspannung', farbe: '#60a5fa' }] },
   { schluessel: 'strom',    name: 'Strom',      einheit: 'A',
@@ -2414,6 +2450,87 @@ const GRUPPEN = [
              { f: 'zelle14', n: 'Zelle 14', farbe: '#d173de' },
              { f: 'zelle15', n: 'Zelle 15', farbe: '#de73c3' },
              { f: 'zelle16', n: 'Zelle 16', farbe: '#de739b' }] },
+
+  // ── Die Ladesteuerung ───────────────────────────────────────────────────
+  // Bis hierher zeigt die Seite, WAS die Batterie getan hat. Die drei Gruppen
+  // ab hier zeigen, was ihr aufgetragen war — ohne sie laesst sich eine
+  // Ladekurve nicht deuten: ein Lader, der nichts tut, kann fertig sein oder
+  // heruntergeregelt.
+
+  // Die Namen und ihre Reihenfolge stehen in charge_control.py (_MODUS_ZAHL).
+  // Index = geloggte Zahl, deshalb faengt die Liste mit einem Platzhalter an.
+  { schluessel: 'lademodus', name: 'Lademodus', einheit: '', stufen:
+      ['—', 'Hafen', 'Vollladung', 'Balance'],
+    felder: [{ f: 'ld_modus', n: 'gewählter Modus', farbe: '#f0abfc' }] },
+
+  // Was die Lader selbst melden. Die Stufen stehen in nmea2000.py (CS_STUFEN)
+  // und sind nach Ladeeifer sortiert, nicht nach den Rohcodes des Herstellers.
+  { schluessel: 'ladezustand', name: 'Zustand der Ladegeräte', einheit: '', stufen:
+      ['Aus', 'Startet', 'Bulk', 'Absorption', 'Float', 'Storage',
+       'Equalise', 'Auto-Equalise', 'Ext. Steuerung', 'Fehler'],
+    felder: [{ f: 'cs_lader', n: 'Ladegerät', farbe: '#fbbf24' },
+             { f: 'cs_solar', n: 'Solar', farbe: '#a78bfa' },
+             { f: 'cs_orion', n: 'Lichtmaschine', farbe: '#fb923c' }] },
+
+  // Soll und Ist in EINER Reihe: laufen sie auseinander, hat jemand den Lader
+  // von Hand verstellt — mit der Victron-App, oder ein Werksreset. Genau das
+  // sieht man nur, wenn beide dieselbe Achse teilen.
+  //
+  // Die Kennungen der Geraete kommen aus den Einstellungen (charger_state.json,
+  // settings.devices). Kommt ein Geraet dazu, gehoert seine Zeile hierher —
+  // gezeichnet wird ohnehin nur, was im Verlauf vorkommt.
+  { schluessel: 'ladesoll', name: 'Sollspannungen der Ladegeräte', einheit: 'V',
+    felder: [{ f: 'ld_abs_ip43', n: 'Ladegerät Absorption', farbe: '#fbbf24' },
+             { f: 'ld_flt_ip43', n: 'Ladegerät Erhaltung', farbe: '#fde68a' },
+             { f: 'ld_abs_mppt', n: 'Solar Absorption', farbe: '#a78bfa' },
+             { f: 'ld_flt_mppt', n: 'Solar Erhaltung', farbe: '#ddd6fe' },
+             { f: 'ld_abs_orion', n: 'Lichtmaschine Absorption', farbe: '#fb923c' },
+             { f: 'ld_flt_orion', n: 'Lichtmaschine Erhaltung', farbe: '#fed7aa' },
+             { f: 'ld_ist_abs', n: 'Rückmeldung Absorption', farbe: '#22d3ee' },
+             { f: 'ld_ist_flt', n: 'Rückmeldung Erhaltung', farbe: '#a5f3fc' }] },
+
+  // Alles, was nur an oder aus sein kann, auf einer Achse — die Reihenfolge
+  // ist die Erklaerung: der Ziel-SOC ist erreicht (Halten), deshalb gehen die
+  // Lader aus, deshalb faellt der Solar-Vorrang weg.
+  { schluessel: 'ladeschalter', name: 'Hafen-Regelung', einheit: 'an',
+    felder: [{ f: 'ld_an', n: 'Lader ein', farbe: '#34d399' },
+             { f: 'ld_halten', n: 'Ziel erreicht, hält', farbe: '#60a5fa' },
+             { f: 'ld_vorrang', n: 'Solar-Vorrang wirkt', farbe: '#a78bfa' }] },
+
+  // ── Die Heizung ─────────────────────────────────────────────────────────
+
+  // Ist und Soll in EINER Reihe: die Frage lautet nicht 'wie warm war es',
+  // sondern 'hat der Raum seine Solltemperatur erreicht' — und die beantwortet
+  // erst der Abstand der beiden Linien.
+  { schluessel: 'hzraum', name: 'Raumtemperaturen', einheit: '°C',
+    felder: [...hzRaumFelder('ist', '', false),
+             ...hzRaumFelder('soll', ' Soll', true)] },
+
+  // Der Vorlauf je Raum und der an der Heizung selbst auf einer Achse. Bleibt
+  // ein Raum kalt, waehrend sein Vorlauf heiss ist, liegt es nicht an der
+  // Heizung — dann ist die Klappe zu oder der Luefter steht.
+  { schluessel: 'hzvorlauf', name: 'Vorlauftemperaturen', einheit: '°C',
+    felder: [...hzRaumFelder('vor', ' Vorlauf', false),
+             { f: 'hz_vorlauf', n: 'Heizung', farbe: '#f87171' }] },
+
+  { schluessel: 'hzgeblaese', name: 'Gebläse', einheit: '%',
+    felder: hzRaumFelder('luft', '', false) },
+
+  // Die Stufen stehen so in der Firmware des Hubs (types.h, HeaterState) —
+  // Index = geloggte Zahl.
+  { schluessel: 'hzzustand', name: 'Zustand der Heizung', einheit: '', stufen:
+      ['Aus', 'Startet', 'Läuft', 'Stoppt', 'Sperrzeit', 'Störung'],
+    felder: [{ f: 'hz_zustand', n: 'Heizung', farbe: '#fb923c' }] },
+
+  { schluessel: 'hzleistung', name: 'Heizleistung', einheit: '%',
+    felder: [{ f: 'hz_leistung', n: 'Stufe', farbe: '#fbbf24' }] },
+
+  // Eigene Reihe und nicht in den Zustand hinein: in einem verdichteten Satz
+  // (ab der Viertelstundenebene) steht im Zustand, was am Ende des Zeitraums
+  // war — die Stoerung sagt, ob IRGENDWANN darin eine anlag. Das ist eine
+  // andere Aussage, und sie geht sonst verloren.
+  { schluessel: 'hzstoerung', name: 'Heizungsstörung', einheit: 'an',
+    felder: [{ f: 'hz_stoerung', n: 'Störung lag an', farbe: '#f87171' }] },
 
   // Drei getrennte Kurven statt einer: Minuten, Prozent und An/Aus teilen sich
   // keine Achse. Nebeneinander auf derselben ZEITachse beantworten sie
@@ -2488,6 +2605,8 @@ function zeichneMesswerte() {
     return;
   }
 
+  heizungBeschriften(d.heizung_raeume);
+
   const stunden = (d.bis - d.von) / 3600;
   $('messStand').textContent =
     `${d.roh_anzahl.toLocaleString('de-DE')} Messwerte, zusammengefasst zu ${d.punkte.length} `
@@ -2520,6 +2639,22 @@ function zeichneMesswerte() {
   fadenVerdrahten(d, sichtbar);
 }
 
+/** Die Raumnamen des Hubs in die Legende schreiben.
+ *
+ *  Der Verlauf des Hubs kennt seine Raeume nur als Nummer; die Namen kommen
+ *  ueber den Sync mit und liegen auf dem Server. Fehlen sie — weil noch nie
+ *  ein Satz ankam oder der Raum keinen Namen hat —, bleibt die Nummer stehen.
+ */
+function heizungBeschriften(namen) {
+  for (const g of GRUPPEN) {
+    for (const x of g.felder) {
+      if (x.raum === undefined) continue;
+      const name = namen && namen[String(x.raum)];
+      x.n = (name || `Raum ${x.raum}`) + (x.endung || '');
+    }
+  }
+}
+
 function zeichneReihe(g, d) {
   const cv = $('cv-' + g.schluessel);
   if (!cv) return;
@@ -2546,6 +2681,9 @@ function zeichneReihe(g, d) {
     }
   }
   if (!isFinite(lo)) return;
+  // Die echten Grenzen, bevor Luft drankommt. Eine Stufenreihe wird nach ihnen
+  // beschriftet: 'Absorption' steht bei genau 3, und 3,24 waere kein Zustand.
+  const loRoh = lo, hiRoh = hi;
   if (hi - lo < 1e-9) { hi = lo + 1; lo -= 0; }
   const luft = (hi - lo) * 0.08;
   lo -= luft; hi += luft;
@@ -2594,9 +2732,30 @@ function zeichneReihe(g, d) {
   }
 
   const k = (hi - lo) < 2 ? 2 : ((hi - lo) < 20 ? 1 : 0);
-  $('oben-' + g.schluessel).textContent = hi.toFixed(k) + ' ' + g.einheit;
-  $('unten-' + g.schluessel).textContent = lo.toFixed(k) + ' ' + g.einheit;
-  werteZeigen(g, d, d.punkte.length - 1);
+  $('oben-' + g.schluessel).textContent = g.stufen
+    ? stufenName(g, hiRoh) : hi.toFixed(k) + ' ' + g.einheit;
+  $('unten-' + g.schluessel).textContent = g.stufen
+    ? stufenName(g, loRoh) : lo.toFixed(k) + ' ' + g.einheit;
+  werteZeigen(g, d, letzterMitWert(g, d));
+}
+
+/** Der letzte Punkt, an dem diese Gruppe ueberhaupt etwas hat.
+ *
+ *  Nicht schlicht der letzte Punkt des Fensters: eine Reihe kann VOR dem Ende
+ *  aufhoeren — die Hafen-Regelung gilt nur im Hafen-Modus, die Position fehlt
+ *  ohne Fix. Stur den letzten Punkt zu nehmen liess die Legende dann leer,
+ *  waehrend die Kurve daneben gezeichnet dastand. */
+function letzterMitWert(g, d) {
+  for (let i = d.punkte.length - 1; i >= 0; i--) {
+    if (g.felder.some(x => d.punkte[i][x.f])) return i;
+  }
+  return d.punkte.length - 1;
+}
+
+/** Der Name einer Stufe. Zwischen zwei Stufen wird gerundet — der Mittelwert
+ *  eines Eimers, in dem gewechselt wurde, liegt sonst zwischen den Namen. */
+function stufenName(g, wert) {
+  return g.stufen[Math.round(wert)] || '';
 }
 
 function werteZeigen(g, d, i) {
@@ -2609,8 +2768,9 @@ function werteZeigen(g, d, i) {
   ziel.innerHTML = felder.map(x => `
     <span class="rj-wert">
       <span class="rj-punkt" style="background:${x.farbe}"></span>
-      <span class="rj-zahl">${p[x.f][0].toFixed(k)}</span>
-      <span class="rj-einheit">${esc(g.einheit)} ${esc(x.n)}</span>
+      <span class="rj-zahl">${g.stufen ? esc(stufenName(g, p[x.f][0]))
+                                       : p[x.f][0].toFixed(k)}</span>
+      <span class="rj-einheit">${g.stufen ? '' : esc(g.einheit)} ${esc(x.n)}</span>
     </span>`).join('');
 }
 

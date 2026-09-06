@@ -93,6 +93,51 @@ def _raum_kennzahlen(state: dict | None) -> dict:
     }
 
 
+# So viele Raumplaetze fuehrt der Hub, ob sie belegt sind oder nicht
+# (MAX_ROOMS in types.h). Steht die Zahl hier zu niedrig, fehlen Raeume im
+# Logbuch; zu hoch kostet sie nur ein paar leere Durchlaeufe je Satz.
+_RAUMPLAETZE = 10
+
+# Bitmarken eines Verlaufssatzes (history.h, HistoryFlags).
+_HF_ZEIT_UNSICHER = 0x01     # der Hub kannte die Uhrzeit nicht
+_HF_STOERUNG      = 0x08     # im Zeitraum lag eine Heizungsstoerung an
+
+
+def _zahl(wert):
+    """Zahl oder None. `null` heisst beim Hub ausdruecklich 'unbekannt' und
+    niemals null Grad (API-ANBINDUNG.md, Abschnitt 9)."""
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    return wert
+
+
+def _satz_umsetzen(roh: dict) -> dict:
+    """Eine Zeile des Hubs in flache Verlaufsfelder."""
+    daten: dict = {}
+    for nummer in range(_RAUMPLAETZE):
+        temps = {ziel: _zahl(roh.get(f'r{nummer}.{quelle}'))
+                 for ziel, quelle in (('ist', 'temp'), ('soll', 'target'), ('vor', 'flow'))}
+        if all(w is None for w in temps.values()):
+            continue                 # den Raum gibt es nicht (oder er meldet nichts)
+        for ziel, wert in temps.items():
+            if wert is not None:
+                daten[f'hz_r{nummer}_{ziel}'] = round(float(wert), 2)
+        luft = _zahl(roh.get(f'r{nummer}.fan'))
+        if luft is not None:
+            daten[f'hz_r{nummer}_luft'] = round(float(luft), 1)
+
+    for feld, quelle in (('hz_zustand', 'heater.state'),
+                         ('hz_leistung', 'heater.power'),
+                         ('hz_vorlauf', 'heater.flow')):
+        wert = _zahl(roh.get(quelle))
+        if wert is not None:
+            daten[feld] = round(float(wert), 2)
+    marken = roh.get('flags')
+    if isinstance(marken, int) and not isinstance(marken, bool):
+        daten['hz_stoerung'] = 1 if (marken & _HF_STOERUNG) else 0
+    return daten
+
+
 def _heizgeraet_verbaut(state: dict | None) -> bool:
     """Haengt ueberhaupt ein Heizgeraet an der Leitung des Hubs?
 
@@ -344,6 +389,118 @@ class StokerClient:
         except Exception as e:
             log.debug('Heizungsverlauf nicht abrufbar: %s', e)
             return None
+
+    # Die Aufloesungen des Hubs: wie weit sie zurueckreichen (history.h) und
+    # wie viel Zeit ein einzelner Abruf hoechstens umfassen darf.
+    #
+    # Das Erste entscheidet, welche Ebene eine Luecke ueberhaupt noch enthaelt:
+    # die Minutenebene haelt 24 Stunden, danach ist sie ueberschrieben. Etwas
+    # Luft nach unten, damit nicht am Rand des Rings gefragt wird.
+    #
+    # Das Zweite ist Ruecksicht auf den Hub. Dahinter sitzt ein ESP32 mit EINEM
+    # Kern fuer alles — Regelung, Raumknoten, Bus zur Heizung, Weboberflaeche.
+    # Ein Tag minuetlich waeren 1440 Saetze in einer Antwort; die haelt er zwar
+    # aus (er schickt sie stueckweise), aber er tut es waehrend er regelt. Ein
+    # nachgeholter Monat kommt deshalb in Haeppchen, mit Pausen dazwischen.
+    # Je Stufe sind das rund 180 bis 500 Saetze.
+    AUFLOESUNGEN = (('minute',  23 * 3600,       3 * 3600),
+                    ('quarter', 29 * 86400,      5 * 86400),
+                    ('hour',    44 * 86400,     20 * 86400),
+                    ('day',     395 * 86400,   400 * 86400))
+
+    @classmethod
+    def aufloesung_fuer(cls, alter_s: float) -> str:
+        """Welche Aufloesung einen so alten Zeitpunkt ueberhaupt noch enthaelt."""
+        for name, reicht, _ in cls.AUFLOESUNGEN:
+            if alter_s <= reicht:
+                return name
+        return cls.AUFLOESUNGEN[-1][0]
+
+    @classmethod
+    def spanne_fuer(cls, aufloesung: str) -> float:
+        """Wie viel Zeit ein einzelner Abruf dieser Ebene umfassen darf."""
+        for name, _, spanne in cls.AUFLOESUNGEN:
+            if name == aufloesung:
+                return spanne
+        return cls.AUFLOESUNGEN[0][2]
+
+    def raumnamen(self) -> dict:
+        """Die Namen der Raeume, nach ihrer Nummer. Fuer die Beschriftung
+        auswaerts — der Verlauf des Hubs kennt nur `r0`, `r1`, `r2`."""
+        namen = {}
+        for r in ((self.snapshot().get('state') or {}).get('rooms') or []):
+            if not isinstance(r, dict):
+                continue
+            nummer, name = r.get('id'), r.get('name')
+            if isinstance(nummer, int) and not isinstance(nummer, bool) \
+                    and isinstance(name, str) and name.strip():
+                namen[str(nummer)] = name.strip()[:40]
+        return namen
+
+    def verlaufssaetze(self, von: float, bis: float, aufloesung: str) -> list[dict]:
+        """Den Hub-Verlauf in Saetze umsetzen, wie sie nach draussen gehen.
+
+        Aus der Antwort des Hubs (`columns` und `rows`) werden flache Zeilen aus
+        Zahlen — dieselbe Form, in der auch der Verlauf des Bootes reist:
+
+            hz_r<N>_ist    Raumtemperatur
+            hz_r<N>_soll   Solltemperatur
+            hz_r<N>_vor    Vorlauf dieses Raums
+            hz_r<N>_luft   Geblaese in Prozent
+            hz_zustand     Zustand der Heizung (0 aus … 5 Stoerung)
+            hz_leistung    Leistungsstufe in Prozent
+            hz_vorlauf     Vorlauf an der Heizung selbst
+            hz_stoerung    1, wenn im Zeitraum eine Stoerung anlag
+
+        Drei Dinge werden dabei WEGGELASSEN, und jedes aus einem Grund:
+
+        * Saetze, die der Hub als zeitlich unsicher markiert (er hat keine
+          gepufferte Uhr). Sie laegen sonst irgendwo auf der Zeitachse.
+        * Raeume, deren Temperaturen alle leer sind. Der Hub fuehrt zehn
+          Raumplaetze, ob es sie gibt oder nicht — die Geblaesedrehzahl eines
+          nicht vorhandenen Raums ist eine echte Null und saehe aus wie eine
+          Messung.
+        * Leere Saetze. Eine Zeile, in der nichts steht, ist keine Auskunft.
+        """
+        antwort = self.verlauf(von, bis, aufloesung)
+        spalten = (antwort or {}).get('columns')
+        zeilen  = (antwort or {}).get('rows')
+        if not isinstance(spalten, list) or not isinstance(zeilen, list):
+            return []
+        saetze = []
+        for zeile in zeilen:
+            if not isinstance(zeile, list) or len(zeile) != len(spalten):
+                continue
+            roh = dict(zip(spalten, zeile))
+            zeit = roh.get('t')
+            marken = roh.get('flags')
+            if not isinstance(zeit, (int, float)) or isinstance(zeit, bool) or zeit <= 0:
+                continue
+            if isinstance(marken, int) and (marken & _HF_ZEIT_UNSICHER):
+                continue
+            daten = _satz_umsetzen(roh)
+            if daten:
+                saetze.append({'zeit': float(zeit), 'daten': daten})
+        return saetze
+
+    def verlauf_nachschub(self, von: float, bis: float) -> dict:
+        """Was seit `von` an Verlauf vorliegt — in der groebsten noetigen Ebene.
+
+        Die Ebene folgt dem ALTER der Luecke und nicht ihrer Laenge: die
+        Minutenebene des Hubs reicht 24 Stunden zurueck, danach ist sie
+        ueberschrieben. Wer eine drei Tage alte Luecke minuetlich anfragt,
+        bekommt nichts — nicht weil nichts da waere, sondern weil er in der
+        falschen Ebene sucht.
+
+        Ist die Luecke geschlossen, faellt der naechste Aufruf von selbst
+        wieder auf 'minute' zurueck; er rechnet das Alter jedesmal neu.
+        """
+        aufloesung = self.aufloesung_fuer(max(0.0, bis - von))
+        # Nicht mehr auf einmal verlangen, als die Stufe vertraegt: der Hub
+        # regelt nebenher. Was uebrig bleibt, holt der naechste Durchlauf.
+        ende = min(bis, von + self.spanne_fuer(aufloesung))
+        return {'aufloesung': aufloesung,
+                'saetze': self.verlaufssaetze(von, ende, aufloesung)}
 
     def snapshot(self) -> dict:
         """Zwischengespeicherter Zustand plus Erreichbarkeit."""

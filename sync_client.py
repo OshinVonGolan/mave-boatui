@@ -59,6 +59,17 @@ _BUENDEL = 200
 # Verlaufszeile entsteht je Minute — zwanzig Sekunden sind prompt genug.
 _NACHLIEFERN_RUHE_S = 20
 
+# Dasselbe fuer die Heizung. Ihre Saetze kommen vom Hub und entstehen ebenfalls
+# je Minute; hier wird seltener nachgesehen, weil jedes Nachsehen eine HTTP-
+# Abfrage AN DEN HUB ist und der ein ESP32 mit einem Kern ist (nicht oefter als
+# 1 Hz, sagt seine Anleitung — eine Abfrage je Minute ist weit darunter).
+_HEIZUNG_RUHE_S = 60
+
+# Wie viele Heizungssaetze auf einmal gehen. Ein Satz ist klein (eine Handvoll
+# Zahlen je Raum); dreihundert bleiben deutlich unter der Nachrichtengrenze und
+# machen aus einem nachgeholten Monat trotzdem keine Dauerlast.
+_HEIZUNG_BUENDEL = 300
+
 # Ereignisse brauchen eine Nummer, die es nur einmal gibt.
 #
 # Der Server legt sie mit `folge` als PRIMAERSCHLUESSEL und INSERT OR IGNORE ab:
@@ -86,6 +97,7 @@ class SyncClient:
     def __init__(self, *, adresse: str, token: str, geraet: str, version: str,
                  zustand_holen, verlauf_holen, verlauf_stand, conn_status,
                  schalter=lambda: 'auto', lokal_ausfuehren=None,
+                 heizung_saetze=None, heizung_raeume=None,
                  konten_stand=lambda: '', konten_uebernehmen=None,
                  intern_token: str = '',
                  eigener_port: int = 8080, markenpfad='sync_start.json'):
@@ -103,6 +115,11 @@ class SyncClient:
         self._verlauf_holen = verlauf_holen
         self._verlauf_stand = verlauf_stand
         self._conn_status = conn_status
+        # Die Heizung fuehrt ihren Verlauf selbst — im Hub. Der Pi holt ihn nur
+        # ab und reicht ihn weiter; ohne diese beiden Griffe passiert das
+        # schlicht nicht, und alles andere laeuft weiter.
+        self._heizung_saetze = heizung_saetze
+        self._heizung_raeume = heizung_raeume or (lambda: {})
         self._schalter = schalter
         self._lokal = lokal_ausfuehren or (
             lambda m, pf, r, konto='': lokal_ueber_http(
@@ -117,6 +134,7 @@ class SyncClient:
         self._push_schluessel = ''
         self.zustand_gesendet = 0
         self.verlauf_gesendet = 0
+        self.heizung_gesendet = 0
         self.befehle_ausgefuehrt = 0
 
     # ── Leben ───────────────────────────────────────────────────────────────
@@ -210,12 +228,14 @@ class SyncClient:
             # gehoert dem Server, der auch sendet.
             self._push_schluessel = str((antwort['daten'] or {}).get('push_schluessel') or '')
             ab = int((antwort['daten'] or {}).get('verlauf_bis', 0)) + 1
+            heiz_ab = float((antwort['daten'] or {}).get('heizung_bis', 0) or 0.0)
             log.info('Mit dem Server verbunden. Verlauf ab %d, Betriebsart %s', ab, self._art())
 
             # Nachliefern und laufender Betrieb nebeneinander: das Nachliefern
             # kann dauern, der Zustand soll trotzdem aktuell bleiben.
             await asyncio.gather(
                 self._nachliefern(ab),
+                self._heizung_nachliefern(heiz_ab),
                 self._zustand_schleife(),
                 self._empfangen(ws),
             )
@@ -339,6 +359,75 @@ class SyncClient:
             # Luft lassen: ueber Mobilfunk soll das Nachliefern den laufenden
             # Betrieb nicht verdraengen.
             await asyncio.sleep(0.5)
+
+    async def _heizung_nachliefern(self, ab: float) -> None:
+        """Den Heizungsverlauf vom Hub holen und weiterreichen.
+
+        Der Pi schreibt die Heizung NICHT selbst mit — der Hub fuehrt sie
+        ohnehin, und zwar tiefer und laenger, als der Pi es je taete. Was ihm
+        fehlt, ist der Weg nach draussen: an den Hub kommt nur das Bordnetz
+        heran. Genau diese Strecke ist diese Schleife, und mehr ist sie nicht.
+
+        Wo angesetzt wird, sagt der SERVER (`heizung_bis` im Handschlag). Damit
+        braucht der Pi keinen eigenen Merker, und der Fall, der sonst Muehe
+        macht, loest sich von selbst: war der Pi zwei Tage aus, nennt der Server
+        seinen alten Stand, der Hub hat die zwei Tage noch, und sie werden
+        nachgereicht. Ein eigener Mitschnitt an Bord haette in dieser Zeit
+        nichts gehabt.
+
+        Welche Aufloesung dabei zu holen ist, entscheidet der Griff selbst
+        (`heizung_saetze`, an Bord die Heizung): die Minutenebene des Hubs
+        reicht 24 Stunden zurueck, danach gibt es nur noch Viertelstunden,
+        Stunden, Tage. Hier steht nur die Strecke — was der Hub kann, weiss der
+        Hub.
+        """
+        if self._heizung_saetze is None:
+            return                       # keine Heizung eingerichtet
+        while True:
+            jetzt = time.time()
+            # Ohne bekannten Stand nicht die ganze Ablage des Hubs leerraeumen:
+            # der erste Lauf holt einen Tag: das ist die Minutenebene, sie
+            # kostet wenig und ist sofort etwas wert. Aelteres kann jederzeit
+            # nachgeholt werden, indem der Stand zurueckgesetzt wird.
+            von = ab + 1 if ab > 0 else jetzt - 24 * 3600
+            if von >= jetzt:
+                await asyncio.sleep(_HEIZUNG_RUHE_S)
+                continue
+            try:
+                nachschub = await asyncio.to_thread(self._heizung_saetze, von, jetzt) or {}
+            except Exception as e:
+                # Der Hub ist Beiwerk: ist er aus oder gerade beschaeftigt,
+                # wartet die Schleife und versucht es wieder. Die Verbindung
+                # zum Server haengt nicht davon ab.
+                log.debug('Heizungsverlauf nicht abrufbar: %s', e)
+                nachschub = {}
+            saetze = nachschub.get('saetze') or []
+            aufloesung = str(nachschub.get('aufloesung') or '')
+            if not saetze:
+                await asyncio.sleep(_HEIZUNG_RUHE_S)
+                continue
+            buendel = saetze[:_HEIZUNG_BUENDEL]
+            juengster = max(float(s['zeit']) for s in buendel)
+            if juengster <= ab:
+                # Nichts Neues, obwohl etwas kam. Das passiert, wenn der Hub
+                # `from` auf den Beginn seines Rasters abrundet und denselben
+                # Satz noch einmal liefert. Ohne diese Bremse liefe die
+                # Schleife heiss und schickte im Sekundentakt dasselbe.
+                await asyncio.sleep(_HEIZUNG_RUHE_S)
+                continue
+            await self._senden(p.heizung(buendel, aufloesung, self._raeume()))
+            self.heizung_gesendet += len(buendel)
+            ab = juengster
+            # Luft lassen — dasselbe wie beim Verlauf des Bootes: ein
+            # nachgeholter Monat darf den laufenden Betrieb nicht verdraengen.
+            await asyncio.sleep(0.5)
+
+    def _raeume(self) -> dict:
+        """Die Raumnamen fuers Logbuch. Fehlen sie, wird dort nummeriert."""
+        try:
+            return self._heizung_raeume() or {}
+        except Exception:
+            return {}
 
     async def sitzung_melden(self, kennung: str, daten: dict,
                              beendet: bool = False) -> None:
