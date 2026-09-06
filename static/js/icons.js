@@ -13,10 +13,13 @@ const ICON_PATHS = {
   sun:        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon:       '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   cloud:      '<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
-  cloudSun:   '<path d="M12 3v1M5.6 5.6l.7.7M3 12h1M18.4 5.6l-.7.7"/><circle cx="12" cy="12" r="3"/><path d="M19 17h-1.1A5 5 0 1 0 9 19h10a3 3 0 0 0 0-6z"/>',
+  cloudSun:    '<path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41"/>'
+              + '<path d="M15.95 12.65a4 4 0 0 0-5.93-4.13"/>'
+              + '<path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6z"/>',
   rain:       '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 20l-1 2M12 20l-1 2M16 20l-1 2"/>',
   drizzle:    '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 20v1M12 20v1M16 20v1"/>',
-  thunder:    '<path d="M18 7h-1.26A6.5 6.5 0 1 0 9 16h9a4.5 4.5 0 0 0 0-9z"/><path d="M13 13l-3 5h4l-3 5"/>',
+  thunder:     '<path d="M6 16.3A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 .5 9"/>'
+              + '<path d="M13 12l-3 5h4l-3 5"/>',
   snow:       '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M8 21h.01M12 21h.01M16 21h.01M10 19h.01M14 19h.01"/>',
   fog:        '<path d="M18 8h-1.26A6.5 6.5 0 1 0 9 17h9a4.5 4.5 0 0 0 0-9z"/><path d="M5 20h14M7 23h10"/>',
   wind:       '<path d="M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2M17.7 7.7A2.5 2.5 0 1 1 19.5 12H2"/>',
@@ -25,17 +28,23 @@ const ICON_PATHS = {
   thermometer:'<path d="M14 14.8V3.5a2.5 2.5 0 0 0-5 0v11.3a4 4 0 1 0 5 0z"/>',
 
   // Energie
+  // alternator war derselbe Kreispfeil wie `refresh` — die Lichtmaschine
+  // trug damit das Sinnbild fuer „neu laden". Jetzt das Zeichen fuer einen
+  // Generator: Wellenlinie im Kreis.
   bolt:       '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
   battery:    '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/>',
   plug:       '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>',
-  solar:      '<circle cx="12" cy="8" r="3"/><path d="M12 1v1M6.3 3.3l.8.8M2 8h1M22 8h-1M17.7 3.3l-.8.8"/><path d="M4 21l2-7h12l2 7z"/>',
-  alternator: '<path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/>',
+  solar:       '<path d="M6 5h12l3 12H3z"/><path d="M8.6 5L6.6 17M15.4 5l2 12M4.5 11h15"/>',
+  alternator: '<circle cx="12" cy="12" r="9"/>'
+            + '<path d="M7.5 13.5c1.5-3 3-3 4.5 0s3 3 4.5 0"/>',
   gauge:      '<path d="M12 14l3.5-3.5"/><path d="M3.6 18a9 9 0 1 1 16.8 0"/>',
   scale:      '<path d="M12 3v18M5 7h14M5 7l-3 6h6zM19 7l3 6h-6z"/>',
 
   // Licht
   bulb:       '<path d="M15 14c.2-1 .7-1.7 1.5-2.5A5.5 5.5 0 1 0 7.5 11.5C8.3 12.3 8.8 13 9 14"/><path d="M9 18h6M10 22h4"/>',
-  bulbOff:    '<path d="M9 18h6M10 22h4"/><path d="M15 14c.2-1 .7-1.7 1.5-2.5a5.5 5.5 0 0 0-.9-7.7M9 14c-.2-1-.7-1.7-1.5-2.5a5.5 5.5 0 0 1 .3-7.6"/><path d="M2 2l20 20"/>',
+  bulbOff:     '<path d="M16.8 11.2c.8-.9 1.2-2 1.2-3.2a6 6 0 0 0-9.3-5"/>'
+              + '<path d="M6.3 6.3a4.7 4.7 0 0 0 1.2 5.2c.7.7 1.3 1.5 1.5 2.5"/>'
+              + '<path d="M9 18h6M10 22h4M2 2l20 20"/>',
 
   // Status / Navigation
   anchor:     '<circle cx="12" cy="5" r="3"/><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/>',
@@ -52,7 +61,8 @@ const ICON_PATHS = {
   chip:       '<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/>',
   compass:    '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5.2-5.2 2 2-5.2z"/>',
   flame:      '<path d="M12 22a6 6 0 0 0 6-6c0-4-3-5.5-3.5-9.5C13 8 11.5 9 10.5 11 9.5 9.8 9 8.6 9 7.5 7.2 9 6 12.2 6 16a6 6 0 0 0 6 6z"/>',
-  propeller:  '<circle cx="12" cy="12" r="2"/><path d="M12 10c0-3.5-1-6-3-7-1.5 2 0 5 3 7zM14 12c3.5 0 6-1 7-3-2-1.5-5 0-7 3zM10 14c-3.5 0-6 1-7 3 2 1.5 5 0 7-3zM12 14c0 3.5 1 6 3 7 1.5-2 0-5-3-7z"/>',
+  propeller:   '<path d="M10.8 16.4a6.1 6.1 0 0 1-8.6-7l5.4 1.4a6.1 6.1 0 0 1 7-8.6l-1.4 5.4a6.1 6.1 0 0 1'
+              + ' 8.6 7l-5.4-1.4a6.1 6.1 0 0 1-7 8.6z"/><circle cx="12" cy="12" r=".6"/>',
   shield:     '<path d="M12 2.5l8 3.2v5.6c0 5-3.4 9.2-8 10.2-4.6-1-8-5.2-8-10.2V5.7z"/>',
   box:        '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
   pin:        '<path d="M12 21c4-5.5 7-8.9 7-12a7 7 0 1 0-14 0c0 3.1 3 6.5 7 12z"/><circle cx="12" cy="9" r="2.5"/>',

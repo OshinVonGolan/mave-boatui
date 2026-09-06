@@ -1336,6 +1336,108 @@
     .wx-werte b { color: var(--text2); font-weight: 600;
       font-variant-numeric: tabular-nums; }
 
+    /* ── Wetterseite ─────────────────────────────────────────────────────
+       ZURUECKGEHOLT aus 303ee15. Beim Neubau der Wetterkachel (dfd0de9) habe
+       ich den CSS-Bereich bis zur naechsten Ueberschrift ersetzt — und darin
+       standen ausser der Kachel auch die Detailseite und die Wetterorte in
+       den Einstellungen. Beide waren seitdem voellig ohne Gestaltung: eine
+       Spalte nackter Absaetze (Eignermeldung „komplett broken").
+
+       Merke: nie einen CSS-Bereich „bis zur naechsten Ueberschrift" ersetzen.
+       Dazwischen kann mehr stehen als die eine Sache, die man umbaut.
+
+       Aus dem alten Kachelblock mitgeholt: `.wx-row` und `.wx-pfeil` standen
+       dort, gebraucht werden sie von der Tagestabelle der Detailseite. */
+    .wx-row { display: flex; align-items: center; justify-content: center;
+      gap: 3px; font-size: 12px; color: var(--text2); white-space: nowrap; }
+    .wx-pfeil { flex: none; }
+
+    .wx-seite { max-width: 820px; margin: 0 auto; width: 100%; }
+    .wx-leiste { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .wx-chip {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text2);
+      border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600;
+      font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wx-chip.aktiv { background: var(--accent); border-color: var(--accent); color: #04121c; }
+    html[data-zeiger="fein"] .wx-chip:not(.aktiv):hover { border-color: var(--accent); color: var(--text); }
+
+    .wx-jetzt { background: var(--surface); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 14px; }
+    .wx-jetzt-kopf { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .wx-jetzt-icon { line-height: 0; color: var(--text2); }
+    .wx-jetzt-ort { font-size: 18px; font-weight: 700; }
+    .wx-jetzt-quelle { font-size: 12px; color: var(--text3); }
+    /* auto-fit statt fester Spaltenzahl: auf dem Telefon stehen drei Felder
+       nebeneinander, am Kioskbildschirm sieben — ohne zweite Regel. */
+    .wx-felder { display: grid; gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+    .wx-feld { background: var(--surface2); border-radius: 10px; padding: 8px 10px; }
+    .wx-feld-kopf { font-size: 11px; color: var(--text3); text-transform: uppercase;
+      letter-spacing: .05em; font-weight: 700; }
+    .wx-feld-wert { font-size: 22px; font-weight: 700; line-height: 1.25;
+      display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+    .wx-feld-wert small { font-size: 13px; font-weight: 600; color: var(--text2); }
+    .wx-feld-sub { font-size: 12px; color: var(--text2); }
+
+    .wx-block { background: var(--surface); border-radius: var(--radius);
+      padding: 12px 14px 14px; margin-bottom: 14px; }
+    .wx-block-kopf { font-size: 12px; color: var(--text3); text-transform: uppercase;
+      letter-spacing: .05em; font-weight: 700; margin-bottom: 8px; }
+    .wx-canvas { width: 100%; display: block; }
+    .wx-hinweis { font-size: 12px; color: var(--text3); margin-top: 6px; line-height: 1.45; }
+    .wx-leer { color: var(--text3); font-size: 13px; }
+    .wx-knopf { margin-top: 10px; }
+
+    /* Die Tagestabelle scrollt notfalls waagerecht IN ihrem Kasten — die
+       Seite selbst darf das nie. */
+    .wx-tage { overflow-x: auto; }
+    .wx-tab { width: 100%; border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+    .wx-tab th { font-size: 11px; color: var(--text3); text-transform: uppercase;
+      letter-spacing: .04em; font-weight: 700; text-align: left; padding: 0 8px 6px 0; }
+    .wx-tab td { padding: 6px 8px 6px 0; border-top: 1px solid var(--border);
+      font-variant-numeric: tabular-nums; }
+    .wx-tab-tag { font-weight: 700; }
+    .wx-tab-min, .wx-tab-bft { color: var(--text3); font-size: 12px; }
+
+    .wx-legenden { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+    .wx-legende { font-size: 12px; color: var(--text2);
+      display: inline-flex; align-items: center; gap: 5px; }
+    .wx-legende i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+    .wx-urteil { font-size: 13px; color: var(--text2); margin-top: 8px; line-height: 1.5; }
+
+    /* ── Einstellungen: Wetterorte ── */
+    .set-card-zahl { font-size: 12px; color: var(--text3); font-weight: 600; }
+    .set-ort { display: flex; align-items: center; gap: 6px;
+      padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .set-ort:last-child { border-bottom: 0; }
+    .set-ort-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .set-ort-koord { font-size: 12px; color: var(--text3); font-weight: 400;
+      margin-left: 6px; font-variant-numeric: tabular-nums; }
+    .set-ort-btn { background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); border-radius: 8px; width: 30px; height: 30px; flex: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .set-ort-btn:disabled { opacity: .3; cursor: default; }
+    html[data-zeiger="fein"] .set-ort-btn:not(:disabled):hover { color: var(--text); border-color: var(--accent); }
+    html[data-zeiger="fein"] .set-ort-weg:not(:disabled):hover { color: var(--red); border-color: var(--red); }
+    .set-ort-leer { font-size: 13px; color: var(--text3); padding: 6px 0; line-height: 1.5; }
+    .set-suche { position: relative; margin-top: 10px; }
+    /* .settings-input ist auf die schmalen Zahlenfelder der uebrigen
+       Bereiche eingestellt. Ein Ortsname braucht die ganze Zeile. */
+    .set-suche .settings-input, #sWetterModell { width: 100%; max-width: none; }
+    .set-treffer { margin-top: 6px; border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; background: var(--surface2); }
+    .set-treffer-zeile { display: block; width: 100%; text-align: left;
+      background: none; border: 0; border-bottom: 1px solid var(--border);
+      color: var(--text); font: inherit; font-size: 13px; padding: 8px 10px;
+      cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .set-treffer-zeile:last-child { border-bottom: 0; }
+    .set-treffer-zeile span { color: var(--text3); font-size: 12px; }
+    html[data-zeiger="fein"] .set-treffer-zeile:hover { background: var(--surface); }
+
     /* ── Wasserstand tile ── */
     .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
     .wl-tile-spark { flex: 1; width: 100%; min-height: 48px; display: block; }

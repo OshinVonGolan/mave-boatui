@@ -873,13 +873,21 @@ main {
    das schon laenger so?", ohne dass ein Diagramm Platz kostet.
    Die Wartung bekommt keinen: ein Wartungsplan hat keinen Tagesverlauf, und
    eine Flaeche, die nur Dekoration waere, ist hier fehl am Platz. */
-.ampel-spur { position: absolute; inset: 0; pointer-events: none; }
+/* Die Fläche beginnt UNTER der Beschriftung. Vorher lag sie über der ganzen
+   Kachel, und weil der Verlauf oben am dichtesten ist, saß sie ausgerechnet
+   dort, wo der Name steht. Gemessen: 1,79 bis 2,01:1 statt der nötigen 4,5:1 —
+   knapp ein Drittel. Auf blankem Grund sind es 6,45:1.
+   Die Aussage der Fläche bleibt dabei unberührt: sie ist eine Form über der
+   Zeit, ihre Oberkante ist weiterhin ihr eigenes Maximum. */
+.ampel-spur { position: absolute; inset: 22px 0 0; pointer-events: none; }
 .ampel-spur svg { display: block; width: 100%; height: 100%; }
 .ampel > *:not(.ampel-spur) { position: relative; }
 .ampel-kopf { display: flex; align-items: center; gap: 7px; }
 .ampel-name {
   font-size: 10px; font-weight: 700; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--text3);
+  /* --text3 ergab selbst auf blankem Grund nur 3,26:1 und lag damit schon
+     ohne Fläche unter dem, was für kleinen Text nötig ist. */
+  text-transform: uppercase; color: var(--text2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ampel-wert {
@@ -888,7 +896,7 @@ main {
 }
 .ampel-wert small { font-size: 10.5px; font-weight: 600; color: var(--text2); margin-left: 2px; }
 .ampel-neben {
-  font-size: 11px; color: var(--text3);
+  font-size: 11px; color: var(--text2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 

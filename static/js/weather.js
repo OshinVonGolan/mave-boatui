@@ -222,14 +222,17 @@ function _renderWeather() {
   // eigenen Rahmen — sie sind Beiwerk, und Beiwerk bekommt keine Flaeche.
   const werte = $('wxWerte');
   if (werte) {
-    const paar = (was, wert) => wert
-      ? `<span><i>${was}</i> <b>${wert}</b></span>` : '';
+    // Alle vier IMMER, auch ohne Wert. Fiel eine Angabe weg — die Welle gibt
+    // es nur an der Kueste —, rutschten die anderen drei eine Zelle weiter,
+    // und dieselbe Zahl stand je nach Ort an einer anderen Stelle. Ein
+    // Gedankenstrich ist die ruhigere Auskunft (Eignerwunsch).
+    const paar = (was, wert) => `<span><i>${was}</i> <b>${wert || '--'}</b></span>`;
     werte.innerHTML = [
       paar('Welle', welle != null ? welle.toFixed(1) + ' m' : ''),
       paar('Regen', heute.pop != null ? heute.pop + ' %' : ''),
       paar('Druck', jetzt.druck != null ? Math.round(jetzt.druck) + ' hPa' : ''),
       paar('Sonne', _wxUhrZeit(heute.unter) ? 'bis ' + _wxUhrZeit(heute.unter) : ''),
-    ].filter(Boolean).join('');
+    ].join('');
   }
 
   _wxTagStreifen();
@@ -344,7 +347,30 @@ function _wxTagStreifen() {
     }
   }
 
-  // 2. Der Wind als Flaeche bis zum Boden — die Hoehe IST die Staerke.
+  // 2. Der Niederschlag als Balken — von OBEN nach unten (Eignerwunsch:
+  //    „im Hintergrund"). Nach unten waechst schon die Windflaeche; zwei
+  //    durchscheinende Flaechen uebereinander waeren wieder der braune Matsch,
+  //    den dieses Diagramm gerade losgeworden ist. Von oben herab stossen sie
+  //    nie zusammen — und Regen faellt ohnehin von da.
+  //
+  //    Die Skala ist fest bei mindestens 3 mm/h: sonst fuellt ein Nieselregen
+  //    von 0,1 mm das halbe Feld und sieht aus wie ein Wolkenbruch. Mehr als
+  //    3 mm/h dehnt sie mit, damit ein echter Guss auch hoeher steht.
+  const regenSpitze = Math.max(...st.map(s => s.regen || 0), 0);
+  if (regenSpitze > 0) {
+    const rMax = Math.max(3, regenSpitze);
+    const rHoch = cH * 0.45;                 // hoechstens knapp die halbe Hoehe
+    const breite = Math.max(2, (W / Math.max(1, n)) * 0.55);
+    ctx.fillStyle = 'rgba(96,165,250,.40)';
+    st.forEach((s, i) => {
+      const mm = s.regen;
+      if (!(mm > 0)) return;
+      const h = Math.max(1.5, Math.min(1, mm / rMax) * rHoch);
+      ctx.fillRect(xOf(i) - breite / 2, 0, breite, h);
+    });
+  }
+
+  // 3. Der Wind als Flaeche bis zum Boden — die Hoehe IST die Staerke.
   const akzent = _wxFarbe('--accent', '#38bdf8');
   const pfad = () => {
     ctx.beginPath();
@@ -368,7 +394,7 @@ function _wxTagStreifen() {
   ctx.strokeStyle = akzent; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // 3. Die Boee nur als Linie. Die Flaeche dazwischen war ein brauner Fleck.
+  // 4. Die Boee nur als Linie. Die Flaeche dazwischen war ein brauner Fleck.
   ctx.beginPath();
   let erste = true;
   st.forEach((s, i) => {
@@ -381,7 +407,7 @@ function _wxTagStreifen() {
   ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // 4. Die Jetzt-Linie. Sie steht ueber den Kurven, damit sie nicht unter der
+  // 5. Die Jetzt-Linie. Sie steht ueber den Kurven, damit sie nicht unter der
   //    Windflaeche verschwindet, und bleibt duenn und gestrichelt: sie ist
   //    eine Marke an der Zeitachse und kein Messwert.
   if (iNun > 0 && iNun < n) {
@@ -396,7 +422,7 @@ function _wxTagStreifen() {
     ctx.restore();
   }
 
-  // 5. Die hoechste Boe mit ihrer Zahl — darauf richtet man sich ein, und sie
+  // 6. Die hoechste Boe mit ihrer Zahl — darauf richtet man sich ein, und sie
   //    ersetzt die Achsenbeschriftung.
   let iMax = 0, vMax = -1;
   st.forEach((s, i) => {

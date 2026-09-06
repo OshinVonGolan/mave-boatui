@@ -442,7 +442,7 @@ function _wasch(punkte, farbe, unten, oben) {
     const l = x(stueck[0].t), r = x(stueck[stueck.length - 1].t);
     pfade += `<path d="M${l},100 L${pkt.join(' L')} L${r},100 Z" fill="url(#${kennung})"/>`
       + `<polyline points="${pkt.join(' ')}" fill="none" stroke="${farbe}"
-          stroke-opacity=".3" stroke-width="1.2" vector-effect="non-scaling-stroke"
+          stroke-opacity=".4" stroke-width="1.2" vector-effect="non-scaling-stroke"
           stroke-linejoin="round"/>`;
   }
   if (!pfade) return '';

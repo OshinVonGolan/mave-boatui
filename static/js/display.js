@@ -1475,17 +1475,25 @@ function _zeigerartMerken() {
 // Kurz genug, dass das Weiterschalten nicht traege wirkt, lang genug fuer
 // einen bequemen Doppeltipp.
 //
-// Erst 240 ms, dann 150, jetzt 100 — jedes Mal auf Ansage, weil das
-// Weiterschalten noch zu spueren war. Bei 100 ms ist die Verzoegerung beim
-// einfachen Tippen praktisch weg.
+// DIE FRIST WARTET NICHT MEHR AB — sie erkennt nur noch.
 //
-// Der Preis steht in der Frist selbst: ein Doppeltipp wird meist in 100 bis
-// 150 ms getippt, ein Teil davon faellt jetzt also aus der Frist und schaltet
-// zweimal weiter, statt die Detailseite zu oeffnen. Das ist der bewusst
-// gewaehlte Tausch — Weiterschalten ist die haeufige Handlung, die Detailseite
-// die seltene, und ein verpasster Doppeltipp kostet nur einen weiteren.
-const _SB_DOPPEL_MS = 100;
-let _sbWartend = null;      // {feld, los, uhr} — ein Tipp, der noch abwartet
+// Vorher hielt der erste Tipp seine Wirkung zurueck, bis feststand, ob ein
+// zweiter kommt. Damit stand die Frist zwischen zwei Anforderungen, die sich
+// widersprechen: kurz muss sie sein, damit das Weiterschalten nicht traege
+// wirkt (240 -> 150 -> 100 ms, jedes Mal auf Ansage), und lang, damit ein
+// Doppeltipp hineinpasst. Bei 100 ms fiel er heraus und tat gar nichts mehr
+// (Eignermeldung). Ein Kompromiss dazwischen macht beides halb.
+//
+// Jetzt schaltet der erste Tipp SOFORT, und die Frist entscheidet nur noch,
+// ob ein zweiter dazugehoert. Kommt er, wird der erste Schritt zurueckgenommen
+// und die Seite geoeffnet. Damit ist das Weiterschalten ohne jede Verzoegerung
+// und die Frist darf grosszuegig sein.
+//
+// Der sichtbare Preis: waehrend der zwei Zehntel zwischen den Tippern steht
+// kurz der naechste Wert da. Das ist der richtige Fehler — er zeigt, dass der
+// Tipp angekommen ist, und danach liegt ohnehin die Detailseite darueber.
+const _SB_DOPPEL_MS = 320;
+let _sbLetzter = null;      // {feld, zeit} — der vorige Tipp, zum Erkennen
 
 function _sbHaltenBinden() {
   const leiste = document.getElementById('statusBar');
@@ -1526,31 +1534,22 @@ function _sbHaltenBinden() {
     if (typeof weiter !== 'function') return;   // hat nichts durchzuschalten
     const ziel = window[feld.dataset.detail];
 
-    // Zweiter Tipp auf dasselbe Feld: der erste hat noch nicht geschaltet, und
-    // das soll er auch nicht mehr. Nur die Seite geht auf.
-    if (_sbWartend && _sbWartend.feld === feld) {
-      clearTimeout(_sbWartend.uhr);
-      _sbWartend = null;
-      if (typeof ziel === 'function') ziel();
+    // Ohne Detailseite gibt es keinen Doppeltipp — dort schaltet jeder Tipp.
+    if (typeof ziel !== 'function') { weiter(1); _sbLetzter = null; return; }
+
+    const jetzt = (performance && performance.now) ? performance.now() : Date.now();
+    if (_sbLetzter && _sbLetzter.feld === feld
+        && jetzt - _sbLetzter.zeit < _SB_DOPPEL_MS) {
+      // Zweiter Tipp: den Schritt des ersten zuruecknehmen und aufmachen.
+      // Genau EINEN zurueck — der zweite Tipp schaltet selbst nicht mehr.
+      _sbLetzter = null;
+      weiter(-1);
+      ziel();
       return;
     }
-    // Ein wartender Tipp auf einem ANDEREN Feld wird jetzt eingeloest — sonst
-    // haengt er in der Luft, waehrend man schon woanders ist.
-    if (_sbWartend) {
-      clearTimeout(_sbWartend.uhr);
-      _sbWartend.los();
-      _sbWartend = null;
-    }
 
-    const los = () => weiter(1);
-    // Ohne Detailseite gibt es nichts abzuwarten — dann sofort.
-    if (typeof ziel !== 'function') { los(); return; }
-
-    // MIT Detailseite wartet der Tipp die Doppeltipp-Frist ab. Sofort zu
-    // schalten und beim zweiten Tipp zurueckzunehmen war der erste Versuch:
-    // es funktionierte, aber die Anzeige sprang dabei sichtbar hin und her.
-    _sbWartend = { feld, los, uhr: setTimeout(() => { _sbWartend = null; los(); },
-                                              _SB_DOPPEL_MS) };
+    weiter(1);
+    _sbLetzter = { feld, zeit: jetzt };
   });
 }
 

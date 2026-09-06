@@ -696,19 +696,33 @@ class DoppeltippOeffnetDetail(Pruefstand):
         self.pg.wait_for_timeout(500)
         self.assertTrue(self.offen())
 
-    def test_doppeltipp_schaltet_gar_nicht(self):
-        """Nicht vor und wieder zurück: der erste Tipp wartet die Frist ab, und
-        kommt der zweite, schaltet er gar nicht erst. Sonst sprang die Anzeige
-        sichtbar hin und her."""
+    def test_der_erste_tipp_schaltet_sofort(self):
+        """Ohne Verzögerung. Vorher hielt der erste Tipp seine Wirkung zurück,
+        bis die Doppeltipp-Frist um war — und die Frist musste deshalb kurz
+        sein, wodurch der Doppeltipp herausfiel (Eignermeldung)."""
         vorher = self.label()
-        zwischen = []
         self.pg.mouse.click(self.x, self.y)
-        zwischen.append(self.label())          # sofort danach: noch unveraendert
-        self.pg.mouse.click(self.x, self.y)
-        self.pg.wait_for_timeout(700)
-        self.assertEqual(zwischen[0], vorher, 'der erste Tipp hat schon geschaltet')
+        self.assertNotEqual(self.label(), vorher,
+                            'der Tipp wirkt erst nach einer Frist')
+
+    def test_doppeltipp_nimmt_den_ersten_schritt_zurueck(self):
+        """Am Ende steht dasselbe Feld da wie vor dem Doppeltipp — genau ein
+        Schritt zurück, nicht zwei."""
+        vorher = self.label()
+        self.pg.mouse.click(self.x, self.y, click_count=2, delay=40)
+        self.pg.wait_for_timeout(500)
         self.assertEqual(self.label(), vorher)
         self.assertTrue(self.offen())
+
+    def test_ein_gemaechlicher_doppeltipp_zaehlt_noch(self):
+        """Menschen tippen ihn in 100 bis 150 ms; bei 100 ms Frist fiel er
+        heraus und tat gar nichts. Die Frist darf jetzt großzügig sein, weil
+        sie nichts mehr aufhält."""
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(200)
+        self.pg.mouse.click(self.x, self.y)
+        self.pg.wait_for_timeout(400)
+        self.assertTrue(self.offen(), '200 ms sind kein Doppeltipp mehr')
 
     def test_zu_langsam_ist_kein_doppeltipp(self):
         self.pg.mouse.click(self.x, self.y)
@@ -1239,6 +1253,26 @@ class Wetterkachel(Pruefstand):
             return z;
         }""")
         self.assertGreater(n, 300, 'der Streifen ist leer geblieben')
+
+    def test_die_werte_bleiben_an_ihrem_platz(self):
+        """Fehlt eine Angabe — die Welle gibt es nur an der Küste —, rutschten
+        die anderen drei eine Zelle weiter, und dieselbe Zahl stand je nach Ort
+        woanders (Eignerwunsch: dann lieber „--")."""
+        stellen = lambda: self.pg.evaluate(          # noqa: E731
+            """() => [...document.querySelectorAll('#wxWerte span')].map(e => {
+                 const r = e.getBoundingClientRect();
+                 return [e.innerText.split(/\s/)[0], Math.round(r.x), Math.round(r.y)];
+               })""")
+        vorher = stellen()
+        self.pg.evaluate("""() => {
+            (_wxData.stunden || []).forEach(s => { s.welle = null; });
+            (_wxData.tage || []).forEach(t => { t.wave = null; });
+            _renderWeather();
+        }""")
+        self.pg.wait_for_timeout(300)
+        self.assertEqual(stellen(), vorher, 'die Werte sind verrutscht')
+        self.assertIn('--', self.pg.evaluate(
+            "() => document.querySelector('#wxWerte span').innerText"))
 
     def test_die_werte_stehen_mit_ihrer_bezeichnung_da(self):
         """Eine Zahl ohne Wort daneben muss man raten."""
