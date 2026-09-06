@@ -32,7 +32,8 @@ const ICON_PATHS = {
   // trug damit das Sinnbild fuer „neu laden". Jetzt das Zeichen fuer einen
   // Generator: Wellenlinie im Kreis.
   bolt:       '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
-  battery:    '<rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/>',
+  // Der Anschluss sass vier Einheiten neben dem Gehaeuse und hing in der Luft.
+  battery:    '<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M21 10.5v3"/>',
   plug:       '<path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0"/>',
   solar:       '<path d="M6 5h12l3 12H3z"/><path d="M8.6 5L6.6 17M15.4 5l2 12M4.5 11h15"/>',
   alternator: '<circle cx="12" cy="12" r="9"/>'

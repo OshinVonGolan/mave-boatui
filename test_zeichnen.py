@@ -757,6 +757,76 @@ class DoppeltippOeffnetDetail(Pruefstand):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class VeralteterStand(Pruefstand):
+    """Das Band „Diese Seite läuft auf einem älteren Stand" und sein Knopf.
+
+    Der Knopf gab beim Tippen kein Zeichen, und weil `_neuLadenHart` erst den
+    Zwischenspeicher des Service Workers räumt, passierte danach eine Weile
+    sichtbar gar nichts (Eignermeldung: „verwirrend").
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.pg.evaluate("() => _veraltetZeigen('9.9.9')")
+        self.pg.wait_for_timeout(200)
+
+    def knopf(self):
+        return self.pg.locator('.veraltet-knopf')
+
+    def test_das_band_kommt_mit_knopf(self):
+        self.assertEqual(self.knopf().count(), 1)
+        self.assertIn('neu laden', self.knopf().inner_text())
+
+    def test_druecken_ist_zu_sehen(self):
+        k = self.knopf()
+        kasten = k.bounding_box()
+        self.pg.mouse.move(kasten['x'] + kasten['width'] / 2,
+                           kasten['y'] + kasten['height'] / 2)
+        self.pg.mouse.down()
+        self.pg.wait_for_timeout(120)
+        self.assertTrue(self.pg.evaluate(
+            "() => document.querySelector('.veraltet-knopf').classList.contains('tippt')"),
+            'der Druck ist nicht zu sehen')
+        # Und die Klasse muss auch etwas bewirken, nicht nur dastehen.
+        self.assertNotEqual(self.pg.evaluate(
+            "() => getComputedStyle(document.querySelector('.veraltet-knopf')).filter"),
+            'none')
+        self.pg.mouse.up()
+
+    def test_nach_dem_tippen_sagt_er_was_er_tut(self):
+        """Sonst tippt man ein zweites Mal, während noch geräumt wird.
+
+        Geprüft wird der ECHTE Knopf mit dem echten Handler. Damit die Seite
+        dabei nicht wirklich neu lädt, hängt `caches.keys()` — dann kommt
+        `_neuLadenHart` nie bis zum `location.reload()`.
+        """
+        self.pg.evaluate("""() => {
+            Object.defineProperty(window, 'caches', {
+              value: { keys: () => new Promise(() => {}) }, configurable: true });
+        }""")
+        self.knopf().click()
+        self.pg.wait_for_timeout(300)
+        self.assertIn('Wird geladen', self.knopf().inner_text())
+        self.assertTrue(self.pg.evaluate(
+            "() => document.querySelector('.veraltet-knopf').disabled"),
+            'ein zweiter Tipp käme noch durch')
+
+    def test_der_zweite_tipp_laeuft_ins_leere(self):
+        """Er darf nicht ein zweites Mal räumen und neu laden."""
+        self.pg.evaluate("""() => {
+            window._raeumt = 0;
+            Object.defineProperty(window, 'caches', {
+              value: { keys: () => { window._raeumt++; return new Promise(() => {}); } },
+              configurable: true });
+        }""")
+        self.knopf().click()
+        self.pg.wait_for_timeout(200)
+        self.pg.evaluate("() => _neuLadenHart(document.querySelector('.veraltet-knopf'))")
+        self.pg.wait_for_timeout(200)
+        self.assertEqual(self.pg.evaluate("() => window._raeumt"), 1)
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
 class Lichtkreise(Pruefstand):
     """Namen aus den Einstellungen, Balken als Regler, Relais auf Halten."""
 

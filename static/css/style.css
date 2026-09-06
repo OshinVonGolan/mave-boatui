@@ -2852,7 +2852,16 @@
       background: var(--yellow); border: none; border-radius: 8px; color: var(--bg);
       padding: 8px 14px; font-size: 12px; font-weight: 700; font-family: inherit;
       cursor: pointer; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+      transition: filter .12s, transform .06s, opacity .12s;
     }
+    /* Die Klasse setzt JS beim Druecken. `:active` waere das Naheliegende,
+       wird aber auf dem Anzeigegeraet (iPad) nicht zuverlaessig angewandt. */
+    .veraltet-knopf.tippt { filter: brightness(.8); transform: scale(.97); }
+    html[data-zeiger="fein"] .veraltet-knopf:hover { filter: brightness(1.1); }
+    /* Waehrend geraeumt und neu geladen wird. */
+    .veraltet-knopf:disabled { opacity: .65; cursor: default; transform: none; }
+    .veraltet-knopf:focus-visible { outline: 2px solid var(--bg); outline-offset: -4px; }
     /* Auf dem Telefon hochkant reicht die Breite fuer Marke, Text UND Knopf
        nicht. Der Knopf rutschte dann als drittes Element in eine eigene Zeile
        und stand dort linksbuendig unter dem Text — als waere er verrutscht.
