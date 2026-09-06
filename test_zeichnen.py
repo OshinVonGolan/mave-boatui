@@ -24,6 +24,7 @@ Aufruf:
 import base64
 import datetime
 import json
+import re
 import os
 import pathlib
 import shutil
@@ -884,6 +885,72 @@ class LadenGemessenStattGerechnet(Pruefstand):
         """Ohne Kabel meldete das Landstromgerät nichts, und die Einheit sprang
         auf Watt, während der Rest des Bildschirms Ampere zeigte."""
         self.assertEqual(self.zeige(ah=True, quellen={})[1], 'A')
+
+
+class LadeschirmFristen(unittest.TestCase):
+    """Die zwei Fristen beim Start dürfen nicht auseinanderlaufen.
+
+    In `index.html` steht eine Notbremse für den Fall, dass das Bundle gar
+    nicht läuft; in `init.js` der abgestimmte Deckel. Die Notbremse stand auf
+    4 Sekunden, der Deckel auf 8 — alles, was länger als vier Sekunden
+    brauchte, erschien halb fertig (Eignermeldung). Diese Prüfung braucht
+    keinen Browser und läuft deshalb auch mit, wenn Playwright fehlt.
+    """
+
+    def test_die_notbremse_kommt_nach_dem_deckel(self):
+        html = (HIER / 'static' / 'index.html').read_text()
+        js = (HIER / 'static' / 'js' / 'init.js').read_text()
+        notbremse = int(re.search(
+            r"remove\('startet'\); \}, (\d+)\)", html).group(1))
+        deckel = int(re.search(r'_START_DECKEL_MS = (\d+)', js).group(1))
+        self.assertGreater(notbremse, deckel,
+                           f'Notbremse {notbremse} ms feuert vor dem Deckel {deckel} ms')
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Ladeschirm(Pruefstand):
+    """Was der Start abwartet — und was er absichtlich nicht abwartet."""
+
+    def test_auf_wetter_und_pegel_wird_nicht_gewartet(self):
+        """Beide kommen von fremden Diensten. Ohne Internet laufen sie in ihre
+        eigene Frist, und der Ladeschirm hätte so lange gestanden, obwohl alle
+        Bordwerte längst da sind (Eignermeldung)."""
+        wartet = self.pg.evaluate('() => _QUELLEN_BORD.map(q => q[0])')
+        self.assertNotIn('Wetter', wartet)
+        self.assertNotIn('Wasserstand', wartet)
+        self.assertIn('Zustand', wartet)
+        self.assertIn('Heizung', wartet)
+
+    def test_die_beiden_sind_trotzdem_als_extern_verzeichnet(self):
+        """Nicht einfach gestrichen: sie laden weiter, nur ohne aufzuhalten."""
+        self.assertEqual(
+            sorted(self.pg.evaluate('() => _QUELLEN.filter(q => q[2]).map(q => q[0])')),
+            ['Wasserstand', 'Wetter'])
+
+    def test_der_schirm_zeigt_die_marke_und_keinen_text(self):
+        """Eignerwunsch: ein Zeichen statt einer Beschriftung."""
+        m = self.pg.evaluate("""() => {
+            document.documentElement.classList.add('startet');
+            const s = document.getElementById('ladeschirm');
+            return { marke: !!s.querySelector('.lade-marke'),
+                     balken: !!s.querySelector('.lade-balken'),
+                     textStill: document.getElementById('ladeText').hidden };
+        }""")
+        self.assertTrue(m['marke'])
+        self.assertTrue(m['balken'])
+        self.assertTrue(m['textStill'], 'der Text steht sofort da')
+
+    def test_bei_langer_wartezeit_sagt_er_woran_es_haengt(self):
+        """Dann ist er keine Zierde, sondern die Antwort auf „woran hängt es"."""
+        t = self.pg.evaluate("""() => {
+            _textZeigen = true;
+            _offeneQuellen = ['Heizung'];
+            _ladeStandZeigen();
+            const e = document.getElementById('ladeText');
+            return e.hidden ? null : e.textContent;
+        }""")
+        self.assertIsNotNone(t)
+        self.assertIn('Heizung', t)
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')

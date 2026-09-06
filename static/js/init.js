@@ -98,16 +98,26 @@ if (typeof _wartungTagPoller !== 'undefined' && _wartungTagPoller) _wartungTagPo
 // Heizungskachel — was aussah, als fehlten die Rechte.
 const _START_DECKEL_MS = 8000;
 
+// Die dritte Spalte heisst: braucht INTERNET.
+//
+// Auf die wird beim Start NICHT gewartet. Wetter und Wasserstand kommen von
+// fremden Diensten; ohne Internet laufen sie in ihre eigene Frist, und der
+// Ladeschirm haette so lange gestanden, obwohl alle Bordwerte laengst da sind
+// (Eignermeldung). Sie tragen sich nach, wenn sie kommen — eine Kachel, die
+// eine Sekunde spaeter Zahlen bekommt, ist kein Problem; ein Ladeschirm, der
+// vor dem fertigen Boot steht, schon.
 const _QUELLEN = [
-  ['Zustand',    _pStatus],
-  ['Verbindung', _pConn],
-  ['Wartung',    _pWart],
-  ['Grundriss',  _pGrundriss],
-  ['Wasserstand', _pWl],
-  ['Wetter',     _pWetter],
-  ['Heizung',    typeof ladeHeizung === 'function' ? ladeHeizung(false) : null],
-  ['Beleuchtung', typeof loadPresets === 'function' ? _presetsFertig : null],
+  ['Zustand',    _pStatus,     false],
+  ['Verbindung', _pConn,       false],
+  ['Wartung',    _pWart,       false],
+  ['Grundriss',  _pGrundriss,  false],
+  ['Wasserstand', _pWl,        true],
+  ['Wetter',     _pWetter,     true],
+  ['Heizung',    typeof ladeHeizung === 'function' ? ladeHeizung(false) : null, false],
+  ['Beleuchtung', typeof loadPresets === 'function' ? _presetsFertig : null, false],
 ];
+/** Worauf der Start wirklich wartet. */
+const _QUELLEN_BORD = _QUELLEN.filter(([, p, extern]) => p && !extern);
 
 function _startFreigeben() {
   document.documentElement.classList.remove('startet');
@@ -116,17 +126,25 @@ function _startFreigeben() {
 // Im Ladeschirm steht, worauf noch gewartet wird. Das ist nicht Zierde: bleibt
 // eine Quelle hängen, sieht man beim nächsten Mal sofort welche, statt zu
 // raten.
-let _offeneQuellen = _QUELLEN.filter(([, p]) => p).map(([n]) => n);
+let _offeneQuellen = _QUELLEN_BORD.map(([n]) => n);
+
+// Der Text bleibt STILL, solange es normal laeuft. Erst wenn es ungewoehnlich
+// lange dauert, wird er sichtbar — dann ist er keine Zierde, sondern die
+// Antwort auf „woran haengt es". Im Normalfall sieht man die Marke und den
+// Strich, sonst nichts (Eignerwunsch).
+const _LADETEXT_AB_MS = 3000;
+let _textZeigen = false;
+
 function _ladeStandZeigen() {
-  const feld = document.querySelector('.lade-text');
+  const feld = document.getElementById('ladeText');
   if (!feld) return;
-  feld.textContent = _offeneQuellen.length
-    ? 'Es fehlen noch: ' + _offeneQuellen.join(', ')
-    : 'Fertig';
+  if (!_textZeigen || !_offeneQuellen.length) { feld.hidden = true; return; }
+  feld.hidden = false;
+  feld.textContent = 'Es fehlt noch: ' + _offeneQuellen.join(', ');
 }
-_ladeStandZeigen();
-for (const [name, versprechen] of _QUELLEN) {
-  if (!versprechen) continue;
+setTimeout(() => { _textZeigen = true; _ladeStandZeigen(); }, _LADETEXT_AB_MS);
+
+for (const [name, versprechen] of _QUELLEN_BORD) {
   Promise.resolve(versprechen).finally(() => {
     _offeneQuellen = _offeneQuellen.filter(n => n !== name);
     _ladeStandZeigen();
@@ -134,7 +152,7 @@ for (const [name, versprechen] of _QUELLEN) {
 }
 
 Promise.race([
-  Promise.allSettled(_QUELLEN.map(([, p]) => p)),
+  Promise.allSettled(_QUELLEN_BORD.map(([, p]) => p)),
   new Promise(r => setTimeout(r, _START_DECKEL_MS)),
 ]).then(() => requestAnimationFrame(_startFreigeben));
 

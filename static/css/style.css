@@ -676,22 +676,41 @@
        Schirme waeren nur verwirrend. */
     html.anmeldung-offen .ladeschirm { display: none; }
 
-    .lade-kreis {
-      width: 38px; height: 38px; border-radius: 50%;
-      border: 3px solid color-mix(in srgb, var(--accent) 22%, transparent);
-      border-top-color: var(--accent);
-      animation: lade-dreh .8s linear infinite;
+    /* Die Marke, gross und atmend. Sie erbt ihre Form von `.marke-mave`
+       (Maske ueber das Zeichen), hier bekommt sie nur Groesse und Farbe. */
+    .lade-marke {
+      font-size: 34px; color: var(--accent);
+      animation: lade-atmen 2.2s ease-in-out infinite;
     }
-    @keyframes lade-dreh { to { transform: rotate(360deg); } }
+    @keyframes lade-atmen { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+    /* Ein Strich, der hin und her laeuft. Kein Fortschrittsbalken: wir wissen
+       nicht, wie weit es ist — er sagt nur, dass gearbeitet wird. */
+    .lade-balken {
+      width: 128px; height: 3px; border-radius: 2px; overflow: hidden;
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+    .lade-balken i {
+      display: block; width: 40%; height: 100%; border-radius: 2px;
+      background: var(--accent);
+      animation: lade-lauf 1.5s ease-in-out infinite;
+    }
+    @keyframes lade-lauf {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(250%); }
+    }
     @media (prefers-reduced-motion: reduce) {
-      /* Wer Bewegung abbestellt hat, bekommt ein Pulsieren statt der Drehung. */
-      .lade-kreis { animation: lade-puls 1.4s ease-in-out infinite; }
+      /* Wer Bewegung abbestellt hat, bekommt Ruhe: die Marke bleibt stehen,
+         der Strich pulsiert nur. */
+      .lade-marke { animation: none; opacity: .9; }
+      .lade-balken i { width: 100%; animation: lade-puls 1.6s ease-in-out infinite; }
       @keyframes lade-puls { 50% { opacity: .3; } }
     }
     .lade-text {
-      font-size: 12px; font-weight: 600; letter-spacing: .06em;
-      text-transform: uppercase; color: var(--text2);
+      font-size: 11px; font-weight: 600; letter-spacing: .05em;
+      color: var(--text3); text-align: center; max-width: 260px; line-height: 1.4;
     }
+    .lade-text[hidden] { display: none; }
     main, .statusbar { opacity: 1; transition: opacity .18s ease; }
 
     /* ── Kacheln anordnen ─────────────────────────────────────────────────
