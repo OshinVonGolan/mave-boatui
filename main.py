@@ -3243,7 +3243,12 @@ async def put_wlan(request: Request):
     daten = await _json_body(request)
     if not isinstance(daten, dict):
         raise HTTPException(400, detail='Erwartet wird ein Objekt')
-    ssid = str(daten.get('ssid') or '').strip()[:64]
+    # NICHT beschneiden. Ein Netzname darf auf ein Leerzeichen enden, und das
+    # `.strip()`, das hier stand, machte daraus stillschweigend einen anderen
+    # Namen — der QR-Code war dann gueltig und fuehrte ins Leere
+    # (Eignermeldung). Sichtbar gemacht wird es in der Oberflaeche, nicht
+    # weggeraeumt.
+    ssid = str(daten.get('ssid') or '')[:64]
     art = daten.get('art') if daten.get('art') in _WLAN_ARTEN else 'WPA'
     passwort = str(daten.get('passwort') or '')[:128]
     if ssid and art != 'nopass' and len(passwort) < 8:

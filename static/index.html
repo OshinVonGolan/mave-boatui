@@ -1249,7 +1249,10 @@
         <div class="set-wlan-form">
           <label>Netzname (SSID)
             <input id="sWlanSsid" class="settings-input" type="text" maxlength="64"
-                   autocomplete="off" spellcheck="false"></label>
+                   autocomplete="off" spellcheck="false" oninput="wlanRandhinweis()">
+            <!-- Leerzeichen am Rand sind erlaubt, aber unsichtbar. Weder
+                 wegschneiden noch verschweigen. -->
+            <span class="set-wlan-rand" id="sWlanRand" hidden></span></label>
           <label>Passwort
             <input id="sWlanPw" class="settings-input" type="text" maxlength="128"
                    autocomplete="off" spellcheck="false"></label>
@@ -1266,6 +1269,11 @@
         <div class="es-tat" style="margin-top:12px">
           <button class="btn-primary" onclick="wlanSpeichern()"
                   style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Speichern</button>
+          <!-- Im Menü steht der Eintrag nur am Wandtablet. Hier kommt heran,
+               wer ihn einrichtet — sonst könnte man nie nachsehen, ob es
+               stimmt. -->
+          <button class="btn-primary" onclick="wlanPopAuf()"
+                  style="background:none;color:var(--text2);border:1px solid var(--border)">Vorschau</button>
           <span class="hinweis" id="sWlanMeldung"></span>
         </div>
       </div>

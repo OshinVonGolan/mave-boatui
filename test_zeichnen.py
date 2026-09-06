@@ -966,16 +966,33 @@ class GaesteWlan(Pruefstand):
         self.pg.wait_for_timeout(700)
         self.assertIn('nur an Bord', self.pg.inner_text('#wlanLeer'))
 
-    def test_im_menue_nur_beim_wandtablet_und_beim_eigner(self):
+    def test_im_menue_nur_am_wandtablet(self):
         """Eine Frage der Platzierung, nicht des Schutzes — auf jedem Telefon
-        im Menü braucht es niemand."""
+        im Menü braucht es niemand. Auch nicht beim Eigner: der kommt über die
+        Vorschau in den Einstellungen heran (Eignermeldung, es stand auch in
+        seinem Browser)."""
         fuer = lambda rolle: self.pg.evaluate(          # noqa: E731
             "(rolle) => { _zugangStand = { konto: { rolle } }; return wlanImMenue(); }",
             rolle)
+        for rolle in ('eigner', 'crew', 'gast', 'techniker'):
+            self.assertFalse(fuer(rolle), f'steht bei {rolle} im Menü')
         self.assertTrue(fuer('kiosk'))
-        self.assertTrue(fuer('eigner'))
-        self.assertFalse(fuer('crew'))
-        self.assertFalse(fuer('gast'))
+
+    def test_die_wandfassung_zeigt_es_auch_ohne_kiosk_konto(self):
+        """Auf diesem Boot gibt es (noch) kein Kiosk-Konto — das Tablet meldet
+        sich mit einem Eignerkonto an. Über die Rolle allein wäre der Eintrag
+        also entweder überall oder nirgends."""
+        self.assertTrue(self.pg.evaluate("""() => {
+            _zugangStand = { konto: { rolle: 'eigner' } };
+            const echt = window._wandVollbild;
+            window._wandVollbild = () => true;
+            try { return wlanImMenue(); } finally { window._wandVollbild = echt; }
+        }"""))
+
+    def test_die_vorschau_steht_in_den_einstellungen(self):
+        """Sonst könnte der Eigner nie nachsehen, ob es stimmt."""
+        self.assertEqual(self.pg.locator(
+            '#setPane-netz button[onclick="wlanPopAuf()"]').count(), 1)
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')

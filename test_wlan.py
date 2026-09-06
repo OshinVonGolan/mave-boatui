@@ -133,6 +133,18 @@ class Endpunkte(unittest.TestCase):
         lauf(main.put_wlan(Anfrage({'ssid': 'Hafen', 'passwort': '', 'art': 'nopass'})))
         self.assertTrue(lauf(main.get_wlan())['eingerichtet'])
 
+    def test_leerzeichen_am_rand_bleiben_stehen(self):
+        """Ein Netzname DARF auf ein Leerzeichen enden. Das `.strip()`, das hier
+        stand, machte daraus stillschweigend einen anderen Namen — der QR-Code
+        war gültig und führte trotzdem in kein Netz (Eignermeldung)."""
+        lauf(main.put_wlan(Anfrage({'ssid': 'SY_Mave ', 'passwort': 'seemannsgarn'})))
+        self.assertEqual(lauf(main.get_wlan())['ssid'], 'SY_Mave ')
+
+    def test_das_leerzeichen_steht_auch_im_code(self):
+        lauf(main.put_wlan(Anfrage({'ssid': ' Rand ', 'passwort': 'seemannsgarn'})))
+        self.assertEqual(main.wlan_kette(main._wlan_lesen()),
+                         'WIFI:T:WPA;S: Rand ;P:seemannsgarn;;')
+
     def test_unbekannte_art_faellt_auf_wpa_zurueck(self):
         lauf(main.put_wlan(Anfrage({'ssid': 'X', 'passwort': 'seemannsgarn',
                                     'art': 'quatsch'})))

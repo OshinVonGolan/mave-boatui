@@ -15,19 +15,27 @@
 let _wlanStand = null;      // {ssid, passwort, art, eingerichtet}
 let _wlanNurAnBord = false; // der Server kennt die Endpunkte nicht
 
-/** Wer den Eintrag sehen soll: das Wandtablet — und der Eigner, der es
- *  einrichtet und nachsehen will, ob es stimmt.
+/** Wer den Eintrag sehen soll: NUR das Wandtablet.
  *
  *  Das ist eine Frage der PLATZIERUNG, nicht der Sicherheit: das Passwort
  *  hängt ohnehin für jeden lesbar an der Wand im Salon, und der Endpunkt gibt
  *  es jedem angemeldeten Konto. Es soll nur nicht auf jedem Telefon im Menü
  *  stehen, wo es niemand braucht.
+ *
+ *  Erkannt wird die installierte WANDFASSUNG und nicht die Rolle. Der Grund
+ *  ist unangenehm einfach: ein Kiosk-Konto gibt es auf diesem Boot (noch)
+ *  nicht — das Tablet meldet sich mit einem Eignerkonto an. Über die Rolle
+ *  wäre der Eintrag also entweder überall oder nirgends. Sobald das Tablet
+ *  sein eigenes Konto hat, greift die zweite Bedingung von selbst.
+ *
+ *  Der Eigner kommt trotzdem heran: in den Einstellungen steht neben den
+ *  Feldern ein Knopf „Vorschau".
  */
 function wlanImMenue() {
+  if (typeof _wandVollbild === 'function' && _wandVollbild()) return true;
   const k = (typeof _zugangStand !== 'undefined' && _zugangStand)
     ? _zugangStand.konto : null;
-  if (!k) return false;
-  return k.rolle === 'kiosk' || k.rolle === 'eigner';
+  return !!k && k.rolle === 'kiosk';
 }
 
 async function wlanLaden() {
@@ -99,17 +107,41 @@ async function wlanEinstZeichnen() {
   };
   setzen('sWlanSsid', w.ssid);
   setzen('sWlanPw', w.passwort);
+  wlanRandhinweis();
   const art = document.getElementById('sWlanArt');
   if (art) art.value = w.art;
   const versteckt = document.getElementById('sWlanVersteckt');
   if (versteckt) versteckt.checked = !!w.versteckt;
 }
 
+/** Leerzeichen am Rand sichtbar machen.
+ *
+ *  Sie sind erlaubt und manchmal Absicht — aber man sieht sie nicht, und ein
+ *  versehentlich mitkopiertes Leerzeichen ergibt einen QR-Code, der gueltig
+ *  ist und trotzdem in kein Netz fuehrt. Also weder wegschneiden noch
+ *  verschweigen: hinschreiben.
+ */
+function wlanRandhinweis() {
+  const feld = document.getElementById('sWlanSsid');
+  const hinweis = document.getElementById('sWlanRand');
+  if (!feld || !hinweis) return;
+  const v = feld.value;
+  const vorn = v !== v.replace(/^\s+/, '');
+  const hinten = v !== v.replace(/\s+$/, '');
+  hinweis.textContent = (vorn && hinten)
+    ? 'Der Name beginnt und endet mit einem Leerzeichen.'
+    : vorn ? 'Der Name beginnt mit einem Leerzeichen.'
+    : hinten ? 'Der Name endet mit einem Leerzeichen.' : '';
+  hinweis.hidden = !hinweis.textContent;
+}
+
 async function wlanSpeichern() {
   const wert = id => (document.getElementById(id) || {}).value || '';
   const meldung = document.getElementById('sWlanMeldung');
   const koerper = {
-    ssid: wert('sWlanSsid').trim(),
+    // Kein trim: siehe put_wlan in main.py — der Name darf auf ein Leerzeichen
+    // enden, und wegzuschneiden hiesse, ihn ohne Ansage zu aendern.
+    ssid: wert('sWlanSsid'),
     passwort: wert('sWlanPw'),
     art: wert('sWlanArt') || 'WPA',
     versteckt: !!(document.getElementById('sWlanVersteckt') || {}).checked,
@@ -128,6 +160,7 @@ async function wlanSpeichern() {
     _wlanStand = d;
     if (meldung) meldung.textContent = koerper.ssid ? 'Gespeichert.' : 'Geleert.';
     setTimeout(() => { if (meldung) meldung.textContent = ''; }, 2500);
+    wlanRandhinweis();
   } catch (_) {
     if (meldung) meldung.textContent = 'Keine Verbindung';
   }

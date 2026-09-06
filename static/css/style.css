@@ -2940,6 +2940,7 @@
     .set-wlan-form label { display: flex; flex-direction: column; gap: 4px;
       font-size: 12px; color: var(--text3); }
     .set-wlan-form .settings-input { width: 100%; max-width: none; }
+    .set-wlan-rand { font-size: 11px; color: var(--yellow); }
     .set-wlan-haken { flex-direction: row !important; align-items: center;
       gap: 8px !important; color: var(--text2) !important; }
 
