@@ -403,6 +403,10 @@ function _renderChargerStatus() {
   if (d.mode === 'harbor' && d.harbor_voltage != null) {
     const hv = d.harbor_voltage.toFixed(2);
     modeLabel += d.harbor_holding ? ` · Halten (${hv} V)` : ` · Laden (${hv} V)`;
+  } else if (d.mode === 'balance') {
+    const phase = { entladen: 'Entladen', laden: 'Laden', halten: 'Halten' }[d.balance_phase];
+    if (phase) modeLabel += ' · ' + phase;
+    if (d.balance_spannung != null) modeLabel += ` (${d.balance_spannung.toFixed(2)} V)`;
   }
   const modeColor = { harbor: 'var(--text2)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
 
@@ -517,8 +521,23 @@ function _populateChargerInputs() {
     auto.addEventListener('change', _chgHoldAutoInfo);
   }
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
-  if ($('sChgBalMinHours'))  $('sChgBalMinHours').value = s.balance_min_hours       ?? 2;
-  if ($('sChgBalEndA'))      $('sChgBalEndA').value     = s.balance_end_current_a  ?? 1.0;
+  const b = s.balance ?? {};
+  const balFelder = [
+    ['sChgBalStartSoc',  'start_soc',    60],
+    ['sChgBalStromA',    'strom_a',      10],
+    ['sChgBalStartV',    'start_v',      13.6],
+    ['sChgBalMaxV',      'max_v',        14.4],
+    ['sChgBalSchrittV',  'schritt_v',    0.05],
+    ['sChgBalZellDiff',  'zelldiff_mv',  20],
+    ['sChgBalSchrittMin','schritt_min',  20],
+    ['sChgBalZielSoc',   'ziel_soc',     100],
+    ['sChgBalHaltenH',   'halten_h',     2],
+    ['sChgBalMaxH',      'max_h',        48],
+  ];
+  balFelder.forEach(([id, schluessel, vorgabe]) => {
+    const el = $(id);
+    if (el) el.value = b[schluessel] ?? vorgabe;
+  });
   if ($('sChgDevIp43'))      $('sChgDevIp43').checked  = s.devices?.ip43?.enabled  ?? true;
   if ($('sChgDevMppt'))      $('sChgDevMppt').checked  = s.devices?.mppt?.enabled  ?? true;
   if ($('sChgDevOrion'))     $('sChgDevOrion').checked = s.devices?.orion?.enabled ?? false;
@@ -594,9 +613,19 @@ async function saveChargerSettings() {
     full:    { profile_id: _intOr($('sChgFullProfile')?.value, 1) },
     profile: _chgProfilLesen(Array.isArray(_chargerStatus?.settings?.profile)
                              ? _chargerStatus.settings.profile : []),
-    balance_interval_days:  _intOr($('sChgBalInterval').value,     30),
-    balance_min_hours:      _floatOr($('sChgBalMinHours').value,   2),
-    balance_end_current_a:  _floatOr($('sChgBalEndA').value,       1.0),
+    balance_interval_days:  _intOr($('sChgBalInterval')?.value,    30),
+    balance: {
+      start_soc:   _intOr($('sChgBalStartSoc')?.value,      60),
+      strom_a:     _floatOr($('sChgBalStromA')?.value,      10),
+      start_v:     _floatOr($('sChgBalStartV')?.value,      13.6),
+      max_v:       _floatOr($('sChgBalMaxV')?.value,        14.4),
+      schritt_v:   _floatOr($('sChgBalSchrittV')?.value,    0.05),
+      zelldiff_mv: _floatOr($('sChgBalZellDiff')?.value,    20),
+      schritt_min: _floatOr($('sChgBalSchrittMin')?.value,  20),
+      ziel_soc:    _intOr($('sChgBalZielSoc')?.value,       100),
+      halten_h:    _floatOr($('sChgBalHaltenH')?.value,     2),
+      max_h:       _floatOr($('sChgBalMaxH')?.value,        48),
+    },
     // Offset 0 = Solar und Nicht-Solar gleich hoch, ebenfalls gueltig
     solar_priority_offset_v: _floatOr($('sChgSolarOffset')?.value, 0.3),
     devices: {

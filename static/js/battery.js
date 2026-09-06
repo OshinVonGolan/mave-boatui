@@ -1089,10 +1089,17 @@ async function ladeModusSetzen(modus) {
 }
 
 /** Kurzform des Zustands fuer den Chip rechts oben. */
+const BAL_PHASE_TEXT = { entladen: 'Entladen', laden: 'Laden', halten: 'Halten' };
+
 function _ladeZustand(s) {
   if (s.mode === 'harbor') return s.harbor_holding ? 'Halten' : 'Laden';
   if (s.mode === 'full')   return 'Vollladung';
-  if (s.mode === 'balance') return 'Balancing';
+  if (s.mode === 'balance') {
+    // Der Lauf dauert Stunden — welche Phase gerade laeuft, ist die
+    // eigentliche Auskunft.
+    const p = BAL_PHASE_TEXT[s.balance_phase];
+    return p ? 'Balancing · ' + p : 'Balancing';
+  }
   return s.mode || '--';
 }
 

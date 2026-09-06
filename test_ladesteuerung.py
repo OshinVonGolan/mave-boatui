@@ -494,5 +494,159 @@ class KaputteProfillisteWirdRepariert(Basis):
         self.assertLessEqual(len(r._profil(2)['name']), cc._PROFIL_NAME_MAX)
 
 
+class BalanceLauf(Basis):
+    """Drei Phasen: entladen, langsam laden mit steigender Spannung, halten."""
+
+    def _lauf(self, settings=None, von='harbor'):
+        r = self._regler({'mode': von}, settings)
+        r.set_mode('balance')
+        return r
+
+    def _ip43(self, r):
+        return next(d for d in r.device_setpoints() if d['instance'] == 1)
+
+    # ── Start ──────────────────────────────────────────────────────────────
+
+    def test_start_merkt_sich_woher(self):
+        for von in ('harbor', 'full'):
+            r = self._lauf(von=von)
+            self.assertEqual(r._state['balance_zurueck'], von)
+            self.assertEqual(r._state['balance_phase'], 'entladen')
+
+    def test_in_der_entladephase_sind_alle_lader_aus(self):
+        r = self._lauf()
+        self.assertTrue(all(d['on'] is False for d in r.device_setpoints()))
+
+    def test_ueber_dem_startwert_wird_weiter_gewartet(self):
+        r = self._lauf()
+        self.assertFalse(r.update_soc(90, 0.0, 5.0, True))
+        self.assertEqual(r._state['balance_phase'], 'entladen')
+
+    def test_startwert_erreicht_beginnt_die_ladephase(self):
+        r = self._lauf()
+        self.assertTrue(r.update_soc(60, 0.0, 5.0, True))
+        self.assertEqual(r._state['balance_phase'], 'laden')
+        self.assertAlmostEqual(r._state['balance_spannung'],
+                               cc._DEFAULT_SETTINGS['balance']['start_v'], places=3)
+
+    def test_entladen_braucht_keinen_landstrom(self):
+        # Die Lader sind ohnehin aus — ohne Landstrom faellt der Ladezustand
+        # sogar schneller.
+        r = self._lauf()
+        self.assertTrue(r.update_soc(55, -8.0, 5.0, False))
+        self.assertEqual(r._state['balance_phase'], 'laden')
+
+    # ── Ladephase ──────────────────────────────────────────────────────────
+
+    def _laden(self, settings=None):
+        r = self._lauf(settings)
+        r.update_soc(60, 0.0, 5.0, True)
+        return r
+
+    def test_ladephase_faehrt_konstantspannung_mit_kleinem_strom(self):
+        r = self._laden()
+        d = self._ip43(r)
+        self.assertIs(d['on'], True)
+        self.assertAlmostEqual(d['absorption_v'], d['float_v'], places=3)
+        self.assertAlmostEqual(d['max_a'], cc._DEFAULT_SETTINGS['balance']['strom_a'], places=1)
+
+    def test_gleiche_zellen_heben_die_spannung(self):
+        r = self._laden()
+        vorher = r._state['balance_spannung']
+        r._schritt_mono = time.monotonic() - 3600
+        self.assertTrue(r.update_soc(70, 5.0, 5.0, True))
+        self.assertAlmostEqual(r._state['balance_spannung'],
+                               vorher + cc._DEFAULT_SETTINGS['balance']['schritt_v'], places=3)
+
+    def test_ungleiche_zellen_heben_nicht(self):
+        r = self._laden()
+        vorher = r._state['balance_spannung']
+        r._schritt_mono = time.monotonic() - 3600
+        self.assertFalse(r.update_soc(70, 5.0, 80.0, True))
+        self.assertEqual(r._state['balance_spannung'], vorher)
+
+    def test_ohne_zellwerte_wird_nicht_gehoben(self):
+        # Der ganze Zweck ist, dem BMS Zeit zum Ausgleichen zu geben. Blind zu
+        # steigern waere genau das Gegenteil.
+        r = self._laden()
+        vorher = r._state['balance_spannung']
+        r._schritt_mono = time.monotonic() - 3600
+        self.assertFalse(r.update_soc(70, 5.0, None, True))
+        self.assertEqual(r._state['balance_spannung'], vorher)
+
+    def test_mindestabstand_zwischen_zwei_schritten(self):
+        r = self._laden()
+        r._schritt_mono = time.monotonic() - 3600
+        self.assertTrue(r.update_soc(70, 5.0, 5.0, True))
+        self.assertFalse(r.update_soc(71, 5.0, 5.0, True))
+
+    def test_spannung_bleibt_unter_der_obergrenze(self):
+        r = self._laden()
+        for _ in range(60):
+            r._schritt_mono = time.monotonic() - 3600
+            r.update_soc(70, 5.0, 5.0, True)
+        self.assertLessEqual(r._state['balance_spannung'],
+                             cc._DEFAULT_SETTINGS['balance']['max_v'])
+
+    def test_ohne_landstrom_geht_es_nicht_weiter(self):
+        r = self._laden()
+        vorher = r._state['balance_spannung']
+        r._schritt_mono = time.monotonic() - 3600
+        self.assertFalse(r.update_soc(70, 0.0, 5.0, False))
+        self.assertEqual(r._state['balance_spannung'], vorher)
+        self.assertEqual(r._state['balance_phase'], 'laden')
+
+    def test_ladestrom_nie_ueber_dem_geraetestrom(self):
+        # Der Balance-Strom ist eine Begrenzung, keine Anhebung: der MPPT kann
+        # 15 A, ein Balance-Strom von 40 A darf daraus keine 40 machen.
+        r = self._laden({'balance': {'strom_a': 40.0}})
+        werte = {d['id']: d['max_a'] for d in r.device_setpoints()}
+        self.assertAlmostEqual(werte['mppt'], 15.0, places=1)
+
+    # ── Halten und Abschluss ───────────────────────────────────────────────
+
+    def test_ziel_erreicht_geht_ins_halten(self):
+        r = self._laden()
+        r.update_soc(100, 2.0, 5.0, True)
+        self.assertEqual(r._state['balance_phase'], 'halten')
+
+    def test_nach_der_haltezeit_zurueck_woher_es_kam(self):
+        r = self._lauf(von='full')
+        r.update_soc(60, 0.0, 5.0, True)
+        r.update_soc(100, 2.0, 5.0, True)
+        r._phase_mono = time.monotonic() - 3 * 3600
+        self.assertTrue(r.update_soc(100, 1.0, 5.0, True))
+        self.assertEqual(r._state['mode'], 'full')
+        self.assertIsNotNone(r._state['last_balance'])
+        self.assertIsNone(r._state['balance_phase'])
+
+    def test_danach_bekommen_die_lader_ihren_strom_zurueck(self):
+        r = self._lauf()
+        r.update_soc(60, 0.0, 5.0, True)
+        r.update_soc(100, 2.0, 5.0, True)
+        r._phase_mono = time.monotonic() - 3 * 3600
+        r.update_soc(100, 1.0, 5.0, True)
+        werte = {d['id']: d['max_a'] for d in r.device_setpoints()}
+        self.assertAlmostEqual(werte['ip43'], 50.0, places=1)
+        self.assertAlmostEqual(werte['mppt'], 15.0, places=1)
+
+    def test_deckel_bricht_ab_ohne_das_datum_zu_setzen(self):
+        # Sonst gaelte ein abgebrochener Lauf als durchbalancierte Bank, und der
+        # naechste faellige waere einen Monat spaeter.
+        r = self._lauf()
+        r._balance_mono = time.monotonic() - 100 * 3600
+        self.assertTrue(r.update_soc(70, 0.0, 5.0, True))
+        self.assertEqual(r._state['mode'], 'harbor')
+        self.assertIsNone(r._state['last_balance'])
+
+    def test_verlassen_des_modus_raeumt_auf(self):
+        r = self._lauf()
+        r.update_soc(60, 0.0, 5.0, True)
+        r.set_mode('harbor')
+        self.assertIsNone(r._state['balance_phase'])
+        self.assertIsNone(r._state['balance_spannung'])
+        self.assertIsNone(r._state['balance_zurueck'])
+
+
 if __name__ == '__main__':
     unittest.main()

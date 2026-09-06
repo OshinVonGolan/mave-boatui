@@ -471,6 +471,60 @@ sync = sync_client.SyncClient(
 
 
 _REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
+_REG_MAX_STROM   = 0xEDF0   # maximaler Ladestrom, 0,1 A
+
+
+def _zellspreizung_mv(data: dict) -> float | None:
+    """Abstand zwischen hoechster und niedrigster Zelle in Millivolt.
+
+    None, wenn keine oder unvollstaendige Zellwerte vorliegen — der Balance-Lauf
+    hebt dann bewusst nicht weiter, statt blind zu steigern.
+    """
+    zellen = (data.get('bms') or {}).get('cells')
+    if not isinstance(zellen, list) or not zellen:
+        return None
+    werte = [z.get('voltage') for z in zellen
+             if isinstance(z, dict) and isinstance(z.get('voltage'), (int, float))]
+    if len(werte) < 2:
+        return None
+    return round((max(werte) - min(werte)) * 1000.0, 1)
+
+
+def _landstrom_da(data: dict) -> bool | None:
+    """Haengt das Boot am Landstrom?
+
+    Der Smart IP43 wird aus dem Netz gespeist: ohne Landstrom ist er stromlos
+    und meldet sich gar nicht. Ein per DeviceMode abgeschalteter Lader redet
+    dagegen weiter — genau diese Unterscheidung braucht der Balance-Lauf, der
+    seine Lader in der Entladephase selbst abschaltet.
+
+    None heisst "unbekannt" (noch keine Daten) und wird wie "da" behandelt:
+    lieber weiterlaufen als einen Lauf wegen eines fehlenden Feldes anhalten.
+    """
+    lader = data.get('charger')
+    if not isinstance(lader, dict) or 'active' not in lader:
+        return None
+    return bool(lader.get('active'))
+
+
+# Zuletzt geschriebener maximaler Ladestrom je Geraeteinstanz. Das Register
+# liegt im Flash des Laders, ein unveraenderter Wert wird deshalb nicht erneut
+# geschrieben. Er aendert sich nur beim Wechsel in den Balance-Lauf und zurueck.
+_strom_geschrieben: dict[int, int] = {}
+
+
+def _strom_setzen(dev: dict):
+    """Schreibt den maximalen Ladestrom eines Geraets, wenn er sich geaendert hat."""
+    a = dev.get('max_a')
+    if isinstance(a, bool) or not isinstance(a, (int, float)) or a <= 0:
+        return
+    roh  = int(round(a * 10))          # das Register rechnet in 0,1 A
+    inst = dev['instance']
+    if _strom_geschrieben.get(inst) == roh:
+        return
+    can_if.send_charger_register(_REG_MAX_STROM, roh, inst, size=2)
+    _strom_geschrieben[inst] = roh
+    log.info("Lader %s Inst %d: max. Ladestrom %.1f A", dev.get('label', inst), inst, a)
 
 
 def _apply_charger_setpoints(setpoints: list):
@@ -493,6 +547,7 @@ def _apply_charger_setpoints(setpoints: list):
             can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], inst)
             log.info("Lader %s Inst %d: %.2f/%.2f V (on=%s)",
                      dev['label'], inst, dev['absorption_v'], dev['float_v'], on_flag)
+        _strom_setzen(dev)
 
 
 # ── Minutenmittel fuer den groben Verlauf ─────────────────────────────────
@@ -692,10 +747,13 @@ async def broadcast(data: dict):
     _alarme_melden()
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
     soc = data.get('battery', {}).get('soc')
-    # Den Batteriestrom mitgeben: die Selbstermittlung der Haltespannung misst
-    # nur, wenn die Bank eingependelt ist, und das Schweifstrom-Kriterium des
-    # Balance-Laufs greift ohne ihn ebenfalls nicht.
-    if charge_ctrl.update_soc(soc, data.get('battery', {}).get('current')):
+    # Batteriestrom, Zellspreizung und Landstrom mitgeben: die Selbstermittlung
+    # der Haltespannung misst nur bei eingependelter Bank, und der Balance-Lauf
+    # hebt die Spannung nur, wenn die Zellen beieinanderliegen.
+    if charge_ctrl.update_soc(soc,
+                              data.get('battery', {}).get('current'),
+                              _zellspreizung_mv(data),
+                              _landstrom_da(data)):
         _apply_charger_setpoints(charge_ctrl.device_setpoints())
     batt = data.get('battery', {})
     now = time.time()
@@ -2711,11 +2769,19 @@ _LADE_GRENZEN: dict[str, tuple[float, float]] = {
     'hold_settle_h':           ( 0.1, 48.0),
     'hold_quiet_a':            ( 0.0, 200.0),
     'hold_interval_h':         ( 0.1, 720.0),
-    'balance_target_soc':      ( 0.0, 100.0),
     'balance_interval_days':   ( 1.0, 365.0),
-    'balance_min_hours':       ( 0.0, 48.0),
-    'balance_max_hours':       ( 0.1, 72.0),
-    'balance_end_current_a':   ( 0.0, 200.0),
+    # Balance-Lauf
+    'start_soc':               ( 0.0, 100.0),
+    'ziel_soc':                ( 0.0, 100.0),
+    'strom_a':                 ( 0.5, 200.0),
+    'start_v':                 (10.0, 60.0),
+    'max_v':                   (10.0, 60.0),
+    'schritt_v':               ( 0.005, 1.0),
+    'zelldiff_mv':             ( 1.0, 500.0),
+    'schritt_min':             ( 1.0, 600.0),
+    'halten_h':                ( 0.1, 48.0),
+    'max_h':                   ( 1.0, 168.0),
+    'max_current_a':           ( 0.5, 200.0),
     'solar_priority_offset_v': ( 0.0, 5.0),
     'profile_id':              ( 1.0, 5.0),
 }

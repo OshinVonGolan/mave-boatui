@@ -13,11 +13,7 @@ log = logging.getLogger(__name__)
 _STATE_FILE = Path(__file__).parent / 'charger_state.json'
 
 _DEFAULT_SETTINGS: dict = {
-    'balance_interval_days':   30,
-    'balance_min_hours':        2.0,   # frühestens danach darf Balancing enden
-    'balance_max_hours':        8.0,   # spätestens danach endet es in jedem Fall
-    'balance_target_soc':     100,     # ab diesem SOC gilt die Bank als durchbalanciert
-    'balance_end_current_a':    1.0,   # Schweifstrom-Kriterium (nur mit übergebenem Strom)
+    'balance_interval_days':   30,     # so oft ist ein Balance-Lauf fällig
     'solar_priority_offset_v':  0.3,   # Nicht-Solar-Geräte bekommen Absorption − Offset
     # Fünf benannte Ladeprofile. Hafen und Vollladung verweisen darauf, statt
     # eigene Spannungen zu halten — so steht jede Spannung genau einmal, und
@@ -30,9 +26,12 @@ _DEFAULT_SETTINGS: dict = {
         {'id': 5, 'name': 'Profil 5',   'absorption_v': 14.2, 'float_v': 13.5},
     ],
     'devices': {
-        'ip43':  {'enabled': True,  'is_solar': False, 'label': 'Smart IP43',  'instance': 1},
-        'mppt':  {'enabled': True,  'is_solar': True,  'label': 'MPPT 75/15',  'instance': 3},
-        'orion': {'enabled': False, 'is_solar': False, 'label': 'Orion XS',    'instance': 0},
+        # max_current_a ist der normale Ladestrom des Geräts (Typenschild, am Bus
+        # nachgemessen). Der Balance-Lauf setzt ihn vorübergehend herunter und
+        # stellt ihn danach wieder her — ohne diesen Wert wüsste er nicht, worauf.
+        'ip43':  {'enabled': True,  'is_solar': False, 'label': 'Smart IP43',  'instance': 1, 'max_current_a': 50.0},
+        'mppt':  {'enabled': True,  'is_solar': True,  'label': 'MPPT 75/15',  'instance': 3, 'max_current_a': 15.0},
+        'orion': {'enabled': False, 'is_solar': False, 'label': 'Orion XS',    'instance': 0, 'max_current_a': 50.0},
     },
     'harbor':  {
         'profile_id':         2,     # Ladeprofil, bis der Ziel-SOC steht
@@ -58,7 +57,21 @@ _DEFAULT_SETTINGS: dict = {
         'hold_interval_h':   24.0,   # hoechstens ein Schritt in diesem Abstand
     },
     'full':    {'profile_id': 1},
-    'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
+    # Der Balance-Lauf fährt keine feste Spannung, sondern einen Ablauf:
+    # entladen, langsam laden, Spannung schrittweise heben, halten.
+    'balance': {
+        'start_soc':      60,     # bis hierher wird entladen (Lader aus, warten)
+        'strom_a':        10.0,   # Ladestrom in der Ladephase — klein, damit das
+                                  # BMS Zeit zum Ausgleichen hat
+        'start_v':        13.6,   # Spannung, mit der die Ladephase beginnt
+        'max_v':          14.4,   # Obergrenze der Steigerung
+        'schritt_v':       0.05,  # Schrittweite
+        'zelldiff_mv':    20.0,   # darunter gelten die Zellen als gleich
+        'schritt_min':    20.0,   # Mindestabstand zwischen zwei Schritten
+        'ziel_soc':      100,     # ab hier wird gehalten
+        'halten_h':        2.0,   # so lange auf dem Ziel halten
+        'max_h':          48.0,   # Sicherheitsdeckel für den ganzen Lauf
+    },
 }
 
 # Die Modi, die es gibt. Alles andere ist ein Fehler und faellt auf 'harbor'
@@ -76,12 +89,27 @@ _DEFAULT_STATE: dict = {
     'actual_last_read':    None,
     'hold_learned_v':      None,    # selbst ermittelte Haltespannung
     'hold_learn_last':     None,    # Zeitpunkt der letzten Anpassung
+    'balance_phase':       None,    # 'entladen' | 'laden' | 'halten'
+    'balance_zurueck':     None,    # Modus, in den nach dem Lauf zurückgekehrt wird
+    'balance_spannung':    None,    # gerade gefahrene Spannung der Ladephase
+    'balance_phase_seit':  None,    # Beginn der aktuellen Phase
+    'balance_schritt':     None,    # Zeitpunkt des letzten Spannungsschritts
 }
 
 
 # Obergrenze fuer die Hafen-Hysterese in SOC-Prozentpunkten. Groesser darf sie
 # nicht werden, sonst bleibt der Lader zu tief hinunter aus.
 _MAX_HYSTERESIS_PCT = 20.0
+
+
+def _stunden_seit(iso: str | None) -> float:
+    """Stunden seit einem gespeicherten Zeitpunkt, 0 wenn er fehlt oder unlesbar ist."""
+    if not iso:
+        return 0.0
+    try:
+        return max(0.0, (datetime.now() - datetime.fromisoformat(iso)).total_seconds() / 3600.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _num(value, default: float) -> float:
@@ -131,6 +159,18 @@ _HALTEARTEN = ('spannung', 'aus')
 _PROFIL_ZAHL   = 5
 _PROFIL_NAME_MAX = 40
 
+# Die Phasen des Balance-Laufs, in dieser Reihenfolge.
+#
+#   entladen  Alle Lader aus, warten bis der Start-Ladezustand erreicht ist.
+#             Aktiv entladen kann das System nicht — es gibt keine steuerbare
+#             Last. Es wird abgeschaltet und gewartet, mehr geht nicht.
+#   laden     Mit kleinem Strom laden und die Spannung schrittweise heben,
+#             solange die Zellen beieinanderliegen. Der kleine Strom ist der
+#             eigentliche Zweck: er gibt dem BMS Zeit zum Ausgleichen.
+#   halten    Das erreichte Ziel eine Weile halten, dann zurück in den Modus,
+#             aus dem gestartet wurde.
+_BAL_PHASEN = ('entladen', 'laden', 'halten')
+
 # Totband der Selbstermittlung in SOC-Prozentpunkten. Enger lohnt nicht: die
 # LiFePO4-Kennlinie ist so flach, dass ein Prozentpunkt bereits im Rauschen der
 # SOC-Schaetzung des BMS liegt.
@@ -145,6 +185,8 @@ class ChargeController:
         self._halte_geladen: bool = False            # waehrend des Haltens floss Ladung
         self._nachsetz_zeit: float | None = None     # monoton, letzter Nachsetz-Versuch
         self._nachsetz_zaehler: int = 0              # vergebliche Versuche in Folge
+        self._phase_mono: float | None = None        # monoton, Beginn der Balance-Phase
+        self._schritt_mono: float | None = None      # monoton, letzter Spannungsschritt
         self._last_written: str | None = None        # zuletzt auf Disk geschriebener Stand
         self._balance_mono: float | None = None      # Start des laufenden Balance-Laufs (monoton)
         # _save() wird aus zwei Richtungen aufgerufen: aus dem Event-Loop
@@ -416,6 +458,10 @@ class ChargeController:
             'last_balance':        self._state['last_balance'],
             'balance_start':       self._state['balance_start'],
             'balance_hours':       self._balance_hours(),
+            'balance_phase':       self._state.get('balance_phase'),
+            'balance_phase_hours': self._phase_stunden() if self._state['mode'] == 'balance' else None,
+            'balance_spannung':    self._state.get('balance_spannung'),
+            'balance_zurueck':     self._state.get('balance_zurueck'),
             'actual_absorption_v': self._state['actual_absorption_v'],
             'actual_float_v':      self._state['actual_float_v'],
             'actual_last_read':    self._state['actual_last_read'],
@@ -462,14 +508,14 @@ class ChargeController:
                     'absorption_v': v_abs,
                     'float_v':      v_flt,
                     'on':           ein,   # False → DeviceMode=0 (aus), True → DeviceMode=1 (ein)
+                    'max_a':        _num(dev.get('max_current_a'), 0.0) or None,
                 })
             return result
 
-        if mode == 'full':
-            abs_v, flt_v = self._profil_spannungen(preset.get('profile_id'))
-        else:
-            abs_v = _num(preset.get('absorption_v'), 14.4)
-            flt_v = _num(preset.get('float_v'),      14.4)
+        if mode == 'balance':
+            return self._balance_setpoints()
+
+        abs_v, flt_v = self._profil_spannungen(preset.get('profile_id'))
         # Kein Solar-Offset außerhalb des Hafen-Modus
         result = []
         for dev_id, dev in self._settings.get('devices', {}).items():
@@ -482,12 +528,49 @@ class ChargeController:
                 'is_solar':     dev.get('is_solar', False),
                 'absorption_v': abs_v,
                 'float_v':      flt_v,
+                'max_a':        _num(dev.get('max_current_a'), 0.0) or None,
+            })
+        return result
+
+    def _balance_setpoints(self) -> list[dict]:
+        """Sollwerte des Balance-Laufs — sie haengen an der Phase, nicht an einem Profil.
+
+        Entladephase: alle Lader aus. Ladephase und Halten: Konstantspannung
+        (Erhaltung = Absorption, damit der Lader nicht von selbst abfaellt) und
+        der kleine Ladestrom, der dem BMS die Zeit zum Ausgleichen verschafft.
+        """
+        b     = self._bal()
+        phase = self._state.get('balance_phase')
+        ein   = phase in ('laden', 'halten')
+        v     = self._state.get('balance_spannung')
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            v = _num(b.get('start_v'), 13.6)
+        v     = round(min(float(v), _num(b.get('max_v'), 14.4)), 3)
+        strom = _num(b.get('strom_a'), 10.0)
+        result = []
+        for dev_id, dev in self._settings.get('devices', {}).items():
+            if not dev.get('enabled', False):
+                continue
+            normal = _num(dev.get('max_current_a'), strom)
+            result.append({
+                'id':           dev_id,
+                'label':        dev.get('label', dev_id),
+                'instance':     dev.get('instance', 1),
+                'is_solar':     dev.get('is_solar', False),
+                'absorption_v': v,
+                'float_v':      v,
+                'on':           ein,
+                # Nie ueber den normalen Ladestrom des Geraets hinaus: der
+                # Balance-Strom ist eine Begrenzung, keine Anhebung.
+                'max_a':        round(min(strom, normal), 1),
             })
         return result
 
     # ── Schreibe-API ─────────────────────────────────────────────────────────
 
-    def update_soc(self, soc: float | None, current_a: float | None = None) -> bool:
+    def update_soc(self, soc: float | None, current_a: float | None = None,
+                   zelldiff_mv: float | None = None,
+                   landstrom: bool | None = None) -> bool:
         """Aktualisiert SOC (optional den Batteriestrom). True = neue Setpoints senden.
 
         Hafen-Modus: nur beim Wechsel zwischen Laden und Halten. Die Sollwerte
@@ -521,7 +604,7 @@ class ChargeController:
 
         mode = self._state['mode']
         if mode == 'balance':
-            return self._check_balance_end(soc, current_a) or nachsetzen
+            return self._balance_takten(soc, current_a, zelldiff_mv, landstrom) or nachsetzen
         if mode != 'harbor':
             return nachsetzen
 
@@ -637,13 +720,29 @@ class ChargeController:
     def set_mode(self, mode: str) -> dict:
         if mode not in _MODI:
             raise ValueError(f'Unbekannter Modus: {mode}')
+        vorher = self._state.get('mode')
         self._state['mode'] = mode
         if mode == 'balance':
-            self._state['balance_start'] = datetime.now().isoformat()
-            self._balance_mono           = time.monotonic()
+            # Wohin es danach zurueckgeht, wird beim Start gemerkt: der Lauf
+            # dauert Stunden, und niemand soll sich hinterher erinnern muessen,
+            # wo er hergekommen ist.
+            self._state['balance_start']   = datetime.now().isoformat()
+            self._state['balance_zurueck'] = vorher if vorher in ('harbor', 'full') else 'harbor'
+            self._state['balance_spannung'] = None
+            self._state['balance_schritt']  = None
+            self._balance_mono              = time.monotonic()
+            self._schritt_mono              = None
+            self._phase_setzen('entladen')
+            log.info('Balance-Lauf gestartet, danach zurueck nach %s',
+                     self._state['balance_zurueck'])
         else:
-            self._state['balance_start'] = None
-            self._balance_mono           = None
+            self._state['balance_start']   = None
+            self._state['balance_phase']   = None
+            self._state['balance_zurueck'] = None
+            self._state['balance_spannung'] = None
+            self._balance_mono              = None
+            self._phase_mono                = None
+            self._schritt_mono              = None
         self._nachsetz_zeit    = None          # neuer Modus, neue Absicht
         self._nachsetz_zaehler = 0
         if mode == 'harbor':
@@ -651,14 +750,34 @@ class ChargeController:
         self._save()
         return self.status()
 
-    def complete_balance(self):
-        """Nach erfolgreichem Balance-Abschluss aufrufen → setzt last_balance + wechselt zu Hafen."""
-        self._state['last_balance']   = date.today().isoformat()
-        self._state['balance_start']  = None
-        self._state['mode']           = 'harbor'
-        self._state['harbor_holding'] = None
-        self._balance_mono            = None
+    def complete_balance(self, erfolgreich: bool = True):
+        """Beendet den Balance-Lauf und kehrt dorthin zurueck, wo er herkam.
+
+        Nur ein erfolgreicher Lauf setzt das Datum: sonst gaelte ein Abbruch
+        nach dem Sicherheitsdeckel als durchbalancierte Bank, und der naechste
+        faellige Lauf waere einen Monat spaeter.
+        """
+        if erfolgreich:
+            self._state['last_balance'] = date.today().isoformat()
+        zurueck = self._state.get('balance_zurueck')
+        if zurueck not in ('harbor', 'full'):
+            zurueck = 'harbor'
+        self._state['mode']             = zurueck
+        self._state['balance_start']    = None
+        self._state['balance_phase']    = None
+        self._state['balance_zurueck']  = None
+        self._state['balance_spannung'] = None
+        self._state['balance_schritt']  = None
+        self._state['harbor_holding']   = None
+        self._balance_mono = self._phase_mono = self._schritt_mono = None
+        # Neuer Modus, neue Absicht — und die Lader muessen ihren normalen
+        # Ladestrom zurueckbekommen.
+        self._nachsetzen       = True
+        self._nachsetz_zeit    = None
+        self._nachsetz_zaehler = 0
         self._save()
+        log.info('Balance-Lauf %s → Modus %s',
+                 'beendet' if erfolgreich else 'abgebrochen', zurueck)
 
     def update_actual_setpoints(self, absorption_v: float, float_v: float):
         """Aktualisiert die vom IP43 zurückgelesenen Ist-Sollwerte.
@@ -749,46 +868,126 @@ class ChargeController:
             return None
         return max(0.0, (datetime.now() - started).total_seconds() / 3600.0)
 
-    def _check_balance_end(self, soc: float, current_a: float | None) -> bool:
-        """Beendet den Balance-Modus, sobald die Bank durch ist oder die Zeit reicht.
+    # ── Der Balance-Lauf ────────────────────────────────────────────────────
+    #
+    # Drei Phasen, siehe _BAL_PHASEN. Getaktet wird er aus update_soc(); der
+    # Rueckgabewert sagt wie ueberall, ob neue Sollwerte an die Lader muessen.
 
-        Ohne Abbruch bleibt die Bank dauerhaft auf 14,4 V CV und 'balance_due'
-        immer wahr. Reihenfolge der Kriterien:
-          • Höchstdauer balance_max_hours überschritten → beenden, immer
-          • ab balance_min_hours: Ziel-SOC erreicht UND Ladestrom unter
-            balance_end_current_a (nur wenn der Strom übergeben wurde)
-        Gibt True zurück, wenn der Modus gewechselt hat (→ Setpoints neu senden).
+    def _bal(self) -> dict:
+        b = self._settings.get('balance')
+        return b if isinstance(b, dict) else _DEFAULT_SETTINGS['balance']
+
+    def _phase_stunden(self) -> float:
+        """Wie lange die aktuelle Phase schon laeuft.
+
+        Wie bei der Laufzeit des ganzen Laufs: die monotone Uhr zuerst, weil der
+        Pi keine Echtzeituhr hat und ein NTP-Sprung eine Phase sonst verlaengern
+        oder vorzeitig beenden wuerde. Nach einem Neustart mitten im Lauf bleibt
+        nur der gespeicherte Zeitstempel.
         """
-        hours = self._balance_hours()
-        if hours is None:
-            # Modus ohne Startzeitpunkt (z. B. aus einer alten Zustandsdatei) → nachtragen
-            self._state['balance_start'] = datetime.now().isoformat()
-            self._balance_mono           = time.monotonic()
-            self._save()
+        if self._phase_mono is not None:
+            return max(0.0, (time.monotonic() - self._phase_mono) / 3600.0)
+        return _stunden_seit(self._state.get('balance_phase_seit'))
+
+    def _phase_setzen(self, phase: str):
+        self._state['balance_phase']      = phase
+        self._state['balance_phase_seit'] = datetime.now().isoformat()
+        self._phase_mono                  = time.monotonic()
+
+    def _zellen_gleich(self, zelldiff_mv: float | None) -> bool:
+        """Liegen die Zellen beieinander?
+
+        Ohne Zellwerte wird NICHT weitergeschaltet. Der ganze Zweck des Laufs
+        ist, dem BMS Zeit zum Ausgleichen zu geben; die Spannung zu heben, ohne
+        zu wissen wie es den Zellen geht, waere genau das Gegenteil.
+        """
+        if zelldiff_mv is None:
+            return False
+        return zelldiff_mv <= _num(self._bal().get('zelldiff_mv'), 20.0)
+
+    def _balance_takten(self, soc: float, current_a: float | None,
+                        zelldiff_mv: float | None, landstrom: bool | None) -> bool:
+        b = self._bal()
+
+        # Sicherheitsdeckel ueber den ganzen Lauf. Ein Lauf, der nicht
+        # konvergiert — schwache Zelle, kaputter Fuehler, Lader zu klein —, darf
+        # die Bank nicht auf Dauer auf erhoehter Spannung stehen lassen.
+        lauf = self._balance_hours()
+        if lauf is not None and lauf > _num(b.get('max_h'), 48.0):
+            log.warning('Balance-Lauf nach %.1f h abgebrochen (Deckel %.1f h) — '
+                        'zurueck in den vorherigen Modus', lauf, _num(b.get('max_h'), 48.0))
+            self.complete_balance(erfolgreich=False)
+            return True
+
+        phase = self._state.get('balance_phase')
+        if phase not in _BAL_PHASEN:
+            self._phase_setzen('entladen')
+            phase = 'entladen'
+
+        if phase == 'entladen':
+            # Aktiv entladen geht nicht, es gibt keine steuerbare Last. Die
+            # Lader sind aus (siehe device_setpoints), gewartet wird auf das
+            # Boot selbst.
+            if soc <= _num(b.get('start_soc'), 60):
+                self._phase_setzen('laden')
+                self._state['balance_spannung'] = round(_num(b.get('start_v'), 13.6), 3)
+                self._state['balance_schritt']  = datetime.now().isoformat()
+                self._schritt_mono              = time.monotonic()
+                self._save()
+                log.info('Balance: %.1f %% erreicht → Ladephase mit %.2f V und %.1f A',
+                         soc, self._state['balance_spannung'], _num(b.get('strom_a'), 10.0))
+                return True
             return False
 
-        max_h = max(0.1, _num(self._settings.get('balance_max_hours'), 8.0))
-        min_h = max(0.0, _num(self._settings.get('balance_min_hours'), 2.0))
-
-        reason = None
-        if hours >= max_h:
-            reason = f'Höchstdauer {max_h:.1f} h erreicht'
-        elif hours >= min_h:
-            target = _num(self._settings.get('balance_target_soc'), 100)
-            end_a  = _num(self._settings.get('balance_end_current_a'), 1.0)
-            # Der Ziel-SOC allein beendet den Lauf NICHT: 100 % stehen am ANFANG
-            # der CV-Phase auf der Anzeige, die Zellen sind dann noch lange nicht
-            # durchbalanciert. Erst der Schweifstrom zeigt, dass die Bank voll ist.
-            # Gibt der Aufrufer keinen Strom mit, bleibt nur die Höchstdauer.
-            if current_a is not None and soc >= target and 0.0 <= current_a < end_a:
-                reason = (f'Ziel-SOC {target:.0f} % erreicht und '
-                          f'Schweifstrom unter {end_a:.1f} A')
-
-        if reason is None:
+        # Ab hier wird geladen — ohne Landstrom geht das nicht. Der Lauf wartet
+        # dann, statt abzubrechen: der Landstrom kommt in aller Regel wieder.
+        if landstrom is False:
             return False
 
-        log.info('Balancing nach %.1f h beendet: %s → Hafen-Modus', hours, reason)
-        self.complete_balance()
+        if phase == 'laden':
+            if soc >= _num(b.get('ziel_soc'), 100):
+                self._phase_setzen('halten')
+                self._save()
+                log.info('Balance: %.1f %% erreicht → halten fuer %.1f h',
+                         soc, _num(b.get('halten_h'), 2.0))
+                return False
+            return self._balance_schritt(zelldiff_mv)
+
+        if phase == 'halten':
+            if self._phase_stunden() >= _num(b.get('halten_h'), 2.0):
+                self.complete_balance()
+                return True
+            return False
+
+        return False
+
+    def _balance_schritt(self, zelldiff_mv: float | None) -> bool:
+        """Hebt die Ladespannung um einen Schritt, wenn die Zellen es zulassen."""
+        b     = self._bal()
+        jetzt = self._state.get('balance_spannung')
+        if not isinstance(jetzt, (int, float)) or isinstance(jetzt, bool):
+            jetzt = _num(b.get('start_v'), 13.6)
+        deckel = _num(b.get('max_v'), 14.4)
+        if jetzt >= deckel:
+            return False
+        if not self._zellen_gleich(zelldiff_mv):
+            return False
+        abstand = _num(b.get('schritt_min'), 20.0) / 60.0
+        if self._schritt_mono is not None:
+            seither = (time.monotonic() - self._schritt_mono) / 3600.0
+        else:
+            seither = _stunden_seit(self._state.get('balance_schritt'))
+        if seither < abstand:
+            return False
+        neu = round(min(deckel, jetzt + _num(b.get('schritt_v'), 0.05)), 3)
+        if abs(neu - jetzt) < 1e-9:
+            return False
+        self._state['balance_spannung'] = neu
+        self._state['balance_schritt']  = datetime.now().isoformat()
+        self._schritt_mono              = time.monotonic()
+        self._save()
+        log.info('Balance: Zellen gleich (%.0f mV) → Spannung %.2f → %.2f V',
+                 zelldiff_mv if zelldiff_mv is not None else -1.0, jetzt, neu)
         return True
 
     def _days_since_balance(self) -> int | None:
@@ -823,8 +1022,10 @@ class ChargeController:
         for name in ('harbor', 'full', 'balance'):
             p = self._settings.get(name, {})
             if name == 'balance':
-                a = _num(p.get('absorption_v'), 0.0)
-                f = _num(p.get('float_v'),      0.0)
+                # Der Balance-Lauf faehrt keine feste Spannung, sondern die
+                # gerade erreichte Stufe.
+                a = f = _num(self._state.get('balance_spannung'),
+                             _num(self._bal().get('start_v'), 13.6))
             else:
                 a, f = self._profil_spannungen(p.get('profile_id'))
             if abs(av - a) < 0.06 and abs(fv - f) < 0.06:
