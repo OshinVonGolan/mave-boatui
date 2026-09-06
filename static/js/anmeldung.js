@@ -25,7 +25,7 @@ async function zugangPruefen() {
     const ohneKonten = !!(_zugangStand.offen || _zugangStand.ersteinrichtung);
     if (!_angemeldet && !ohneKonten) anmeldungZeigen();
     else anmeldungSchliessen();
-    if (ohneKonten) _hinweisOhneKonten();
+    if (ohneKonten) _hinweisOhneKonten(); else _hinweisOhneKontenWeg();
     _rechteAnwenden(_zugangStand.konto);
     // Das Menü zeigt oben, wer angemeldet ist. Ändert sich das, muss es neu
     // gebaut werden — sonst steht dort der Stand von vor der Anmeldung.
@@ -37,13 +37,27 @@ async function zugangPruefen() {
 }
 
 function _hinweisOhneKonten() {
-  const b = $('kopieBanner');
-  if (!b || !b.classList.contains('hidden')) return;   // Kopie-Banner hat Vorrang
-  b.classList.remove('hidden');
-  b.classList.add('offen-hinweis');
+  // Eine EIGENE Karte im Meldungsstapel, nicht das Kopie-Band mitbenutzt.
+  //
+  // Vorher teilten sich beide ein Element, und wer zuletzt hineinschrieb,
+  // gewann — die Klasse `offen-hinweis` blieb dabei stehen, sodass die
+  // Verbindungsmeldung in der Farbe des Offen-Hinweises erschien. Zwei
+  // Aussagen, die nebeneinander wahr sein koennen, gehoeren in zwei Karten.
+  if (document.getElementById('offenHinweis')) return;
+  const stapel = document.getElementById('meldungen');
+  if (!stapel) return;
+  const b = document.createElement('div');
+  b.id = 'offenHinweis';
+  b.className = 'kopie-banner offen-hinweis';
   b.innerHTML = '<span class="kb-mark">Offen</span>'
     + '<span class="kb-txt">Es ist noch kein Konto angelegt — jeder im Netz kann '
     + 'diese Anlage bedienen. Das ändert sich, sobald das erste Konto besteht.</span>';
+  stapel.appendChild(b);
+}
+
+/** Wieder weg, sobald das erste Konto steht. */
+function _hinweisOhneKontenWeg() {
+  document.getElementById('offenHinweis')?.remove();
 }
 
 /** Was jemand nicht darf, wird ausgeblendet — als Bequemlichkeit, nicht als Schutz. */

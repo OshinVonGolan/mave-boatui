@@ -951,6 +951,59 @@ class VerbindungWeg(Pruefstand):
         }""")
         self.assertFalse(self.zustand()['banner'])
 
+    def test_die_meldung_steht_unten_und_schiebt_nichts(self):
+        """Sie klemmte oben unter der Kopfzeile und schob dabei die ganze Seite
+        nach unten (Eignermeldung). Die anderen Meldungen der Anwendung stehen
+        seit jeher unten — „auffallen, ohne die Kopfzeile zu verdecken"."""
+        vorher = self.pg.evaluate(
+            "() => Math.round(document.querySelector('main').getBoundingClientRect().top)")
+        self.pg.evaluate("() => quelleGetrennt(true)")
+        self.pg.wait_for_timeout(200)
+        m = self.pg.evaluate("""() => {
+            const st = document.getElementById('meldungen');
+            const b = document.getElementById('kopieBanner');
+            return { imStapel: b.parentElement === st,
+                     unten: Math.round(window.innerHeight - st.getBoundingClientRect().bottom),
+                     mainOben: Math.round(document.querySelector('main').getBoundingClientRect().top) };
+        }""")
+        self.assertTrue(m['imStapel'], 'die Meldung hängt nicht im Stapel')
+        self.assertLess(m['unten'], 30, 'sie steht nicht unten')
+        self.assertEqual(m['mainOben'], vorher, 'die Seite ist verrutscht')
+
+    def test_zwei_meldungen_verdecken_sich_nicht(self):
+        """Bei einer Aktualisierung reißt die Verbindung ab UND die Anlage
+        startet neu — das trifft sich."""
+        self.pg.evaluate("""() => {
+            quelleGetrennt(true);
+            _neustartSeit = Date.now();
+            _neustartZeigen();
+        }""")
+        self.pg.wait_for_timeout(250)
+        self.assertFalse(self.pg.evaluate("""() => {
+            const k = [...document.getElementById('meldungen').children]
+              .filter(e => !e.classList.contains('hidden'));
+            if (k.length < 2) return true;          // dann stimmt schon der Aufbau nicht
+            return k[0].getBoundingClientRect().bottom > k[1].getBoundingClientRect().top + 1;
+        }"""), 'die Meldungen liegen übereinander')
+
+    def test_der_offen_hinweis_ist_eine_eigene_karte(self):
+        """Vorher teilten sich beide EIN Element, und wer zuletzt hineinschrieb,
+        gewann — die Verbindungsmeldung erschien dann in der Farbe des
+        Offen-Hinweises."""
+        self.pg.evaluate("() => { _hinweisOhneKonten(); quelleGetrennt(true); }")
+        self.pg.wait_for_timeout(250)
+        # Der Vergleich gehört in den Browser: zwei verschiedene Element-
+        # Verweise kommen hier oben beide als „ref: <Node>" an.
+        m = self.pg.evaluate("""() => {
+            const o = document.getElementById("offenHinweis");
+            const k = document.getElementById("kopieBanner");
+            return { beide: !!o && !!k, getrennt: o !== k,
+                     sauber: !!k && !k.classList.contains("offen-hinweis") };
+        }""")
+        self.assertTrue(m['beide'], 'eine der beiden Karten fehlt')
+        self.assertTrue(m['getrennt'], 'beide teilen sich noch ein Element')
+        self.assertTrue(m['sauber'], 'die fremde Klasse klebt noch dran')
+
     def test_ohne_je_etwas_empfangen_kein_falscher_alarm(self):
         """Beim Aufschlagen der Seite ist noch nichts angekommen — das ist
         keine abgerissene Verbindung."""

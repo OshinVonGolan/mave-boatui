@@ -1028,6 +1028,150 @@ function _starterKarte(b) {
   </div>`;
 }
 
+// ── Lademodus auf der Batterie-Detailseite ───────────────────────────────
+//
+// Der Umschalter stand bisher nur in den Einstellungen. Hier gehoert er
+// daneben: auf der Detailseite sieht man, was die Ladegeraete gerade tun, und
+// entscheidet an derselben Stelle, wie geladen werden soll.
+//
+// Die Karte wird in #bdSources einsortiert und bei jedem Neuzeichnen der
+// Geraetekacheln mitgebaut. Sie ist zustandslos und liest allein aus
+// _ladeStand — deshalb darf renderDeviceTiles() sie bedenkenlos ueberschreiben.
+
+const LADE_MODI = [
+  { id: 'harbor',  name: 'Hafen' },
+  { id: 'full',    name: 'Vollladung' },
+  { id: 'balance', name: 'Balancing' },
+];
+
+const LADE_TAKT_MS = 30000;
+
+let _ladeStand  = null;   // Antwort von /api/charger
+let _ladeFehler = null;
+let _ladeLaeuft = false;  // waehrend eines Moduswechsels: Knoepfe sperren
+
+async function _ladeJson(url, opts) {
+  const r = await fetch(url, { cache: 'no-store', ...(opts || {}) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function ladeStandHolen() {
+  try {
+    _ladeStand  = await _ladeJson('/api/charger');
+    _ladeFehler = null;
+  } catch (e) {
+    _ladeFehler = e.message || 'nicht erreichbar';
+  }
+  _ladeKarteNachziehen();
+}
+
+/**
+ * Modus umschalten.
+ *
+ * Der Endpunkt schickt die neuen Sollwerte selbst an die Ladegeraete und gibt
+ * den fertigen Zustand zurueck — deshalb wird die Antwort direkt uebernommen
+ * und nicht noch einmal nachgefragt. Waehrenddessen sind die Knoepfe gesperrt:
+ * ein zweiter Klick wuerde ein zweites Mal ins Flash der Lader schreiben.
+ */
+async function ladeModusSetzen(modus) {
+  if (_ladeLaeuft || !LADE_MODI.some(m => m.id === modus)) return;
+  if (_ladeStand && _ladeStand.mode === modus) return;
+  _ladeLaeuft = true;
+  _ladeKarteNachziehen();
+  try {
+    _ladeStand  = await _ladeJson('/api/charger/mode', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ mode: modus }),
+    });
+    _ladeFehler = null;
+  } catch (e) {
+    _ladeFehler = e.message || 'Umschalten fehlgeschlagen';
+  }
+  _ladeLaeuft = false;
+  _ladeKarteNachziehen();
+}
+
+/** Kurzform des Zustands fuer den Chip rechts oben. */
+function _ladeZustand(s) {
+  if (s.mode === 'harbor') return s.harbor_holding ? 'Halten' : 'Laden';
+  if (s.mode === 'full')   return 'Vollladung';
+  if (s.mode === 'balance') return 'Balancing';
+  return s.mode || '--';
+}
+
+/**
+ * Die Zeile unter den Knoepfen: was gewollt ist und was der Lader meldet.
+ *
+ * Die Rueckmeldung (PGN 130914) kam bis zum 06.09.2026 nie an — der Gateway
+ * las die falschen Register und verwarf jede Antwort. Jetzt steht sie hier,
+ * denn genau daran sieht man, ob jemand am Lader gedreht hat.
+ */
+function _ladeZeile(s) {
+  const teile = [];
+  const liste = s.device_setpoints || [];
+  const soll  = liste.find(d => d.instance === 1) || liste[0] || null;
+  if (soll) {
+    if (soll.on === false) {
+      teile.push('Lader aus');
+    } else {
+      teile.push('Soll ' + soll.absorption_v.toFixed(2) + ' / ' + soll.float_v.toFixed(2) + ' V');
+    }
+  }
+  if (s.actual_absorption_v != null && s.actual_float_v != null) {
+    teile.push('gemeldet ' + s.actual_absorption_v.toFixed(2) + ' / ' + s.actual_float_v.toFixed(2) + ' V');
+  } else {
+    teile.push('noch keine Rückmeldung');
+  }
+  return teile.join(' · ');
+}
+
+function _ladeKarte() {
+  const s   = _ladeStand;
+  const off = !s || _ladeLaeuft;
+
+  const knoepfe = LADE_MODI.map(m =>
+    `<button class="chart-range${s && s.mode === m.id ? ' active' : ''}"` +
+    ` onclick="ladeModusSetzen('${m.id}')"${off ? ' disabled' : ''}>${m.name}</button>`
+  ).join('');
+
+  let chip = '<span class="chip">--</span>';
+  let zeile = 'Lade…';
+  if (_ladeFehler) {
+    chip  = `<span class="chip err">Fehler</span>`;
+    zeile = _esc(_ladeFehler);
+  } else if (s) {
+    const haelt = s.mode === 'harbor' && s.harbor_holding;
+    chip  = `<span class="chip${haelt ? '' : ' on'}">${_esc(_ladeZustand(s))}</span>`;
+    zeile = _esc(_ladeZeile(s));
+    if (s.preset_match === 'custom') {
+      zeile += ' · <span style="color:var(--yellow)">extern geändert</span>';
+    }
+  }
+
+  // grid-column, weil #bdSources ein Raster aus Geraetekacheln ist — die Karte
+  // soll ueber die volle Breite darueberstehen, nicht als vierte Kachel daneben.
+  return `<div class="bd-src" id="bdLademodus" style="grid-column: 1 / -1">
+    <div class="bd-src-head">
+      <span style="display:inline-flex;color:var(--text2)">${icon('battery', { size: 15 })}</span>
+      <span class="bd-src-name">Lademodus</span>
+      ${chip}
+    </div>
+    <div class="chart-range-group" style="margin-top:8px">${knoepfe}</div>
+    <div class="bd-src-sub" style="margin-top:8px">${zeile}</div>
+  </div>`;
+}
+
+/** Nur die Modus-Karte neu zeichnen, ohne die Geraetekacheln anzufassen. */
+function _ladeKarteNachziehen() {
+  const alt = document.getElementById('bdLademodus');
+  if (alt) alt.outerHTML = _ladeKarte();
+}
+
+const _ladePoller = createPoller(ladeStandHolen, LADE_TAKT_MS);
+
+
 /**
  * Baut die Batterie-Detailseite.
  * Reihenfolge: Servicebatterie -> Verlauf -> Geraete -> Starterbatterie.
@@ -1044,6 +1188,8 @@ function renderDeviceTiles(data) {
   setz('bdAntwort', _baAntwort(data));
   setz('bdBilanz',  _baBilanz(data));
   setz('bdZellen',  _baZellen(data));
-  setz('bdSources', _baGeraete(data));
+  // Der Lademodus steht ueber den Geraetekacheln: erst die Entscheidung,
+  // darunter, was sie bewirkt.
+  setz('bdSources', _ladeKarte() + _baGeraete(data));
   setz('bdDiag',    _starterKarte(data.battery ?? null));
 }

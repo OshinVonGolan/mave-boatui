@@ -363,6 +363,11 @@ async function _standPruefen() {
   } catch (_) { /* kein Netz: dann eben beim nächsten Mal */ }
 }
 
+/** Der Stapel unten, in den alle Meldungen gehoeren. */
+function _meldungsstapel() {
+  return document.getElementById('meldungen') || document.body;
+}
+
 function _veraltetZeigen(neuerStand) {
   const b = document.createElement('div');
   b.className = 'veraltet';
@@ -371,7 +376,7 @@ function _veraltetZeigen(neuerStand) {
     + '<span class="kb-txt">Diese Seite läuft auf einem älteren Stand. '
     + 'Bis sie neu geladen ist, können Werte fehlen und Schaltflächen gesperrt aussehen.</span>'
     + '<button class="veraltet-knopf">Jetzt neu laden</button>';
-  document.body.appendChild(b);
+  _meldungsstapel().appendChild(b);
 
   // Rueckmeldung in zwei Stufen (Eignermeldung: „kein optisches Feedback, das
   // ist verwirrend"). Erstens beim Druecken — als Klasse aus JS und nicht als
@@ -452,5 +457,5 @@ function _neustartZeigen() {
   b.innerHTML = '<span class="nh-kreis"></span>'
     + '<span class="nh-txt">Die Anlage startet gerade neu — meist nach einer '
     + 'Aktualisierung. Das dauert etwa eine halbe Minute.</span>';
-  document.body.appendChild(b);
+  _meldungsstapel().appendChild(b);
 }

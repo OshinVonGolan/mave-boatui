@@ -133,7 +133,6 @@
 </header>
 
 <!-- Nur sichtbar, wenn ausschliesslich die gespeicherte Kopie vorliegt. -->
-<div class="kopie-banner hidden" id="kopieBanner"></div>
 
 <!-- ── Kiosk-Chrome (nur im Kiosk-Profil sichtbar) ───────────────────────── -->
 <aside id="kioskSidebar" class="kiosk-sidebar"></aside>
@@ -649,6 +648,19 @@
     <div class="wlan-hinweis">Kamera drauf halten — das Telefon bietet den
       Beitritt von selbst an.</div>
   </div>
+</div>
+
+<!-- Meldungen stehen UNTEN, alle im selben Stapel.
+     Unten, weil sie auffallen sollen, ohne die Kopfzeile zu verdecken,
+     während man noch arbeitet — so machten es „Seite veraltet" und
+     „startet neu" schon. Das Kopie-Band war der Ausreißer: es klemmte oben
+     unter der Kopfzeile und schob dabei die ganze Seite nach unten
+     (Eignermeldung).
+     Und als Stapel, weil sie sich treffen können: bei einer Aktualisierung
+     reißt die Verbindung ab UND die Anlage startet neu. Nebeneinander
+     gestapelt verdecken sie sich nicht. -->
+<div class="meldungen" id="meldungen">
+  <div class="kopie-banner hidden" id="kopieBanner"></div>
 </div>
 
 <footer class="seitenfuss">
