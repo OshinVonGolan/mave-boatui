@@ -101,15 +101,16 @@ const HZ_ZUSTAND = {
 // Ueberall dieselben drei Woerter — am Heizgeraet wie am Raumgeblaese.
 const HZ_MODUS = { off: 'Aus', auto: 'Automatik', manual: 'Manuell' };
 
-// Kurzform fuer die Kachel. Dort steht die Betriebsart neben der Drehzahl und
-// muss in eine Rasterspalte passen — "Automatik" waere dort zu lang.
-const HZ_FAN_KURZ = { off: 'Aus', auto: 'Auto', manual: 'Hand' };
+// Kurzform fuer die Kachel. „Manuell" und nicht „Hand" (Eignerwort) — es
+// passt jetzt auch hinein, seit alle Zeilen sich EIN Raster teilen und die
+// Spalte sich nach der breitesten Zeile richtet. Nur „Automatik" bliebe zu
+// lang; dort steht weiter die Kurzform.
+const HZ_FAN_KURZ = { off: 'Aus', auto: 'Auto', manual: 'Manuell' };
 
-// Spaltenaufteilung und Optik des Geblaese-Felds stehen hier inline statt in
-// style.css: an der Stilvorlage arbeitet gerade eine zweite Sitzung, und ein
-// Commit haette ihre Aenderungen mitgenommen. Gehoert bei Gelegenheit zu
-// .hz-raum in die Stilvorlage.
-const HZ_RAUM_SPALTEN = 'grid-template-columns:minmax(0,1fr) auto auto auto auto 14px';
+// Die Spaltenaufteilung stand hier inline, weil an der Stilvorlage eine zweite
+// Sitzung arbeitete. Sie steht jetzt dort, wo sie hingehoert (.hz-raeume) —
+// inline ging es ohnehin nicht mehr: ein Raster je Zeile war genau der Grund,
+// warum die Werte nicht untereinander standen.
 const HZ_FAN_STIL     = 'display:flex;align-items:baseline;gap:4px;color:var(--text3);font-size:11px';
 const HZ_FAN_ZAHL     = 'color:var(--text2);font-weight:600;font-size:13px';
 
@@ -232,7 +233,7 @@ function updateHeizungKachel() {
   const raeume = alleRaeume.map(r => {
     const aus = !(_hzErwartetWert('an' + r.id) ?? (r.enabled !== false));
     const kalt = r.conn !== 'online';
-    return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}" style="${HZ_RAUM_SPALTEN}">
+    return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}">
       <span class="hz-raum-name">${_esc(r.name)}</span>
       <span class="hz-raum-ist">${_hzT(r.roomTemp)}<i>°</i></span>
       <span class="hz-raum-pfeil">→</span>

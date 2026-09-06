@@ -909,6 +909,58 @@ class LadeschirmFristen(unittest.TestCase):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class HeizungRaumzeilen(Pruefstand):
+    """Die Werte stehen in jeder Raumzeile an derselben Stelle.
+
+    Vorher war jede Zeile ihr eigenes Raster. `auto`-Spalten richten sich dann
+    nach dem Inhalt DIESER Zeile — „Auto 0 %" ist schmaler als „Manuell 95 %",
+    und schon standen die Temperaturen jeder Zeile woanders (Eignermeldung).
+    """
+
+    HZ = {'configured': True, 'enabled': True, 'reachable': True, 'state': {
+        'heater': {'state': 'on', 'command': 'on'},
+        'rooms': [
+            {'id': 1, 'name': 'Kartentisch', 'roomTemp': 26.1, 'setTemp': 6.0,
+             'fanMode': 'manual', 'fanPercent': 75, 'enabled': True, 'conn': 'online'},
+            {'id': 2, 'name': 'Salon', 'roomTemp': 20.1, 'setTemp': 6.0,
+             'fanMode': 'manual', 'fanPercent': 95, 'enabled': True, 'conn': 'online'},
+            # Die kurze Betriebsart ist der Fall, an dem es aufgefallen ist.
+            {'id': 3, 'name': 'Koje', 'roomTemp': 20.9, 'setTemp': 6.0,
+             'fanMode': 'auto', 'fanPercent': 0, 'enabled': True, 'conn': 'online'},
+        ]}}
+
+    def zeilen(self):
+        return self.pg.evaluate("""(hz) => {
+            _hzDaten = hz;
+            updateHeizungKachel();
+            const x = e => e ? Math.round(e.getBoundingClientRect().x) : null;
+            return [...document.querySelectorAll('.hz-raeume .hz-raum')].map(z => ({
+              name: z.querySelector('.hz-raum-name')?.textContent,
+              ist: x(z.querySelector('.hz-raum-ist')),
+              pfeil: x(z.querySelector('.hz-raum-pfeil')),
+              soll: x(z.querySelector('.hz-raum-soll')),
+              text: z.innerText.replace(/\s+/g, ' '),
+            }));
+        }""", self.HZ)
+
+    def test_die_werte_stehen_in_allen_zeilen_gleich(self):
+        z = self.zeilen()
+        self.assertEqual(len(z), 3)
+        for feld in ('ist', 'pfeil', 'soll'):
+            stellen = {r[feld] for r in z}
+            self.assertEqual(len(stellen), 1,
+                             f'{feld} steht an {len(stellen)} verschiedenen Stellen: '
+                             + ', '.join(f'{r["name"]}={r[feld]}' for r in z))
+
+    def test_manuell_heisst_manuell(self):
+        """Nicht „Hand" (Eignerwort). Es passt jetzt auch hinein, seit sich
+        alle Zeilen ein Raster teilen."""
+        text = ' '.join(r['text'] for r in self.zeilen())
+        self.assertIn('Manuell', text)
+        self.assertNotIn('Hand', text)
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
 class Ladeschirm(Pruefstand):
     """Was der Start abwartet — und was er absichtlich nicht abwartet."""
 
