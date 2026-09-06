@@ -45,6 +45,23 @@ function wxBft(kn) {
   return b;
 }
 
+/** Das Wettersymbol allein sagt nicht, ob „bedeckt" oder „Nebel" gemeint ist. */
+function wxLage(code) {
+  if (code == null) return '';
+  const t = {
+    0: 'klar', 1: 'überwiegend klar', 2: 'wechselnd bewölkt', 3: 'bedeckt',
+    45: 'Nebel', 48: 'Reifnebel', 51: 'leichter Niesel', 53: 'Niesel',
+    55: 'starker Niesel', 56: 'gefrierender Niesel', 57: 'gefrierender Niesel',
+    61: 'leichter Regen', 63: 'Regen', 65: 'starker Regen',
+    66: 'gefrierender Regen', 67: 'gefrierender Regen',
+    71: 'leichter Schnee', 73: 'Schnee', 75: 'starker Schnee', 77: 'Schneegriesel',
+    80: 'Schauer', 81: 'Schauer', 82: 'kräftige Schauer',
+    85: 'Schneeschauer', 86: 'Schneeschauer',
+    95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'Gewitter mit Hagel',
+  }[code];
+  return t || '';
+}
+
 const _WX_STRICHE = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO',
                      'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 function wxStrich(grad) {
@@ -145,6 +162,15 @@ function _wxDayName(date, i) {
 
 // ── Die Kachel ──────────────────────────────────────────────────────────────
 
+/**
+ * Die Kachel.
+ *
+ * Sie zeigte fuenf gleich grosse Tagesspalten — das beantwortet "wie wird die
+ * Woche", aber nicht die Frage, die man morgens beim Kaffee stellt: was ist
+ * HEUTE los. Jetzt steht heute oben und ausfuehrlich, mit Wind, Boeen und
+ * Richtung; darunter der Wind der naechsten zwoelf Stunden als Streifen, und
+ * erst dann die uebrigen Tage, knapp.
+ */
 function _renderWeather() {
   const ort = _wxOrt();
   const nameEl = $('wxOrtName');
@@ -152,34 +178,157 @@ function _renderWeather() {
 
   const d = _wxData;
   const tage = (d && d.tage) || [];
+  const heute = tage[0] || {};
+  const jetzt = _wxStundeJetzt() || {};
+
+  const kopf = $('wxHeute');
+  if (kopf) {
+    // Der Wind kommt aus der aktuellen Stunde, nicht aus dem Tagesmaximum:
+    // "heute bis 22 kn" hilft um neun Uhr morgens nicht weiter.
+    const wind = jetzt.wind != null ? jetzt.wind : heute.wind;
+    const boe  = jetzt.boe  != null ? jetzt.boe  : heute.gust;
+    const dir  = jetzt.dir  != null ? jetzt.dir  : heute.dir;
+    const bft  = wxBft(wind);
+    const faktor = (wind && boe) ? boe / wind : null;
+    const welle = jetzt.welle != null ? jetzt.welle : heute.wave;
+
+    const zahl = (v, e) => `${v != null ? Math.round(v) : '--'}<small>${e}</small>`;
+    kopf.innerHTML = `
+      <div class="wx-h-luft">
+        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 40)}</span>
+        <div>
+          <div class="wx-h-grad">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</div>
+          <div class="wx-h-lage">${_wxEsc(wxLage(jetzt.wmo != null ? jetzt.wmo : heute.wmo))}</div>
+          <div class="wx-h-spanne">${heute.tmin != null ? Math.round(heute.tmin) : '--'}° bis ${heute.tmax != null ? Math.round(heute.tmax) : '--'}°</div>
+        </div>
+      </div>
+      <div class="wx-h-wind">
+        <div class="wx-h-pfeil">${_wxPfeil(dir, 30)}<span>${wxStrich(dir) || '--'}</span></div>
+        <div class="wx-h-zahlen">
+          <div class="wx-h-gross">${zahl(wind, ' kn')}<em>${bft != null ? bft + ' Bft' : ''}</em></div>
+          <div class="wx-h-boe">Böen ${zahl(boe, ' kn')}${
+            faktor ? ` <em>${faktor >= 1.5 ? 'böig' : 'gleichmäßig'}</em>` : ''}</div>
+        </div>
+      </div>
+      <div class="wx-h-rest">
+        <span>${icon('droplet', { size: 13 })} ${heute.pop != null ? heute.pop : '--'} %</span>
+        ${welle != null ? `<span>${icon('waves', { size: 13 })} ${welle.toFixed(1)} m</span>` : ''}
+        ${jetzt.druck != null ? `<span>${Math.round(jetzt.druck)} hPa</span>` : ''}
+        <span>${icon('sun', { size: 13 })} ${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}</span>
+      </div>`;
+  }
+
+  _wxTagStreifen();
 
   const grid = $('wxGrid');
   if (grid) {
-    // Entweder in ALLEN Spalten die Welle oder in allen die Richtung. Gemischt
-    // sah die Zeile aus, als fehlten Werte — dabei reicht das Seegangsmodell
-    // nur drei Tage weit, und ab Tag vier ist die Windrichtung die bessere
-    // Auskunft als ein Strich.
-    const alleWellen = tage.slice(0, 5).every(t => t.wave != null);
-    grid.innerHTML = tage.slice(0, 5).map((td, i) => `<div class="wx-day">
-        <div class="wx-day-name">${_wxDayName(td.date, i)}</div>
-        <div class="wx-icon">${_wxIconHtml(td.wmo, td.storm, 30)}</div>
+    // Heute steht oben schon ausfuehrlich — hier die Tage danach.
+    const rest = tage.slice(1, 5);
+    const alleWellen = rest.length > 0 && rest.every(t => t.wave != null);
+    grid.innerHTML = rest.map((td, i) => `<div class="wx-day">
+        <div class="wx-day-name">${_wxDayName(td.date, i + 1)}</div>
+        <div class="wx-icon">${_wxIconHtml(td.wmo, td.storm, 26)}</div>
         <div class="wx-temp"><b>${td.tmax != null ? Math.round(td.tmax) : '--'}°</b> <span>${td.tmin != null ? Math.round(td.tmin) : '--'}°</span></div>
-        <div class="wx-row">${icon('droplet', { size: 13 })} ${td.pop != null ? td.pop : '--'}%</div>
-        <div class="wx-row">${icon('wind', { size: 13 })} ${td.wind != null ? Math.round(td.wind) : '--'} kn</div>
+        <div class="wx-row">${icon('wind', { size: 12 })} ${td.wind != null ? Math.round(td.wind) : '--'}<span class="wx-boe">/${td.gust != null ? Math.round(td.gust) : '--'}</span></div>
         <div class="wx-row wx-row-welle">${alleWellen
-            ? icon('waves', { size: 13 }) + ' ' + td.wave.toFixed(1) + ' m'
-            : _wxPfeil(td.dir, 13) + ' ' + (wxStrich(td.dir) || '--')}</div>
+            ? icon('waves', { size: 12 }) + ' ' + td.wave.toFixed(1) + ' m'
+            : _wxPfeil(td.dir, 12) + ' ' + (wxStrich(td.dir) || '--')}</div>
       </div>`).join('');
   }
 
   // Halbe Kachel: heute, knapp
-  const td = tage[0] || {};
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
   const iconEl = $('wxHalfIcon');
-  if (iconEl) iconEl.innerHTML = _wxIconHtml(td.wmo, td.storm, 40);
-  set('wxHalfTemp', (td.tmax != null ? Math.round(td.tmax) : '--') + '°');
-  set('wxHalfWind', (td.wind != null ? Math.round(td.wind) : '--') + ' kn');
-  set('wxHalfPop',  (td.pop  != null ? td.pop  : '--') + '%');
+  if (iconEl) iconEl.innerHTML = _wxIconHtml(heute.wmo, heute.storm, 40);
+  set('wxHalfTemp', (jetzt.temp != null ? Math.round(jetzt.temp)
+                     : heute.tmax != null ? Math.round(heute.tmax) : '--') + '°');
+  set('wxHalfWind', (jetzt.wind != null ? Math.round(jetzt.wind)
+                     : heute.wind != null ? Math.round(heute.wind) : '--') + ' kn');
+  set('wxHalfPop',  (heute.pop != null ? heute.pop : '--') + '%');
+}
+
+/**
+ * Der Wind der naechsten zwoelf Stunden, fingernagelgross.
+ *
+ * Er beantwortet die eine Frage, die eine Tageszahl nie beantwortet: frischt
+ * es auf oder schlaeft es ein. Dieselbe Sprache wie der grosse Streifen auf
+ * der Detailseite — Flaeche zwischen Wind und Boe, Zeit von links nach rechts.
+ */
+function _wxTagStreifen() {
+  const cv = $('wxTagCanvas');
+  if (!cv || !_wxData) return;
+  const alle = _wxData.stunden || [];
+  const jetzt = _wxStundeJetzt();
+  const von = Math.max(0, alle.indexOf(jetzt));
+  const st = alle.slice(von, von + 13);
+  if (st.length < 2) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.offsetWidth, H = cv.offsetHeight;
+  if (!W || !H) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = { t: 4, b: 13 };
+  const cH = H - pad.t - pad.b;
+  const max = Math.max(10, ...st.map(s => s.boe || s.wind || 0));
+  const n = st.length - 1;
+  const xOf = i => (i / n) * W;
+  const yOf = v => pad.t + (1 - v / max) * cH;
+
+  // Nacht hinterlegen — dieselbe Auskunft wie auf der grossen Seite.
+  const tag = (_wxData.tage || [])[0] || {};
+  const auf = _wxZeit(tag.auf), unter = _wxZeit(tag.unter);
+  if (auf && unter) {
+    ctx.fillStyle = 'rgba(128,128,160,.13)';
+    st.forEach((s, i) => {
+      const t = _wxZeit(s.t);
+      if (!t) return;
+      const h = t.getHours();
+      if (h < auf.getHours() || h >= unter.getHours()) {
+        ctx.fillRect(xOf(Math.max(0, i - .5)), pad.t, xOf(1) - xOf(0), cH);
+      }
+    });
+  }
+
+  ctx.beginPath();
+  st.forEach((s, i) => {
+    const v = s.boe != null ? s.boe : s.wind;
+    if (v == null) return;
+    i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+  });
+  for (let i = st.length - 1; i >= 0; i--) {
+    if (st[i].wind == null) continue;
+    ctx.lineTo(xOf(i), yOf(st[i].wind));
+  }
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(251,146,60,.22)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.strokeStyle = _wxFarbe('--accent', '#38bdf8');
+  ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+  st.forEach((s, i) => {
+    if (s.wind == null) return;
+    i === 0 ? ctx.moveTo(xOf(i), yOf(s.wind)) : ctx.lineTo(xOf(i), yOf(s.wind));
+  });
+  ctx.stroke();
+
+  // Stunden darunter, alle drei — mehr passt hier nicht hin.
+  ctx.fillStyle = 'rgba(148,163,184,.8)';
+  ctx.font = '9px sans-serif';
+  ctx.textAlign = 'center';
+  st.forEach((s, i) => {
+    if (i % 3) return;
+    const x = Math.min(W - 8, Math.max(8, xOf(i)));
+    ctx.fillText(_wxUhr(s.t), x, H - 3);
+  });
+  // Links oben, nicht rechts: rechts liegt am Abend die Nachtflaeche, und die
+  // Beschriftung darauf sah aus wie ein Schildchen.
+  ctx.textAlign = 'left';
+  ctx.fillText(`${Math.round(max)} kn`, 1, pad.t + 8);
 }
 
 // ── Abruf ───────────────────────────────────────────────────────────────────
@@ -748,6 +897,7 @@ function _wxVergleichZeichnen() {
 // ── Verdrahtung ─────────────────────────────────────────────────────────────
 
 function _wxBinden() {
+  wischenBinden($('wxCard'), wxOrtWeiter);
   const orte = $('wxOrtLeiste');
   if (orte) orte.addEventListener('click', e => {
     const k = e.target.closest('[data-index]');

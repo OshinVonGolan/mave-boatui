@@ -582,3 +582,55 @@ function _kopfhoeheFuehren() {
   // Schriften kommen spaeter an und aendern die Hoehe noch einmal.
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(setzen).catch(() => {});
 }
+
+// ── Wischen auf einer Kachel ────────────────────────────────────────────────
+//
+// Nach links und rechts wischen, um durchzuschalten — auf der Wetter- und der
+// Pegelkachel. Der Namensknopf in der Kopfzeile bleibt daneben bestehen; das
+// Wischen ist der schnellere Weg, wenn man ohnehin schon den Finger drauf hat.
+//
+// Drei Dinge, die dabei schiefgehen koennen und deshalb hier stehen:
+//
+//   * Die Kachel oeffnet beim Tippen ihre Detailseite. Nach einem Wisch darf
+//     das NICHT passieren — der folgende Klick wird geschluckt.
+//   * Senkrecht muss die Seite weiter scrollen. Deshalb `touch-action: pan-y`
+//     im Stylesheet und die Bedingung, dass die Bewegung ueberwiegend
+//     waagerecht ist.
+//   * Im Modus "Kacheln ordnen" wird die Kachel verschoben, nicht gewischt.
+
+const _WISCH_WEG_PX  = 45;    // so weit muss der Finger, sonst war es ein Tipp
+const _WISCH_SCHRAEG = 1.6;   // waagerecht muss deutlich ueberwiegen
+
+function wischenBinden(el, weiter) {
+  if (!el || el.dataset.wischBereit) return;
+  el.dataset.wischBereit = '1';
+  let start = null, gewischt = false;
+
+  el.addEventListener('pointerdown', e => {
+    if (document.body.classList.contains('kacheln-ordnen')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    start = { x: e.clientX, y: e.clientY };
+    gewischt = false;
+  });
+
+  el.addEventListener('pointermove', e => {
+    if (!start || gewischt) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (Math.abs(dx) < _WISCH_WEG_PX) return;
+    if (Math.abs(dx) < Math.abs(dy) * _WISCH_SCHRAEG) { start = null; return; }
+    gewischt = true;
+    start = null;
+    // Nach links wischen heisst vorwaerts — wie beim Blaettern.
+    weiter(dx < 0 ? 1 : -1);
+  });
+
+  const ende = () => { start = null; };
+  el.addEventListener('pointerup', ende);
+  el.addEventListener('pointercancel', ende);
+  el.addEventListener('click', e => {
+    if (!gewischt) return;
+    gewischt = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+}

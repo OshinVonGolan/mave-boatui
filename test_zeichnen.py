@@ -1043,6 +1043,35 @@ class Wetterkachel(Pruefstand):
         self.pg.wait_for_timeout(400)
         self.assertFalse(self.offen())
 
+
+    def wischen(self, sel, dx):
+        """Mit dem Finger über die Kachel ziehen."""
+        self.pg.locator(sel).scroll_into_view_if_needed()
+        self.pg.wait_for_timeout(250)
+        k = self.pg.locator(sel).bounding_box()
+        y = k['y'] + k['height'] * 0.5
+        x0 = k['x'] + k['width'] * (0.78 if dx < 0 else 0.22)
+        self.pg.mouse.move(x0, y)
+        self.pg.mouse.down()
+        self.pg.mouse.move(x0 + dx, y + 3, steps=12)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(700)
+
+    def test_wischen_schaltet_den_ort_weiter(self):
+        """Wenn der Finger ohnehin auf der Kachel liegt, ist Wischen der
+        kürzere Weg als der Namensknopf in der Ecke."""
+        self.assertEqual(self.ort(), 'Travemünde')
+        self.wischen('#wxCard', -200)
+        self.assertEqual(self.ort(), 'Fehmarnsund')
+        self.wischen('#wxCard', 200)
+        self.assertEqual(self.ort(), 'Travemünde')
+
+    def test_wischen_oeffnet_die_seite_nicht(self):
+        """Sonst wäre Wischen unbrauchbar: jeder Zug endete auf der
+        Detailseite. Der Klick nach dem Wisch wird geschluckt."""
+        self.wischen('#wxCard', -200)
+        self.assertFalse(self.offen())
+
     def test_tippen_auf_die_kachel_oeffnet_die_seite(self):
         self.pg.click('.card-wx .wx-day')
         self.pg.wait_for_timeout(600)
@@ -1065,15 +1094,45 @@ class Wetterkachel(Pruefstand):
         self.assertTrue(any('lat=54.4139' in u for u in self.wx_abrufe),
                         f'abgerufen wurde: {self.wx_abrufe}')
 
-    def test_fuenf_tage_in_der_kachel(self):
-        self.assertEqual(self.pg.locator('.card-wx .wx-day').count(), 5)
+    def test_heute_steht_oben_und_ausfuehrlich(self):
+        """Fünf gleich große Tagesspalten beantworten „wie wird die Woche" —
+        aber nicht die Frage beim Kaffee: was ist HEUTE los."""
+        text = self.pg.evaluate("() => document.getElementById('wxHeute').innerText")
+        for teil in ('kn', 'Bft', 'Böen', 'hPa'):
+            self.assertIn(teil, text, f'{teil} fehlt: {text}')
+
+    def test_der_wind_kommt_aus_der_aktuellen_stunde(self):
+        """„Heute bis 22 kn" hilft um neun Uhr morgens nicht weiter. In der
+        Prüfvorlage steht in der laufenden Stunde 33 kn."""
+        self.assertIn('33', self.pg.evaluate(
+            "() => document.getElementById('wxHeute').innerText"))
+
+    def test_vier_weitere_tage_darunter(self):
+        """Heute steht oben schon — hier die Tage danach."""
+        self.assertEqual(self.pg.locator('.card-wx .wx-day').count(), 4)
+        namen = self.pg.evaluate(
+            "() => [...document.querySelectorAll('.card-wx .wx-day-name')].map(e => e.textContent)")
+        self.assertNotIn('Heute', namen)
+
+    def test_der_tagesstreifen_zeichnet(self):
+        """Er beantwortet, was eine Tageszahl nie beantwortet: frischt es auf
+        oder schläft es ein. Ein Canvas der Breite 0 malt still nichts."""
+        n = self.pg.evaluate("""() => {
+            const c = document.getElementById('wxTagCanvas');
+            if (!c || !c.width) return 0;
+            const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let z = 0;
+            for (let i = 3; i < d.length; i += 4) if (d[i]) z++;
+            return z;
+        }""")
+        self.assertGreater(n, 300, 'der Streifen ist leer geblieben')
 
     def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self):
-        """Welle nur an drei von fünf Tagen sah aus, als fehlten Werte. Dann
-        lieber überall die Windrichtung."""
+        """Welle nur an manchen Tagen sah aus, als fehlten Werte. Dann lieber
+        überall die Windrichtung."""
         zeilen = self.pg.evaluate(
             "() => [...document.querySelectorAll('.wx-row-welle')].map(e => e.textContent.trim())")
-        self.assertEqual(len(zeilen), 5)
+        self.assertEqual(len(zeilen), 4)
         self.assertFalse(any('m' in z for z in zeilen),
                          f'gemischt: {zeilen}')
 
@@ -1148,10 +1207,15 @@ class WetterOhnePosition(Wetterkachel):
 
     def test_erster_favorit_steht_in_der_kachel(self): pass
     def test_tippen_auf_den_namen_oeffnet_die_seite_nicht(self): pass
+    def test_wischen_schaltet_den_ort_weiter(self): pass
+    def test_wischen_oeffnet_die_seite_nicht(self): pass
     def test_tippen_auf_die_kachel_oeffnet_die_seite(self): pass
     def test_gewaehlter_ort_ueberlebt_das_neuladen(self): pass
     def test_der_ort_geht_als_koordinate_mit(self): pass
-    def test_fuenf_tage_in_der_kachel(self): pass
+    def test_heute_steht_oben_und_ausfuehrlich(self): pass
+    def test_der_wind_kommt_aus_der_aktuellen_stunde(self): pass
+    def test_vier_weitere_tage_darunter(self): pass
+    def test_der_tagesstreifen_zeichnet(self): pass
     def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self): pass
     def test_der_kopf_zeigt_die_aktuelle_stunde(self): pass
     def test_boeenfaktor_steht_dabei(self): pass
@@ -1276,6 +1340,32 @@ class Pegelkachel(Pruefstand):
 
     def test_tippen_auf_den_namen_oeffnet_die_seite_nicht(self):
         self.weiter()
+        self.assertTrue(self.pg.evaluate(
+            "() => document.getElementById('wlOverlay').classList.contains('hidden')"))
+
+
+    def wischen(self, sel, dx):
+        """Mit dem Finger über die Kachel ziehen."""
+        self.pg.locator(sel).scroll_into_view_if_needed()
+        self.pg.wait_for_timeout(250)
+        k = self.pg.locator(sel).bounding_box()
+        y = k['y'] + k['height'] * 0.5
+        x0 = k['x'] + k['width'] * (0.78 if dx < 0 else 0.22)
+        self.pg.mouse.move(x0, y)
+        self.pg.mouse.down()
+        self.pg.mouse.move(x0 + dx, y + 3, steps=12)
+        self.pg.mouse.up()
+        self.pg.wait_for_timeout(700)
+
+    def test_wischen_schaltet_den_pegel_weiter(self):
+        self.assertEqual(self.name(), 'Travemünde')
+        self.wischen('#wlCard', -200)
+        self.assertEqual(self.name(), 'Warnemünde')
+        self.wischen('#wlCard', 200)
+        self.assertEqual(self.name(), 'Travemünde')
+
+    def test_wischen_oeffnet_die_seite_nicht(self):
+        self.wischen('#wlCard', -200)
         self.assertTrue(self.pg.evaluate(
             "() => document.getElementById('wlOverlay').classList.contains('hidden')"))
 
@@ -1575,16 +1665,39 @@ class Grundrisswerkzeug(Pruefstand):
         nach = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
         self.assertAlmostEqual(vorher['y'] / vorher['h'], nach['y'] / nach['h'], places=2)
 
-    def test_alle_sechs_rumpfformen_sind_gueltige_pfade(self):
+    def test_alle_rumpfformen_sind_gueltige_pfade(self):
         """Sie gehen als SVG in den Browser und durch die Prüfung des Pi.
         Ein Zeichen zu viel, und der Riss lässt sich nicht mehr speichern."""
         pfade = self.pg.evaluate("""() => _GE_RUMPF_VORLAGEN.map(v =>
             [v.id, geRumpfPfad({ w: 200, h: 680, ...v })])""")
-        self.assertEqual(len(pfade), 6)
+        self.assertEqual(len(pfade), 7)
+        self.assertIn('kat', [k for k, _ in pfade])
         import main as _main
         for kennung, d in pfade:
             self.assertTrue(_main._GR_PFAD.match(d), f'{kennung}: {d[:60]}')
             self.assertTrue(d.endswith('Z'), kennung)
+
+    def test_der_katamaran_hat_drei_teile(self):
+        """Zwei Rümpfe und das Deck dazwischen. Ein einzelner Umriss wäre
+        kein Katamaran, sondern ein sehr breites Boot."""
+        d = self.pg.evaluate(
+            "() => geRumpfPfad({ w: 200, h: 480, art: 'kat' })")
+        self.assertEqual(d.count('Z'), 3, d[:80])
+
+    def test_kein_rumpf_verlaesst_die_zeichenflaeche(self):
+        """Sonst steht das Boot halb neben dem Blatt."""
+        grenzen = self.pg.evaluate("""() => _GE_RUMPF_VORLAGEN.map(v => {
+            const zahlen = geRumpfPfad({ w: 200, h: 680, ...v })
+                .match(/-?\\d+(\\.\\d+)?/g).map(Number);
+            const xs = zahlen.filter((_, i) => i % 2 === 0);
+            const ys = zahlen.filter((_, i) => i % 2 === 1);
+            return [v.id, Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+        })""")
+        for kennung, x0, x1, y0, y1 in grenzen:
+            self.assertGreaterEqual(x0, -0.5, kennung)
+            self.assertLessEqual(x1, 200.5, kennung)
+            self.assertGreaterEqual(y0, -0.5, kennung)
+            self.assertLessEqual(y1, 680.5, kennung)
 
     def test_gespeichert_wird_was_der_pi_zurueckgibt(self):
         """Der Pi prüft und schneidet zurecht. Was er antwortet, ist ab dann

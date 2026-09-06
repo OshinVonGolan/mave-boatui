@@ -535,63 +535,129 @@ function _geRaumAnlegen(form) {
 // er zum eigenen Boot passt.
 
 const _GE_RUMPF_VORLAGEN = [
-  { id: 'klassisch', name: 'Langkieler',      bug: .28, heck: .40, breiteBei: .52, spiegel: .35 },
-  { id: 'fahrten',   name: 'Fahrtenyacht',    bug: .38, heck: .62, breiteBei: .56, spiegel: .55 },
-  { id: 'modern',    name: 'Moderne Yacht',   bug: .50, heck: .88, breiteBei: .62, spiegel: .85 },
-  { id: 'doppelend', name: 'Doppelender',     bug: .30, heck: .18, breiteBei: .50, spiegel: .10 },
-  { id: 'motor',     name: 'Motorboot',       bug: .45, heck: .92, breiteBei: .45, spiegel: 1.0 },
-  { id: 'platt',     name: 'Plattbodenschiff', bug: .62, heck: .78, breiteBei: .50, spiegel: .70 },
+  { id: 'langkieler', name: 'Langkieler',       voll: .26, breiteBei: .50, heck: .34, spiegel: .45, lauf: .35 },
+  { id: 'fahrten',    name: 'Fahrtenyacht',     voll: .34, breiteBei: .56, heck: .58, spiegel: .70, lauf: .50 },
+  { id: 'breitheck',  name: 'Breites Heck',     voll: .42, breiteBei: .62, heck: .88, spiegel: 1.0, lauf: .72 },
+  { id: 'spitzgatt',  name: 'Spitzgatter',      voll: .44, breiteBei: .51, heck: .03, spiegel: 0,   lauf: .42, kappe: .12 },
+  { id: 'motor',      name: 'Motorboot',        voll: .52, breiteBei: .58, heck: .95, spiegel: 1.0, lauf: .82, kappe: .18 },
+  { id: 'platt',      name: 'Plattbodenschiff', voll: .78, breiteBei: .48, heck: .78, spiegel: .50, lauf: .62, kappe: .80 },
+  { id: 'kat',        name: 'Katamaran',        art: 'kat' },
 ];
 
-/**
- * Den Rumpfumriss rechnen — Bug oben, Heck unten, spiegelsymmetrisch.
- *
- * `bug` sagt, wie voll der Vorschiffsbereich ist (klein = spitz),
- * `heck` wie breit der Spiegel im Verhältnis zur größten Breite,
- * `breiteBei` wo die größte Breite liegt (0 = ganz vorn, 1 = ganz hinten),
- * `spiegel` wie stark das Heck gerundet ist (0 = spitz, 1 = gerade Kante).
- */
-function geRumpfPfad({ w, h, bug, heck, breiteBei, spiegel, rand = 12 }) {
-  const mx = w / 2;
-  const halb = mx - rand;                       // größte Halbbreite
+function _z(n) { return Math.round(n * 10) / 10; }
+
+function rumpfSeiten(o) {
+  const { w, h, voll, breiteBei, heck, spiegel, lauf, kappe = 0, rand = 12,
+          mitte = w / 2, halbMax = w / 2 - rand } = o;
+  const mx = mitte, halb = halbMax;
   const yBug = rand, yHeck = h - rand;
   const yMax = yBug + breiteBei * (yHeck - yBug);
+  const L1 = yMax - yBug, L2 = yHeck - yMax;
   const halbHeck = halb * heck;
-  // Kontrollpunkte: `bug` schiebt sie nach außen, der Bug wird völliger.
-  // Ein voelliger Bug wird frueh breit, ein spitzer erst spaet. Beides steckt
-  // in denselben zwei Zahlen: wie weit der Kontrollpunkt nach aussen geht und
-  // wie hoch er liegt.
-  const k1 = yBug + (yMax - yBug) * (.08 + .42 * (1 - bug));
-  const k2 = yBug + (yMax - yBug) * .88;
-  const k3 = yMax + (yHeck - yMax) * .38;
-  const k4 = yHeck - (yHeck - yMax) * .14 * (1 - spiegel);
-  const bugBreite = halb * bug;
 
-  // Die Bugspitze: bei einem spitzen Rumpf ein Punkt, bei einem voelligen
-  // eine kurze Rundung. Ohne sie bekam das Motorboot eine Schildform mit
-  // scharfer Ecke oben — zwei Kurven, die sich im Winkel treffen.
-  const kappe = Math.max(0, bug - .5) * halb * 1.3;
-  const yKappe = yBug + kappe * .45;
-  const z = n => n.toFixed(1);
+  // Vorschiff: der erste Kontrollpunkt liegt nah an der Mittellinie und tief
+  // unter dem Steven — dann verlaesst die Linie ihn laengs und nicht quer.
+  const a = 0.06 + 0.55 * voll;
+  const bq = 0.62 - 0.44 * voll;
+  const c = 0.40 + 0.18 * voll;
+  const d = 0.25 + 0.60 * lauf;
+  const e = 0.55 + 0.35 * lauf;
+
+  // Stumpfer Steven: eine kurze Rundung statt eines Punktes.
+  const r = kappe * halb * 0.55;
+  const yK = yBug + r * 0.5;
 
   const s = [];
-  s.push(`M${z(mx - kappe)},${z(yKappe)}`);
-  s.push(`Q${z(mx)},${z(yBug)} ${z(mx + kappe)},${z(yKappe)}`);
-  // Steuerbordseite nach achtern
-  s.push(`C${z(mx + bugBreite)},${z(k1)} ${z(mx + halb)},${z(k2)} ${z(mx + halb)},${z(yMax)}`);
-  s.push(`C${z(mx + halb)},${z(k3)} ${z(mx + halbHeck)},${z(k4)} ${z(mx + halbHeck)},${z(yHeck)}`);
-  // Spiegel: bei 1 eine gerade Kante, bei 0 laufen die Seiten im Punkt zusammen
-  if (spiegel > .02) {
-    const bauch = (1 - spiegel) * (yHeck - yMax) * .10;
-    s.push(`Q${z(mx)},${z(yHeck + bauch)} ${z(mx - halbHeck)},${z(yHeck)}`);
-  } else {
-    s.push(`L${z(mx - halbHeck)},${z(yHeck)}`);
-  }
-  // Backbordseite zurueck nach vorn
-  s.push(`C${z(mx - halbHeck)},${z(k4)} ${z(mx - halb)},${z(k3)} ${z(mx - halb)},${z(yMax)}`);
-  s.push(`C${z(mx - halb)},${z(k2)} ${z(mx - bugBreite)},${z(k1)} ${z(mx - kappe)},${z(yKappe)}`);
+  s.push(`M${_z(mx - r)},${_z(yK)}`);
+  if (r > 0.5) s.push(`Q${_z(mx)},${_z(yBug)} ${_z(mx + r)},${_z(yK)}`);
+  s.push(`C${_z(mx + halb * a)},${_z(yBug + L1 * bq)} ${_z(mx + halb)},${_z(yMax - L1 * c)} ${_z(mx + halb)},${_z(yMax)}`);
+  s.push(`C${_z(mx + halb)},${_z(yMax + L2 * d)} ${_z(mx + halbHeck + (halb - halbHeck) * (1 - e))},${_z(yHeck)} ${_z(mx + halbHeck)},${_z(yHeck)}`);
+  s.push(halbHeck < halb * 0.06
+    ? `L${_z(mx - halbHeck)},${_z(yHeck)}`
+    // Die Woelbung darf nicht aus dem Blatt laufen: `rand` ist alles, was
+    // unterhalb von yHeck noch da ist.
+    : `Q${_z(mx)},${_z(yHeck + Math.min(rand * 0.7, (1 - spiegel) * L2 * 0.10))} ${_z(mx - halbHeck)},${_z(yHeck)}`);
+  s.push(`C${_z(mx - halbHeck - (halb - halbHeck) * (1 - e))},${_z(yHeck)} ${_z(mx - halb)},${_z(yMax + L2 * d)} ${_z(mx - halb)},${_z(yMax)}`);
+  s.push(`C${_z(mx - halb)},${_z(yMax - L1 * c)} ${_z(mx - halb * a)},${_z(yBug + L1 * bq)} ${_z(mx - r)},${_z(yK)}`);
   s.push('Z');
   return s.join(' ');
+}
+
+/**
+ * Katamaran: zwei schlanke Ruempfe und das Deck DAZWISCHEN.
+ *
+ * Das Deck spannt nur von Innenkante zu Innenkante. Ueber die Ruempfe hinweg
+ * gezeichnet lagen drei Umrisse uebereinander, und man sah lauter Linien, wo
+ * in Wirklichkeit eine durchgehende Flaeche ist.
+ */
+function _bez(a, b, c, d, t) {
+  const u = 1 - t;
+  return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
+}
+
+/**
+ * Eine Rumpfseite als Punktfolge, Bug nach Heck.
+ *
+ * Fuer den Katamaran gebraucht: das Deck soll die Ruempfe BERUEHREN. Mit der
+ * groessten Breite gerechnet schwebte es zwischen ihnen (dort, wo es ansetzt,
+ * sind sie schmaler); mit Ueberlappung kreuzten sich die Linien. Die einzige
+ * ehrliche Antwort ist, der echten Kante zu folgen.
+ */
+function _seitePunkte(cx, halb, yBug, yMax, yHeck, halbHeck, s, n = 26) {
+  const L1 = yMax - yBug, L2 = yHeck - yMax;
+  const voll = 0.34, lauf = 0.78;
+  const a = 0.06 + 0.55 * voll, bq = 0.62 - 0.44 * voll, c = 0.40 + 0.18 * voll;
+  const d = 0.25 + 0.60 * lauf, e = 0.55 + 0.35 * lauf;
+  const pkt = [];
+  for (let i = 0; i <= n; i++) {                       // Vorschiff
+    const t = i / n;
+    pkt.push([_bez(cx, cx + s * halb * a, cx + s * halb, cx + s * halb, t),
+              _bez(yBug, yBug + L1 * bq, yMax - L1 * c, yMax, t)]);
+  }
+  for (let i = 1; i <= n; i++) {                       // Achterschiff
+    const t = i / n;
+    pkt.push([_bez(cx + s * halb, cx + s * halb,
+                   cx + s * (halbHeck + (halb - halbHeck) * (1 - e)), cx + s * halbHeck, t),
+              _bez(yMax, yMax + L2 * d, yHeck, yHeck, t)]);
+  }
+  return pkt;
+}
+
+function rumpfKatamaran(o) {
+  const { w, h, rand = 12 } = o;
+  const mx = w / 2, halb = mx - rand;
+  const r = halb * 0.25;                    // halbe Breite EINES Rumpfes
+  const versatz = halb - r;
+  const yBug = rand, yHeck = h - rand;
+  const nutz = h - 2 * rand;
+  const yMax = yBug + nutz * 0.58, rHeck = r * 0.72;
+  const P = n => n.map(([x, y]) => `${_z(x)},${_z(y)}`).join(' L');
+
+  const teile = [];
+  const innen = {};
+  for (const s of [-1, 1]) {
+    const cx = mx + s * versatz;
+    const aussen = _seitePunkte(cx, r, yBug, yMax, yHeck, rHeck, s);
+    const nach   = _seitePunkte(cx, r, yBug, yMax, yHeck, rHeck, -s);
+    innen[s] = nach;
+    teile.push(`M${P(aussen)} L${P([...nach].reverse())} Z`);
+  }
+
+  // Das Deck folgt den Innenkanten — vorn ein geschwungener Querbalken.
+  const yA = yBug + nutz * 0.30, yB = yHeck;
+  const stueck = s => innen[s].filter(([, y]) => y >= yA && y <= yB);
+  const links = stueck(-1), rechts = stueck(1);
+  if (links.length > 1 && rechts.length > 1) {
+    teile.push(
+      `M${_z(links[0][0])},${_z(links[0][1])} ` +
+      `Q${_z(mx)},${_z(yA - nutz * 0.05)} ${_z(rechts[0][0])},${_z(rechts[0][1])} ` +
+      `L${P(rechts.slice(1))} L${P([...links].reverse())} Z`);
+  }
+  return teile.join(' ');
+}
+
+function geRumpfPfad(o) {
+  return o.art === 'kat' ? rumpfKatamaran(o) : rumpfSeiten(o);
 }
 
 function geRumpfDialogOeffnen() {
@@ -603,7 +669,9 @@ function geRumpfDialogOeffnen() {
   // waere nicht zu sehen. Gewaehlt wird der CHARAKTER des Rumpfes; die Masse
   // stehen daneben und bestimmen den fertigen Riss.
   liste.innerHTML = _GE_RUMPF_VORLAGEN.map(v => {
-    const w = 120, h = 250;
+    // Ein Katamaran ist breiter als eine Yacht — im selben Feld waere er ein
+    // Strich mit zwei Spitzen.
+    const w = v.art === 'kat' ? 170 : 120, h = 250;
     const d = geRumpfPfad({ w, h, ...v });
     return `<button class="ge-vorlage" data-vorlage="${v.id}"
             onclick="geRumpfUebernehmen('${v.id}')">

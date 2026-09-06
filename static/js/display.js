@@ -1427,9 +1427,31 @@ function _sbHaltenBinden() {
   if (!leiste || leiste.dataset.doppelBereit) return;
   leiste.dataset.doppelBereit = '1';
 
+  // Kurzes Aufleuchten, solange der Finger draufliegt. Ohne das fuehlt sich
+  // die Leiste tot an — man tippt und nichts sagt, dass es angekommen ist.
+  let _gedrueckt = null;
+  const _los = () => {
+    if (_gedrueckt) _gedrueckt.classList.remove('sb-tipp');
+    _gedrueckt = null;
+  };
+  leiste.addEventListener('pointerdown', e => {
+    const feld = e.target.closest('.sb-item');
+    if (!feld) return;
+    _los();
+    _gedrueckt = feld;
+    feld.classList.add('sb-tipp');
+  }, true);
+  for (const art of ['pointerup', 'pointercancel', 'pointerleave']) {
+    leiste.addEventListener(art, _los, true);
+  }
+
   leiste.addEventListener('click', e => {
     const feld = e.target.closest('.sb-item');
     if (!feld) return;
+    // Ein sehr kurzer Tipp waere sonst nicht zu sehen: der Zeiger geht wieder
+    // hoch, bevor ein Bild gezeichnet ist.
+    feld.classList.add('sb-tipp');
+    setTimeout(() => feld.classList.remove('sb-tipp'), 130);
     // Der Knopf behaelt sonst den Tastaturfokus und traegt seinen Rahmen mit
     // auf die Detailseite. (Das Nachleuchten des HINTERGRUNDS kam woanders her
     // — siehe `_zeigerartMerken` weiter oben.)

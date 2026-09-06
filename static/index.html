@@ -582,8 +582,12 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
     </div>
-    <!-- Normal: 3-Tage-Trend -->
-    <div class="wx-grid tile-hide-half" id="wxGrid"></div>
+    <!-- Normal: heute ausfuehrlich, danach die naechsten Tage knapp -->
+    <div class="wx-koerper tile-hide-half">
+      <div class="wx-heute" id="wxHeute"></div>
+      <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
+      <div class="wx-grid" id="wxGrid"></div>
+    </div>
     <!-- Half: heute -->
     <div class="tile-show-half wx-half">
       <span class="wx-half-icon" id="wxHalfIcon">·</span>

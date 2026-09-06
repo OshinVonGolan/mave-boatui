@@ -369,6 +369,7 @@ function fetchWaterLevel() {
 }
 
 function _wlBinden() {
+  wischenBinden($('wlCard'), wlStationWeiter);
   const leiste = $('wlStationLeiste');
   if (leiste) leiste.addEventListener('click', e => {
     const k = e.target.closest('[data-index]');
