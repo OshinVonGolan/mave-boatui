@@ -894,7 +894,14 @@ def build_charger_register_frame(reg: int, val: int, size: int = 2,
                                   dst: int = 0xFF) -> tuple[int, bytes]:
     """PGN 61184 – VE.Direct Register Write (commandType=2).
     size=1: 8-Bit-Register (z.B. DeviceMode 0x0200 = un8).
-    size=2: 16-Bit-Register (z.B. 0xEDF0 Absorption).
+    size=2: 16-Bit-Register.
+
+    Registerzuordnung am 06.09.2026 an allen drei Ladern nachgemessen:
+      0xEDF7  Absorptionsspannung  0,01 V
+      0xEDF6  Float-Spannung       0,01 V
+      0xEDF0  max. Ladestrom       0,1 A   (Orion 50,0 / IP43 50,0 / MPPT 15,0)
+    0xEDF0 stand hier frueher als Absorption — das ist der Ladestrom. Ein
+    Spannungswert dorthin geschrieben landet als Strombegrenzung.
     """
     payload = struct.pack('<BBBHH', instance, 2, size, reg, val)
     can_id  = make_can_id(61184, RPI_SOURCE_ADDRESS, dst=dst, priority=3)
