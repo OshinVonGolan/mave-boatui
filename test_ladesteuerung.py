@@ -17,6 +17,13 @@ from unittest import mock
 import charge_control as cc
 
 
+def hafenprofil(absorption, float_v, **hafen):
+    """Einstellungen mit einem eigenen Hafen-Profil (Nummer 2)."""
+    profile = [dict(pr) for pr in cc._DEFAULT_SETTINGS['profile']]
+    profile[1] = {**profile[1], 'absorption_v': absorption, 'float_v': float_v}
+    return {'profile': profile, 'harbor': {'profile_id': 2, **hafen}}
+
+
 class Basis(unittest.TestCase):
     def _regler(self, state=None, settings=None):
         datei = {'state': state or {}, 'settings': settings or {}}
@@ -72,7 +79,7 @@ class HaltenBeiZiel(Basis):
     def test_unter_ziel_wird_geladen(self):
         r = self._regler()
         r.update_soc(60)
-        lade = cc._DEFAULT_SETTINGS['harbor']['absorption_v']
+        lade = cc._DEFAULT_SETTINGS['profile'][1]['absorption_v']
         for d in r.device_setpoints():
             self.assertIs(d['on'], True)
         werte = {d['id']: d['absorption_v'] for d in r.device_setpoints()}
@@ -107,7 +114,7 @@ class HaltenBeiZiel(Basis):
         self.assertAlmostEqual(nach['mppt'], nach['ip43'], places=3)
 
     def test_erhaltung_nie_ueber_absorption(self):
-        r = self._regler(settings={'harbor': {'absorption_v': 13.4, 'float_v': 13.9}})
+        r = self._regler(settings=hafenprofil(13.4, 13.9))
         r.update_soc(60)
         for d in r.device_setpoints():
             self.assertLessEqual(d['float_v'], d['absorption_v'])
@@ -198,7 +205,8 @@ class NachsetzenBeiAbweichung(Basis):
         soll = self._ip43(r)
         r.update_actual_setpoints(soll['absorption_v'], soll['float_v'])
         self.assertFalse(r.update_soc(61))
-        r.update_settings({'harbor': {'absorption_v': 14.0}})
+        r.update_settings({'profile': [{**cc._DEFAULT_SETTINGS['profile'][1],
+                                        'absorption_v': 14.0}]})
         self.assertTrue(r.update_soc(62))
 
     def test_hartnaeckige_abweichung_wird_irgendwann_aufgegeben(self):
@@ -348,8 +356,7 @@ class HaltespannungSelbstErmitteln(Basis):
         self.assertLess(r._state['hold_learned_v'], erster)
 
     def test_nie_ueber_die_absorptionsspannung(self):
-        r = self._haltend({'harbor': {'hold_auto': True, 'absorption_v': 13.25,
-                                      'float_v': 13.2, 'hold_voltage': 13.24}})
+        r = self._haltend(hafenprofil(13.25, 13.2, hold_auto=True, hold_voltage=13.24))
         for _ in range(20):
             r._state['hold_learn_last'] = None
             r._halte_seit = time.monotonic() - 10 * 3600
@@ -367,8 +374,7 @@ class HaltespannungSelbstErmitteln(Basis):
     def test_untergrenze_ueber_obergrenze_gewinnt_die_obergrenze(self):
         # Kaeme aus dem Einstellungs-Endpunkt eine Untergrenze ueber der
         # Absorption, liesse sich die Obergrenze sonst umgehen.
-        r = self._haltend({'harbor': {'hold_auto': True, 'absorption_v': 13.4,
-                                      'float_v': 13.2, 'hold_min_v': 14.0}})
+        r = self._haltend(hafenprofil(13.4, 13.2, hold_auto=True, hold_min_v=14.0))
         self.assertLessEqual(r._haltespannung(), 13.4)
 
     def test_bei_abgeschaltetem_lader_wird_nicht_gelernt(self):
@@ -384,6 +390,108 @@ class HaltespannungSelbstErmitteln(Basis):
             self.assertAlmostEqual(d['absorption_v'], gelernt, places=3)
             self.assertAlmostEqual(d['float_v'],      gelernt, places=3)
         self.assertAlmostEqual(r.status()['hold_voltage_eff'], gelernt, places=3)
+
+
+class Ladeprofile(Basis):
+    """Fünf benannte Profile; Hafen und Vollladung verweisen darauf."""
+
+    def test_hafen_nimmt_sein_profil(self):
+        r = self._regler(settings=hafenprofil(13.9, 13.35))
+        r.update_soc(60)
+        werte = {d['id']: d for d in r.device_setpoints()}
+        self.assertAlmostEqual(werte['mppt']['absorption_v'], 13.9,  places=3)
+        self.assertAlmostEqual(werte['mppt']['float_v'],      13.35, places=3)
+
+    def test_vollladung_nimmt_ihr_profil(self):
+        profile = [dict(pr) for pr in cc._DEFAULT_SETTINGS['profile']]
+        profile[2] = {**profile[2], 'absorption_v': 14.55, 'float_v': 13.6}
+        r = self._regler({'mode': 'full'}, {'profile': profile, 'full': {'profile_id': 3}})
+        for d in r.device_setpoints():
+            self.assertAlmostEqual(d['absorption_v'], 14.55, places=3)
+            self.assertAlmostEqual(d['float_v'],      13.6,  places=3)
+
+    def test_andere_profilnummer_andere_spannung(self):
+        r = self._regler(settings={'harbor': {'profile_id': 1}})
+        r.update_soc(60)
+        werte = {d['id']: d['absorption_v'] for d in r.device_setpoints()}
+        self.assertAlmostEqual(werte['mppt'],
+                               cc._DEFAULT_SETTINGS['profile'][0]['absorption_v'], places=3)
+
+    def test_unbekannte_nummer_faellt_auf_das_erste_profil(self):
+        # Nie None: der Aufrufer rechnet mit Spannungen, und ein Zahlendreher in
+        # den Einstellungen darf die Ladung nicht anhalten.
+        r = self._regler(settings={'harbor': {'profile_id': 99}})
+        r.update_soc(60)
+        werte = {d['id']: d['absorption_v'] for d in r.device_setpoints()}
+        self.assertAlmostEqual(werte['mppt'],
+                               cc._DEFAULT_SETTINGS['profile'][0]['absorption_v'], places=3)
+
+    def test_erhaltung_ueber_absorption_wird_gekappt(self):
+        r = self._regler(settings=hafenprofil(13.4, 13.9))
+        self.assertEqual(r._profil_spannungen(2), (13.4, 13.4))
+
+    def test_halteband_deckelt_auf_das_profil(self):
+        r = self._regler(settings=hafenprofil(13.3, 13.2))
+        self.assertLessEqual(r._halte_grenzen(14.0), 13.3)
+
+
+class AlteStaendeUmstellen(Basis):
+    """Vor dem Umbau trugen harbor und full ihre Spannungen selbst.
+
+    Diese Werte sind vom Eigner eingestellt. Ohne Umstellung wuerde _deep_merge
+    sie stumm verwerfen, weil es nur bekannte Schluessel behaelt.
+    """
+
+    ALT = {'harbor': {'absorption_v': 13.75, 'float_v': 13.25, 'target_soc': 85},
+           'full':   {'absorption_v': 14.55, 'float_v': 13.45}}
+
+    def test_alte_spannungen_landen_in_den_profilen(self):
+        r = self._regler(settings=dict(self.ALT))
+        self.assertAlmostEqual(r._profil(1)['absorption_v'], 14.55, places=3)
+        self.assertAlmostEqual(r._profil(1)['float_v'],      13.45, places=3)
+        self.assertAlmostEqual(r._profil(2)['absorption_v'], 13.75, places=3)
+        self.assertAlmostEqual(r._profil(2)['float_v'],      13.25, places=3)
+
+    def test_die_modi_verweisen_danach_darauf(self):
+        r = self._regler(settings=dict(self.ALT))
+        self.assertEqual(r._settings['harbor']['profile_id'], 2)
+        self.assertEqual(r._settings['full']['profile_id'],   1)
+
+    def test_andere_einstellungen_bleiben(self):
+        r = self._regler(settings=dict(self.ALT))
+        self.assertEqual(r._settings['harbor']['target_soc'], 85)
+
+    def test_neuer_stand_wird_nicht_noch_einmal_umgestellt(self):
+        profile = [dict(pr) for pr in cc._DEFAULT_SETTINGS['profile']]
+        profile[0] = {**profile[0], 'absorption_v': 14.1}
+        r = self._regler(settings={'profile': profile,
+                                   'harbor': {'absorption_v': 99.0}})
+        self.assertAlmostEqual(r._profil(1)['absorption_v'], 14.1, places=3)
+
+
+class KaputteProfillisteWirdRepariert(Basis):
+
+    def test_immer_fuenf_mit_den_nummern_eins_bis_fuenf(self):
+        for kaputt in (None, [], 'Profile', 42, [{'kein': 'profil'}], [{'id': 'zwei'}]):
+            r = self._regler(settings={'profile': kaputt})
+            self.assertEqual([pr['id'] for pr in r._settings['profile']], [1, 2, 3, 4, 5])
+
+    def test_gueltige_eintraege_bleiben_erhalten(self):
+        r = self._regler(settings={'profile': [{'id': 3, 'name': ' Winter ',
+                                                'absorption_v': 14.1, 'float_v': 13.4}]})
+        pr = r._profil(3)
+        self.assertEqual(pr['name'], 'Winter')
+        self.assertAlmostEqual(pr['absorption_v'], 14.1, places=3)
+        # Die uebrigen kommen aus der Vorgabe.
+        self.assertEqual(r._profil(1)['name'], cc._DEFAULT_SETTINGS['profile'][0]['name'])
+
+    def test_leerer_name_faellt_auf_die_vorgabe_zurueck(self):
+        r = self._regler(settings={'profile': [{'id': 2, 'name': '   '}]})
+        self.assertEqual(r._profil(2)['name'], cc._DEFAULT_SETTINGS['profile'][1]['name'])
+
+    def test_langer_name_wird_gekuerzt(self):
+        r = self._regler(settings={'profile': [{'id': 2, 'name': 'x' * 200}]})
+        self.assertLessEqual(len(r._profil(2)['name']), cc._PROFIL_NAME_MAX)
 
 
 if __name__ == '__main__':

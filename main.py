@@ -2717,6 +2717,7 @@ _LADE_GRENZEN: dict[str, tuple[float, float]] = {
     'balance_max_hours':       ( 0.1, 72.0),
     'balance_end_current_a':   ( 0.0, 200.0),
     'solar_priority_offset_v': ( 0.0, 5.0),
+    'profile_id':              ( 1.0, 5.0),
 }
 
 
@@ -2731,6 +2732,14 @@ def _pruefe_ladewerte(patch: dict, pfad: str = '') -> None:
         voll = f'{pfad}.{schluessel}' if pfad else schluessel
         if isinstance(wert, dict):
             _pruefe_ladewerte(wert, voll)
+            continue
+        # Auch in Listen absteigen: die Ladeprofile stehen als Liste von
+        # Objekten im Body. Ohne das waeren genau ihre Spannungen ungeprueft —
+        # also die Werte, die am Ende im Lader landen.
+        if isinstance(wert, list):
+            for i, eintrag in enumerate(wert):
+                if isinstance(eintrag, dict):
+                    _pruefe_ladewerte(eintrag, f'{voll}[{i}]')
             continue
         if schluessel not in _LADE_GRENZEN:
             continue
@@ -2761,6 +2770,18 @@ async def update_charger_settings(body: dict):
             if isinstance(a, (int, float)) and isinstance(f, (int, float)) and a < f:
                 raise HTTPException(400, detail=f'{profil}: absorption_v ({a}) darf nicht '
                                                 f'unter float_v ({f}) liegen')
+    # Dasselbe fuer die Ladeprofile. Der Regler kappt die Erhaltung zwar ohnehin
+    # auf die Absorption, aber eine stumme Korrektur ist die schlechtere Antwort
+    # als eine klare Fehlermeldung an den, der es gerade eintraegt.
+    liste = body.get('profile')
+    if isinstance(liste, list):
+        for i, pr in enumerate(liste):
+            if not isinstance(pr, dict):
+                continue
+            a, f = pr.get('absorption_v'), pr.get('float_v')
+            if isinstance(a, (int, float)) and isinstance(f, (int, float)) and a < f:
+                raise HTTPException(400, detail=f'profile[{i}]: absorption_v ({a}) darf '
+                                                f'nicht unter float_v ({f}) liegen')
     return charge_ctrl.update_settings(body)
 
 
@@ -3049,9 +3070,34 @@ def _spark_bauen() -> dict:
             aus.append(round(summe / anzahl, 2) if anzahl else None)
         return aus
 
+    def _reihe_quelle(feld: str) -> list:
+        """Wie `_reihe`, aber eine fehlende LADEQUELLE zaehlt als 0 W.
+
+        Ein Ladegeraet, das nichts meldet, laedt nicht — bei einer Quelle ist
+        "kein Wert" also tatsaechlich null und nicht "unbekannt". Bei einem
+        Tank waere dieselbe Annahme falsch: der hat einen Stand, auch wenn ihn
+        gerade niemand misst. Deshalb nur hier.
+
+        Der Anlass: das Landstromgeraet meldet sich erst, seit das Kabel
+        dranhaengt — im Verlauf standen die Stunden davor leer. Die Kurve lief
+        deshalb nach links aus (die Anlaufblende in display.js greift, wenn
+        eine Reihe erst mitten im Fenster beginnt), waehrend das Feld "Laden"
+        daneben durchging: dessen Summe gibt es, weil Solar durchgehend 0,0
+        meldet. Zwei Bilder derselben Sache (Eignermeldung).
+
+        Ein Eimer OHNE jeden Wert bleibt leer. Dann lief der Pi nicht, und
+        "null Watt" waere eine Behauptung ueber eine Zeit, von der wir nichts
+        wissen.
+        """
+        aus = []
+        for b in eimer:
+            summe, anzahl = b.get(feld, (0.0, 0))
+            aus.append(round(summe / anzahl, 2) if anzahl else (0.0 if b else None))
+        return aus
+
     def _ladeleistung() -> list:
         """Summe der Ladequellen, wie es die Statusleiste auch anzeigt."""
-        teile = [_reihe(f) for f in ('charger', 'solar1', 'alternator')]
+        teile = [_reihe_quelle(f) for f in ('charger', 'solar1', 'alternator')]
         aus = []
         for i in range(_SPARK_PUNKTE):
             werte = [t[i] for t in teile if t[i] is not None]
@@ -3067,8 +3113,8 @@ def _spark_bauen() -> dict:
               # richtig herum: was hochschlaegt, ist ein Problem.
               'ping': _reihe('ping_ms'), 'down': _reihe('down_mbit'),
               # Je Quelle einzeln, damit das Laden-Feld durchschalten kann.
-              'charger': _reihe('charger'), 'solar1': _reihe('solar1'),
-              'orion': _reihe('orion')}
+              'charger': _reihe_quelle('charger'), 'solar1': _reihe_quelle('solar1'),
+              'orion': _reihe_quelle('orion')}
     # Heizung und Raeume kommen aus dem Hub, nicht aus unserem Puffer.
     serien.update(_heizung_reihen(von, breite))
 

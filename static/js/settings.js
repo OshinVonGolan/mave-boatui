@@ -444,11 +444,68 @@ function _renderChargerStatus() {
     </div>`;
 }
 
+// ── Die fuenf Ladeprofile ───────────────────────────────────────────────────
+//
+// Die Zeilen werden gebaut statt im Markup zu stehen: es sind fuenf gleiche
+// Zeilen mit je drei Feldern, und die Anzahl gehoert zum Regler (_PROFIL_ZAHL),
+// nicht zur Seite. Steht sie nur an einer Stelle, koennen beide nicht
+// auseinanderlaufen.
+
+function _chgProfilZeilen(profile) {
+  const wirt = $('sChgProfileList');
+  if (!wirt) return;
+  const zahl = 'font-size:13px;color:var(--text2)';
+  // .settings-input streckt sich in der Zeile; ohne festes flex-basis werden
+  // die Zahlenfelder so breit wie das Namensfeld und passen nicht zur Kopfzeile.
+  const feld  = 'flex:0 0 92px';
+  const einh  = `${zahl};flex:0 0 10px`;
+  const spalte = 'flex:0 0 110px';   // Feld + Abstand + Einheit
+  const kopf = `<div class="settings-row" style="gap:8px;color:var(--text3);font-size:11px;
+      letter-spacing:.06em;text-transform:uppercase">
+      <span style="flex:1 1 auto;min-width:0">Name</span>
+      <span style="${spalte}">Absorption</span>
+      <span style="${spalte}">Erhaltung</span>
+    </div>`;
+  wirt.innerHTML = kopf + profile.map(pr => `
+    <div class="settings-row" style="gap:8px">
+      <input class="settings-input" id="sChgP${pr.id}Name" type="text" maxlength="40"
+             style="flex:1 1 auto;min-width:0" value="${_esc(pr.name ?? '')}" />
+      <input class="settings-input" id="sChgP${pr.id}Abs" type="number" min="10" max="60"
+             step="0.05" style="${feld}" value="${(pr.absorption_v ?? 0).toFixed(2)}" />
+      <span style="${einh}">V</span>
+      <input class="settings-input" id="sChgP${pr.id}Flt" type="number" min="10" max="60"
+             step="0.05" style="${feld}" value="${(pr.float_v ?? 0).toFixed(2)}" />
+      <span style="${einh}">V</span>
+    </div>`).join('');
+}
+
+function _chgProfilAuswahl(profile) {
+  const eintraege = profile.map(pr =>
+    `<option value="${pr.id}">${_esc(pr.name ?? ('Profil ' + pr.id))}</option>`).join('');
+  for (const id of ['sChgHarborProfile', 'sChgFullProfile']) {
+    const el = $(id);
+    if (el) el.innerHTML = eintraege;
+  }
+}
+
+/** Liest die fuenf Profilzeilen aus dem Formular zurueck. */
+function _chgProfilLesen(profile) {
+  return profile.map(pr => ({
+    id:           pr.id,
+    name:         ($(`sChgP${pr.id}Name`)?.value ?? pr.name ?? '').trim() || `Profil ${pr.id}`,
+    absorption_v: _floatOr($(`sChgP${pr.id}Abs`)?.value, pr.absorption_v ?? 14.4),
+    float_v:      _floatOr($(`sChgP${pr.id}Flt`)?.value, pr.float_v ?? 13.5),
+  }));
+}
+
 function _populateChargerInputs() {
   const s = _chargerStatus?.settings;
   if (!s) return;
-  if ($('sChgHarborAbs'))    $('sChgHarborAbs').value   = s.harbor?.absorption_v  ?? 13.8;
-  if ($('sChgHarborFloat'))  $('sChgHarborFloat').value = s.harbor?.float_v        ?? 13.3;
+  const profile = Array.isArray(s.profile) ? s.profile : [];
+  _chgProfilZeilen(profile);
+  _chgProfilAuswahl(profile);
+  if ($('sChgHarborProfile')) $('sChgHarborProfile').value = String(s.harbor?.profile_id ?? 2);
+  if ($('sChgFullProfile'))   $('sChgFullProfile').value   = String(s.full?.profile_id   ?? 1);
   if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
   if ($('sChgHoldV'))        $('sChgHoldV').value       = s.harbor?.hold_voltage  ?? 13.2;
   if ($('sChgHoldMode'))     $('sChgHoldMode').value    = s.harbor?.hold_mode     ?? 'spannung';
@@ -459,8 +516,6 @@ function _populateChargerInputs() {
     auto.dataset.gebunden = '1';
     auto.addEventListener('change', _chgHoldAutoInfo);
   }
-  if ($('sChgFullAbs'))      $('sChgFullAbs').value     = s.full?.absorption_v     ?? 14.4;
-  if ($('sChgFullFloat'))    $('sChgFullFloat').value   = s.full?.float_v           ?? 13.5;
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
   if ($('sChgBalMinHours'))  $('sChgBalMinHours').value = s.balance_min_hours       ?? 2;
   if ($('sChgBalEndA'))      $('sChgBalEndA').value     = s.balance_end_current_a  ?? 1.0;
@@ -469,11 +524,16 @@ function _populateChargerInputs() {
   if ($('sChgDevOrion'))     $('sChgDevOrion').checked = s.devices?.orion?.enabled ?? false;
   if ($('sChgSolarOffset'))  $('sChgSolarOffset').value = s.solar_priority_offset_v ?? 0.3;
   // live preview — einmalig Listener anhängen
-  ['sChgSolarOffset', 'sChgHarborAbs'].forEach(id => {
+  // Die Vorschau haengt am Solar-Versatz, an der Profilwahl und an den
+  // Absorptionsfeldern der Profile — alle drei aendern das Ergebnis.
+  const beobachten = ['sChgSolarOffset', 'sChgHarborProfile']
+    .concat(profile.map(pr => `sChgP${pr.id}Abs`));
+  beobachten.forEach(id => {
     const el = $(id);
     if (el && !el.dataset.previewBound) {
       el.dataset.previewBound = '1';
-      el.addEventListener('input', _updateOffsetPreview);
+      el.addEventListener('input',  _updateOffsetPreview);
+      el.addEventListener('change', _updateOffsetPreview);
     }
   });
   _updateOffsetPreview();
@@ -514,7 +574,9 @@ function _updateOffsetPreview() {
   if (!el) return;
   // parseFloat liefert bei leerem Feld NaN (nicht null) — `?? 0.3` griff hier
   // nie und die Vorschau zeigte "NaN V".
-  const harborAbs = _floatOr($('sChgHarborAbs')?.value, 13.8);
+  // Die Absorption steht nicht mehr im Hafen-Block, sondern im gewaehlten Profil.
+  const pid       = _intOr($('sChgHarborProfile')?.value, 2);
+  const harborAbs = _floatOr($(`sChgP${pid}Abs`)?.value, 13.8);
   const offset    = _floatOr($('sChgSolarOffset')?.value, 0.3);
   el.textContent  = `Solar: ${harborAbs.toFixed(2)} V · Nicht-Solar: ${(harborAbs - offset).toFixed(2)} V (nur Hafen-Modus)`;
 }
@@ -523,21 +585,15 @@ async function saveChargerSettings() {
   const fb = $('settingsFeedbackLaden');
   const body = {
     harbor:  {
-      absorption_v: _floatOr($('sChgHarborAbs').value,   13.8),
-      float_v:      _floatOr($('sChgHarborFloat').value, 13.3),
       target_soc:   _intOr($('sChgTargetSoc')?.value,    80),
       hold_voltage: _floatOr($('sChgHoldV')?.value,      13.2),
       hold_mode:    $('sChgHoldMode')?.value === 'aus' ? 'aus' : 'spannung',
       hold_auto:    $('sChgHoldAuto')?.checked === true,
+      profile_id:   _intOr($('sChgHarborProfile')?.value, 2),
     },
-    full:    {
-      absorption_v: _floatOr($('sChgFullAbs').value,   14.4),
-      float_v:      _floatOr($('sChgFullFloat').value, 13.5),
-    },
-    balance: {
-      absorption_v: _floatOr($('sChgFullAbs').value,   14.4),
-      float_v:      _floatOr($('sChgFullFloat').value, 13.5),
-    },
+    full:    { profile_id: _intOr($('sChgFullProfile')?.value, 1) },
+    profile: _chgProfilLesen(Array.isArray(_chargerStatus?.settings?.profile)
+                             ? _chargerStatus.settings.profile : []),
     balance_interval_days:  _intOr($('sChgBalInterval').value,     30),
     balance_min_hours:      _floatOr($('sChgBalMinHours').value,   2),
     balance_end_current_a:  _floatOr($('sChgBalEndA').value,       1.0),

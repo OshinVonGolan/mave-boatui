@@ -19,14 +19,23 @@ _DEFAULT_SETTINGS: dict = {
     'balance_target_soc':     100,     # ab diesem SOC gilt die Bank als durchbalanciert
     'balance_end_current_a':    1.0,   # Schweifstrom-Kriterium (nur mit übergebenem Strom)
     'solar_priority_offset_v':  0.3,   # Nicht-Solar-Geräte bekommen Absorption − Offset
+    # Fünf benannte Ladeprofile. Hafen und Vollladung verweisen darauf, statt
+    # eigene Spannungen zu halten — so steht jede Spannung genau einmal, und
+    # dasselbe Profil lässt sich an beiden Stellen verwenden.
+    'profile': [
+        {'id': 1, 'name': 'Vollladung', 'absorption_v': 14.4, 'float_v': 13.5},
+        {'id': 2, 'name': 'Hafen',      'absorption_v': 13.8, 'float_v': 13.3},
+        {'id': 3, 'name': 'Profil 3',   'absorption_v': 14.0, 'float_v': 13.4},
+        {'id': 4, 'name': 'Profil 4',   'absorption_v': 13.6, 'float_v': 13.3},
+        {'id': 5, 'name': 'Profil 5',   'absorption_v': 14.2, 'float_v': 13.5},
+    ],
     'devices': {
         'ip43':  {'enabled': True,  'is_solar': False, 'label': 'Smart IP43',  'instance': 1},
         'mppt':  {'enabled': True,  'is_solar': True,  'label': 'MPPT 75/15',  'instance': 3},
         'orion': {'enabled': False, 'is_solar': False, 'label': 'Orion XS',    'instance': 0},
     },
     'harbor':  {
-        'absorption_v':      13.8,   # Ladeprofil: Absorption bis der Ziel-SOC steht
-        'float_v':           13.3,   # Ladeprofil: Erhaltung
+        'profile_id':         2,     # Ladeprofil, bis der Ziel-SOC steht
         'hold_voltage':      13.2,   # Halteprofil: Absorption = Erhaltung = dieser Wert
         'target_soc':        80,     # Ziel-SOC (%)
         'soc_hysteresis_pct': 3,     # Hysterese: zurück ins Laden erst bei Ziel − diesem Wert
@@ -48,7 +57,7 @@ _DEFAULT_SETTINGS: dict = {
         'hold_quiet_a':       2.0,   # |Strom| darunter gilt die Bank als eingependelt
         'hold_interval_h':   24.0,   # hoechstens ein Schritt in diesem Abstand
     },
-    'full':    {'absorption_v': 14.4, 'float_v': 13.5},
+    'full':    {'profile_id': 1},
     'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
 }
 
@@ -116,6 +125,12 @@ _NACHSETZ_MAX       = 3
 # Zulässige Werte für harbor.hold_mode.
 _HALTEARTEN = ('spannung', 'aus')
 
+# So viele Ladeprofile gibt es, fest. Die Liste hat immer genau diese Länge:
+# eine Auswahl, die je nach gespeichertem Stand mal drei und mal fünf Einträge
+# hat, ist in der Oberfläche schwerer zu bedienen als eine feste.
+_PROFIL_ZAHL   = 5
+_PROFIL_NAME_MAX = 40
+
 # Totband der Selbstermittlung in SOC-Prozentpunkten. Enger lohnt nicht: die
 # LiFePO4-Kennlinie ist so flach, dass ein Prozentpunkt bereits im Rauschen der
 # SOC-Schaetzung des BMS liegt.
@@ -161,8 +176,44 @@ class ChargeController:
             log.warning('Unbekannter Lademodus %r — zurueck auf %s',
                         self._state.get('mode'), _DEFAULT_STATE['mode'])
             self._state['mode'] = _DEFAULT_STATE['mode']
-        self._settings = self._deep_merge(_DEFAULT_SETTINGS,
-                                          settings if isinstance(settings, dict) else {})
+        settings = self._umstellen(settings if isinstance(settings, dict) else {})
+        self._settings = self._deep_merge(_DEFAULT_SETTINGS, settings)
+        self._settings['profile'] = self._profile_saeubern(self._settings.get('profile'))
+
+    @staticmethod
+    def _umstellen(roh: dict) -> dict:
+        """Alte Stände auf die Profilliste heben.
+
+        Bis zum Umbau trugen `harbor` und `full` ihre Spannungen selbst. Diese
+        Werte sind vom Eigner eingestellt und duerfen nicht verlorengehen — sie
+        wandern in Profil 2 (Hafen) und Profil 1 (Vollladung), und die beiden
+        Modi verweisen darauf. Ohne das griffe _deep_merge, das nur bekannte
+        Schluessel behaelt, und die alten Spannungen waeren stumm weg.
+
+        Laeuft nur, solange keine Profilliste da ist — danach ist der Stand neu
+        und wird nicht noch einmal angefasst.
+        """
+        if not isinstance(roh, dict) or isinstance(roh.get('profile'), list):
+            return roh
+        alt_h = roh.get('harbor') if isinstance(roh.get('harbor'), dict) else {}
+        alt_f = roh.get('full')   if isinstance(roh.get('full'), dict)   else {}
+        hat_alt = any(k in d for d in (alt_h, alt_f) for k in ('absorption_v', 'float_v'))
+        if not hat_alt:
+            return roh
+        profile = [dict(pr) for pr in _DEFAULT_SETTINGS['profile']]
+        for ziel, quelle in ((profile[0], alt_f), (profile[1], alt_h)):
+            for k in ('absorption_v', 'float_v'):
+                if isinstance(quelle.get(k), (int, float)) and not isinstance(quelle.get(k), bool):
+                    ziel[k] = float(quelle[k])
+        neu = dict(roh)
+        neu['profile'] = profile
+        neu['harbor']  = {**alt_h, 'profile_id': 2}
+        neu['full']    = {**alt_f, 'profile_id': 1}
+        log.info('Ladeeinstellungen auf Profile umgestellt: '
+                 'Profil 1 = %.2f/%.2f V (Vollladung), Profil 2 = %.2f/%.2f V (Hafen)',
+                 profile[0]['absorption_v'], profile[0]['float_v'],
+                 profile[1]['absorption_v'], profile[1]['float_v'])
+        return neu
 
     @staticmethod
     def _deep_merge(base: dict, overlay: dict) -> dict:
@@ -228,6 +279,63 @@ class ChargeController:
             return False
         return bool(prev) if prev is not None else False   # unbekannt im Band → laden
 
+    def _profile(self) -> list[dict]:
+        liste = self._settings.get('profile')
+        return liste if isinstance(liste, list) else _DEFAULT_SETTINGS['profile']
+
+    def _profil(self, pid) -> dict:
+        """Das Profil zu einer Nummer — oder das erste, wenn die Nummer nichts trifft.
+
+        Nie None: der Aufrufer rechnet mit Spannungen, und ein fehlendes Profil
+        (geloescht, nie angelegt, Zahlendreher in den Einstellungen) darf die
+        Ladung nicht anhalten. Das erste Profil ist die Vollladung und damit die
+        sichere Seite — lieber zu viel geladen als der Lader steht.
+        """
+        liste = self._profile()
+        for pr in liste:
+            if isinstance(pr, dict) and pr.get('id') == pid:
+                return pr
+        return liste[0] if liste else _DEFAULT_SETTINGS['profile'][0]
+
+    def _profil_spannungen(self, pid) -> tuple[float, float]:
+        pr    = self._profil(pid)
+        abs_v = _num(pr.get('absorption_v'), 14.4)
+        flt_v = _num(pr.get('float_v'),      13.5)
+        # Erhaltung nie ueber Absorption — sonst laedt der Lader in der
+        # Erhaltungsphase haerter als in der Absorption.
+        return abs_v, min(flt_v, abs_v)
+
+    @staticmethod
+    def _profile_saeubern(liste) -> list[dict]:
+        """Macht aus dem, was gespeichert war, eine brauchbare Profilliste.
+
+        Die Liste kommt aus einer Datei und aus einem PATCH-Endpunkt. Fehlt ein
+        Eintrag, ist er kein Objekt oder trägt er eine unbrauchbare Nummer, wird
+        er durch die Vorgabe ersetzt — die Reihenfolge der Nummern 1..N steht
+        fest, damit eine Auswahl in der Oberfläche stabil bleibt.
+        """
+        vorgabe = _DEFAULT_SETTINGS['profile']
+        roh     = liste if isinstance(liste, list) else []
+        nach_id = {}
+        for e in roh:
+            if isinstance(e, dict) and isinstance(e.get('id'), int) and not isinstance(e.get('id'), bool):
+                nach_id[e['id']] = e
+        sauber = []
+        for i in range(_PROFIL_ZAHL):
+            pid = i + 1
+            v   = vorgabe[i] if i < len(vorgabe) else vorgabe[-1]
+            e   = nach_id.get(pid, {})
+            name = e.get('name')
+            if not isinstance(name, str) or not name.strip():
+                name = v['name']
+            sauber.append({
+                'id':           pid,
+                'name':         name.strip()[:_PROFIL_NAME_MAX],
+                'absorption_v': _num(e.get('absorption_v'), v['absorption_v']),
+                'float_v':      _num(e.get('float_v'),      v['float_v']),
+            })
+        return sauber
+
     def _haltespannung(self) -> float:
         """Die Spannung, auf der im Hafen-Modus gehalten wird.
 
@@ -254,7 +362,7 @@ class ChargeController:
         gewinnt die Obergrenze, sonst liesse sich die Grenze umgehen.
         """
         h     = self._settings.get('harbor', {})
-        oben  = _num(h.get('absorption_v'), 13.8)
+        oben  = self._profil_spannungen(h.get('profile_id'))[0]
         unten = min(_num(h.get('hold_min_v'), 12.8), oben)
         return round(min(max(v, unten), oben), 3)
 
@@ -267,8 +375,7 @@ class ChargeController:
         Geschrieben wird deshalb nur beim Wechsel zwischen Laden und Halten.
         """
         h = self._settings.get('harbor', {})
-        abs_v = _num(h.get('absorption_v'), 13.8)
-        flt_v = _num(h.get('float_v'),      13.3)
+        abs_v, flt_v = self._profil_spannungen(h.get('profile_id'))
         if not holding:
             return abs_v, flt_v, True
         art = h.get('hold_mode')
@@ -302,6 +409,8 @@ class ChargeController:
             'harbor_voltage':      harbor_v,
             'harbor_holding':      self._state.get('harbor_holding'),
             'hold_voltage_eff':    self._haltespannung(),
+            'profile_name':        self._profil(
+                self._settings.get(self._state['mode'], {}).get('profile_id')).get('name'),
             'hold_learned_v':      self._state.get('hold_learned_v'),
             'hold_learn_last':     self._state.get('hold_learn_last'),
             'last_balance':        self._state['last_balance'],
@@ -356,8 +465,11 @@ class ChargeController:
                 })
             return result
 
-        abs_v  = preset['absorption_v']
-        flt_v  = preset['float_v']
+        if mode == 'full':
+            abs_v, flt_v = self._profil_spannungen(preset.get('profile_id'))
+        else:
+            abs_v = _num(preset.get('absorption_v'), 14.4)
+            flt_v = _num(preset.get('float_v'),      14.4)
         # Kein Solar-Offset außerhalb des Hafen-Modus
         result = []
         for dev_id, dev in self._settings.get('devices', {}).items():
@@ -608,6 +720,7 @@ class ChargeController:
         wird. Das kann Tage dauern.
         """
         self._settings          = self._deep_merge(self._settings, patch)
+        self._settings['profile'] = self._profile_saeubern(self._settings.get('profile'))
         self._nachsetzen        = True
         self._nachsetz_zeit     = None
         self._nachsetz_zaehler  = 0
@@ -709,7 +822,11 @@ class ChargeController:
             return 'custom'
         for name in ('harbor', 'full', 'balance'):
             p = self._settings.get(name, {})
-            if (abs(av - p.get('absorption_v', 0)) < 0.06 and
-                    abs(fv - p.get('float_v', 0)) < 0.06):
+            if name == 'balance':
+                a = _num(p.get('absorption_v'), 0.0)
+                f = _num(p.get('float_v'),      0.0)
+            else:
+                a, f = self._profil_spannungen(p.get('profile_id'))
+            if abs(av - a) < 0.06 and abs(fv - f) < 0.06:
                 return name
         return 'custom'
