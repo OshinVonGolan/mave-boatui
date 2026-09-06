@@ -101,6 +101,38 @@ const HZ_ZUSTAND = {
 // Ueberall dieselben drei Woerter — am Heizgeraet wie am Raumgeblaese.
 const HZ_MODUS = { off: 'Aus', auto: 'Automatik', manual: 'Manuell' };
 
+// Kurzform fuer die Kachel. Dort steht die Betriebsart neben der Drehzahl und
+// muss in eine Rasterspalte passen — "Automatik" waere dort zu lang.
+const HZ_FAN_KURZ = { off: 'Aus', auto: 'Auto', manual: 'Hand' };
+
+// Spaltenaufteilung und Optik des Geblaese-Felds stehen hier inline statt in
+// style.css: an der Stilvorlage arbeitet gerade eine zweite Sitzung, und ein
+// Commit haette ihre Aenderungen mitgenommen. Gehoert bei Gelegenheit zu
+// .hz-raum in die Stilvorlage.
+const HZ_RAUM_SPALTEN = 'grid-template-columns:minmax(0,1fr) auto auto auto auto 14px';
+const HZ_FAN_STIL     = 'display:flex;align-items:baseline;gap:4px;color:var(--text3);font-size:11px';
+const HZ_FAN_ZAHL     = 'color:var(--text2);font-weight:600;font-size:13px';
+
+/**
+ * Betriebsart und Drehzahl des Raumgeblaeses, kurz genug fuer die Kachel.
+ *
+ * Die Betriebsart kommt wie auf der Detailseite aus dem erwarteten Wert, falls
+ * gerade umgeschaltet wurde — sonst haenge die Kachel bis zur naechsten Antwort
+ * der Anlage der Bedienung hinterher.
+ *
+ * Ein Raum, der sich nicht meldet, zeigt gar nichts: seine letzte Drehzahl
+ * waere ein Wert von vorhin und saehe aus wie ein laufendes Geblaese.
+ */
+function _hzGeblaese(r) {
+  if (r.conn !== 'online') return '';
+  const modus = _hzErwartetWert('fan' + r.id) ?? r.fanMode;
+  if (modus === 'off') return HZ_FAN_KURZ.off;
+  const kurz = HZ_FAN_KURZ[modus] || '';
+  const pct  = r.fanPercent;
+  if (pct == null) return kurz;
+  return `${kurz}<span style="${HZ_FAN_ZAHL}">${pct}</span>%`;
+}
+
 const HZ_CONN = {
   online:     { text: 'verbunden', farbe: 'var(--green)' },
   connecting: { text: 'verbindet', farbe: 'var(--yellow)' },
@@ -200,11 +232,12 @@ function updateHeizungKachel() {
   const raeume = alleRaeume.map(r => {
     const aus = !(_hzErwartetWert('an' + r.id) ?? (r.enabled !== false));
     const kalt = r.conn !== 'online';
-    return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}">
+    return `<div class="hz-raum${aus ? ' hz-raum-aus' : ''}" style="${HZ_RAUM_SPALTEN}">
       <span class="hz-raum-name">${_esc(r.name)}</span>
       <span class="hz-raum-ist">${_hzT(r.roomTemp)}<i>°</i></span>
       <span class="hz-raum-pfeil">→</span>
       <span class="hz-raum-soll">${_hzT(_hzSollAnzeige(r))}<i>°</i></span>
+      <span style="${HZ_FAN_STIL}">${_hzGeblaese(r)}</span>
       <span class="hz-raum-flag">${
         kalt ? '<span class="hz-punkt" style="background:var(--text3)" title="nicht verbunden"></span>'
         : aus ? '<span class="hz-aus-txt">aus</span>'
