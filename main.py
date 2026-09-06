@@ -692,7 +692,10 @@ async def broadcast(data: dict):
     _alarme_melden()
     # Hafen-SOC-Regelung: bei Zustandswechsel sofort neue Setpoints senden
     soc = data.get('battery', {}).get('soc')
-    if charge_ctrl.update_soc(soc):
+    # Den Batteriestrom mitgeben: die Selbstermittlung der Haltespannung misst
+    # nur, wenn die Bank eingependelt ist, und das Schweifstrom-Kriterium des
+    # Balance-Laufs greift ohne ihn ebenfalls nicht.
+    if charge_ctrl.update_soc(soc, data.get('battery', {}).get('current')):
         _apply_charger_setpoints(charge_ctrl.device_setpoints())
     batt = data.get('battery', {})
     now = time.time()
@@ -2700,10 +2703,14 @@ _LADE_GRENZEN: dict[str, tuple[float, float]] = {
     'absorption_v':            (10.0, 60.0),
     'float_v':                 (10.0, 60.0),
     'hold_voltage':            (10.0, 60.0),
-    'off_voltage':             ( 0.0, 60.0),
     'target_soc':              ( 0.0, 100.0),
-    'soc_ramp_pct':            ( 0.0, 100.0),
     'soc_hysteresis_pct':      ( 0.0, 50.0),
+    # Selbstermittlung der Haltespannung
+    'hold_min_v':              (10.0, 60.0),
+    'hold_step_v':             ( 0.001, 1.0),
+    'hold_settle_h':           ( 0.1, 48.0),
+    'hold_quiet_a':            ( 0.0, 200.0),
+    'hold_interval_h':         ( 0.1, 720.0),
     'balance_target_soc':      ( 0.0, 100.0),
     'balance_interval_days':   ( 1.0, 365.0),
     'balance_min_hours':       ( 0.0, 48.0),
@@ -2739,6 +2746,13 @@ async def update_charger_settings(body: dict):
     if not isinstance(body, dict):
         raise HTTPException(400, detail='Objekt erwartet')
     _pruefe_ladewerte(body)
+    # hold_auto steuert, ob der Regler selbst an den Ladespannungen dreht —
+    # das muss ein echter Wahrheitswert sein. Ein Text waere in Python wahr,
+    # und ein versehentliches "false" haette die Selbstermittlung eingeschaltet.
+    for profil in ('harbor',):
+        p = body.get(profil)
+        if isinstance(p, dict) and 'hold_auto' in p and not isinstance(p['hold_auto'], bool):
+            raise HTTPException(400, detail=f'{profil}.hold_auto: true oder false erwartet')
     # Absorption darf nicht unter Float liegen — das ergibt kein sinnvolles Ladeprofil.
     for profil in ('harbor', 'full', 'balance'):
         p = body.get(profil)

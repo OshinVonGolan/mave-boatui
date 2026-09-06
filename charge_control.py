@@ -38,6 +38,15 @@ _DEFAULT_SETTINGS: dict = {
         #   'aus'      — Lader abschalten. Harter Stopp, aber jedes
         #                Wiedereinschalten beginnt erneut mit Bulk.
         'hold_mode':         'spannung',
+        # Haltespannung selbst ermitteln statt fest vorzugeben. Aus, bis sie
+        # jemand einschaltet — eine Regelung, die von sich aus an den
+        # Ladespannungen dreht, darf nicht die Vorgabe sein.
+        'hold_auto':         False,
+        'hold_min_v':        12.8,   # Untergrenze der Selbstermittlung
+        'hold_step_v':        0.02,  # Schrittweite je Anpassung
+        'hold_settle_h':      3.0,   # so lange muss gehalten worden sein
+        'hold_quiet_a':       2.0,   # |Strom| darunter gilt die Bank als eingependelt
+        'hold_interval_h':   24.0,   # hoechstens ein Schritt in diesem Abstand
     },
     'full':    {'absorption_v': 14.4, 'float_v': 13.5},
     'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
@@ -56,6 +65,8 @@ _DEFAULT_STATE: dict = {
     'actual_absorption_v': None,
     'actual_float_v':      None,
     'actual_last_read':    None,
+    'hold_learned_v':      None,    # selbst ermittelte Haltespannung
+    'hold_learn_last':     None,    # Zeitpunkt der letzten Anpassung
 }
 
 
@@ -82,11 +93,18 @@ _SOLL_TOLERANZ_V = 0.05
 # Zulässige Werte für harbor.hold_mode.
 _HALTEARTEN = ('spannung', 'aus')
 
+# Totband der Selbstermittlung in SOC-Prozentpunkten. Enger lohnt nicht: die
+# LiFePO4-Kennlinie ist so flach, dass ein Prozentpunkt bereits im Rauschen der
+# SOC-Schaetzung des BMS liegt.
+_LERN_TOLERANZ_PCT = 1.0
+
 
 class ChargeController:
     def __init__(self):
         self._last_soc: float | None = None
         self._nachsetzen: bool = False               # Rückmeldung wich ab → neu senden
+        self._halte_seit: float | None = None        # monoton, Beginn des aktuellen Haltens
+        self._halte_geladen: bool = False            # waehrend des Haltens floss Ladung
         self._last_written: str | None = None        # zuletzt auf Disk geschriebener Stand
         self._balance_mono: float | None = None      # Start des laufenden Balance-Laufs (monoton)
         # _save() wird aus zwei Richtungen aufgerufen: aus dem Event-Loop
@@ -185,6 +203,36 @@ class ChargeController:
             return False
         return bool(prev) if prev is not None else False   # unbekannt im Band → laden
 
+    def _haltespannung(self) -> float:
+        """Die Spannung, auf der im Hafen-Modus gehalten wird.
+
+        Entweder die eingestellte oder die selbst ermittelte — umschaltbar über
+        harbor.hold_auto. Solange noch nichts ermittelt wurde, gilt die
+        eingestellte als Startwert; die Selbstermittlung geht von dort aus.
+        """
+        h       = self._settings.get('harbor', {})
+        manuell = _num(h.get('hold_voltage'), 13.2)
+        if h.get('hold_auto') is not True:
+            return manuell
+        gelernt = self._state.get('hold_learned_v')
+        if isinstance(gelernt, bool) or not isinstance(gelernt, (int, float)):
+            return self._halte_grenzen(manuell)
+        return self._halte_grenzen(float(gelernt))
+
+    def _halte_grenzen(self, v: float) -> float:
+        """Haelt die Haltespannung im erlaubten Band.
+
+        Nach oben begrenzt die Absorptionsspannung des Hafen-Profils: die
+        Selbstermittlung darf nie mehr verlangen als die Ladephase selbst.
+        Nach unten hold_min_v. Beide Werte kommen ungeprueft aus dem
+        Einstellungs-Endpunkt — steht die Untergrenze ueber der Obergrenze,
+        gewinnt die Obergrenze, sonst liesse sich die Grenze umgehen.
+        """
+        h     = self._settings.get('harbor', {})
+        oben  = _num(h.get('absorption_v'), 13.8)
+        unten = min(_num(h.get('hold_min_v'), 12.8), oben)
+        return round(min(max(v, unten), oben), 3)
+
     def _harbor_profile(self, holding: bool) -> tuple[float, float, bool]:
         """Die Sollwerte des Hafen-Modus: (Absorption, Erhaltung, Lader ein).
 
@@ -205,7 +253,7 @@ class ChargeController:
             # Sollwerte unverändert stehen lassen, nur abschalten — so muss beim
             # Wiedereinschalten nichts ins Flash zurückgeschrieben werden.
             return abs_v, flt_v, False
-        hold_v = _num(h.get('hold_voltage'), 13.2)
+        hold_v = self._haltespannung()
         return hold_v, hold_v, True
 
     def _harbor_voltage(self, soc: float, holding: bool | None = None) -> float:
@@ -228,6 +276,9 @@ class ChargeController:
             'mode':                self._state['mode'],
             'harbor_voltage':      harbor_v,
             'harbor_holding':      self._state.get('harbor_holding'),
+            'hold_voltage_eff':    self._haltespannung(),
+            'hold_learned_v':      self._state.get('hold_learned_v'),
+            'hold_learn_last':     self._state.get('hold_learn_last'),
             'last_balance':        self._state['last_balance'],
             'balance_start':       self._state['balance_start'],
             'balance_hours':       self._balance_hours(),
@@ -331,15 +382,112 @@ class ChargeController:
 
         prev_holding = self._state.get('harbor_holding')
         holding      = self._holding_for(soc)
+
+        # Erst lernen, dann umschalten: der Lernschritt braucht den bisherigen
+        # Zustand, und faellt die Bank gerade aus dem Halten, ist genau das das
+        # Signal, dass die Haltespannung zu niedrig war.
+        gelernt = self._lernen(soc, current_a, prev_holding, holding)
+
         if holding != prev_holding:
             self._state['harbor_holding'] = holding
+            self._halte_seit    = time.monotonic() if holding else None
+            self._halte_geladen = False
             self._save()
             abs_v, flt_v, ein = self._harbor_profile(holding)
             log.info('Hafen: SOC=%.1f%% → %s (%.2f/%.2f V, Lader %s)', soc,
                      'Halten' if holding else 'Laden', abs_v, flt_v,
                      'ein' if ein else 'aus')
             return True
-        return nachsetzen
+        return gelernt or nachsetzen
+
+    # ── Selbstermittlung der Haltespannung ──────────────────────────────────
+    #
+    # Kein Modell, sondern eine langsame Rueckkopplung: gemessen wird der
+    # Ladezustand, den die Bank bei der aktuellen Haltespannung tatsaechlich
+    # annimmt, und die Spannung wird um einen kleinen Schritt nachgezogen.
+    # Nachvollziehbar, ohne Trainingsdaten, und auf einem Pi Zero bezahlbar.
+    #
+    # Zwei Signale:
+    #   1. Die Bank haelt und ist eingependelt (Strom klein, lange genug
+    #      gehalten) → Ladezustand mit dem Ziel vergleichen.
+    #   2. Die Bank faellt aus dem Halteband heraus, obwohl geladen werden
+    #      konnte → die Haltespannung traegt nicht, einen Schritt hoch.
+    #
+    # Die LiFePO4-Kennlinie ist flach: mehr als etwa +-5 % ist ueber die
+    # Spannung nicht zu treffen, und jeder Schritt braucht Stunden. Das
+    # konvergiert ueber Tage — genau dafuer ist es gedacht.
+
+    def _lernen(self, soc: float, current_a: float | None,
+                prev: bool | None, holding: bool) -> bool:
+        """Zieht die Haltespannung nach. True = neue Sollwerte senden."""
+        h = self._settings.get('harbor', {})
+        if h.get('hold_auto') is not True:
+            return False
+        if h.get('hold_mode') == 'aus':
+            # Bei abgeschaltetem Lader sagt die Spannung nichts ueber den
+            # Ladezustand aus — dann gibt es auch nichts zu lernen.
+            return False
+
+        jetzt = time.monotonic()
+        ruhig = _num(h.get('hold_quiet_a'), 2.0)
+        reif  = _num(h.get('hold_settle_h'), 3.0)
+
+        if holding and prev:
+            if self._halte_seit is None:
+                self._halte_seit = jetzt
+                return False
+            if current_a is not None and abs(current_a) <= ruhig:
+                # Der Lader traegt die Last, die Bank wird nicht entladen.
+                self._halte_geladen = True
+            if (jetzt - self._halte_seit) / 3600.0 < reif:
+                return False
+            if current_a is None or abs(current_a) > ruhig:
+                return False                       # noch nicht eingependelt
+            ziel = _num(h.get('target_soc'), 80)
+            if soc > ziel + _LERN_TOLERANZ_PCT:
+                return self._halte_schritt(-1, 'Ladezustand %.1f %% über dem Ziel' % soc)
+            if soc < ziel - _LERN_TOLERANZ_PCT:
+                return self._halte_schritt(+1, 'Ladezustand %.1f %% unter dem Ziel' % soc)
+            return False
+
+        if prev and not holding:
+            # Aus dem Halteband gefallen. Nur auswerten, wenn waehrend des
+            # Haltens ueberhaupt Ladung floss — sonst war schlicht kein
+            # Landstrom da, und die Haltespannung kann nichts dafuer.
+            if self._halte_seit is None or not self._halte_geladen:
+                return False
+            if (jetzt - self._halte_seit) / 3600.0 < reif:
+                return False
+            return self._halte_schritt(+1, 'Ladezustand unter das Halteband gefallen')
+
+        return False
+
+    def _halte_schritt(self, richtung: int, grund: str) -> bool:
+        """Einen Schritt gehen, sofern der Mindestabstand eingehalten ist."""
+        h       = self._settings.get('harbor', {})
+        abstand = _num(h.get('hold_interval_h'), 24.0)
+        letzte  = self._state.get('hold_learn_last')
+        if letzte:
+            try:
+                seither = (datetime.now() - datetime.fromisoformat(letzte)).total_seconds() / 3600.0
+            except (TypeError, ValueError):
+                seither = abstand            # unlesbar → nicht blockieren
+            if 0 <= seither < abstand:
+                # Negatives seither heisst Uhrensprung nach hinten (der Pi hat
+                # keine Echtzeituhr) — dann lieber zulassen als ewig sperren.
+                return False
+        alt = self._haltespannung()
+        neu = self._halte_grenzen(alt + richtung * _num(h.get('hold_step_v'), 0.02))
+        if abs(neu - alt) < 1e-9:
+            return False                     # an der Grenze angekommen
+        self._state['hold_learned_v']  = neu
+        self._state['hold_learn_last'] = datetime.now().isoformat()
+        # Uhr neu stellen: der naechste Schritt darf erst nach erneutem
+        # Einpendeln kommen, sonst rutscht die Spannung in einem Zug durch.
+        self._halte_seit = time.monotonic()
+        self._save()
+        log.info('Haltespannung selbst ermittelt: %.2f → %.2f V (%s)', alt, neu, grund)
+        return True
 
     def set_mode(self, mode: str) -> dict:
         if mode not in _MODI:

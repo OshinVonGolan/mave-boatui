@@ -452,6 +452,13 @@ function _populateChargerInputs() {
   if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
   if ($('sChgHoldV'))        $('sChgHoldV').value       = s.harbor?.hold_voltage  ?? 13.2;
   if ($('sChgHoldMode'))     $('sChgHoldMode').value    = s.harbor?.hold_mode     ?? 'spannung';
+  if ($('sChgHoldAuto'))     $('sChgHoldAuto').checked  = s.harbor?.hold_auto === true;
+  _chgHoldAutoInfo();
+  const auto = $('sChgHoldAuto');
+  if (auto && !auto.dataset.gebunden) {
+    auto.dataset.gebunden = '1';
+    auto.addEventListener('change', _chgHoldAutoInfo);
+  }
   if ($('sChgFullAbs'))      $('sChgFullAbs').value     = s.full?.absorption_v     ?? 14.4;
   if ($('sChgFullFloat'))    $('sChgFullFloat').value   = s.full?.float_v           ?? 13.5;
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
@@ -470,6 +477,36 @@ function _populateChargerInputs() {
     }
   });
   _updateOffsetPreview();
+}
+
+/**
+ * Sagt neben dem Schalter, woher die Haltespannung gerade kommt.
+ *
+ * Bei eingeschalteter Selbstermittlung steht dort der ermittelte Wert und wann
+ * er zuletzt nachgezogen wurde — sonst sieht man nur ein Feld, das sich nicht
+ * mehr auswirkt, und weiss nicht, was der Regler tatsaechlich benutzt.
+ */
+function _chgHoldAutoInfo() {
+  const el = $('sChgHoldAutoInfo');
+  if (!el) return;
+  if (!$('sChgHoldAuto')?.checked) {
+    el.textContent = 'Haltespannung wird oben von Hand gesetzt';
+    el.style.color = 'var(--text3)';
+    return;
+  }
+  const d = _chargerStatus;
+  const v = d?.hold_voltage_eff;
+  const gelernt = d?.hold_learned_v;
+  const wann = d?.hold_learn_last ? new Date(d.hold_learn_last).toLocaleDateString('de-DE') : null;
+  el.style.color = 'var(--text2)';
+  // Dezimalkomma wie in den Zahlenfeldern daneben, die der Browser deutsch
+  // formatiert — sonst steht in einer Zeile 13,2 und in der naechsten 13.16.
+  const kom = x => x.toFixed(2).replace('.', ',');
+  if (gelernt == null) {
+    el.textContent = `startet bei ${kom(v ?? 0)} V, zieht sich in 0,02-V-Schritten nach`;
+  } else {
+    el.textContent = `ermittelt: ${kom(gelernt)} V` + (wann ? ` (zuletzt ${wann})` : '');
+  }
 }
 
 function _updateOffsetPreview() {
@@ -491,6 +528,7 @@ async function saveChargerSettings() {
       target_soc:   _intOr($('sChgTargetSoc')?.value,    80),
       hold_voltage: _floatOr($('sChgHoldV')?.value,      13.2),
       hold_mode:    $('sChgHoldMode')?.value === 'aus' ? 'aus' : 'spannung',
+      hold_auto:    $('sChgHoldAuto')?.checked === true,
     },
     full:    {
       absorption_v: _floatOr($('sChgFullAbs').value,   14.4),

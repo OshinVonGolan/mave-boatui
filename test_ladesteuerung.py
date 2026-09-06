@@ -9,7 +9,9 @@ stumm 13,8/13,3 V bekommen, ohne jede Begrenzung bei 80 %.
 Aufruf:  python3 -m unittest test_ladesteuerung -v
 """
 import json
+import time
 import unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 import charge_control as cc
@@ -177,6 +179,145 @@ class NachsetzenBeiAbweichung(Basis):
         r = self._regler()
         r.update_actual_setpoints(11.0, 11.0)
         self.assertFalse(r._nachsetzen)
+
+
+class HaltespannungSelbstErmitteln(Basis):
+    """Kein Modell, eine langsame Rueckkopplung.
+
+    Gemessen wird der Ladezustand, den die Bank bei der aktuellen
+    Haltespannung annimmt; die Spannung wird um einen Schritt nachgezogen.
+    Ausgeschaltet, bis jemand sie einschaltet — eine Regelung, die von sich aus
+    an Ladespannungen dreht, darf nicht die Vorgabe sein.
+    """
+
+    AN = {'harbor': {'hold_auto': True}}
+
+    def _haltend(self, settings=None, stunden=4.0):
+        """Regler im Halten, seit `stunden` eingependelt."""
+        r = self._regler(settings=settings if settings is not None else dict(self.AN))
+        r.update_soc(85, 0.0)                      # Wechsel ins Halten
+        r._halte_seit    = time.monotonic() - stunden * 3600
+        r._halte_geladen = True
+        return r
+
+    def test_aus_wenn_nicht_eingeschaltet(self):
+        r = self._regler()
+        r.update_soc(85, 0.0)
+        r._halte_seit = time.monotonic() - 10 * 3600
+        r.update_soc(85, 0.0)
+        self.assertIsNone(r._state['hold_learned_v'])
+        self.assertAlmostEqual(r._haltespannung(),
+                               cc._DEFAULT_SETTINGS['harbor']['hold_voltage'], places=3)
+
+    def test_zeichenkette_zaehlt_nicht_als_ja(self):
+        # 'false' waere in Python wahr — das darf die Ermittlung nicht starten.
+        r = self._haltend({'harbor': {'hold_auto': 'false'}})
+        r.update_soc(85, 0.0)
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_ueber_dem_ziel_geht_die_spannung_runter(self):
+        r = self._haltend()
+        start = r._haltespannung()
+        self.assertTrue(r.update_soc(85, 0.0))
+        self.assertLess(r._state['hold_learned_v'], start)
+
+    def test_unter_dem_ziel_geht_die_spannung_hoch(self):
+        r = self._haltend()
+        start = r._haltespannung()
+        # 78 liegt im Hystereseband (Ziel 80, Hysterese 3) → weiter halten,
+        # aber unter dem Ziel.
+        self.assertTrue(r.update_soc(78, 0.0))
+        self.assertGreater(r._state['hold_learned_v'], start)
+
+    def test_im_totband_passiert_nichts(self):
+        r = self._haltend()
+        self.assertFalse(r.update_soc(80.5, 0.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_noch_nicht_lange_genug_gehalten(self):
+        r = self._haltend(stunden=0.5)
+        self.assertFalse(r.update_soc(85, 0.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_nicht_eingependelt_wird_nicht_gemessen(self):
+        # Fliesst noch Strom, sagt die Spannung nichts ueber den Ladezustand.
+        r = self._haltend()
+        self.assertFalse(r.update_soc(85, 12.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_ohne_strom_wird_nicht_gemessen(self):
+        r = self._haltend()
+        self.assertFalse(r.update_soc(85, None))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_aus_dem_band_gefallen_hebt_die_spannung(self):
+        r = self._haltend()
+        start = r._haltespannung()
+        r.update_soc(70, 0.0)                      # unter Ziel minus Hysterese
+        self.assertGreater(r._state['hold_learned_v'], start)
+
+    def test_ohne_landstrom_wird_nichts_gelernt(self):
+        # Faellt der Ladezustand, weil gar nicht geladen werden konnte, kann
+        # die Haltespannung nichts dafuer.
+        r = self._haltend()
+        r._halte_geladen = False
+        r.update_soc(70, -18.0)
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_hoechstens_ein_schritt_je_abstand(self):
+        r = self._haltend()
+        self.assertTrue(r.update_soc(85, 0.0))
+        erster = r._state['hold_learned_v']
+        r._halte_seit = time.monotonic() - 10 * 3600
+        self.assertFalse(r.update_soc(85, 0.0))
+        self.assertEqual(r._state['hold_learned_v'], erster)
+
+    def test_nach_dem_abstand_geht_der_naechste_schritt(self):
+        r = self._haltend()
+        r.update_soc(85, 0.0)
+        erster = r._state['hold_learned_v']
+        r._state['hold_learn_last'] = (datetime.now() - timedelta(hours=48)).isoformat()
+        r._halte_seit = time.monotonic() - 10 * 3600
+        self.assertTrue(r.update_soc(85, 0.0))
+        self.assertLess(r._state['hold_learned_v'], erster)
+
+    def test_nie_ueber_die_absorptionsspannung(self):
+        r = self._haltend({'harbor': {'hold_auto': True, 'absorption_v': 13.25,
+                                      'float_v': 13.2, 'hold_voltage': 13.24}})
+        for _ in range(20):
+            r._state['hold_learn_last'] = None
+            r._halte_seit = time.monotonic() - 10 * 3600
+            r.update_soc(78, 0.0)
+        self.assertLessEqual(r._haltespannung(), 13.25)
+
+    def test_nie_unter_die_untergrenze(self):
+        r = self._haltend({'harbor': {'hold_auto': True, 'hold_min_v': 13.1}})
+        for _ in range(20):
+            r._state['hold_learn_last'] = None
+            r._halte_seit = time.monotonic() - 10 * 3600
+            r.update_soc(95, 0.0)
+        self.assertGreaterEqual(r._haltespannung(), 13.1)
+
+    def test_untergrenze_ueber_obergrenze_gewinnt_die_obergrenze(self):
+        # Kaeme aus dem Einstellungs-Endpunkt eine Untergrenze ueber der
+        # Absorption, liesse sich die Obergrenze sonst umgehen.
+        r = self._haltend({'harbor': {'hold_auto': True, 'absorption_v': 13.4,
+                                      'float_v': 13.2, 'hold_min_v': 14.0}})
+        self.assertLessEqual(r._haltespannung(), 13.4)
+
+    def test_bei_abgeschaltetem_lader_wird_nicht_gelernt(self):
+        r = self._haltend({'harbor': {'hold_auto': True, 'hold_mode': 'aus'}})
+        self.assertFalse(r.update_soc(85, 0.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_ermittelte_spannung_landet_im_profil(self):
+        r = self._haltend()
+        r.update_soc(85, 0.0)
+        gelernt = r._state['hold_learned_v']
+        for d in r.device_setpoints():
+            self.assertAlmostEqual(d['absorption_v'], gelernt, places=3)
+            self.assertAlmostEqual(d['float_v'],      gelernt, places=3)
+        self.assertAlmostEqual(r.status()['hold_voltage_eff'], gelernt, places=3)
 
 
 if __name__ == '__main__':
