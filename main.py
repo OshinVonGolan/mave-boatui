@@ -478,24 +478,84 @@ sync = sync_client.SyncClient(
 )
 
 
-_REG_DEVICE_MODE = 0x0200   # DeviceMode: 0 = aus, 1 = ein
+_REG_DEVICE_MODE = 0x0200   # DeviceMode
 _REG_MAX_STROM   = 0xEDF0   # maximaler Ladestrom, 0,1 A
+
+# Die Werte des DeviceMode-Registers. Hier stand zum Abschalten eine 0 — die
+# kennt das Geraet nicht. Am 06.09.2026 am Bus gemessen: der ausgeschaltete
+# Orion meldet 4, der laufende MPPT 1, und ein geschriebenes 4 schaltete den
+# MPPT nachweislich ab. PROTOCOL.md fuehrt fuer 0x0200 ebenfalls nur
+# On(2)/Off(4)/Eco(5). Eine 0 quittiert der Lader mit Fehlerstatus, und genau
+# diese Antwort verwirft der Auswerter im Gateway — es wurde nicht einmal
+# geloggt, dass das Abschalten nie ankam.
+_MODUS_AN  = 1
+_MODUS_AUS = 4
+
+
+# So alt darf die letzte BMS-Meldung sein, damit ihre Zellwerte noch zaehlen.
+_ZELLEN_FRIST_S = 60.0
 
 
 def _zellspreizung_mv(data: dict) -> float | None:
     """Abstand zwischen hoechster und niedrigster Zelle in Millivolt.
 
-    None, wenn keine oder unvollstaendige Zellwerte vorliegen — der Balance-Lauf
-    hebt dann bewusst nicht weiter, statt blind zu steigern.
+    None, sobald irgendetwas daran nicht stimmt — der Balance-Lauf hebt dann
+    bewusst nicht weiter, statt blind zu steigern.
+
+    Das Alter wird mitgeprueft, und das ist keine Feinheit: CanState.to_dict()
+    setzt die Werte einer ausgefallenen Quelle absichtlich NICHT auf None (das
+    wuerde bestehende Anzeigen brechen), sondern laesst nur '_age_s' wachsen.
+    Faellt das BMS mitten im Lauf aus, stuende hier sonst weiter die letzte,
+    bei kleinem Ladestrom typischerweise winzige Spreizung — und der Lauf
+    haette sie als "Zellen gleich" gelesen und die Spannung ohne jede lebende
+    Zellueberwachung bis zur Obergrenze hochgefahren. Dieselbe Fristpruefung
+    macht _lader_werte weiter unten aus demselben Grund.
+
+    Ebenso muss JEDE Zelle eine Spannung melden. Aus einem Teil der Zellen
+    laesst sich die Spreizung der Bank nicht bestimmen: ausgerechnet die
+    driftende koennte die fehlende sein.
     """
-    zellen = (data.get('bms') or {}).get('cells')
-    if not isinstance(zellen, list) or not zellen:
+    bms = data.get('bms')
+    if not isinstance(bms, dict):
+        return None
+    alter = bms.get('_age_s')
+    if not isinstance(alter, (int, float)) or isinstance(alter, bool) or alter > _ZELLEN_FRIST_S:
+        return None
+    zellen = bms.get('cells')
+    if not isinstance(zellen, list) or len(zellen) < 2:
         return None
     werte = [z.get('voltage') for z in zellen
-             if isinstance(z, dict) and isinstance(z.get('voltage'), (int, float))]
-    if len(werte) < 2:
+             if isinstance(z, dict) and isinstance(z.get('voltage'), (int, float))
+             and not isinstance(z.get('voltage'), bool)]
+    if len(werte) != len(zellen):
         return None
     return round((max(werte) - min(werte)) * 1000.0, 1)
+
+
+def _lader_strom_a(data: dict) -> float | None:
+    """Was UNSERE geregelten Lader gerade in die Bank schicken, in Ampere.
+
+    Nicht mit dem Shunt-Strom der Bank zu verwechseln. Der enthaelt auch die
+    Lichtmaschine, den nicht geregelten Orion und jeden Verbraucher — wer ihn
+    als "unser Lader drueckt" liest, regelt beim Motoren die Haltespannung an
+    die Untergrenze.
+
+    None, wenn keine der Gruppen frisch meldet: dann ist unbekannt, ob gedrueckt
+    wird, und unbekannt darf kein Regeleingriff ausloesen.
+    """
+    summe, gesehen = 0.0, False
+    for gruppe in ('charger', 'solar', 'orion'):
+        g = data.get(gruppe)
+        if not isinstance(g, dict):
+            continue
+        alter = g.get('_age_s')
+        if not isinstance(alter, (int, float)) or isinstance(alter, bool) or alter > _ZELLEN_FRIST_S:
+            continue
+        i = g.get('dc_current')
+        if isinstance(i, (int, float)) and not isinstance(i, bool):
+            summe += float(i)
+            gesehen = True
+    return round(summe, 2) if gesehen else None
 
 
 def _zelltemp_mittel(data: dict) -> float | None:
@@ -549,7 +609,14 @@ def _strom_setzen(dev: dict):
     inst = dev['instance']
     if _strom_geschrieben.get(inst) == roh:
         return
-    can_if.send_charger_register(_REG_MAX_STROM, roh, inst, size=2)
+    # Erst merken, wenn der Rahmen wirklich hinausging. Sonst gilt ein Strom
+    # als gesetzt, den der Lader nie gesehen hat — und weil der Merker den
+    # naechsten Versuch unterdrueckt, bliebe er es fuer immer. Genau das
+    # passiert, wenn der CAN-Bus beim Umschalten kurz weg ist.
+    if can_if.send_charger_register(_REG_MAX_STROM, roh, inst, size=2) is not True:
+        log.warning("Lader %s Inst %d: max. Ladestrom %.1f A NICHT abgesetzt",
+                    dev.get('label', inst), inst, a)
+        return
     _strom_geschrieben[inst] = roh
     log.info("Lader %s Inst %d: max. Ladestrom %.1f A", dev.get('label', inst), inst, a)
 
@@ -565,12 +632,12 @@ def _apply_charger_setpoints(setpoints: list):
         on_flag = dev.get('on')   # None = kein Toggle (Vollladung/Balance), True/False = Hafen
         if on_flag is False:
             # Lader ausschalten (SOC ≥ Ziel im Hafen-Modus); DeviceMode ist un8 → size=1
-            can_if.send_charger_register(_REG_DEVICE_MODE, 0, inst, size=1)
+            can_if.send_charger_register(_REG_DEVICE_MODE, _MODUS_AUS, inst, size=1)
             log.info("Lader aus → Inst %d (%s)", inst, dev['label'])
         else:
             # Einschalten: immer bei True (Hafen laden) und bei None (Vollladung/Balance),
             # da der Lader nach einem Hafen-Halt evtl. noch aus sein könnte
-            can_if.send_charger_register(_REG_DEVICE_MODE, 1, inst, size=1)
+            can_if.send_charger_register(_REG_DEVICE_MODE, _MODUS_AN, inst, size=1)
             can_if.send_charger_setpoints(dev['absorption_v'], dev['float_v'], inst)
             log.info("Lader %s Inst %d: %.2f/%.2f V (on=%s)",
                      dev['label'], inst, dev['absorption_v'], dev['float_v'], on_flag)
@@ -831,7 +898,8 @@ async def broadcast(data: dict):
                               _zellspreizung_mv(data),
                               _landstrom_da(data),
                               data.get('battery', {}).get('voltage'),
-                              _zelltemp_mittel(data)):
+                              _zelltemp_mittel(data),
+                              _lader_strom_a(data)):
         _apply_charger_setpoints(charge_ctrl.device_setpoints())
     batt = data.get('battery', {})
     now = time.time()

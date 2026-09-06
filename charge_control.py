@@ -176,22 +176,27 @@ def _num(value, default: float) -> float:
     return float(value)
 
 
-# Ab dieser Abweichung zwischen gewollten und zurückgelesenen Sollwerten gilt
-# der Lader als verstellt und bekommt sie erneut geschickt.
-#
-# Eine halbe Registerstufe. Die Sollwert-Register des Laders rechnen in 0,01 V,
-# und der Weg dorthin ist verlustfrei: der Pi schickt Millivolt, das Gateway
-# rundet auf 0,01 V, der Lader meldet genau das zurück. Was hier ankommt, weicht
-# also entweder gar nicht ab oder um mindestens eine ganze Stufe. Die halbe
-# Stufe faengt nur die Rundung ab, wenn der eingestellte Wert selbst feiner ist
-# als 0,01 V (13,833 minus Solar-Versatz).
-#
-# Vorher standen hier 0,05 V, und genau daran ist die Regelung am Boot
-# vorbeigelaufen: gewollt waren 13,50 V, im Lader standen 13,48 V, und die
-# 0,02 V Unterschied galten als "passt schon". Da zugleich kein Wechsel
-# zwischen Laden und Halten stattfand, wurde nie geschrieben — der Lader stand
-# tagelang auf einem Wert, den niemand gesetzt hatte.
-_SOLL_TOLERANZ_V = 0.005
+def _register_stufe(v: float) -> int:
+    """Was nach dem Weg zum Lader in seinem Register steht, in 0,01-V-Stufen.
+
+    Der Pi schickt Millivolt, das Gateway rundet auf 0,01 V, der Lader meldet
+    genau das zurueck. Frueher wurde die Rueckmeldung mit einer
+    Gleitkomma-Toleranz von einer halben Stufe verglichen — und bei GENAU
+    halber Stufe faellt der Abstand in Gleitkomma auf die falsche Seite
+    (13,055 V → Register 13,06 → Abstand 0.005000000000000782 > 0.005).
+    Nachgerechnet scheitern so 90 der 1601 moeglichen Ziele zwischen 12,80 und
+    14,40 V, und solche Werte entstehen im Normalbetrieb: die Selbstermittlung
+    und die Kennlinie liefern beliebige Tausendstel.
+
+    Die Folge waere nicht nur ein ueberfluessiges Nachsetzen gewesen, sondern
+    ein dauerhaft totes Sicherheitsnetz: nach drei vergeblichen Versuchen gibt
+    der Regler auf, und eine spaetere ECHTE Verstellung des Laders faellt dann
+    niemandem mehr auf.
+
+    Also in derselben Einheit vergleichen, in der das Geraet rechnet.
+    """
+    return (int(round(v * 1000)) + 5) // 10
+
 
 # Bremse fuer das Nachsetzen. Uebernimmt der Lader einen Wert nicht — weil das
 # Register ihn neu berechnet, weil er ihn ablehnt, weil er defekt ist —, wuerde
@@ -253,7 +258,6 @@ class ChargeController:
         self._last_soc: float | None = None
         self._nachsetzen: bool = False               # Rückmeldung wich ab → neu senden
         self._halte_seit: float | None = None        # monoton, Beginn des aktuellen Haltens
-        self._halte_geladen: bool = False            # waehrend des Haltens floss Ladung
         self._nachsetz_zeit: float | None = None     # monoton, letzter Nachsetz-Versuch
         self._nachsetz_zaehler: int = 0              # vergebliche Versuche in Folge
         self._ruhig_seit: float | None = None         # monoton, seit wann der Strom klein ist
@@ -295,6 +299,21 @@ class ChargeController:
         settings = self._umstellen(settings if isinstance(settings, dict) else {})
         self._settings = self._deep_merge(_DEFAULT_SETTINGS, settings)
         self._settings['profile'] = self._profile_saeubern(self._settings.get('profile'))
+        if self._state.get('mode') == 'balance':
+            # Die monotonen Uhren nach einem Neustart NEU stellen, nicht der
+            # Wanduhr ueberlassen. Der Pi hat keine Echtzeituhr; steht sie nach
+            # dem Start hinter dem gespeicherten Beginn, wird die Differenz
+            # negativ und auf 0 geklemmt — dauerhaft, weil im laufenden Modus
+            # nie wieder eine monotone Uhr gesetzt wurde. Damit war der
+            # Sicherheitsdeckel des Balance-Laufs fuer immer wirkungslos und
+            # die Bank haette unbegrenzt auf Konstantspannung gehangen.
+            # Neu gestellt zaehlt ab dem Neustart — der Lauf ist damit wieder
+            # begrenzt, im schlimmsten Fall auf max_h ab hier.
+            jetzt = time.monotonic()
+            self._balance_mono = jetzt
+            self._phase_mono   = jetzt
+            self._schritt_mono = jetzt
+            log.info('Balance-Lauf nach Neustart uebernommen — Uhren neu gestellt')
 
     @staticmethod
     def _umstellen(roh: dict) -> dict:
@@ -333,13 +352,27 @@ class ChargeController:
 
     @staticmethod
     def _deep_merge(base: dict, overlay: dict) -> dict:
-        """Zweistufiger Merge: Schlüssel der zweiten Ebene werden pro Eintrag gemergt."""
+        """Zweistufiger Merge: Schlüssel der zweiten Ebene werden pro Eintrag gemergt.
+
+        Wo die Vorgabe ein Objekt ist, muss auch der gespeicherte Wert eines
+        sein — sonst gewinnt die Vorgabe. Ein `"harbor": "kaputt"` in der
+        Zustandsdatei oder aus dem PATCH-Endpunkt haette sonst die ganze
+        Ladesteuerung lahmgelegt: jeder Zugriff der Form
+        `self._settings.get('harbor', {}).get(...)` faellt auf einer
+        Zeichenkette mit AttributeError um, und weil der kaputte Wert
+        gespeichert wird, auch nach jedem Neustart wieder.
+        """
         result = {}
         for k, v in base.items():
             if k not in overlay:
                 result[k] = v
                 continue
             ov = overlay[k]
+            if isinstance(v, dict) and not isinstance(ov, dict):
+                log.warning('Einstellung %r ist kein Objekt (%s) — Vorgabe bleibt stehen',
+                            k, type(ov).__name__)
+                result[k] = v
+                continue
             if isinstance(v, dict) and isinstance(ov, dict):
                 inner = {}
                 for ik, iv in v.items():
@@ -829,7 +862,8 @@ class ChargeController:
                    zelldiff_mv: float | None = None,
                    landstrom: bool | None = None,
                    spannung: float | None = None,
-                   zelltemp: float | None = None) -> bool:
+                   zelltemp: float | None = None,
+                   lader_a: float | None = None) -> bool:
         """Aktualisiert SOC (optional den Batteriestrom). True = neue Setpoints senden.
 
         Hafen-Modus: nur beim Wechsel zwischen Laden und Halten. Die Sollwerte
@@ -880,12 +914,11 @@ class ChargeController:
         # Erst lernen, dann umschalten: der Lernschritt braucht den bisherigen
         # Zustand, und faellt die Bank gerade aus dem Halten, ist genau das das
         # Signal, dass die Haltespannung zu niedrig war.
-        gelernt = self._lernen(soc, current_a, prev_holding, holding)
+        gelernt = self._lernen(soc, current_a, prev_holding, holding, landstrom, lader_a)
 
         if holding != prev_holding:
             self._state['harbor_holding'] = holding
-            self._halte_seit    = time.monotonic() if holding else None
-            self._halte_geladen = False
+            self._halte_seit = time.monotonic() if holding else None
             self._save()
             abs_v, flt_v, ein = self._harbor_profile(holding)
             log.info('Hafen: SOC=%.1f%% → %s (%.2f/%.2f V, Lader %s)', soc,
@@ -912,7 +945,8 @@ class ChargeController:
     # konvergiert ueber Tage — genau dafuer ist es gedacht.
 
     def _lernen(self, soc: float, current_a: float | None,
-                prev: bool | None, holding: bool) -> bool:
+                prev: bool | None, holding: bool,
+                landstrom: bool | None, lader_a: float | None) -> bool:
         """Zieht die Haltespannung nach. True = neue Sollwerte senden."""
         h = self._settings.get('harbor', {})
         if h.get('hold_auto') is not True:
@@ -939,20 +973,21 @@ class ChargeController:
         if holding and prev:
             if self._halte_seit is None:
                 self._halte_seit = jetzt
-            if current_a is not None and abs(current_a) <= ruhig:
-                self._halte_geladen = True
 
-            # Das schnelle Signal. Drueckt der Lader beim Halten dauerhaft Strom
-            # in die Bank, ist die Spannung zu hoch — das steht in Minuten fest,
-            # waehrend der Ladezustand Stunden braucht, um es zu zeigen.
-            if current_a is not None and current_a > ruhig:
+            # Das schnelle Signal — und hier zaehlt ausschliesslich, was UNSERE
+            # geregelten Lader schicken. Der Shunt-Strom der Bank enthaelt auch
+            # die Lichtmaschine, den nicht geregelten Orion und jede andere
+            # Quelle; als "unser Lader drueckt" gelesen, faehrt er die
+            # Haltespannung beim Motoren binnen ein bis zwei Tagen an die
+            # Untergrenze und der Hafen-Modus haelt danach gar nichts mehr.
+            if lader_a is not None and lader_a > ruhig:
                 if self._laedt_seit is None:
                     self._laedt_seit = jetzt
                 elif (jetzt - self._laedt_seit) / 60.0 >= _num(h.get('hold_schnell_min'), 45.0):
                     self._laedt_seit = jetzt
                     return self._halte_schritt(
-                        -1, _num(h.get('hold_kp_a'), 0.01) * current_a,
-                        'Lader drueckt beim Halten %.1f A' % current_a)
+                        -1, _num(h.get('hold_kp_a'), 0.01) * lader_a,
+                        'Lader drueckt beim Halten %.1f A' % lader_a)
             else:
                 self._laedt_seit = None
 
@@ -961,19 +996,40 @@ class ChargeController:
             if current_a is None or abs(current_a) > ruhig:
                 return False                       # noch nicht eingependelt
             if soc > ziel + _LERN_TOLERANZ_PCT:
+                # Nach unten immer erlaubt: weniger Spannung kann nie schaden.
                 return self._halte_schritt(-1, kp * (soc - ziel),
                                            'Ladezustand %.1f %% über dem Ziel' % soc)
             if soc < ziel - _LERN_TOLERANZ_PCT:
+                # Nach OBEN nur, wenn ueberhaupt geladen werden kann.
+                #
+                # Ohne Landstrom liegt der Ladezustand beim Halten zwangslaeufig
+                # unter dem Ziel — darueber hebt ihn nur ein aktiv druckender
+                # Lader. Der Messwert ist dann kein Urteil ueber die
+                # Haltespannung, sondern die blosse Feststellung, dass niemand
+                # laedt. Wer daraus einen Schritt macht, hat ein einseitiges
+                # Signal: jeder Toern ohne Steckdose schiebt die Spannung weiter
+                # nach oben, bis sie an der Absorptionsspannung klebt und die
+                # Bank am Steg dauerhaft nahe 100 % steht.
+                if landstrom is not True:
+                    return False
                 return self._halte_schritt(+1, kp * (ziel - soc),
                                            'Ladezustand %.1f %% unter dem Ziel' % soc)
             return False
 
         if prev and not holding:
-            # Aus dem Halteband gefallen. Nur auswerten, wenn waehrend des
-            # Haltens ueberhaupt Ladung floss — sonst war schlicht kein
-            # Landstrom da, und die Haltespannung kann nichts dafuer.
             self._laedt_seit = None
-            if self._halte_seit is None or not self._halte_geladen:
+            # Aus dem Halteband gefallen — nur auswerten, wenn ueberhaupt
+            # geladen werden konnte.
+            #
+            # Hier stand frueher ein Merker _halte_geladen, der das GEGENTEIL
+            # dessen mass, was sein Kommentar behauptete: gesetzt wurde er,
+            # wenn der Strom KLEIN war. Bei einer entladenden Bank mit 1,5 A
+            # Grundlast trifft das immer zu, der Schutz griff also nie — und
+            # ausgerechnet der Fall, fuer den er gebaut war (kein Lader da, der
+            # Ladezustand faellt durch), hob die Haltespannung.
+            if landstrom is not True:
+                return False
+            if self._halte_seit is None:
                 return False
             if (jetzt - self._halte_seit) / 3600.0 < reif:
                 return False
@@ -1049,6 +1105,11 @@ class ChargeController:
             log.info('Balance-Lauf gestartet, danach zurueck nach %s',
                      self._state['balance_zurueck'])
         else:
+            if vorher == 'balance':
+                # Von Hand aus dem Lauf heraus ist auch ein Abbruch. Ohne die
+                # Sperre wuerde der automatische Start ihn binnen Sekunden neu
+                # anwerfen, und der Lauf waere nicht verlassbar.
+                self._state['balance_sperre'] = datetime.now().isoformat()
             self._state['balance_start']   = None
             self._state['balance_phase']   = None
             self._state['balance_zurueck'] = None
@@ -1056,6 +1117,7 @@ class ChargeController:
             self._balance_mono              = None
             self._phase_mono                = None
             self._schritt_mono              = None
+        self._laedt_seit = None                # gilt nur im Hafen-Halten
         self._nachsetz_zeit    = None          # neuer Modus, neue Absicht
         self._nachsetz_zaehler = 0
         if mode == 'harbor':
@@ -1133,8 +1195,8 @@ class ChargeController:
         ziel = next((d for d in self.device_setpoints() if d.get('instance') == 1), None)
         if not ziel or ziel.get('on') is False:
             return
-        if (abs(ist_abs - ziel['absorption_v']) <= _SOLL_TOLERANZ_V and
-                abs(ist_flt - ziel['float_v']) <= _SOLL_TOLERANZ_V):
+        if (int(round(ist_abs * 100)) == _register_stufe(ziel['absorption_v']) and
+                int(round(ist_flt * 100)) == _register_stufe(ziel['float_v'])):
             if self._nachsetz_zaehler:
                 log.info('Lader hat die Sollwerte uebernommen: %.2f/%.2f V', ist_abs, ist_flt)
             self._nachsetz_zaehler = 0
@@ -1374,12 +1436,15 @@ class ChargeController:
         fv   = self._state.get('actual_float_v')
         if av is None or fv is None:
             return None
-        # Hafen-Modus: gegen das gerade gueltige Profil pruefen, nicht gegen die
-        # Voreinstellung — beim Halten stehen andere Werte im Lader als beim Laden.
-        if mode == 'harbor' and self._last_soc is not None:
-            ziel_abs, ziel_flt, _ = self._harbor_profile(self._holding_for(self._last_soc))
-            if abs(av - ziel_abs) < 0.06 and abs(fv - ziel_flt) < 0.06:
-                return 'harbor'
+        # Gegen das, was dem Lader tatsaechlich geschickt wurde — nicht gegen das
+        # Profil. Zurueckgelesen wird Instanz 1 (der IP43), und die bekommt im
+        # Hafen-Laden den Solar-Versatz abgezogen. Ohne ihn stand hier waehrend
+        # des ganz normalen Ladens dauerhaft "Extern geaendert".
+        soll = next((d for d in self.device_setpoints() if d.get('instance') == 1), None)
+        if soll is not None and self._last_soc is not None:
+            if (abs(av - soll['absorption_v']) < 0.06
+                    and abs(fv - soll['float_v']) < 0.06):
+                return mode
             return 'custom'
         for name in ('harbor', 'full', 'balance'):
             p = self._settings.get(name, {})

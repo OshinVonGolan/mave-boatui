@@ -290,11 +290,10 @@ class HaltespannungSelbstErmitteln(Basis):
     AN = {'harbor': {'hold_auto': True}}
 
     def _haltend(self, settings=None, stunden=4.0):
-        """Regler im Halten, seit `stunden` eingependelt."""
+        """Regler im Halten, seit `stunden` eingependelt, MIT Landstrom."""
         r = self._regler(settings=settings if settings is not None else dict(self.AN))
-        r.update_soc(85, 0.0)                      # Wechsel ins Halten
-        r._halte_seit    = time.monotonic() - stunden * 3600
-        r._halte_geladen = True
+        r.update_soc(85, 0.0, None, True)          # Wechsel ins Halten
+        r._halte_seit = time.monotonic() - stunden * 3600
         return r
 
     def test_aus_wenn_nicht_eingeschaltet(self):
@@ -322,8 +321,8 @@ class HaltespannungSelbstErmitteln(Basis):
         r = self._haltend()
         start = r._haltespannung()
         # 78 liegt im Hystereseband (Ziel 80, Hysterese 3) → weiter halten,
-        # aber unter dem Ziel.
-        self.assertTrue(r.update_soc(78, 0.0))
+        # aber unter dem Ziel. Nach oben nur mit Landstrom.
+        self.assertTrue(r.update_soc(78, 0.0, None, True))
         self.assertGreater(r._state['hold_learned_v'], start)
 
     def test_im_totband_passiert_nichts(self):
@@ -350,15 +349,48 @@ class HaltespannungSelbstErmitteln(Basis):
     def test_aus_dem_band_gefallen_hebt_die_spannung(self):
         r = self._haltend()
         start = r._haltespannung()
-        r.update_soc(70, 0.0)                      # unter Ziel minus Hysterese
+        r.update_soc(70, 0.0, None, True)          # unter Ziel minus Hysterese
         self.assertGreater(r._state['hold_learned_v'], start)
 
     def test_ohne_landstrom_wird_nichts_gelernt(self):
-        # Faellt der Ladezustand, weil gar nicht geladen werden konnte, kann
-        # die Haltespannung nichts dafuer.
-        r = self._haltend()
-        r._halte_geladen = False
-        r.update_soc(70, -18.0)
+        """Faellt der Ladezustand, weil gar nicht geladen werden konnte, kann
+        die Haltespannung nichts dafuer.
+
+        Diese Probe lief frueher am Fehler vorbei: sie setzte den Merker
+        _halte_geladen von Hand auf False und durchlief den Setzpfad deshalb
+        nie. Der Merker wurde in Wahrheit gesetzt, sobald der Strom KLEIN war —
+        was bei einer entladenden Bank mit Grundlast immer zutrifft. Jetzt wird
+        der ganze Weg ohne Landstrom durchlaufen.
+        """
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(85, -1.5, None, False)        # Halten beginnt, kein Landstrom
+        r._halte_seit = time.monotonic() - 10 * 3600
+        r.update_soc(78, -1.5, None, False)        # im Band, unter dem Ziel
+        r.update_soc(70, -1.5, None, False)        # aus dem Band gefallen
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    def test_ohne_landstrom_geht_es_trotzdem_nach_unten(self):
+        # Weniger Spannung kann nie schaden — die Sperre gilt nur nach oben.
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(90, 0.0, None, False)
+        r._halte_seit = time.monotonic() - 10 * 3600
+        self.assertTrue(r.update_soc(90, 0.0, None, False))
+        self.assertLess(r._state['hold_learned_v'],
+                        cc._DEFAULT_SETTINGS['harbor']['hold_voltage'])
+
+    def test_fremder_ladestrom_regelt_nicht_nach(self):
+        """Der Shunt-Strom der Bank ist nicht der Strom unserer Lader.
+
+        Laeuft die Maschine oder der nicht geregelte Orion, steht dort
+        stundenlang ein grosser positiver Strom. Als "unser Lader drueckt"
+        gelesen, faehrt er die Haltespannung binnen ein bis zwei Motortagen an
+        die Untergrenze.
+        """
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(85, 0.0, None, True)
+        r._laedt_seit = time.monotonic() - 3600
+        # 40 A am Shunt, aber unsere Lader schicken nichts.
+        self.assertFalse(r.update_soc(85, 40.0, None, True, None, None, 0.0))
         self.assertIsNone(r._state['hold_learned_v'])
 
     def test_hoechstens_ein_schritt_je_abstand(self):
@@ -971,19 +1003,19 @@ class GelernteKennlinie(Basis):
         self.assertEqual(schritte, cc._DEFAULT_SETTINGS['harbor']['hold_max_pro_tag'])
 
     def test_druckender_lader_wird_schnell_nachgeregelt(self):
-        # Das schnelle Signal: der Ladestrom sagt in Minuten, was der
+        # Das schnelle Signal: der Strom UNSERER Lader sagt in Minuten, was der
         # Ladezustand erst nach Stunden zeigt.
         r = self._regler(settings={'harbor': {'hold_auto': True}})
-        r.update_soc(85, 0.0)
+        r.update_soc(85, 0.0, None, True)
         r._laedt_seit = time.monotonic() - 3600
-        self.assertTrue(r.update_soc(85, 6.0))
+        self.assertTrue(r.update_soc(85, 0.0, None, True, None, None, 6.0))
         self.assertLess(r._state['hold_learned_v'],
                         cc._DEFAULT_SETTINGS['harbor']['hold_voltage'])
 
     def test_kurzes_druecken_reicht_nicht(self):
         r = self._regler(settings={'harbor': {'hold_auto': True}})
-        r.update_soc(85, 0.0)
-        self.assertFalse(r.update_soc(85, 6.0))
+        r.update_soc(85, 0.0, None, True)
+        self.assertFalse(r.update_soc(85, 0.0, None, True, None, None, 6.0))
         self.assertIsNone(r._state['hold_learned_v'])
 
     # ── Zuruecksetzen ──────────────────────────────────────────────────────
@@ -1000,6 +1032,106 @@ class GelernteKennlinie(Basis):
         self.assertAlmostEqual(r._settings['harbor']['hold_voltage'],
                                cc._DEFAULT_SETTINGS['harbor']['hold_voltage'], places=3)
         self.assertEqual(r._haltespannung_quelle(), 'manuell')
+
+
+class AusDerPruefungHervorgegangen(Basis):
+    """Proben zu Defekten, die eine adversariale Pruefung am 06.09.2026 fand.
+
+    Jeder davon war ein Ablauf, der am Boot echten Schaden angerichtet haette,
+    und keiner wurde von den vorhandenen Tests erfasst.
+    """
+
+    def test_balance_uhren_werden_beim_laden_neu_gestellt(self):
+        """Der Pi hat keine Echtzeituhr.
+
+        Startet er mitten im Lauf ohne Netz neu und steht seine Uhr HINTER dem
+        gespeicherten Beginn, wurde die Laufzeit auf 0 geklemmt — dauerhaft,
+        weil im laufenden Modus nie wieder eine monotone Uhr gesetzt wurde. Der
+        Sicherheitsdeckel war damit fuer immer wirkungslos und die Bank haette
+        unbegrenzt auf Konstantspannung gehangen.
+        """
+        zukunft = (datetime.now() + timedelta(hours=5)).isoformat()
+        r = self._regler({'mode': 'balance', 'balance_phase': 'laden',
+                          'balance_start': zukunft, 'balance_spannung': 14.4})
+        self.assertIsNotNone(r._balance_mono)
+        self.assertIsNotNone(r._phase_mono)
+        # Und der Deckel greift wieder, gerechnet ab dem Neustart.
+        r._balance_mono = time.monotonic() - 100 * 3600
+        r.update_soc(95, 3.0, 2.0, True)
+        self.assertNotEqual(r._state['mode'], 'balance')
+
+    def test_haltephase_laeuft_auch_nach_neustart_ab(self):
+        zukunft = (datetime.now() + timedelta(hours=5)).isoformat()
+        r = self._regler({'mode': 'balance', 'balance_phase': 'halten',
+                          'balance_start': zukunft, 'balance_phase_seit': zukunft,
+                          'balance_zurueck': 'harbor'})
+        r._phase_mono = time.monotonic() - 5 * 3600
+        r.update_soc(100, 1.0, 2.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_von_hand_verlassener_lauf_startet_nicht_sofort_neu(self):
+        # Ohne Sperre wirft der automatische Start den gerade verlassenen Lauf
+        # binnen Sekunden wieder an — er waere nicht verlassbar.
+        r = self._regler(settings={'balance': {'auto': True}})
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'balance')
+        r.set_mode('harbor')
+        self.assertIsNotNone(r._state['balance_sperre'])
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_kaputter_einstellungsabschnitt_legt_nichts_lahm(self):
+        """Wo die Vorgabe ein Objekt ist, muss auch der gespeicherte Wert eines sein.
+
+        Ein "harbor": "kaputt" in der Zustandsdatei haette die ganze
+        Ladesteuerung lahmgelegt — jeder Zugriff der Form
+        settings.get('harbor', {}).get(...) faellt auf einer Zeichenkette um,
+        und weil der Wert gespeichert wird, nach jedem Neustart wieder.
+        """
+        for kaputt in ('kaputt', 42, [1, 2], None):
+            r = self._regler(settings={'harbor': kaputt})
+            self.assertIsInstance(r._settings['harbor'], dict)
+            r.update_soc(85, 0.0, None, True)          # muss einfach laufen
+            self.assertTrue(r.device_setpoints())
+
+    def test_halbe_registerstufe_loest_kein_nachsetzen_aus(self):
+        """13,055 V wird im Lader zu 13,06 V — das ist keine Abweichung.
+
+        Verglichen wurde frueher mit einer Gleitkomma-Toleranz von genau einer
+        halben Stufe, und dort faellt der Abstand auf die falsche Seite. Die
+        Folge war nicht nur ueberfluessiges Schreiben ins Flash, sondern ein
+        dauerhaft totes Sicherheitsnetz: nach drei Versuchen gibt der Regler
+        auf und meldet eine spaetere ECHTE Verstellung nicht mehr.
+        """
+        profile = [dict(pr) for pr in cc._DEFAULT_SETTINGS['profile']]
+        profile[1] = {**profile[1], 'absorption_v': 13.355, 'float_v': 13.055}
+        r = self._regler(settings={'profile': profile,
+                                   'harbor': {'profile_id': 2, 'target_soc': 0}})
+        r.update_soc(60, 0.0, None, True)
+        soll = next(d for d in r.device_setpoints() if d['instance'] == 1)
+        # Was der Lader nach der Rundung auf 0,01 V zurueckmeldet.
+        ist_abs = cc._register_stufe(soll['absorption_v']) / 100.0
+        ist_flt = cc._register_stufe(soll['float_v']) / 100.0
+        r.update_actual_setpoints(ist_abs, ist_flt)
+        self.assertFalse(r._nachsetzen)
+
+    def test_echte_verstellung_wird_weiter_erkannt(self):
+        r = self._regler()
+        r.update_soc(60, 0.0, None, True)
+        soll = next(d for d in r.device_setpoints() if d['instance'] == 1)
+        r.update_actual_setpoints(soll['absorption_v'] - 0.2, soll['float_v'])
+        self.assertTrue(r._nachsetzen)
+
+    def test_solar_versatz_gilt_nicht_als_fremde_verstellung(self):
+        """Zurueckgelesen wird der IP43, und der bekommt beim Laden den
+        Solar-Versatz abgezogen. Vorher stand waehrend des ganz normalen
+        Hafen-Ladens dauerhaft "Extern geaendert" in der Oberflaeche.
+        """
+        r = self._regler()
+        r.update_soc(60, 0.0, None, True)
+        soll = next(d for d in r.device_setpoints() if d['instance'] == 1)
+        r.update_actual_setpoints(soll['absorption_v'], soll['float_v'])
+        self.assertEqual(r.status()['preset_match'], 'harbor')
 
 
 if __name__ == '__main__':

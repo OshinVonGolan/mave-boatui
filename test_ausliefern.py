@@ -137,7 +137,13 @@ class NurEinmalPacken(unittest.TestCase):
         main._js_bundle['mtime'] = 0.0          # so, als waere eine Datei angefasst
         hole('/js-bundle.js', gzip_ok=True)
         self.assertIsNot(main._js_bundle['gz'], alt)
-        self.assertEqual(main._js_bundle['gz'], alt)   # Inhalt gleich, Objekt neu
+        # Den INHALT vergleichen, nicht die gzip-Bytes. In deren Kopf steht ein
+        # Zeitstempel: landen die beiden Bauvorgaenge in verschiedenen Sekunden,
+        # unterscheiden sich die Bytes, obwohl der Inhalt gleich ist. Genau so
+        # ist dieser Test am 06.09.2026 einmal umgefallen und hat Diagnosezeit
+        # gekostet, ohne dass etwas kaputt war.
+        self.assertEqual(gzip.decompress(main._js_bundle['gz']),
+                         gzip.decompress(alt))          # Inhalt gleich, Objekt neu
 
 
 if __name__ == '__main__':

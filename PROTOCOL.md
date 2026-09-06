@@ -380,7 +380,17 @@ Wird nur gesendet wenn VE.Direct-Daten frisch (< 5 s) sind und das Gerät Typ `V
 
 Enthält die aktuellen Spannungs-Sollwerte des Smart IP43.
 **Pi → Gateway:** Wird durch einen ISO-Request (59904) angefordert; Pi sendet diesen Request alle 5 Minuten.
-**Gateway → Pi:** Antwort nach ISO-Request — Teensy liest die Register 0xEDF0 (Absorption) und 0xEDE0 (Float) via VE.Direct HEX GET-Command aus dem IP43 und sendet das Ergebnis zurück.
+**Gateway → Pi:** Antwort nach ISO-Request — Teensy liest die Register **0xEDF7 (Absorption)** und **0xEDF6 (Erhaltung)** via VE.Direct HEX GET-Command aus dem IP43 und sendet das Ergebnis zurück.
+
+> Hier standen bis zum 06.09.2026 0xEDF0 (Absorption) und 0xEDE0 (Float). Beides
+> ist falsch. Am Bus gemessen liefert **0xEDF0 den maximalen Ladestrom** in
+> 0,1 A — Orion 50,0 / IP43 50,0 / MPPT 15,0, also exakt die Typenschilder der
+> drei Geräte. Eine Spannung dorthin geschrieben landet als Strombegrenzung
+> (14,4 V → 144,0 A). Die drei Spannungen liegen auf 0xEDF7 (Absorption),
+> 0xEDF6 (Erhaltung) und 0xEDF5 (Lagerung), alle in 0,01 V; die Zuordnung ist
+> gegen die in VictronConnect angezeigten Einstellungen des IP43 abgeglichen.
+> **Finger weg von 0xEDF4:** ein dort geschriebener Wert erscheint als die am
+> Ausgang *gemessene* Spannung, das Register greift in die Messung ein.
 
 > ⚠ Erfordert aktualisierte VE.Direct-Gateway-Firmware (Teensy 4.1) mit HEX-Protokoll-Unterstützung.
 
