@@ -906,9 +906,13 @@
     .sb-balken.mit-verlauf { opacity: 1; }
     /* Die Kante markiert den Stand — so, wie die Linie ueber der Flaeche eines
        Verlaufsgraphen ihn markiert. Sie ist kraeftiger als die Flaeche
-       dahinter, sonst waere sie keine Kante. */
+       dahinter, sonst waere sie keine Kante.
+
+       EIN Pixel breit (auf Ansage von zwei heruntergenommen): eine Marke soll
+       den Stand zeigen, nicht ihn verbreitern — und die Linie ueber den
+       Verlaufsgraphen daneben ist auch einen Pixel breit. */
     .sb-kante {
-      position: absolute; top: 0; bottom: 0; width: 2px; left: 0;
+      position: absolute; top: 0; bottom: 0; width: 1px; left: 0;
       background: currentColor; opacity: 0;
       pointer-events: none; z-index: 1;
       transition: left .5s ease, opacity .3s;
@@ -1262,63 +1266,75 @@
     .wx-half-temp { font-size: 36px; font-weight: 800; color: var(--text); line-height: 1; }
     .wx-half-sub { font-size: 13px; color: var(--text2); margin-top: 4px; }
     /* Die Kachel zeigt NUR heute. Vier Tagesspalten daneben machten beides
-       klein und keins lesbar (Eignermeldung mit Foto) — die weitere Vorschau
-       steht auf der Detailseite. */
-    /* Feste Zeilen, kein `1fr` fuer den Streifen. Bei EINER Spalte setzt
-       display.js `grid-auto-rows: auto` — die Kachel waechst dann mit ihrem
-       Inhalt, und jede Form von "fuell den Rest" nutzt das bis zum Anschlag
-       aus (zweimal probiert, zweimal wurde die Kachel zu hoch). Dafuer bleibt
-       in quadratischen Kacheln unten eine kleine Luecke; das ist der
-       ruhigere Fehler. */
-    .wx-koerper { flex: 1; display: grid; gap: 9px;
-      grid-template-rows: auto auto auto; align-content: start; min-height: 0; }
+       klein und keins lesbar — die weitere Vorschau steht auf der Detailseite.
 
-    /* EIN Feld mit zwei Haelften. Vorher waren es drei Kaesten nebeneinander
-       plus einer darunter — vier verschachtelte Flaechen in einer Kachel, und
-       das war die unruhigste Stelle der ganzen Seite. */
-    .wx-heute { background: var(--surface2); border-radius: 12px;
-      display: grid; grid-template-columns: 1fr 1fr; }
-    .wx-h-halb { display: flex; align-items: center; gap: 11px;
-      padding: 11px 13px; min-width: 0; }
-    .wx-h-halb + .wx-h-halb { border-left: 1px solid var(--border); }
-    /* Schmal wird untereinander gestapelt — nebeneinander bleibt fuer den
-       Zustandstext kein Platz, und der wurde mitten im Wort abgeschnitten. */
-    @media (max-width: 430px) {
-      .wx-heute { grid-template-columns: 1fr; }
-      .wx-h-halb + .wx-h-halb { border-left: 0; border-top: 1px solid var(--border); }
-    }
+       KEINE verschachtelten Kaesten mehr (Eignerurteil: „komplett desastroes,
+       komplett unuebersichtlich"). Vorher lagen drei Flaechen uebereinander:
+       ein gerahmter Kopf, eine nackte Wertezeile, ein gerahmter Streifen —
+       drei Sprachen in einer Kachel. Jetzt traegt die Kachel selbst, und die
+       Rangfolge machen Schriftgroesse und Abstand.
 
-    .wx-h-icon { line-height: 0; color: var(--text2); flex: none; }
-    .wx-h-pfeil { color: var(--accent); }
-    .wx-h-text { min-width: 0; }
-    .wx-h-gross { font-size: 28px; font-weight: 800; line-height: 1; color: var(--text);
-      font-variant-numeric: tabular-nums; }
-    .wx-h-gross small { font-size: 13px; font-weight: 600; color: var(--text2);
+       Und nur EIN grosser Wert. Vorher standen 18° und 10 kn gleich gross
+       nebeneinander und stritten um den Blick. An Bord ist der Wind die
+       Frage; die Luft ist die Antwort daneben. */
+    .wx-koerper { flex: 1; display: flex; flex-direction: column; gap: 10px;
+      min-height: 0; }
+
+    /* Zwei Spalten, zwei Zeilen, gemeinsame Schriftlinie: links der Wind,
+       rechts die Luft. Weil die Zeilen durchlaufen, liest es sich als Kopf
+       und nicht als zwei Kaesten. */
+    .wx-kopf { display: grid; grid-template-columns: auto minmax(0, auto);
+      justify-content: space-between; align-items: baseline; gap: 3px 14px; }
+    .wx-k-wind, .wx-k-luft { display: flex; align-items: baseline; gap: 8px;
+      min-width: 0; }
+    .wx-k-luft { justify-self: end; }
+    .wx-k-pfeil, .wx-k-ikon { line-height: 0; align-self: center; flex: none; }
+    .wx-k-pfeil { color: var(--accent); }
+    .wx-k-ikon  { color: var(--text2); }
+
+    .wx-k-gross { font-size: 34px; font-weight: 800; line-height: 1;
+      color: var(--text); font-variant-numeric: tabular-nums; }
+    .wx-k-gross small { font-size: 14px; font-weight: 600; color: var(--text2);
       margin-left: 3px; }
-    /* Umbrechen statt abschneiden: „wechselnd bewölkt" passt sonst nicht. */
-    .wx-h-klein { font-size: 12.5px; color: var(--text2); line-height: 1.35;
-      margin-top: 3px; overflow-wrap: anywhere; }
-    .wx-h-leise { color: var(--text3); }
-    .wx-h-klein em { font-style: normal; color: var(--orange); font-weight: 600; }
+    /* Die Luft ist Beiwerk, aber ein Messwert — gross genug, um sie im
+       Vorbeigehen zu lesen, klein genug, um dem Wind nicht die Schau zu
+       stehlen. */
+    .wx-k-mittel { font-size: 19px; font-weight: 700; line-height: 1;
+      color: var(--text2); font-variant-numeric: tabular-nums; }
+    /* Boeen stehen neben der Windzahl und nicht darunter: sie gehoeren zu
+       ihr. Orange wird die Zahl nur, wenn es wirklich boeig ist. */
+    .wx-k-boe { font-size: 13.5px; color: var(--text3); white-space: nowrap; }
+    .wx-k-boe b { color: var(--text2); font-weight: 600;
+      font-variant-numeric: tabular-nums; }
+    .wx-k-boe.boeig b { color: var(--orange); }
 
-    /* Beiwerk, also kein eigener Rahmen: eine Zeile auf dem Grund der Kachel. */
-    .wx-werte { display: flex; flex-wrap: wrap; gap: 3px 18px; padding: 0 3px;
-      font-size: 12.5px; }
-    .wx-werte span { display: inline-flex; gap: 6px; white-space: nowrap; }
+    /* Zweite Zeile. Umbrechen statt abschneiden — „wechselnd bewölkt" passt
+       schmal sonst nicht (das stand hier schon einmal mitten im Wort). */
+    .wx-k-unter { font-size: 12.5px; color: var(--text3); line-height: 1.35;
+      overflow-wrap: anywhere; }
+    .wx-kopf > .wx-k-unter:last-child { text-align: right; }
+
+    /* Der Verlauf bekommt den Rest der Kachel — aber gedeckelt.
+       `flex: 1` allein war zweimal falsch: bei EINER Spalte setzt display.js
+       `grid-auto-rows: auto`, die Kachel waechst dann mit ihrem Inhalt, und
+       „fuell den Rest" nutzt das bis zum Anschlag aus. Mit `max-height`
+       zusammen stimmt beides: in der quadratischen Kachel fuellt er die
+       Luecke, am Telefon bleibt die Kachel flach. */
+    .wx-tag-canvas { width: 100%; display: block;
+      flex: 1 1 auto; min-height: 104px; max-height: 240px; }
+
+    /* Der Fuss: vier Angaben in einem festen 2x2-Raster, keine Flaeche
+       darunter. Vorher war es eine umbrechende Zeile — der Umbruchpunkt
+       wanderte mit der Breite, und „Sonne" stand mal hinter dem Druck und mal
+       allein in einer zweiten Zeile. Zwei Spalten sind bei jeder Breite
+       dieselben zwei Spalten, und die Werte stehen untereinander. */
+    .wx-werte { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 3px 12px; font-size: 12.5px; }
+    .wx-werte span { display: inline-flex; gap: 5px; min-width: 0;
+      white-space: nowrap; }
     .wx-werte i { font-style: normal; color: var(--text3); }
     .wx-werte b { color: var(--text2); font-weight: 600;
       font-variant-numeric: tabular-nums; }
-
-    .wx-streifen { background: var(--surface2); border-radius: 12px;
-      padding: 8px 10px 4px; display: flex; flex-direction: column; min-height: 0; }
-    .wx-streifen-kopf { display: flex; justify-content: space-between;
-      font-size: 11px; color: var(--text3); text-transform: uppercase;
-      letter-spacing: .05em; font-weight: 700; margin-bottom: 2px; }
-    /* Die Spanne rechts ist eine Zahl mit Einheit, keine Ueberschrift —
-       „2–10 KN" liest sich falsch. */
-    .wx-streifen-kopf span + span { text-transform: none; letter-spacing: 0;
-      font-variant-numeric: tabular-nums; }
-    .wx-tag-canvas { width: 100%; height: 96px; flex: none; display: block; }
 
     /* ── Wasserstand tile ── */
     .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }

@@ -1253,15 +1253,49 @@ class Wetterkachel(Pruefstand):
         for breite in (360, 420, 560, 900, 1400):
             self.pg.set_viewport_size({'width': breite, 'height': 1000})
             self.pg.wait_for_timeout(400)
-            klemmt = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-h-klein')]
+            klemmt = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-k-unter')]
                 .some(e => e.scrollWidth - e.clientWidth > 1)""")
             self.assertFalse(klemmt, f'bei {breite} px abgeschnitten')
 
-    def test_die_kachel_hat_zwei_flaechen_und_nicht_vier(self):
-        """Vier verschachtelte Kaesten waren die unruhigste Stelle der Seite."""
-        n = self.pg.evaluate("""() => document.querySelectorAll(
-            '.wx-koerper > .wx-heute, .wx-koerper > .wx-streifen').length""")
-        self.assertEqual(n, 2)
+    def test_die_kachel_hat_keine_kaesten_im_kasten(self):
+        """Drei Flächen übereinander — gerahmter Kopf, nackte Wertezeile,
+        gerahmter Streifen — waren drei Sprachen in einer Kachel (Eignerurteil
+        „komplett desaströs"). Die Kachel selbst ist die Fläche; alles darin
+        hängt an Abstand und Schriftgröße."""
+        n = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-koerper *')]
+            .filter(e => {
+              const bg = getComputedStyle(e).backgroundColor;
+              return bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+            }).length""")
+        self.assertEqual(n, 0, 'in der Kachel liegt noch ein Kasten')
+
+    def test_nur_ein_grosser_wert(self):
+        """Temperatur und Wind standen gleich groß nebeneinander und stritten
+        um den Blick. An Bord ist der Wind die Frage."""
+        # Nicht nur Blätter: die große Zahl trägt ein <small> mit der Einheit.
+        gross = self.pg.evaluate("""() => {
+            const gr = e => parseFloat(getComputedStyle(e).fontSize) >= 26;
+            return [...document.querySelectorAll('.wx-koerper *')]
+              .filter(e => e.textContent.trim() && gr(e)
+                        && !(e.parentElement && gr(e.parentElement)))
+              .map(e => e.textContent.trim());
+        }""")
+        self.assertEqual(len(gross), 1, f'mehr als ein grosser Wert: {gross}')
+        self.assertIn('kn', gross[0])
+
+    def test_der_verlauf_fuellt_die_quadratische_kachel(self):
+        """Der Streifen hatte eine feste Höhe, und in der quadratischen Kachel
+        blieb darunter ein Viertel leer. Er ist jetzt beweglich — nach oben
+        gedeckelt, damit er am Telefon die Kachel nicht aufbläht."""
+        self.pg.set_viewport_size({'width': 1400, 'height': 1000})
+        self.pg.wait_for_timeout(600)
+        m = self.pg.evaluate("""() => {
+            const c = document.getElementById('wxCard');
+            const k = document.querySelector('.wx-koerper');
+            const r = c.getBoundingClientRect(), s = k.getBoundingClientRect();
+            return Math.round(r.bottom - s.bottom);
+        }""")
+        self.assertLess(m, 30, f'unten bleiben {m} px liegen')
 
     # ── Die Detailseite ────────────────────────────────────────────────────
 

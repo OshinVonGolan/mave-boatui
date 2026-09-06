@@ -193,41 +193,41 @@ function _renderWeather() {
     const bft = wxBft(wind);
     const faktor = (wind && boe) ? boe / wind : null;
     const lage = wxLage(jetzt.wmo != null ? jetzt.wmo : heute.wmo);
+    const wmo = jetzt.wmo != null ? jetzt.wmo : heute.wmo;
 
-    // EIN Feld mit zwei Haelften statt zweier Kaesten: Luft links, Wind
-    // rechts, dazwischen eine Haarlinie. Vier verschachtelte Flaechen in einer
-    // Kachel waren die unruhigste Stelle der ganzen Seite.
+    // EIN grosser Wert, nicht zwei. Vorher standen Temperatur und Wind gleich
+    // gross nebeneinander und stritten um den Blick — an Bord ist der Wind
+    // die Frage. Die Luft steht daneben, kleiner, und die beiden zweiten
+    // Zeilen laufen auf derselben Schriftlinie durch: dadurch liest sich das
+    // als EIN Kopf und nicht als zwei Kaesten.
+    const spanne = (heute.tmin != null && heute.tmax != null)
+      ? ` · ${Math.round(heute.tmin)}–${Math.round(heute.tmax)}°` : '';
     kopf.innerHTML = `
-      <div class="wx-h-halb">
-        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 40)}</span>
-        <div class="wx-h-text">
-          <div class="wx-h-gross">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</div>
-          <div class="wx-h-klein">${_wxEsc(lage)}</div>
-          <div class="wx-h-klein wx-h-leise">${heute.tmin != null ? Math.round(heute.tmin) : '--'}° bis ${heute.tmax != null ? Math.round(heute.tmax) : '--'}°</div>
-        </div>
+      <div class="wx-k-wind">
+        <span class="wx-k-pfeil">${_wxPfeil(dir, 30)}</span>
+        <span class="wx-k-gross">${wind != null ? Math.round(wind) : '--'}<small>kn</small></span>
+        <span class="wx-k-boe${faktor && faktor >= 1.5 ? ' boeig' : ''}">Böen <b>${
+          boe != null ? Math.round(boe) : '--'}</b></span>
       </div>
-      <div class="wx-h-halb">
-        <span class="wx-h-icon wx-h-pfeil">${_wxPfeil(dir, 34)}</span>
-        <div class="wx-h-text">
-          <div class="wx-h-gross">${wind != null ? Math.round(wind) : '--'}<small>kn</small></div>
-          <div class="wx-h-klein">${wxStrich(dir) || '--'}${bft != null ? ` · ${bft} Bft` : ''}</div>
-          <div class="wx-h-klein wx-h-leise">Böen ${boe != null ? Math.round(boe) : '--'} kn${
-            faktor && faktor >= 1.5 ? ' <em>böig</em>' : ''}</div>
-        </div>
-      </div>`;
+      <div class="wx-k-luft">
+        <span class="wx-k-ikon">${_wxIconHtml(wmo, heute.storm, 26)}</span>
+        <span class="wx-k-mittel">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</span>
+      </div>
+      <div class="wx-k-unter">${wxStrich(dir) || '--'}${bft != null ? ` · ${bft} Bft` : ''}</div>
+      <div class="wx-k-unter">${_wxEsc(lage)}${spanne}</div>`;
   }
 
-  // Die uebrigen Werte als schlichte Zeile auf dem Grund der Kachel — sie
-  // brauchen keinen eigenen Rahmen, sie sind Beiwerk.
+  // Der Fuss: vier Angaben in einem festen Raster. Sie brauchen keinen
+  // eigenen Rahmen — sie sind Beiwerk, und Beiwerk bekommt keine Flaeche.
   const werte = $('wxWerte');
   if (werte) {
     const paar = (was, wert) => wert
       ? `<span><i>${was}</i> <b>${wert}</b></span>` : '';
     werte.innerHTML = [
-      paar('Regen', heute.pop != null ? heute.pop + ' %' : ''),
       paar('Welle', welle != null ? welle.toFixed(1) + ' m' : ''),
+      paar('Regen', heute.pop != null ? heute.pop + ' %' : ''),
       paar('Druck', jetzt.druck != null ? Math.round(jetzt.druck) + ' hPa' : ''),
-      paar('Sonne', `${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}`),
+      paar('Sonne', _wxUhrZeit(heute.unter) ? 'bis ' + _wxUhrZeit(heute.unter) : ''),
     ].filter(Boolean).join('');
   }
 
@@ -275,67 +275,93 @@ function _wxTagStreifen() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
-  const pad = { t: 8, b: 16, l: 26 };
-  const cH = H - pad.t - pad.b, cW = W - pad.l;
+  // Vier Schichten, nicht acht. Vorher lagen hier eine Achse mit zwei Zahlen,
+  // eine Hilfslinie, ein Nachtblock, eine Flaeche zwischen Wind und Boee,
+  // zwei Linien, ein Punkt mit Beschriftung und die Stunden uebereinander —
+  // in 96 Pixeln Hoehe. Genau das war unlesbar (Eignerurteil).
+  //
+  // Geblieben ist: Nacht als Hauch, der Wind als Flaeche mit Linie, die Boee
+  // als duenne Linie darueber, und EINE Zahl — die hoechste Boe. Die Skala
+  // braucht keine Beschriftung, wenn ihr Hoechstwert dransteht.
+  const pad = { t: 16, b: 17 };
+  const cH = H - pad.t - pad.b;
   const spitze = Math.max(...st.map(s => s.boe || s.wind || 0), 0);
-  // Nie unter 10 kn Skala: sonst wirkt eine Flaute wie ein Sturm. Und immer
-  // etwas Luft ueber der Spitze, damit sie nicht am Rand klebt.
-  const max = Math.max(10, Math.ceil((spitze * 1.15) / 5) * 5);
+  // Nie unter 10 kn Skala: sonst wirkt eine Flaute wie ein Sturm. Sonst nur
+  // so viel Luft ueber der Spitze, wie ihre Beschriftung braucht.
+  //
+  // Aufgerundet wurde frueher auf Fuenferschritte, weil eine Achse mit Zahlen
+  // dranstand — 18 kn wurden dann zu einer Skala bis 25, und ein gutes Drittel
+  // des Bildes blieb leer. Die Achse gibt es nicht mehr, also auch keinen
+  // Grund fuer glatte Zahlen.
+  const max = Math.max(10, spitze * 1.18);
   const n = st.length - 1;
-  const xOf = i => pad.l + (i / n) * cW;
+  const xOf = i => (i / n) * W;
   const yOf = v => pad.t + (1 - v / max) * cH;
 
-  // Nacht hinterlegen — 20 Knoten um drei Uhr sind etwas anderes als um drei.
+  // 1. Nacht — 20 Knoten um drei Uhr sind etwas anderes als um drei. Als
+  //    Hauch und nicht als Block: der Block war der dunkelste Fleck im Bild
+  //    und stritt mit der Kurve.
   const tag = (_wxData.tage || [])[0] || {};
   const auf = _wxZeit(tag.auf), unter = _wxZeit(tag.unter);
   if (auf && unter) {
-    ctx.fillStyle = 'rgba(128,128,160,.14)';
-    st.forEach((s, i) => {
+    // Ueber die VOLLE Hoehe: als Kasten in der Bildmitte sah es aus wie ein
+    // zweites Diagramm, das ueber dem ersten liegt.
+    //
+    // Und mit weicher Kante. Der Fleck war leise genug, aber seine SENKRECHTE
+    // KANTE fing den Blick — sie sah aus wie eine Linie im Diagramm, und die
+    // Sonne geht ohnehin nicht auf die Minute unter. Sie laeuft jetzt ueber
+    // eine halbe Stunde ein und aus.
+    const nacht = st.map(s => {
       const t = _wxZeit(s.t);
-      if (!t) return;
+      if (!t) return false;
       const h = t.getHours();
-      if (h < auf.getHours() || h >= unter.getHours()) {
-        const a = xOf(Math.max(0, i - .5)), b = xOf(Math.min(n, i + .5));
-        ctx.fillRect(a, pad.t, b - a, cH);
-      }
+      return h < auf.getHours() || h >= unter.getHours();
     });
+    let i = 0;
+    while (i < nacht.length) {
+      if (!nacht[i]) { i++; continue; }
+      let j = i;
+      while (j + 1 < nacht.length && nacht[j + 1]) j++;
+      const a = xOf(Math.max(0, i - .5)), b = xOf(Math.min(n, j + .5));
+      const weich = Math.min(14, Math.max(2, (b - a) / 4));
+      const lauf = ctx.createLinearGradient(a, 0, b, 0);
+      const ton = 'rgba(148,163,184,';
+      lauf.addColorStop(0, ton + '0)');
+      lauf.addColorStop(Math.min(.5, weich / (b - a)), ton + '.055)');
+      lauf.addColorStop(Math.max(.5, 1 - weich / (b - a)), ton + '.055)');
+      lauf.addColorStop(1, ton + (b >= W - 1 ? '.055)' : '0)'));
+      ctx.fillStyle = lauf;
+      ctx.fillRect(a, 0, b - a, H);
+      i = j + 1;
+    }
   }
 
-  // Hilfslinie auf der halben Skala, mit Zahl. Ohne sie ist eine Kurve nur
-  // eine Form.
-  const mitte = max / 2;
-  ctx.strokeStyle = 'rgba(148,163,184,.22)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad.l, yOf(mitte)); ctx.lineTo(W, yOf(mitte)); ctx.stroke();
-  ctx.fillStyle = 'rgba(148,163,184,.85)';
-  ctx.font = '11px sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(String(Math.round(mitte)), pad.l - 5, yOf(mitte) + 4);
-  ctx.fillText(String(max), pad.l - 5, pad.t + 8);
-
-  // Boeen als Flaeche ueber dem Wind — die Flaeche IST der Unterschied.
-  ctx.beginPath();
-  let start = true;
-  st.forEach((s, i) => {
-    const v = s.boe != null ? s.boe : s.wind;
-    if (v == null) return;
-    start ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
-    start = false;
-  });
-  for (let i = st.length - 1; i >= 0; i--) {
-    if (st[i].wind == null) continue;
-    ctx.lineTo(xOf(i), yOf(st[i].wind));
-  }
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(251,146,60,.22)';
+  // 2. Der Wind als Flaeche bis zum Boden — die Hoehe IST die Staerke.
+  const akzent = _wxFarbe('--accent', '#38bdf8');
+  const pfad = () => {
+    ctx.beginPath();
+    let erste = true;
+    st.forEach((s, i) => {
+      if (s.wind == null) return;
+      erste ? ctx.moveTo(xOf(i), yOf(s.wind)) : ctx.lineTo(xOf(i), yOf(s.wind));
+      erste = false;
+    });
+  };
+  const boden = pad.t + cH;
+  pfad();
+  ctx.lineTo(W, boden); ctx.lineTo(0, boden); ctx.closePath();
+  const fuell = ctx.createLinearGradient(0, pad.t, 0, boden);
+  fuell.addColorStop(0, _wxAlpha(akzent, .30));
+  fuell.addColorStop(1, _wxAlpha(akzent, .02));
+  ctx.fillStyle = fuell;
   ctx.fill();
 
-  // Die Oberkante der Boeen als eigene duenne Linie: ohne sie ist die Flaeche
-  // ein Fleck, und man sieht nicht, WO die Boe sitzt.
+  pfad();
+  ctx.strokeStyle = akzent; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // 3. Die Boee nur als Linie. Die Flaeche dazwischen war ein brauner Fleck.
   ctx.beginPath();
-  ctx.strokeStyle = 'rgba(251,146,60,.9)';
-  ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
   let erste = true;
   st.forEach((s, i) => {
     const v = s.boe != null ? s.boe : s.wind;
@@ -343,48 +369,52 @@ function _wxTagStreifen() {
     erste ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
     erste = false;
   });
+  ctx.strokeStyle = 'rgba(251,146,60,.75)';
+  ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.strokeStyle = _wxFarbe('--accent', '#38bdf8');
-  ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
-  st.forEach((s, i) => {
-    if (s.wind == null) return;
-    i === 0 ? ctx.moveTo(xOf(i), yOf(s.wind)) : ctx.lineTo(xOf(i), yOf(s.wind));
-  });
-  ctx.stroke();
-
-  // Die hoechste Boe mit ihrer Zahl — die ist es, worauf man sich einrichtet.
+  // 4. Die hoechste Boe mit ihrer Zahl — darauf richtet man sich ein, und sie
+  //    ersetzt die Achsenbeschriftung.
   let iMax = 0, vMax = -1;
   st.forEach((s, i) => {
     const v = s.boe != null ? s.boe : s.wind;
     if (v != null && v > vMax) { vMax = v; iMax = i; }
   });
   if (vMax > 0) {
-    const x = xOf(iMax), y = yOf(vMax);
+    // Punkt und Zahl bleiben im Bild. Liegt die Spitze auf der ersten Stunde
+    // — was oft so ist, es ist die jetzige —, sass der Punkt halb ausserhalb
+    // und die Zahl lag auf der Linie.
+    const x = Math.min(W - 3, Math.max(3, xOf(iMax)));
+    const y = Math.max(11, yOf(vMax));
     ctx.fillStyle = 'rgba(251,146,60,.95)';
-    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 2.6, 0, Math.PI * 2); ctx.fill();
     ctx.font = '600 11px sans-serif';
-    ctx.textAlign = x > W - 40 ? 'right' : 'left';
-    ctx.fillText(`${Math.round(vMax)} kn`, x + (x > W - 40 ? -6 : 6), y - 5);
+    const rechts = x > W - 46;
+    ctx.textAlign = rechts ? 'right' : 'left';
+    ctx.fillText(`${Math.round(vMax)} kn`, x + (rechts ? -7 : 7), y - 7);
   }
 
-  // Stunden darunter, alle drei.
-  ctx.fillStyle = 'rgba(148,163,184,.85)';
+  // Die Stunden darunter, alle drei. Die erste ist jetzt und steht deshalb
+  // links buendig, die letzte rechts — sonst haengen sie halb ueber der Kante.
+  ctx.fillStyle = 'rgba(148,163,184,.7)';
   ctx.font = '11px sans-serif';
-  ctx.textAlign = 'center';
   st.forEach((s, i) => {
     if (i % 3) return;
-    ctx.fillText(_wxUhr(s.t), Math.min(W - 10, Math.max(pad.l + 8, xOf(i))), H - 3);
+    ctx.textAlign = i === 0 ? 'left' : (i === n ? 'right' : 'center');
+    ctx.fillText(_wxUhr(s.t), Math.min(W, Math.max(0, xOf(i))), H - 3);
   });
+}
 
-  const spanne = $('wxTagSpanne');
-  if (spanne) {
-    const winde = st.map(s => s.wind).filter(v => v != null);
-    spanne.textContent = winde.length
-      ? `${Math.round(Math.min(...winde))}–${Math.round(Math.max(...winde))} kn`
-      : '';
-  }
+/** Eine Farbe aus dem Stylesheet mit Deckkraft versehen.
+ *
+ * Die Design-Marken stehen als `#rrggbb` da; `color-mix` gaebe es zwar, aber
+ * die Leinwand nimmt keine CSS-Funktionen entgegen — sie will eine fertige
+ * Farbe. */
+function _wxAlpha(farbe, a) {
+  const m = /^#([0-9a-f]{6})$/i.exec((farbe || '').trim());
+  if (!m) return farbe;
+  const z = parseInt(m[1], 16);
+  return `rgba(${(z >> 16) & 255},${(z >> 8) & 255},${z & 255},${a})`;
 }
 
 // ── Abruf ───────────────────────────────────────────────────────────────────

@@ -1475,12 +1475,16 @@ function _zeigerartMerken() {
 // Kurz genug, dass das Weiterschalten nicht traege wirkt, lang genug fuer
 // einen bequemen Doppeltipp.
 //
-// Erst 240 ms — das war zu spueren (Eignermeldung). 150 ms faengt den
-// ueblichen Doppeltipp noch ab (Menschen tippen ihn meist in 100 bis 150 ms)
-// und ist beim einfachen Weiterschalten kaum noch wahrzunehmen. Ein sehr
-// gemaechlicher Doppeltipp schaltet dafuer weiter, statt die Seite zu oeffnen;
-// das ist der bewusst in Kauf genommene Tausch.
-const _SB_DOPPEL_MS = 150;
+// Erst 240 ms, dann 150, jetzt 100 — jedes Mal auf Ansage, weil das
+// Weiterschalten noch zu spueren war. Bei 100 ms ist die Verzoegerung beim
+// einfachen Tippen praktisch weg.
+//
+// Der Preis steht in der Frist selbst: ein Doppeltipp wird meist in 100 bis
+// 150 ms getippt, ein Teil davon faellt jetzt also aus der Frist und schaltet
+// zweimal weiter, statt die Detailseite zu oeffnen. Das ist der bewusst
+// gewaehlte Tausch — Weiterschalten ist die haeufige Handlung, die Detailseite
+// die seltene, und ein verpasster Doppeltipp kostet nur einen weiteren.
+const _SB_DOPPEL_MS = 100;
 let _sbWartend = null;      // {feld, los, uhr} — ein Tipp, der noch abwartet
 
 function _sbHaltenBinden() {
@@ -1726,8 +1730,10 @@ function _sbRenderTank(data) {
     // .34 statt kraeftiger: die Linie ueber der Flaeche eines Verlaufsgraphen
     // liegt bei .3 — die Kante soll dazu passen und nicht daneben schreien.
     kante.style.opacity = anteil2 == null ? 0 : 0.34;
+    // Um die eigene Breite nach links versetzt: die Kante liegt damit INNEN
+    // am Balken an und steht nicht ueber den Stand hinaus.
     kante.style.left = anteil2 == null ? '0%'
-      : `calc(${anteil2.toFixed(1)}% - 2px)`;
+      : `calc(${anteil2.toFixed(1)}% - 1px)`;
     kante.style.color = c.color || '';
   }
 
