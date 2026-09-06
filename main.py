@@ -3164,6 +3164,129 @@ def _pegel_finden(uuid: str | None) -> dict:
     raise HTTPException(400, detail='Unbekannter Pegel')
 
 
+# ── Gaeste-WLAN: ein QR-Code zum Scannen ────────────────────────────────────
+#
+# Wer an Bord kommt, fragt als Erstes nach dem WLAN. Statt ein Passwort
+# vorzulesen, zeigt das Wandtablet einen QR-Code; iOS-Kamera und Android bieten
+# daraufhin von selbst „Netzwerk beitreten" an.
+#
+# **Das gehoert das GAESTENETZ und nicht das Bordnetz.** Wer vor dem Tablet
+# steht, hat damit das Passwort — das ist der Sinn der Sache. Es darf also
+# kein Netz sein, aus dem man an den Pi, die Router-Oberflaeche oder das
+# CAN-Gateway kommt. Das einzurichten ist Sache des Routers, nicht dieser App;
+# hier stehen nur Name und Passwort.
+#
+# Von Hand eingetragen und NICHT aus dem Router gelesen: der RutOS-Zugang hat
+# ein Sitzungslimit, und ein 401 von dort hat schon einmal den ganzen
+# Verbindungszustand eingefroren. Ein Gaestepasswort aendert sich zweimal im
+# Jahr — das ist den Preis nicht wert.
+
+WLAN_FILE = BASE_DIR / 'wlan.json'
+_WLAN_ARTEN = ('WPA', 'WEP', 'nopass')
+
+
+def _wlan_lesen() -> dict:
+    d = read_json(WLAN_FILE, {}) or {}
+    art = d.get('art')
+    return {'ssid': str(d.get('ssid') or '')[:64],
+            'passwort': str(d.get('passwort') or '')[:128],
+            'art': art if art in _WLAN_ARTEN else 'WPA',
+            'versteckt': bool(d.get('versteckt'))}
+
+
+def _wlan_feld(text: str) -> str:
+    """Ein Feld fuer die WIFI-Zeichenkette maskieren.
+
+    Sonderzeichen muessen mit Backslash geschuetzt werden, und der Backslash
+    zuerst — sonst maskiert man die eigenen Maskierungen gleich mit.
+    """
+    for zeichen in ('\\', ';', ',', ':', '"'):
+        text = text.replace(zeichen, '\\' + zeichen)
+    return text
+
+
+def _wlan_wert(text: str) -> str:
+    """Wie `_wlan_feld`, aber schuetzt zusaetzlich vor der Hex-Falle.
+
+    Sieht ein Wert aus wie eine Hexzahl (`0a1b2c…`), liest ein Telefon ihn als
+    ROHEN Schluessel statt als Text und tritt dem Netz nicht bei. Anfuehrungs-
+    zeichen erzwingen die Lesart als Text. Sie stehen AUSSEN und werden selbst
+    nicht maskiert.
+    """
+    hex_verdacht = bool(text) and all(c in '0123456789abcdefABCDEF' for c in text)
+    return f'"{_wlan_feld(text)}"' if hex_verdacht else _wlan_feld(text)
+
+
+def wlan_kette(w: dict) -> str:
+    """Die Zeichenkette, die ein Telefon als WLAN-Angebot versteht."""
+    teile = [f"T:{w['art']}", f"S:{_wlan_wert(w['ssid'])}"]
+    if w['art'] != 'nopass':
+        teile.append(f"P:{_wlan_wert(w['passwort'])}")
+    if w['versteckt']:
+        teile.append('H:true')
+    return 'WIFI:' + ';'.join(teile) + ';;'
+
+
+@app.get('/api/wlan')
+async def get_wlan():
+    """Name und Passwort des Gaestenetzes.
+
+    Das Passwort geht mit hinaus. Es steht ohnehin im QR-Code daneben, und die
+    Seite zeigt es als Text darunter — nicht jeder scannt.
+    """
+    w = _wlan_lesen()
+    return {**w, 'eingerichtet': bool(w['ssid'])}
+
+
+@app.put('/api/wlan')
+async def put_wlan(request: Request):
+    daten = await _json_body(request)
+    if not isinstance(daten, dict):
+        raise HTTPException(400, detail='Erwartet wird ein Objekt')
+    ssid = str(daten.get('ssid') or '').strip()[:64]
+    art = daten.get('art') if daten.get('art') in _WLAN_ARTEN else 'WPA'
+    passwort = str(daten.get('passwort') or '')[:128]
+    if ssid and art != 'nopass' and len(passwort) < 8:
+        # WPA verlangt acht Zeichen. Ein kuerzeres Passwort ergaebe einen
+        # QR-Code, den jedes Telefon annimmt und an dem dann jeder Beitritt
+        # scheitert — und gesucht wird der Fehler beim WLAN.
+        raise HTTPException(400, detail='WPA braucht mindestens 8 Zeichen')
+    neu = {'ssid': ssid, 'passwort': passwort, 'art': art,
+           'versteckt': bool(daten.get('versteckt'))}
+    await _run_blocking(write_json, WLAN_FILE, neu)
+    with suppress(OSError):
+        os.chmod(WLAN_FILE, 0o600)
+    log.info('Gäste-WLAN gesetzt: %r', ssid or '(geleert)')
+    return {'ok': True, **neu, 'eingerichtet': bool(ssid)}
+
+
+@app.get('/api/wlan/qr.svg')
+async def get_wlan_qr():
+    """Der QR-Code als SVG.
+
+    DUNKEL AUF WEISS, mit weissem Rand. Auf dunklem Grund mit durchsichtigem
+    Hintergrund waere er zwar huebscher, aber ein Teil der Telefone liest
+    umgekehrte Codes nicht — und wenn es nicht klappt, sucht niemand die
+    Ursache beim Farbschema.
+    """
+    w = _wlan_lesen()
+    if not w['ssid']:
+        raise HTTPException(404, detail='Kein Gäste-WLAN eingerichtet')
+    import io
+    try:
+        import segno
+    except ImportError:                     # pragma: no cover — Paket fehlt
+        raise HTTPException(
+            503, detail='Das Paket segno fehlt — QR-Code kann nicht erzeugt '
+                        'werden (pip install -r requirements.txt)') from None
+    code = segno.make(wlan_kette(w), error='m')
+    puffer = io.BytesIO()
+    code.save(puffer, kind='svg', scale=8, border=3,
+              dark='#000000', light='#ffffff')
+    return Response(content=puffer.getvalue(), media_type='image/svg+xml',
+                    headers={'Cache-Control': 'no-store'})
+
+
 @app.get('/api/pegel/orte')
 async def get_pegel_orte():
     """Die gepflegten Pegel, in gepflegter Reihenfolge."""

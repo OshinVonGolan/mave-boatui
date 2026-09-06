@@ -392,6 +392,12 @@ function _burgerHaupt() {
     + (netz ? eintrag(_BM_SVG.geraete, 'Geräte', 'openGeraete()') : '')
     + (netz ? eintrag(_BM_SVG.internet, 'Netzwerk', 'openConnectivity()') : '')
     + eintrag(_BM_SVG.stauplan, 'Stauplan', 'openStauplan()')
+    // Nur dort, wo jemand danach gefragt wird: am Wandtablet (Kiosk) und beim
+    // Eigner, der es einrichtet. Eine Frage der Platzierung, nicht des
+    // Schutzes — siehe wlan.js.
+    + ((typeof wlanImMenue === 'function' && wlanImMenue())
+       ? eintrag('<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/>',
+                 'Gäste-WLAN', 'wlanPopAuf()') : '')
     + '<div class="burger-trenner"></div>'
     + eintrag(_BM_SVG.ordnen, 'Kacheln anordnen', 'kachelnOrdnenAn(true)')
     // In der installierten Wandfassung faellt der Eintrag weg. Sie laeuft

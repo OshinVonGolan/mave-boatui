@@ -16,7 +16,8 @@ JS_FILES = [
     'core.js', 'quelle.js', 'anmeldung.js', 'battery.js', 'tanks.js', 'lights.js', 'charts.js',
     'alarms.js', 'alarmton.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
-    'wandbetrieb.js', 'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
+    'wandbetrieb.js', 'waterlevel.js', 'weather.js',
+    'wlan.js', 'verlauf.js', 'heizung.js',
     'orte.js', 'topologie.js', 'geraete.js', 'init.js',
 ]
 

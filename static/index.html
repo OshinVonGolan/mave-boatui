@@ -594,7 +594,13 @@
       <div class="wx-kopf" id="wxHeute"></div>
       <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
       <div class="wx-werte" id="wxWerte"></div>
-      <div class="ort-punkte" id="wxPunkte" aria-hidden="true"></div>
+      <!-- Unterste Zeile: Punkte mittig, rechts daneben leise das Modell.
+           Herkunft gehoert an den Rand, nicht in die Werte. -->
+      <div class="wx-fuss">
+        <span></span>
+        <span class="ort-punkte" id="wxPunkte" aria-hidden="true"></span>
+        <span class="wx-quelle" id="wxQuelle"></span>
+      </div>
     </div>
     <!-- Half: heute -->
     <div class="tile-show-half wx-half">
@@ -624,6 +630,28 @@
 <!-- Die Fassungsnummer stand in der Kopfzeile neben dem Bootsnamen und nahm
      dort Platz weg, den die Uhr brauchte. Sie wird selten gelesen und gehoert
      ans Ende der Seite, wie in einem Impressum. -->
+<!-- Gäste-WLAN: frei schwebendes Popup (Eignerwunsch), keine eigene Seite.
+     Man tippt es auf, hält jemandem das Tablet hin, tippt daneben — weg. -->
+<div id="wlanPop" class="wlan-pop hidden" onclick="wlanPopZu(event)">
+  <div class="wlan-karte">
+    <button class="wlan-zu" onclick="wlanPopZu()" aria-label="Schließen">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <div class="wlan-titel">Gäste-WLAN</div>
+    <!-- Weisser Kasten um den Code: er ist dunkel auf weiss, und auf dunklem
+         Grund ohne Rand lesen ihn manche Telefone nicht. -->
+    <div class="wlan-qr"><img id="wlanQr" alt="QR-Code zum Beitreten"></div>
+    <div class="wlan-leer" id="wlanLeer" hidden>Noch nicht eingerichtet —
+      Einstellungen › Netzwerk › Gäste-WLAN.</div>
+    <div class="wlan-zeilen">
+      <div class="wlan-zeile"><i>Netz</i><b id="wlanSsid">--</b></div>
+      <div class="wlan-zeile"><i>Passwort</i><b id="wlanPw">--</b></div>
+    </div>
+    <div class="wlan-hinweis">Kamera drauf halten — das Telefon bietet den
+      Beitritt von selbst an.</div>
+  </div>
+</div>
+
 <footer class="seitenfuss">
   <span id="versionBadge"></span>
 </footer>
@@ -1210,6 +1238,37 @@
 
     <!-- Kategorie: Netzwerk -->
     <div class="set-pane set-pane-net" id="setPane-netz">
+      <!-- Steht VOR dem erzeugten Teil: `settingsNetContent` wird komplett
+           ersetzt, ein Geschwister daneben bleibt stehen. -->
+      <div class="set-card" style="max-width:1100px;margin:0 auto 14px">
+        <div class="set-card-hd">Gäste-WLAN</div>
+        <div class="hinweis" style="margin-bottom:10px">Wird als QR-Code
+          angezeigt, den Gäste mit dem Telefon scannen. <b>Das Gästenetz
+          eintragen, nicht das Bordnetz</b> — wer vor dem Tablet steht, hat
+          damit das Passwort.</div>
+        <div class="set-wlan-form">
+          <label>Netzname (SSID)
+            <input id="sWlanSsid" class="settings-input" type="text" maxlength="64"
+                   autocomplete="off" spellcheck="false"></label>
+          <label>Passwort
+            <input id="sWlanPw" class="settings-input" type="text" maxlength="128"
+                   autocomplete="off" spellcheck="false"></label>
+          <label>Verschlüsselung
+            <select id="sWlanArt" class="settings-input">
+              <option value="WPA">WPA / WPA2 / WPA3</option>
+              <option value="WEP">WEP</option>
+              <option value="nopass">ohne Passwort</option>
+            </select></label>
+          <label class="set-wlan-haken">
+            <input id="sWlanVersteckt" type="checkbox"> Netz sendet den Namen nicht
+          </label>
+        </div>
+        <div class="es-tat" style="margin-top:12px">
+          <button class="btn-primary" onclick="wlanSpeichern()"
+                  style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Speichern</button>
+          <span class="hinweis" id="sWlanMeldung"></span>
+        </div>
+      </div>
       <div id="settingsNetContent" style="max-width:1100px;margin:0 auto;padding:0 4px"><div class="net-empty">Lade…</div></div>
     </div>
 

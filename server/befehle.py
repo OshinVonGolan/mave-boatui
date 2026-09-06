@@ -65,6 +65,10 @@ DURCHLEITEN: tuple[tuple[str, str, str], ...] = (
     # — der Server nahm den Aufruf an und das Boot antwortete mit 405. Aufgefallen
     # beim Einbau der Wetterorte und der Pegelliste, die beide hier durchmuessen.
     ('PATCH', '/api/settings',                 r.EINSTELLEN),
+    # Gaeste-WLAN setzen. GELESEN wird es nur an Bord: der QR-Code haengt am
+    # Wandtablet, und ein Gaestepasswort hat auf einem Rechenzentrumsserver
+    # nichts verloren. Einstellen soll man es aber auch von unterwegs koennen.
+    ('PUT',  '/api/wlan',                      r.EINSTELLEN),
     # Der Grundriss wie der Stauplan daneben: eine gepflegte Liste, die auch
     # aus der Ferne zu aendern sein soll. Das BILD dazu bewusst nicht — der
     # Durchleiter nimmt nur JSON und hoechstens 256 kB, und ein Planfoto ueber

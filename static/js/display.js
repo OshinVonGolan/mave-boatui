@@ -1807,45 +1807,91 @@ function sbLadenWeiter(richtung = 1) {
   if (typeof _lastData !== 'undefined' && _lastData) _sbRenderLaden(_lastData);
 }
 
-function _sbRenderLaden(data) {
-  const w = q => {
-    const v = data?.[q]?.power;
-    return (typeof v === 'number') ? v : null;
-  };
-  const einzeln = { charger: w('charger'), solar: w('solar'), orion: w('orion') };
-  const aktiv = _SB_LADEN[_sbLadenIdx];
+// GEMESSEN SCHLAEGT GERECHNET.
+//
+// Zeigen wir Ampere und die Quelle meldet Ampere, dann nehmen wir ihre. Zeigen
+// wir Watt und sie meldet Watt, dann diese. Gerechnet wird nur, wo der
+// passende Wert fehlt.
+//
+// Der Anlass war ein Widerspruch auf einem Bildschirm (Eignermeldung): die
+// Detailseite zeigte fuer den Lader 51,5 A, die Leiste 52,9 A. Die Leiste
+// rechnete `Leistung / Batteriespannung` — die Leistung misst der Lader aber an
+// SEINEN Klemmen (13,70 V), die Batteriespannung liegt hinter dem Kabel
+// (13,29 V). In einer Reihenschaltung ist der Strom ueberall gleich; verloren
+// geht Spannung, nicht Strom. Die Division verwandelte den Kabelverlust also
+// rechnerisch in 1,4 A, die es nicht gibt.
+//
+// Fuer „gesamt" werden entsprechend STROEME addiert und nicht Leistungen: die
+// Quellen speisen dieselbe Sammelschiene, da ist die Summe der Stroeme der
+// Strom. Leistungen zu addieren und danach durch eine Spannung zu teilen,
+// haette denselben Fehler nur breiter gemacht.
+const _SB_QUELLEN = {
+  // Reihenfolge = Vorrang. `dc_*` sind bei allen dreien die BATTERIESEITIGEN
+  // Klemmwerte; die Lichtmaschine hat nur das schlichte Paar.
+  charger:    { strom: ['dc_current'], leistung: ['power'] },
+  solar:      { strom: ['dc_current', 'current'], leistung: ['power'] },
+  orion:      { strom: ['dc_current', 'current'], leistung: ['power'] },
+  alternator: { strom: ['current'], leistung: ['power'] },
+};
 
-  let leistung;
-  if (aktiv.schluessel === 'gesamt') {
-    // Gesamt heisst wirklich gesamt: auch die Lichtmaschine zaehlt mit, auch
-    // wenn sie kein eigenes Feld im Durchschalten hat.
-    const alle = [einzeln.charger, einzeln.solar, einzeln.orion, w('alternator')]
-      .filter(v => v != null && v > 1);
-    leistung = alle.length ? alle.reduce((a, b) => a + b, 0) : 0;
-  } else {
-    leistung = einzeln[aktiv.schluessel];
-  }
+/** Der gesuchte Wert einer Quelle — gemessen, sonst gerechnet, sonst null. */
+function _sbQuelle(data, name, alsStrom, spannung) {
+  const q = data?.[name];
+  if (!q) return null;
+  const felder = _SB_QUELLEN[name] || { strom: ['current'], leistung: ['power'] };
+  const zahl = liste => {
+    for (const f of liste) {
+      const v = q[f];
+      if (typeof v === 'number') return v;
+    }
+    return null;
+  };
+  const gemessen = zahl(alsStrom ? felder.strom : felder.leistung);
+  if (gemessen != null) return gemessen;
+  const anders = zahl(alsStrom ? felder.leistung : felder.strom);
+  if (anders == null || !(spannung > 1)) return null;
+  return alsStrom ? anders / spannung : anders * spannung;
+}
+
+function _sbRenderLaden(data) {
+  const aktiv = _SB_LADEN[_sbLadenIdx];
 
   // Einheit folgt der Batteriekachel: dort steht der Schalter Ah/Wh, und zwei
   // verschiedene Masse nebeneinander auf einem Bildschirm waeren Unsinn.
   const inAh = (typeof _battEnergyUnit !== 'undefined') && _battEnergyUnit === 'ah';
   const spannung = (typeof _lastBattery !== 'undefined' && _lastBattery?.voltage) || null;
+  const wert = name => _sbQuelle(data, name, inAh, spannung);
+
+  // Was als „laeuft nicht" gilt, haengt am Mass: ein Watt ist nichts, ein
+  // Ampere ist schon etwas.
+  const schwelle = inAh ? 0.1 : 1;
+
+  let anzeige;
+  if (aktiv.schluessel === 'gesamt') {
+    // Gesamt heisst wirklich gesamt: auch die Lichtmaschine zaehlt mit, auch
+    // wenn sie kein eigenes Feld im Durchschalten hat.
+    const alle = ['charger', 'solar', 'orion', 'alternator']
+      .map(wert).filter(v => v != null && v > schwelle);
+    anzeige = alle.length ? alle.reduce((a, b) => a + b, 0) : 0;
+  } else {
+    anzeige = wert(aktiv.schluessel);
+  }
 
   _sbSet('sbChgLbl', aktiv.label);
   const einheitEl = document.querySelector('#sbChgItem .sb-val i');
 
-  // Die Einheit haengt am gewaehlten Mass und an der Spannung — NICHT daran,
-  // ob diese eine Quelle gerade etwas liefert.
+  // Die Einheit haengt am gewaehlten Mass — NICHT daran, ob diese eine Quelle
+  // gerade etwas liefert.
   //
   // Vorher stand beides in derselben Bedingung. Meldete das Landstromgeraet
   // keine Leistung (also immer, wenn kein Kabel dranhaengt), fiel der Zweig
   // durch und die Einheit sprang auf Watt, obwohl auf dem ganzen Rest des
-  // Bildschirms Ampere stand. Ohne Spannung wird weiter nicht gerechnet: dann
-  // ist Watt richtig, weil Ampere geraten waere.
-  const inA = inAh && spannung > 1;
-  _sbSet('sbChg', leistung == null ? '--'
-    : inA ? (leistung / spannung).toFixed(1) : String(Math.round(leistung)));
+  // Bildschirms Ampere stand.
+  const inA = inAh;
+  _sbSet('sbChg', anzeige == null ? '--'
+    : inA ? anzeige.toFixed(1) : String(Math.round(anzeige)));
   if (einheitEl) einheitEl.textContent = inA ? 'A' : 'W';
+
 
   // Untere Zeile: geladene Menge der letzten 24 Stunden, in derselben Einheit.
   // Fehlt die Bilanz noch (erster Abruf laeuft), lieber nichts behaupten.
@@ -1859,14 +1905,17 @@ function _sbRenderLaden(data) {
       menge = (wh >= 1000 ? (wh / 1000).toFixed(2) + ' kWh' : Math.round(wh) + ' Wh') + ' / 24 h';
     }
   }
-  if (aktiv.schluessel === 'gesamt' && !(leistung > 1)) {
+  // Gegen `schwelle` und nicht gegen 1: seit hier auch Ampere stehen koennen,
+  // waere eine feste Eins die falsche Grenze — ein Watt ist nichts, ein
+  // Ampere ist schon Ladung.
+  if (aktiv.schluessel === 'gesamt' && !(anzeige > schwelle)) {
     _sbSet('sbChgSub', menge || (data?.inverter?.state === 'Aktiv'
       ? 'Inverter an' : 'keine Quelle'));
   } else {
-    _sbSet('sbChgSub', menge || (leistung == null ? 'keine Daten' : ''));
+    _sbSet('sbChgSub', menge || (anzeige == null ? 'keine Daten' : ''));
   }
-  _sbState('sbChg', leistung == null ? 'sb-idle'
-    : leistung > 1 ? 'sb-ok' : 'sb-idle');
+  _sbState('sbChg', anzeige == null ? 'sb-idle'
+    : anzeige > schwelle ? 'sb-ok' : 'sb-idle');
 }
 
 /**

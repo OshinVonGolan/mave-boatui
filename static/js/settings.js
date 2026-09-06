@@ -82,6 +82,10 @@ function switchSettingsCat(cat) {
   );
   if (cat === 'heizung') hzEinstellungenLaden();
   if (cat === 'netz') {
+    // Einmal beim Aufschlagen, nicht im Takt: das Gäste-WLAN ändert sich nicht
+    // von selbst, und ein Feld, das man gerade tippt, soll nicht überschrieben
+    // werden.
+    if (typeof wlanEinstZeichnen === 'function') wlanEinstZeichnen();
     fetchSettingsNetwork();
     if (!_settingsNetTimer) _settingsNetTimer = setInterval(fetchSettingsNetwork, 5000);
   } else {

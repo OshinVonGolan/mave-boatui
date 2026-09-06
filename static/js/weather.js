@@ -176,6 +176,16 @@ function _renderWeather() {
   const nameEl = $('wxOrtName');
   if (nameEl) nameEl.textContent = ort.name;
   ortPunkte('wxPunkte', _wxOrtListe().length, _wxIndex);
+  // Welches Modell gerade rechnet. Bei der Vorgabe steht dort „Automatisch",
+  // und das ist die ehrliche Auskunft: dann waehlt Open-Meteo selbst und
+  // nennt nicht, welches es genommen hat. Wer es genau wissen will, stellt in
+  // den Einstellungen ein festes Modell ein — dann steht dessen Name hier.
+  const quelle = $('wxQuelle');
+  if (quelle) {
+    const name = (_wxData && _wxData.modell_name) || _wxModelle[_wxModell] || '';
+    quelle.textContent = name;
+    quelle.title = name ? `Wettermodell: ${name}` : '';
+  }
 
   const d = _wxData;
   const tage = (d && d.tage) || [];

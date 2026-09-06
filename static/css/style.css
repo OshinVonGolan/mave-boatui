@@ -1528,6 +1528,14 @@
        wie viele Orte gepflegt sind und auf welchem man gerade steht. Sie
        ersetzen den Pfeil am Namen: ein Pfeil sagt „hier geht es weiter", die
        Punkte sagen zusaetzlich, wie weit. */
+    /* Punkte mittig, Modellname rechts, und links eine gleich breite leere
+       Spalte — sonst schoebe der Name die Punkte aus der Mitte. */
+    .wx-fuss { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center; gap: 6px; flex: none; }
+    .wx-quelle { justify-self: end; font-size: 10px; color: var(--text3);
+      letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+
     .ort-punkte { display: flex; justify-content: center; gap: 6px;
       padding-top: 1px; flex: none; }
     .ort-punkte i { width: 5px; height: 5px; border-radius: 50%;
@@ -2878,6 +2886,62 @@
       .veraltet .kb-txt { flex: none; }
       .veraltet-knopf { width: 100%; padding: 11px 14px; font-size: 13px; }
     }
+
+    /* ── Gäste-WLAN: frei schwebendes Popup ──────────────────────────────
+       Keine eigene Seite (Eignerwunsch). Der abgedunkelte Grund faengt den
+       Tipp zum Schliessen ab; die Karte selbst nicht, sonst geht das Popup zu,
+       waehrend jemand scannt und dabei das Tablet anfasst. */
+    .wlan-pop {
+      position: fixed; inset: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px; background: rgba(4, 10, 20, .72);
+      -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    }
+    .wlan-pop.hidden { display: none; }
+    .wlan-karte {
+      position: relative; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 18px;
+      padding: 22px 24px 20px; width: min(360px, 100%);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .5); text-align: center;
+    }
+    .wlan-zu {
+      position: absolute; top: 10px; right: 10px; width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: none; border: 0; color: var(--text3); cursor: pointer;
+      border-radius: 9px; -webkit-tap-highlight-color: transparent;
+    }
+    html[data-zeiger="fein"] .wlan-zu:hover { color: var(--text); background: var(--surface2); }
+    .wlan-titel { font-size: 12px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3); margin-bottom: 14px; }
+    /* Weiss und mit Rand: der Code ist dunkel auf hell, und ein Teil der
+       Telefone liest umgekehrte Codes nicht. Huebscher waere durchsichtig —
+       aber wenn es dann nicht klappt, sucht niemand die Ursache im Farbton. */
+    .wlan-qr { background: #fff; border-radius: 12px; padding: 8px;
+      display: flex; justify-content: center; }
+    .wlan-qr img { width: 100%; max-width: 260px; display: block; }
+    .wlan-qr:has(img:not([src])) { display: none; }
+    .wlan-leer { font-size: 13px; color: var(--text2); line-height: 1.5;
+      padding: 24px 6px; }
+    .wlan-zeilen { margin-top: 14px; display: grid; gap: 5px; }
+    .wlan-zeile { display: flex; justify-content: space-between; gap: 12px;
+      font-size: 14px; }
+    .wlan-zeile i { font-style: normal; color: var(--text3); }
+    /* Das Passwort muss man abtippen koennen, wenn das Scannen nicht klappt —
+       also mit fester Schrittweite, damit l und 1 sich unterscheiden. */
+    .wlan-zeile b { color: var(--text); font-weight: 600; text-align: right;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      overflow-wrap: anywhere; }
+    .wlan-hinweis { margin-top: 12px; font-size: 12px; color: var(--text3);
+      line-height: 1.45; }
+
+    /* Die Eingabefelder in den Einstellungen. */
+    .set-wlan-form { display: grid; gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+    .set-wlan-form label { display: flex; flex-direction: column; gap: 4px;
+      font-size: 12px; color: var(--text3); }
+    .set-wlan-form .settings-input { width: 100%; max-width: none; }
+    .set-wlan-haken { flex-direction: row !important; align-items: center;
+      gap: 8px !important; color: var(--text2) !important; }
 
     /* ── Kontomenü ───────────────────────────────────────────────────────── */
     .konto-pop {

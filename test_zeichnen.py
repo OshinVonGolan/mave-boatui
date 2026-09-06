@@ -827,6 +827,158 @@ class VeralteterStand(Pruefstand):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class LadenGemessenStattGerechnet(Pruefstand):
+    """Das Laden-Feld nimmt gemessene Werte, wo es sie gibt.
+
+    Anlass war ein Widerspruch auf einem Bildschirm: die Detailseite zeigte für
+    den Lader 51,5 A, die Leiste 52,9 A. Die Leiste rechnete
+    `Leistung / Batteriespannung` — die Leistung misst der Lader aber an SEINEN
+    Klemmen, die Batteriespannung liegt hinter dem Kabel. In einer
+    Reihenschaltung ist der Strom überall gleich; die Division machte aus dem
+    Kabelverlust 1,4 A, die es nicht gibt.
+    """
+
+    # Die echten Zahlen vom Boot, an denen es aufgefallen ist.
+    LADER = {'power': 705.7, 'dc_voltage': 13.70, 'dc_current': 51.5,
+             'cs': 3, 'cs_label': 'Bulk'}
+    BATT = 13.29
+
+    def zeige(self, *, ah, quellen=None, idx=1):
+        """Feld auf eine Quelle stellen, Daten einspielen, Wert ablesen."""
+        # `is None` und nicht `or`: ein leeres Objekt ist in Python falsch, und
+        # `quellen or {…}` setzte damit ausgerechnet im Leer-Fall die Vorgabe ein.
+        daten = {'charger': self.LADER} if quellen is None else quellen
+        return self.pg.evaluate("""([ah, quellen, idx, spannung]) => {
+            _battEnergyUnit = ah ? 'ah' : 'wh';
+            _lastBattery = { voltage: spannung };
+            _sbLadenIdx = idx;
+            _sbRenderLaden(quellen);
+            return [document.getElementById('sbChg').textContent,
+                    document.querySelector('#sbChgItem .sb-val i').textContent];
+        }""", [ah, daten, idx, self.BATT])
+
+    def test_ampere_kommen_vom_lader_und_nicht_aus_der_division(self):
+        self.assertEqual(self.zeige(ah=True), ['51.5', 'A'])
+
+    def test_watt_kommen_als_watt_und_nicht_aus_der_multiplikation(self):
+        self.assertEqual(self.zeige(ah=False), ['706', 'W'])
+
+    def test_ohne_gemessenen_strom_wird_gerechnet(self):
+        """Nur dann. Eine Quelle ohne eigene Strommessung soll nicht schweigen."""
+        ohne = {'charger': {'power': 705.7, 'cs': 3}}
+        wert = float(self.zeige(ah=True, quellen=ohne)[0])
+        self.assertAlmostEqual(wert, 705.7 / self.BATT, places=1)
+
+    def test_gesamt_addiert_stroeme_und_nicht_leistungen(self):
+        """Die Quellen speisen dieselbe Sammelschiene — da ist die Summe der
+        Ströme der Strom. Leistungen zu addieren und dann zu teilen, machte
+        denselben Fehler nur breiter."""
+        quellen = {'charger': self.LADER,
+                   'solar': {'power': 60.0, 'dc_current': 4.4, 'cs': 3}}
+        self.assertEqual(self.zeige(ah=True, quellen=quellen, idx=0)[0], '55.9')
+
+    def test_ohne_quelle_steht_ein_strich(self):
+        self.assertEqual(self.zeige(ah=True, quellen={})[0], '--')
+
+    def test_die_einheit_haengt_nicht_daran_ob_gerade_geladen_wird(self):
+        """Ohne Kabel meldete das Landstromgerät nichts, und die Einheit sprang
+        auf Watt, während der Rest des Bildschirms Ampere zeigte."""
+        self.assertEqual(self.zeige(ah=True, quellen={})[1], 'A')
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class GaesteWlan(Pruefstand):
+    """Das Popup mit dem QR-Code fürs Gäste-WLAN.
+
+    Frei schwebend und keine eigene Seite (Eignerwunsch): man tippt es auf,
+    hält jemandem das Tablet hin, tippt daneben — weg.
+    """
+
+    # Der Pruefstand faehrt server/app.py, und dort gibt es die WLAN-Endpunkte
+    # bewusst NICHT — sie liegen auf dem Pi. Geprueft wird hier also die
+    # Oberflaeche gegen den vereinbarten Vertrag; dass der Pi ihn einhaelt,
+    # steht in test_wlan.py.
+    QR = ('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+          '<rect width="10" height="10" fill="#fff"/></svg>')
+
+    def wlan_vortaeuschen(self, **werte):
+        stand = {'ssid': 'Mave-Gast', 'passwort': 'seemannsgarn', 'art': 'WPA',
+                 'versteckt': False, 'eingerichtet': True, **werte}
+        self.pg.route('**/api/wlan', lambda route: route.fulfill(
+            status=200, content_type='application/json', body=json.dumps(stand)))
+        self.pg.route('**/api/wlan/qr.svg*', lambda route: route.fulfill(
+            status=200, content_type='image/svg+xml', body=self.QR))
+
+    def setUp(self):
+        super().setUp()
+        self.wlan_vortaeuschen()
+
+    def offen(self):
+        return self.pg.evaluate(
+            "() => !document.getElementById('wlanPop').classList.contains('hidden')")
+
+    def test_das_popup_zeigt_netz_passwort_und_code(self):
+        self.pg.evaluate("() => wlanPopAuf()")
+        self.pg.wait_for_timeout(900)
+        self.assertTrue(self.offen())
+        self.assertEqual(self.pg.evaluate(
+            "() => [document.getElementById('wlanSsid').textContent,"
+            "       document.getElementById('wlanPw').textContent]"),
+            ['Mave-Gast', 'seemannsgarn'])
+        self.assertTrue(self.pg.evaluate("""() => {
+            const b = document.getElementById('wlanQr');
+            return b.complete && b.naturalWidth > 0;
+        }"""), 'der QR-Code ist nicht geladen')
+
+    def test_ein_tipp_daneben_schliesst(self):
+        self.pg.evaluate("() => wlanPopAuf()")
+        self.pg.wait_for_timeout(700)
+        self.pg.mouse.click(12, 12)
+        self.pg.wait_for_timeout(200)
+        self.assertFalse(self.offen())
+
+    def test_ein_tipp_auf_die_karte_schliesst_nicht(self):
+        """Sonst geht es zu, während jemand scannt und dabei das Tablet
+        anfasst."""
+        self.pg.evaluate("() => wlanPopAuf()")
+        self.pg.wait_for_timeout(700)
+        k = self.pg.locator('.wlan-karte').bounding_box()
+        self.pg.mouse.click(k['x'] + k['width'] / 2, k['y'] + k['height'] - 12)
+        self.pg.wait_for_timeout(200)
+        self.assertTrue(self.offen())
+
+    def test_ohne_eintrag_sagt_es_das(self):
+        self.wlan_vortaeuschen(ssid='', passwort='', eingerichtet=False)
+        self.pg.evaluate("() => wlanPopAuf()")
+        self.pg.wait_for_timeout(700)
+        self.assertFalse(self.pg.evaluate(
+            "() => document.getElementById('wlanLeer').hidden"))
+        self.assertIn('Einstellungen', self.pg.inner_text('#wlanLeer'))
+
+    def test_auf_dem_server_sagt_es_dass_es_nur_an_bord_geht(self):
+        """Dort gibt es die Endpunkte nicht — und das ist Absicht, nicht ein
+        Fehler. Ein 404 darf deshalb nicht wie einer aussehen."""
+        self.pg.unroute('**/api/wlan')
+        self.pg.route('**/api/wlan', lambda route: route.fulfill(
+            status=404, content_type='application/json',
+            body='{"detail":"gibt es hier nicht"}'))
+        self.pg.evaluate("() => wlanPopAuf()")
+        self.pg.wait_for_timeout(700)
+        self.assertIn('nur an Bord', self.pg.inner_text('#wlanLeer'))
+
+    def test_im_menue_nur_beim_wandtablet_und_beim_eigner(self):
+        """Eine Frage der Platzierung, nicht des Schutzes — auf jedem Telefon
+        im Menü braucht es niemand."""
+        fuer = lambda rolle: self.pg.evaluate(          # noqa: E731
+            "(rolle) => { _zugangStand = { konto: { rolle } }; return wlanImMenue(); }",
+            rolle)
+        self.assertTrue(fuer('kiosk'))
+        self.assertTrue(fuer('eigner'))
+        self.assertFalse(fuer('crew'))
+        self.assertFalse(fuer('gast'))
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
 class Lichtkreise(Pruefstand):
     """Namen aus den Einstellungen, Balken als Regler, Relais auf Halten."""
 

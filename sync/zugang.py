@@ -178,6 +178,13 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     ('*',    r'^/api/pgn/',                  r.EINSTELLEN),
     ('*',    r'^/api/alarms/rules',          r.EINSTELLEN),
     ('PUT',  r'^/api/(wartung|stauplan)$',   r.EINSTELLEN),
+    # Gaeste-WLAN: LESEN genuegt zum Anzeigen, EINSTELLEN zum Aendern.
+    #
+    # Das Passwort geht beim Lesen mit hinaus, und das ist Absicht: es ist das
+    # GAESTEnetz, es steht im QR-Code, und der haengt an der Wand im Salon.
+    # Wer ein Konto auf diesem Boot hat, ist an Bord. Etwas strenger zu tun,
+    # als die Sache ist, waere hier nur Theater.
+    ('PUT',  r'^/api/wlan$',                 r.EINSTELLEN),
     # Der Grundriss ist keine Bedienung, sondern der Aufbau des Bootes: Raeume,
     # Namen, Umriss. An ihm haengen Stauplan und Geraeteseite — wer ihn
     # umzeichnet, aendert, wo fuer ALLE die Dinge liegen. Deshalb dieselbe

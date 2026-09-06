@@ -18,6 +18,11 @@ python-can>=4.3.1         # CAN-Bus (socketcan) für NMEA 2000
 # ist der Bau von numpy/Pillow langwierig — nur installieren, wenn die Funktion
 # wirklich gebraucht wird.
 
+# QR-Code fuers Gaeste-WLAN (Wandtablet). Reines Python, keine Bildbibliothek
+# noetig — der Code wird als SVG ausgegeben. Fehlt das Paket, sagt die Seite
+# das und der Rest laeuft weiter.
+segno>=1.6.0
+
 # Starlink-Status im Internet-Tab:
 # grpcio>=1.60.0
 # protobuf>=4.21.0

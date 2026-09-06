@@ -18,6 +18,8 @@ charger_state.json
 daily_stats.json
 stauplan.json
 grundriss.json
+# Netzname und PASSWORT des Gaestenetzes (nur auf dem Geraet)
+wlan.json
 grundriss-vorlage.jpg
 wartung.json
 heizung.json

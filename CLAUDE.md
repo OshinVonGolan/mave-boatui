@@ -11,6 +11,30 @@ Raspberry Pi Echtzeit-Bootsmonitor mit Web-UI (PWA). Liest alle Bordnetz-Daten �
 
 ## Pflicht-Regeln (IMMER beachten)
 
+### 0. Gemessen schlägt gerechnet
+
+Zeigt die Oberfläche Ampere und das Gerät meldet Ampere, dann werden SEINE
+genommen. Zeigt sie Watt und es meldet Watt, dann diese. Gerechnet wird nur,
+wo der passende Wert fehlt — nie „weil man es ja ausrechnen kann".
+
+**Warum das kein Feinschliff ist.** Die Statusleiste rechnete für den Lader
+`Leistung / Batteriespannung` und zeigte 52,9 A, während die Detailseite den
+vom Lader gemeldeten Strom zeigte: 51,5 A. Die Leistung misst der Lader an
+SEINEN Klemmen (13,70 V), die Batteriespannung liegt hinter dem Kabel
+(13,29 V). In einer Reihenschaltung ist der Strom überall gleich; verloren
+geht Spannung. Die Division machte aus dem Kabelverlust 1,4 A, die es nicht
+gibt — und zwei Zahlen für dieselbe Sache auf einem Bildschirm.
+
+Daraus folgt auch: **Ströme addieren, nicht Leistungen.** Mehrere Ladequellen
+speisen dieselbe Sammelschiene — da ist die Summe der Ströme der Strom. Erst
+Leistungen zu addieren und dann durch eine Spannung zu teilen, macht denselben
+Fehler nur breiter.
+
+Bekannte Restschuld: `_amperestunden` in `main.py` rechnet die 24-Stunden-
+Bilanz weiterhin aus `Leistung / Spannung`, weil der Verlaufspuffer je Quelle
+nur die Leistung aufzeichnet. Das zu ändern hieße, das Aufzeichnungsformat zu
+erweitern — und es hülfe erst für neue Daten.
+
 ### 1. Version bumpen bei jedem Commit der die App verändert
 ```python
 # main.py Zeile ~45
@@ -150,6 +174,7 @@ Raspberry Pi
 | `heating.py` | Anbindung an die Stoker-Heizung: pollt den Hub zentral (max. 1 Hz laut Gerätedoku), hält den Zustand vor, reicht Schaltbefehle durch. Relaisbetrieb bewusst nicht abgebildet |
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |
 | `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
+| `static/js/wlan.js` | Gäste-WLAN: frei schwebendes Popup mit QR-Code zum Scannen, plus die Eingabefelder in den Einstellungen. Der Code kommt fertig vom Pi (`/api/wlan/qr.svg`, segno) — im Browser gerechnet wäre ein falscher Code still falsch. **Nur der Pi hat die Endpunkte**; auf dem Server sagt das Popup das, statt einen Fehler zu zeigen |
 | `static/js/weather.js` | Wetterkachel und Wetterseite. Bis zu fünf Orte plus die eigene Position, Modellwahl, Modellvergleich; Wind/Böen/Seegang/Regen als Leinwand-Streifen über 72 Stunden. Quelle Open-Meteo über `/api/weather`, `/api/wetter/*` |
 | `server/ki.py` | KI im Logbuch: **ein** Zugang für alle Funktionen, über das Claude-Abo des Eigners (OAuth gegen claude.ai). `frage(text, bilder=…)` ist die einzige Stelle, die jemand aufruft. Direkt an die Messages-API und mit `urllib` — das Serverabbild bleibt klein |
 
@@ -160,6 +185,7 @@ Raspberry Pi
 | `presets.json` | Licht-Presets, Batterie-Instanzen (service/starter), Tank-Namen, Kapazitäten |
 | `alarms.json` | Aktive Alarme (zur Laufzeit geschrieben) |
 | `connectivity.json` | Konfiguration für Connectivity-Monitor |
+| `wlan.json` | Netzname und Passwort des GÄSTEnetzes für den QR-Code (chmod 600). Von Hand gepflegt, NICHT aus dem Router gelesen — dessen Sitzungslimit hat schon einmal den ganzen Verbindungszustand eingefroren |
 | `monday.json` | Monday.com Token, Board-IDs |
 | `PROTOCOL.md` | Vollständige NMEA 2000 PGN-Spezifikation dieses Systems |
 | `NETZWERK-UND-ZUGANG.md` | Wie man an Pi, Server und GitHub kommt, wie das Netz aufgebaut ist und welche Fallen es hat. Am laufenden System erhoben |
