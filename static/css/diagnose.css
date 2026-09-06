@@ -873,13 +873,14 @@ main {
    das schon laenger so?", ohne dass ein Diagramm Platz kostet.
    Die Wartung bekommt keinen: ein Wartungsplan hat keinen Tagesverlauf, und
    eine Flaeche, die nur Dekoration waere, ist hier fehl am Platz. */
-/* Die Fläche beginnt UNTER der Beschriftung. Vorher lag sie über der ganzen
-   Kachel, und weil der Verlauf oben am dichtesten ist, saß sie ausgerechnet
-   dort, wo der Name steht. Gemessen: 1,79 bis 2,01:1 statt der nötigen 4,5:1 —
-   knapp ein Drittel. Auf blankem Grund sind es 6,45:1.
-   Die Aussage der Fläche bleibt dabei unberührt: sie ist eine Form über der
-   Zeit, ihre Oberkante ist weiterhin ihr eigenes Maximum. */
-.ampel-spur { position: absolute; inset: 29px 0 0; pointer-events: none; }
+/* Die Fläche nimmt die GANZE Kachel ein. Das ist keine Kosmetik: die Oberkante
+   des Feldes ist das Maximum der Skala — hundert Prozent Ladestand berühren
+   den oberen Rand. Sie weiter unten beginnen zu lassen hiesse, die Skala zu
+   stauchen, und der Blick von zwei Metern verlöre seinen Bezugspunkt.
+   Der Text darüber wird deshalb nicht durch Weglassen der Fläche lesbar
+   gemacht, sondern durch einen Hof in der Farbe des Untergrunds (siehe
+   .ampel-name). */
+.ampel-spur { position: absolute; inset: 0; pointer-events: none; }
 .ampel-spur svg { display: block; width: 100%; height: 100%; }
 .ampel > *:not(.ampel-spur) { position: relative; }
 .ampel-kopf { display: flex; align-items: center; gap: 7px; }
@@ -889,6 +890,13 @@ main {
      ohne Fläche unter dem, was für kleinen Text nötig ist. */
   text-transform: uppercase; color: var(--text2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* Ein Hof in der Farbe des Untergrunds. Er schiebt die Verlaufsfläche in den
+     zwei Pixeln um jeden Buchstaben herum beiseite und stellt dort den
+     Kontrast des blanken Grundes wieder her — ohne die Fläche selbst
+     anzutasten. Wo keine Fläche liegt, ist er unsichtbar, weil er dieselbe
+     Farbe hat wie das, worauf er liegt. */
+  text-shadow: 0 0 3px var(--surface2), 0 0 3px var(--surface2),
+               0 0 6px var(--surface2);
 }
 .ampel-wert {
   font-size: 17px; font-weight: 700; line-height: 1.15;
@@ -897,6 +905,8 @@ main {
 .ampel-wert small { font-size: 10.5px; font-weight: 600; color: var(--text2); margin-left: 2px; }
 .ampel-neben {
   font-size: 11px; color: var(--text2);
+  text-shadow: 0 0 3px var(--surface2), 0 0 3px var(--surface2),
+               0 0 6px var(--surface2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
