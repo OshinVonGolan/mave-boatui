@@ -14,6 +14,18 @@ _STATE_FILE = Path(__file__).parent / 'charger_state.json'
 
 _DEFAULT_SETTINGS: dict = {
     'balance_interval_days':   30,     # so oft ist ein Balance-Lauf fällig
+    # Die gelernte Kennlinie der Bank: bei welcher Spannung sich welcher
+    # Ladezustand einpendelt.
+    'kennlinie': {
+        'ruhe_a':      1.0,   # |Strom| darunter gilt die Bank als in Ruhe
+        'ruhe_min':   10.0,   # so lange muss sie ruhig sein, bevor gemessen wird
+        'abstand_min': 30.0,  # Mindestabstand zwischen zwei Messpunkten
+        # Temperaturgang der Kennlinie in V je °C. Ab Werk 0: LiFePO4 wird
+        # ueblicherweise OHNE Temperaturkompensation geladen. Die Temperatur
+        # wird trotzdem je Fach mitgeschrieben — wer einen Gang beobachtet,
+        # kann ihn hier eintragen.
+        'temp_koeff':  0.0,
+    },
     'solar_priority_offset_v':  0.3,   # Nicht-Solar-Geräte bekommen Absorption − Offset
     # Fünf benannte Ladeprofile. Hafen und Vollladung verweisen darauf, statt
     # eigene Spannungen zu halten — so steht jede Spannung genau einmal, und
@@ -56,10 +68,15 @@ _DEFAULT_SETTINGS: dict = {
         # Ladespannungen dreht, darf nicht die Vorgabe sein.
         'hold_auto':         False,
         'hold_min_v':        12.8,   # Untergrenze der Selbstermittlung
-        'hold_step_v':        0.02,  # Schrittweite je Anpassung
+        'hold_step_v':        0.01,  # kleinste Schrittweite
+        'hold_step_max_v':    0.10,  # groesste Schrittweite
+        'hold_kp':            0.004, # Schrittweite je Prozentpunkt Abweichung
+        'hold_kp_a':          0.01,  # Schrittweite je Ampere, den der Lader beim Halten drueckt
+        'hold_schnell_min':  45.0,   # so lange darf er druecken, bevor nachgeregelt wird
         'hold_settle_h':      3.0,   # so lange muss gehalten worden sein
         'hold_quiet_a':       2.0,   # |Strom| darunter gilt die Bank als eingependelt
-        'hold_interval_h':   24.0,   # hoechstens ein Schritt in diesem Abstand
+        'hold_interval_h':    1.0,   # Mindestabstand zwischen zwei Schritten
+        'hold_max_pro_tag':   6,     # hoechstens so viele Schritte am Tag
     },
     'full':    {'profile_id': 1},
     # Der Balance-Lauf fährt keine feste Spannung, sondern einen Ablauf:
@@ -124,6 +141,12 @@ _DEFAULT_STATE: dict = {
     'balance_phase_seit':  None,    # Beginn der aktuellen Phase
     'balance_schritt':     None,    # Zeitpunkt des letzten Spannungsschritts
     'balance_sperre':      None,    # nach einem Abbruch: fruehestens danach wieder starten
+    # Gelernte Kennlinie: je Ladezustands-Fach ein gleitender Mittelwert der
+    # Spannung, dazu Anzahl der Beobachtungen und mittlere Zelltemperatur.
+    'kennpunkte':          [],
+    'kenn_letzte':         None,    # Zeitpunkt der letzten Aufnahme
+    'hold_learn_tag':      None,    # Tag, auf den sich hold_learn_zahl bezieht
+    'hold_learn_zahl':     0,       # Nachfuehrungen an diesem Tag
 }
 
 
@@ -204,6 +227,21 @@ _BAL_PHASEN = ('entladen', 'laden', 'halten')
 # So lange wird nach einem abgebrochenen Lauf nicht automatisch neu gestartet.
 _BAL_SPERRE_H = 24.0
 
+# ── Die gelernte Kennlinie ──────────────────────────────────────────────────
+#
+# Bei jedem Einpendeln faellt ein Messpunkt an: anliegende Spannung,
+# Ladezustand, Zelltemperatur. Frueher wurde er einmal mit dem Ziel verglichen
+# und weggeworfen. Jetzt sammeln sich die Punkte in einer Tabelle ueber den
+# Ladezustand, und daraus laesst sich fuer JEDES Ziel die passende Spannung
+# ablesen, statt sie in kleinen Schritten zu erlaufen.
+#
+# Die Tabelle ist bewusst grob: Faecher von 5 Prozentpunkten, je Fach ein
+# gleitender Mittelwert. Feiner waere Selbstbetrug — die LiFePO4-Kennlinie ist
+# flach, und der Ladezustand des BMS ist selbst nur eine Schaetzung.
+_KENN_FACH    = 5     # Breite eines Fachs in Prozentpunkten
+_KENN_GEWICHT = 10    # ab so vielen Beobachtungen folgt der Mittelwert nur noch traege
+_KENN_MIN_N   = 3     # so viele braucht ein Fach, bevor daraus abgelesen wird
+
 # Totband der Selbstermittlung in SOC-Prozentpunkten. Enger lohnt nicht: die
 # LiFePO4-Kennlinie ist so flach, dass ein Prozentpunkt bereits im Rauschen der
 # SOC-Schaetzung des BMS liegt.
@@ -218,6 +256,9 @@ class ChargeController:
         self._halte_geladen: bool = False            # waehrend des Haltens floss Ladung
         self._nachsetz_zeit: float | None = None     # monoton, letzter Nachsetz-Versuch
         self._nachsetz_zaehler: int = 0              # vergebliche Versuche in Folge
+        self._ruhig_seit: float | None = None         # monoton, seit wann der Strom klein ist
+        self._laedt_seit: float | None = None         # monoton, seit wann trotz Halten geladen wird
+        self._letzte_temp: float | None = None        # zuletzt gesehene Zelltemperatur
         self._phase_mono: float | None = None        # monoton, Beginn der Balance-Phase
         self._schritt_mono: float | None = None      # monoton, letzter Spannungsschritt
         self._last_written: str | None = None        # zuletzt auf Disk geschriebener Stand
@@ -411,6 +452,108 @@ class ChargeController:
             })
         return sauber
 
+    def _kenn(self) -> dict:
+        k = self._settings.get('kennlinie')
+        return k if isinstance(k, dict) else _DEFAULT_SETTINGS['kennlinie']
+
+    def _kennpunkte(self) -> list:
+        p = self._state.get('kennpunkte')
+        return p if isinstance(p, list) else []
+
+    def _kenn_beobachten(self, soc: float | None, spannung: float | None,
+                         current_a: float | None, zelltemp: float | None) -> None:
+        """Nimmt einen Messpunkt auf, wenn die Bank wirklich in Ruhe ist.
+
+        "In Ruhe" heisst: der Betrag des Stroms liegt eine Weile am Stueck unter
+        der Schwelle. Ein einzelner Messwert genuegt nicht — der Strom geht beim
+        Vorzeichenwechsel durch null, und ein Punkt aus diesem Moment saehe wie
+        Ruhe aus, waehrend die Bank in Wahrheit gerade umschlaegt.
+
+        Die anliegende Spannung IST hier die Ruhespannung: fliesst kein Strom,
+        steht die Bank auf ihrer Leerlaufspannung. Ob der Lader sie haelt oder
+        ob gar nicht geladen wird, spielt keine Rolle — gelernt wird beides.
+        """
+        if zelltemp is not None:
+            self._letzte_temp = zelltemp
+        k       = self._kenn()
+        ruhig_a = _num(k.get('ruhe_a'), 1.0)
+        if (soc is None or spannung is None or current_a is None
+                or abs(current_a) > ruhig_a):
+            self._ruhig_seit = None
+            return
+        jetzt = time.monotonic()
+        if self._ruhig_seit is None:
+            self._ruhig_seit = jetzt
+            return
+        if (jetzt - self._ruhig_seit) / 60.0 < _num(k.get('ruhe_min'), 10.0):
+            return
+        # Nicht bei jeder ruhigen Minute einen Punkt: die Tabelle wird auf die
+        # SD-Karte geschrieben, und eine stille Nacht wuerde sie hundertmal
+        # anfassen, ohne etwas Neues zu lernen.
+        if _stunden_seit(self._state.get('kenn_letzte')) * 60.0 < _num(k.get('abstand_min'), 30.0) \
+                and self._state.get('kenn_letzte'):
+            return
+
+        fach = min(100, max(0, int(round(soc / _KENN_FACH)) * _KENN_FACH))
+        punkte = [dict(p) for p in self._kennpunkte() if isinstance(p, dict)]
+        eintrag = next((p for p in punkte if p.get('soc') == fach), None)
+        if eintrag is None:
+            eintrag = {'soc': fach, 'v': round(float(spannung), 3), 'n': 1,
+                       't': round(float(zelltemp), 1) if zelltemp is not None else None}
+            punkte.append(eintrag)
+        else:
+            # Gleitender Mittelwert mit gedeckeltem Gewicht: die ersten Punkte
+            # zaehlen voll, spaeter folgt das Fach nur noch traege. So bleibt es
+            # ruhig und kann der Bank trotzdem folgen, wenn sie sich aendert.
+            gew = min(int(_num(eintrag.get('n'), 1)) + 1, _KENN_GEWICHT)
+            alt = _num(eintrag.get('v'), float(spannung))
+            eintrag['v'] = round(alt + (float(spannung) - alt) / gew, 3)
+            if zelltemp is not None:
+                alt_t = eintrag.get('t')
+                eintrag['t'] = round(float(zelltemp) if alt_t is None
+                                     else _num(alt_t, zelltemp) + (float(zelltemp) - _num(alt_t, zelltemp)) / gew, 1)
+            eintrag['n'] = int(_num(eintrag.get('n'), 1)) + 1
+        punkte.sort(key=lambda p: p.get('soc', 0))
+        self._state['kennpunkte']  = punkte
+        self._state['kenn_letzte'] = datetime.now().isoformat()
+        self._ruhig_seit = jetzt
+        self._save()
+        log.info('Kennlinie: %.0f %% bei %.3f V (Fach %d, %d. Beobachtung)',
+                 soc, spannung, fach, eintrag['n'])
+
+    def _kenn_spannung(self, ziel_soc: float) -> float | None:
+        """Die Spannung, bei der sich der Ziel-Ladezustand einpendelt.
+
+        None, wenn die Tabelle es nicht hergibt. Es wird ausschliesslich
+        INTERPOLIERT, nie ueber den gemessenen Bereich hinaus gerechnet: eine
+        aus zwei Punkten verlaengerte Gerade waere geraten, und geraten wird
+        hier nicht — dann lieber der bisherige, langsame Weg ueber Schritte.
+        """
+        punkte = [p for p in self._kennpunkte()
+                  if isinstance(p, dict)
+                  and isinstance(p.get('soc'), (int, float))
+                  and isinstance(p.get('v'), (int, float))
+                  and _num(p.get('n'), 0) >= _KENN_MIN_N]
+        if len(punkte) < 2:
+            return None
+        punkte.sort(key=lambda p: p['soc'])
+        if ziel_soc < punkte[0]['soc'] or ziel_soc > punkte[-1]['soc']:
+            return None
+        unten = max((p for p in punkte if p['soc'] <= ziel_soc), key=lambda p: p['soc'])
+        oben  = min((p for p in punkte if p['soc'] >= ziel_soc), key=lambda p: p['soc'])
+        if oben['soc'] == unten['soc']:
+            v, t_fach = float(unten['v']), unten.get('t')
+        else:
+            anteil = (ziel_soc - unten['soc']) / (oben['soc'] - unten['soc'])
+            v = float(unten['v']) + anteil * (float(oben['v']) - float(unten['v']))
+            t_u, t_o = unten.get('t'), oben.get('t')
+            t_fach = (_num(t_u, 0) + anteil * (_num(t_o, 0) - _num(t_u, 0))
+                      if isinstance(t_u, (int, float)) and isinstance(t_o, (int, float)) else None)
+        koeff = _num(self._kenn().get('temp_koeff'), 0.0)
+        if koeff and t_fach is not None and self._letzte_temp is not None:
+            v += koeff * (self._letzte_temp - t_fach)
+        return round(v, 3)
+
     def _haltespannung(self) -> float:
         """Die Spannung, auf der im Hafen-Modus gehalten wird.
 
@@ -422,10 +565,27 @@ class ChargeController:
         manuell = _num(h.get('hold_voltage'), 13.2)
         if h.get('hold_auto') is not True or h.get('hold_mode') not in (None, 'spannung'):
             return manuell
+        # Zuerst die gelernte Kennlinie: sie kennt die Spannung zum Ziel direkt,
+        # statt sie in Schritten zu erlaufen — und sie kennt sie auch fuer ein
+        # geaendertes Ziel sofort.
+        aus_kurve = self._kenn_spannung(_num(h.get('target_soc'), 80))
+        if aus_kurve is not None:
+            return self._halte_grenzen(aus_kurve)
         gelernt = self._state.get('hold_learned_v')
         if isinstance(gelernt, bool) or not isinstance(gelernt, (int, float)):
             return self._halte_grenzen(manuell)
         return self._halte_grenzen(float(gelernt))
+
+    def _haltespannung_quelle(self) -> str:
+        """Woher die geltende Haltespannung stammt — fuer die Anzeige."""
+        h = self._settings.get('harbor', {})
+        if h.get('hold_auto') is not True or h.get('hold_mode') not in (None, 'spannung'):
+            return 'manuell'
+        if self._kenn_spannung(_num(h.get('target_soc'), 80)) is not None:
+            return 'kennlinie'
+        if isinstance(self._state.get('hold_learned_v'), (int, float)):
+            return 'nachgefuehrt'
+        return 'manuell'
 
     def _halte_grenzen(self, v: float) -> float:
         """Haelt die Haltespannung im erlaubten Band.
@@ -486,6 +646,9 @@ class ChargeController:
             'harbor_voltage':      harbor_v,
             'harbor_holding':      self._state.get('harbor_holding'),
             'hold_voltage_eff':    self._haltespannung(),
+            'hold_quelle':         self._haltespannung_quelle(),
+            'kennpunkte':          self._kennpunkte(),
+            'kenn_letzte':         self._state.get('kenn_letzte'),
             'profile_name':        self._profil(
                 self._settings.get(self._state['mode'], {}).get('profile_id')).get('name'),
             'hold_learned_v':      self._state.get('hold_learned_v'),
@@ -664,7 +827,9 @@ class ChargeController:
 
     def update_soc(self, soc: float | None, current_a: float | None = None,
                    zelldiff_mv: float | None = None,
-                   landstrom: bool | None = None) -> bool:
+                   landstrom: bool | None = None,
+                   spannung: float | None = None,
+                   zelltemp: float | None = None) -> bool:
         """Aktualisiert SOC (optional den Batteriestrom). True = neue Setpoints senden.
 
         Hafen-Modus: nur beim Wechsel zwischen Laden und Halten. Die Sollwerte
@@ -684,6 +849,11 @@ class ChargeController:
         if soc is None:
             return False
         self._last_soc = soc
+
+        # Immer beobachten, in jedem Modus: die Kennlinie ist eine Eigenschaft
+        # der Bank, nicht des Lademodus. Je mehr ruhige Momente eingehen, desto
+        # frueher traegt sie.
+        self._kenn_beobachten(soc, spannung, current_a, zelltemp)
 
         nachsetzen = self._nachsetzen
         if nachsetzen:
@@ -754,44 +924,82 @@ class ChargeController:
             # Eigners verschoben werden.
             return False
 
+        ziel = _num(h.get('target_soc'), 80)
+        # Traegt die Kennlinie das Ziel, wird nicht mehr geschrittelt: sie
+        # korrigiert sich ueber neue Beobachtungen von selbst, und jeder
+        # Schritt waere ein zusaetzlicher Schreibvorgang ins Flash des Laders.
+        if self._kenn_spannung(ziel) is not None:
+            return False
+
         jetzt = time.monotonic()
         ruhig = _num(h.get('hold_quiet_a'), 2.0)
         reif  = _num(h.get('hold_settle_h'), 3.0)
+        kp    = _num(h.get('hold_kp'), 0.004)
 
         if holding and prev:
             if self._halte_seit is None:
                 self._halte_seit = jetzt
-                return False
             if current_a is not None and abs(current_a) <= ruhig:
-                # Der Lader traegt die Last, die Bank wird nicht entladen.
                 self._halte_geladen = True
+
+            # Das schnelle Signal. Drueckt der Lader beim Halten dauerhaft Strom
+            # in die Bank, ist die Spannung zu hoch — das steht in Minuten fest,
+            # waehrend der Ladezustand Stunden braucht, um es zu zeigen.
+            if current_a is not None and current_a > ruhig:
+                if self._laedt_seit is None:
+                    self._laedt_seit = jetzt
+                elif (jetzt - self._laedt_seit) / 60.0 >= _num(h.get('hold_schnell_min'), 45.0):
+                    self._laedt_seit = jetzt
+                    return self._halte_schritt(
+                        -1, _num(h.get('hold_kp_a'), 0.01) * current_a,
+                        'Lader drueckt beim Halten %.1f A' % current_a)
+            else:
+                self._laedt_seit = None
+
             if (jetzt - self._halte_seit) / 3600.0 < reif:
                 return False
             if current_a is None or abs(current_a) > ruhig:
                 return False                       # noch nicht eingependelt
-            ziel = _num(h.get('target_soc'), 80)
             if soc > ziel + _LERN_TOLERANZ_PCT:
-                return self._halte_schritt(-1, 'Ladezustand %.1f %% über dem Ziel' % soc)
+                return self._halte_schritt(-1, kp * (soc - ziel),
+                                           'Ladezustand %.1f %% über dem Ziel' % soc)
             if soc < ziel - _LERN_TOLERANZ_PCT:
-                return self._halte_schritt(+1, 'Ladezustand %.1f %% unter dem Ziel' % soc)
+                return self._halte_schritt(+1, kp * (ziel - soc),
+                                           'Ladezustand %.1f %% unter dem Ziel' % soc)
             return False
 
         if prev and not holding:
             # Aus dem Halteband gefallen. Nur auswerten, wenn waehrend des
             # Haltens ueberhaupt Ladung floss — sonst war schlicht kein
             # Landstrom da, und die Haltespannung kann nichts dafuer.
+            self._laedt_seit = None
             if self._halte_seit is None or not self._halte_geladen:
                 return False
             if (jetzt - self._halte_seit) / 3600.0 < reif:
                 return False
-            return self._halte_schritt(+1, 'Ladezustand unter das Halteband gefallen')
+            return self._halte_schritt(+1, kp * max(ziel - soc, _LERN_TOLERANZ_PCT),
+                                       'Ladezustand unter das Halteband gefallen')
 
         return False
 
-    def _halte_schritt(self, richtung: int, grund: str) -> bool:
-        """Einen Schritt gehen, sofern der Mindestabstand eingehalten ist."""
-        h       = self._settings.get('harbor', {})
-        abstand = _num(h.get('hold_interval_h'), 24.0)
+    def _halte_schritt(self, richtung: int, groesse: float, grund: str) -> bool:
+        """Einen Schritt gehen — mit Mindestabstand und Tageskappe.
+
+        Jede Aenderung ist ein Schreibvorgang in das Flash des Ladegeraets.
+        Deshalb zwei unabhaengige Bremsen: ein Mindestabstand zwischen zwei
+        Schritten und eine feste Obergrenze je Tag. Die Kappe ist die
+        wichtigere — der Mindestabstand allein liesse bei einem hartnaeckigen
+        Fehler rund um die Uhr schreiben.
+        """
+        h = self._settings.get('harbor', {})
+        heute = date.today().isoformat()
+        if self._state.get('hold_learn_tag') != heute:
+            self._state['hold_learn_tag']  = heute
+            self._state['hold_learn_zahl'] = 0
+        if _num(self._state.get('hold_learn_zahl'), 0) >= _num(h.get('hold_max_pro_tag'), 6):
+            return False
+
+        abstand = _num(h.get('hold_interval_h'), 1.0)
         letzte  = self._state.get('hold_learn_last')
         if letzte:
             try:
@@ -802,17 +1010,24 @@ class ChargeController:
                 # Negatives seither heisst Uhrensprung nach hinten (der Pi hat
                 # keine Echtzeituhr) — dann lieber zulassen als ewig sperren.
                 return False
+
+        # Schrittweite aus dem gemessenen Fehler, begrenzt nach unten und oben.
+        # Fest waere sie in beide Richtungen falsch: bei halbem Volt Abweichung
+        # zaghaft, bei einem Prozentpunkt nervoes.
+        schritt = min(max(abs(groesse), _num(h.get('hold_step_v'), 0.01)),
+                      _num(h.get('hold_step_max_v'), 0.10))
         alt = self._haltespannung()
-        neu = self._halte_grenzen(alt + richtung * _num(h.get('hold_step_v'), 0.02))
+        neu = self._halte_grenzen(alt + richtung * schritt)
         if abs(neu - alt) < 1e-9:
             return False                     # an der Grenze angekommen
         self._state['hold_learned_v']  = neu
         self._state['hold_learn_last'] = datetime.now().isoformat()
+        self._state['hold_learn_zahl'] = int(_num(self._state.get('hold_learn_zahl'), 0)) + 1
         # Uhr neu stellen: der naechste Schritt darf erst nach erneutem
         # Einpendeln kommen, sonst rutscht die Spannung in einem Zug durch.
         self._halte_seit = time.monotonic()
         self._save()
-        log.info('Haltespannung selbst ermittelt: %.2f → %.2f V (%s)', alt, neu, grund)
+        log.info('Haltespannung nachgefuehrt: %.2f → %.2f V (%s)', alt, neu, grund)
         return True
 
     def set_mode(self, mode: str) -> dict:
@@ -933,6 +1148,28 @@ class ChargeController:
             log.info('Lader meldet %.2f/%.2f V, gewollt sind %.2f/%.2f V — wird nachgesetzt',
                      ist_abs, ist_flt, ziel['absorption_v'], ziel['float_v'])
         self._nachsetzen = True
+
+    def kennlinie_zuruecksetzen(self) -> dict:
+        """Wirft die gelernte Kennlinie weg und faengt von vorn an.
+
+        Auch die nachgefuehrte Haltespannung: sie stammt aus derselben
+        Beobachtung. Bliebe sie stehen, liefe der Regler nach dem Ruecksetzen
+        mit einem Wert weiter, dessen Herkunft niemand mehr nachvollziehen
+        kann. Was von Hand eingestellt ist, bleibt unangetastet.
+        """
+        anzahl = len(self._kennpunkte())
+        self._state['kennpunkte']      = []
+        self._state['kenn_letzte']     = None
+        self._state['hold_learned_v']  = None
+        self._state['hold_learn_last'] = None
+        self._state['hold_learn_tag']  = None
+        self._state['hold_learn_zahl'] = 0
+        self._ruhig_seit = None
+        self._laedt_seit = None
+        self._nachsetzen = True          # die Lader bekommen die Ausgangswerte
+        self._save()
+        log.info('Kennlinie zurueckgesetzt (%d Faecher verworfen)', anzahl)
+        return self.status()
 
     def update_settings(self, patch: dict) -> dict:
         """Einstellungen aendern — und die neuen Sollwerte auch hinschicken.

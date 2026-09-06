@@ -498,6 +498,25 @@ def _zellspreizung_mv(data: dict) -> float | None:
     return round((max(werte) - min(werte)) * 1000.0, 1)
 
 
+def _zelltemp_mittel(data: dict) -> float | None:
+    """Mittlere Zelltemperatur, None wenn keine gemeldet wird.
+
+    Der Temperaturfuehler des Ladegeraets liefert nichts (0xEDEC meldet
+    "nicht verfuegbar"), die Zellen des BMS dagegen schon. Die Kennlinie
+    schreibt sie je Fach mit — ausgewertet wird sie nur, wenn jemand einen
+    Temperaturgang eintraegt.
+    """
+    zellen = (data.get('bms') or {}).get('cells')
+    if not isinstance(zellen, list) or not zellen:
+        return None
+    werte = [z.get('temp') for z in zellen
+             if isinstance(z, dict) and isinstance(z.get('temp'), (int, float))
+             and not isinstance(z.get('temp'), bool)]
+    if not werte:
+        return None
+    return round(sum(werte) / len(werte), 1)
+
+
 def _landstrom_da(data: dict) -> bool | None:
     """Haengt das Boot am Landstrom?
 
@@ -810,7 +829,9 @@ async def broadcast(data: dict):
     if charge_ctrl.update_soc(soc,
                               data.get('battery', {}).get('current'),
                               _zellspreizung_mv(data),
-                              _landstrom_da(data)):
+                              _landstrom_da(data),
+                              data.get('battery', {}).get('voltage'),
+                              _zelltemp_mittel(data)):
         _apply_charger_setpoints(charge_ctrl.device_setpoints())
     batt = data.get('battery', {})
     now = time.time()
@@ -2912,6 +2933,14 @@ async def update_charger_settings(body: dict):
                 raise HTTPException(400, detail=f'profile[{i}]: absorption_v ({a}) darf '
                                                 f'nicht unter float_v ({f}) liegen')
     return charge_ctrl.update_settings(body)
+
+
+@app.post('/api/charger/kennlinie/reset')
+async def reset_charger_kennlinie():
+    """Verwirft die gelernte Kennlinie und die daraus nachgefuehrte Haltespannung."""
+    status = charge_ctrl.kennlinie_zuruecksetzen()
+    _apply_charger_setpoints(charge_ctrl.device_setpoints())
+    return status
 
 
 @app.post('/api/charger/poll')

@@ -502,6 +502,65 @@ function _chgProfilLesen(profile) {
   }));
 }
 
+// ── Gelernte Kennlinie ──────────────────────────────────────────────────────
+
+const KENN_QUELLE = {
+  kennlinie:   'aus der gelernten Kennlinie',
+  nachgefuehrt:'schrittweise nachgeführt',
+  manuell:     'von Hand eingestellt',
+};
+
+function _chgKennlinieZeigen() {
+  const d = _chargerStatus;
+  const stand = $('sChgKennStand');
+  const tab   = $('sChgKennTabelle');
+  if (!d || !stand || !tab) return;
+
+  const v = d.hold_voltage_eff;
+  stand.innerHTML = v == null ? '' :
+    `Haltespannung <b>${v.toFixed(2).replace('.', ',')} V</b> — `
+    + `<span style="color:var(--text3)">${KENN_QUELLE[d.hold_quelle] || d.hold_quelle || ''}</span>`;
+
+  const punkte = Array.isArray(d.kennpunkte) ? d.kennpunkte : [];
+  if (!punkte.length) {
+    tab.innerHTML = '<div style="font-size:12px;color:var(--text3)">Noch nichts gelernt. '
+      + 'Ein Punkt entsteht, sobald der Batteriestrom eine Weile am Stück klein bleibt.</div>';
+    return;
+  }
+  const zahl = 'font-variant-numeric:tabular-nums';
+  const kopf = `<div class="settings-row" style="gap:8px;color:var(--text3);font-size:11px;
+      letter-spacing:.06em;text-transform:uppercase">
+      <span style="flex:0 0 76px">Ladezustand</span>
+      <span style="flex:0 0 76px">Spannung</span>
+      <span style="flex:0 0 96px">Beobachtungen</span>
+      <span style="flex:1 1 auto">Temperatur</span>
+    </div>`;
+  tab.innerHTML = kopf + punkte.map(p => {
+    // Faecher unter der Mindestzahl werden noch nicht zum Ablesen benutzt —
+    // das gehoert sichtbar, sonst wundert man sich ueber die Quelle.
+    const reif = (p.n ?? 0) >= 3;
+    return `<div class="settings-row" style="gap:8px;${zahl}${reif ? '' : ';opacity:.55'}">
+      <span style="flex:0 0 76px">${p.soc} %</span>
+      <span style="flex:0 0 76px">${(p.v ?? 0).toFixed(2).replace('.', ',')} V</span>
+      <span style="flex:0 0 96px">${p.n ?? 0}${reif ? '' : ' (zu wenig)'}</span>
+      <span style="flex:1 1 auto">${p.t == null ? '—' : String(p.t).replace('.', ',') + ' °C'}</span>
+    </div>`;
+  }).join('');
+}
+
+async function resetChargerKennlinie() {
+  const fb = $('settingsFeedbackKenn');
+  try {
+    _chargerStatus = await fetch('/api/charger/kennlinie/reset', { method: 'POST' })
+      .then(_jsonOrThrow);
+    _renderChargerStatus();
+    _populateChargerInputs();
+    _fbOk(fb);
+  } catch (e) {
+    _fbError(fb, e.message || 'Fehler');
+  }
+}
+
 function _populateChargerInputs() {
   const s = _chargerStatus?.settings;
   if (!s) return;
@@ -542,6 +601,7 @@ function _populateChargerInputs() {
     ['sChgBalMaxH',      'max_h',        48],
   ];
   if ($('sChgBalAuto')) $('sChgBalAuto').checked = b.auto === true;
+  _chgKennlinieZeigen();
   balFelder.forEach(([id, schluessel, vorgabe]) => {
     const el = $(id);
     if (el) el.value = b[schluessel] ?? vorgabe;

@@ -814,5 +814,193 @@ class VerlaufswerteFuersLogbuch(Basis):
         self.assertEqual(cc._feldname('../etc'), 'etc')
 
 
+class GelernteKennlinie(Basis):
+    """Bei welcher Spannung sich welcher Ladezustand einpendelt.
+
+    Bei jedem Einpendeln faellt ein Messpunkt an. Frueher wurde er einmal mit
+    dem Ziel verglichen und weggeworfen; jetzt sammelt er sich in einer Tabelle
+    ueber den Ladezustand, aus der sich fuer JEDES Ziel die Spannung ablesen
+    laesst.
+    """
+
+    def _punkt(self, r, soc, v, temp=None, mal=1):
+        """Einen Messpunkt aufnehmen, ohne auf Ruhezeit und Abstand zu warten."""
+        for _ in range(mal):
+            r._ruhig_seit = time.monotonic() - 3600
+            r._state['kenn_letzte'] = None
+            r._kenn_beobachten(soc, v, 0.0, temp)
+
+    def _kurve(self, r, punkte):
+        for soc, v in punkte:
+            self._punkt(r, soc, v, mal=cc._KENN_MIN_N)
+        return r
+
+    # ── Aufnehmen ──────────────────────────────────────────────────────────
+
+    def test_ein_einzelner_ruhiger_messwert_zaehlt_nicht(self):
+        # Der Strom geht beim Vorzeichenwechsel durch null — ein Punkt aus
+        # diesem Moment saehe wie Ruhe aus, waehrend die Bank umschlaegt.
+        r = self._regler()
+        r._kenn_beobachten(80, 13.28, 0.0, None)
+        self.assertEqual(r._state['kennpunkte'], [])
+
+    def test_nach_der_ruhezeit_wird_aufgenommen(self):
+        r = self._regler()
+        self._punkt(r, 80, 13.28)
+        self.assertEqual(len(r._state['kennpunkte']), 1)
+        self.assertEqual(r._state['kennpunkte'][0]['soc'], 80)
+        self.assertAlmostEqual(r._state['kennpunkte'][0]['v'], 13.28, places=3)
+
+    def test_strom_beendet_die_ruhe(self):
+        r = self._regler()
+        r._ruhig_seit = time.monotonic() - 3600
+        r._kenn_beobachten(80, 13.28, 25.0, None)     # laedt gerade
+        self.assertIsNone(r._ruhig_seit)
+        self.assertEqual(r._state['kennpunkte'], [])
+
+    def test_ladezustand_faellt_in_faecher(self):
+        r = self._regler()
+        self._punkt(r, 78, 13.28)
+        self._punkt(r, 81, 13.30)
+        # 78 und 81 runden beide auf das Fach 80.
+        self.assertEqual([p['soc'] for p in r._state['kennpunkte']], [80])
+        self.assertEqual(r._state['kennpunkte'][0]['n'], 2)
+
+    def test_der_mittelwert_folgt_nach(self):
+        r = self._regler()
+        self._punkt(r, 80, 13.20)
+        self._punkt(r, 80, 13.40)
+        v = r._state['kennpunkte'][0]['v']
+        self.assertGreater(v, 13.20)
+        self.assertLess(v, 13.40)
+
+    def test_abstand_verhindert_eine_flut(self):
+        # Die Tabelle landet auf der SD-Karte; eine stille Nacht darf sie nicht
+        # hundertmal anfassen.
+        r = self._regler()
+        self._punkt(r, 80, 13.28)
+        r._ruhig_seit = time.monotonic() - 3600
+        r._kenn_beobachten(80, 13.28, 0.0, None)      # sofort danach
+        self.assertEqual(r._state['kennpunkte'][0]['n'], 1)
+
+    # ── Ablesen ────────────────────────────────────────────────────────────
+
+    def test_zwischen_zwei_faechern_wird_interpoliert(self):
+        r = self._kurve(self._regler(), [(70, 13.20), (90, 13.40)])
+        self.assertAlmostEqual(r._kenn_spannung(80), 13.30, places=3)
+
+    def test_ausserhalb_des_gemessenen_bereichs_kein_wert(self):
+        # Eine verlaengerte Gerade waere geraten, und geraten wird hier nicht.
+        r = self._kurve(self._regler(), [(70, 13.20), (90, 13.40)])
+        self.assertIsNone(r._kenn_spannung(50))
+        self.assertIsNone(r._kenn_spannung(100))
+
+    def test_zu_wenige_beobachtungen_zaehlen_nicht(self):
+        r = self._regler()
+        self._punkt(r, 70, 13.20, mal=cc._KENN_MIN_N - 1)
+        self._punkt(r, 90, 13.40, mal=cc._KENN_MIN_N - 1)
+        self.assertIsNone(r._kenn_spannung(80))
+
+    # ── Wirkung auf die Regelung ───────────────────────────────────────────
+
+    def test_haltespannung_kommt_aus_der_kennlinie(self):
+        r = self._kurve(self._regler(settings={'harbor': {'hold_auto': True}}),
+                        [(70, 13.20), (90, 13.40)])
+        self.assertAlmostEqual(r._haltespannung(), 13.30, places=3)
+        self.assertEqual(r._haltespannung_quelle(), 'kennlinie')
+
+    def test_anderes_ziel_sofort_andere_spannung(self):
+        # Das ist der eigentliche Gewinn: ein geaendertes Ziel muss nicht neu
+        # erlaufen werden.
+        r = self._kurve(self._regler(settings={'harbor': {'hold_auto': True}}),
+                        [(70, 13.20), (90, 13.40)])
+        self.assertAlmostEqual(r._haltespannung(), 13.30, places=3)
+        r.update_settings({'harbor': {'target_soc': 75}})
+        self.assertAlmostEqual(r._haltespannung(), 13.25, places=3)
+
+    def test_ohne_kennlinie_gilt_die_eingestellte_spannung(self):
+        r = self._regler(settings={'harbor': {'hold_auto': True}})
+        self.assertAlmostEqual(r._haltespannung(),
+                               cc._DEFAULT_SETTINGS['harbor']['hold_voltage'], places=3)
+        self.assertEqual(r._haltespannung_quelle(), 'manuell')
+
+    def test_mit_kennlinie_wird_nicht_mehr_geschrittelt(self):
+        # Sie korrigiert sich ueber neue Beobachtungen von selbst; jeder Schritt
+        # waere ein zusaetzlicher Schreibvorgang ins Flash des Laders.
+        r = self._kurve(self._regler(settings={'harbor': {'hold_auto': True}}),
+                        [(70, 13.20), (90, 13.40)])
+        r.update_soc(85, 0.0)
+        r._halte_seit = time.monotonic() - 10 * 3600
+        self.assertFalse(r.update_soc(85, 0.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    # ── Schrittweite und Bremsen ───────────────────────────────────────────
+
+    def _haltend(self, settings=None):
+        r = self._regler(settings=settings or {'harbor': {'hold_auto': True}})
+        r.update_soc(85, 0.0)
+        r._halte_seit    = time.monotonic() - 10 * 3600
+        r._halte_geladen = True
+        return r
+
+    def test_grosser_fehler_grosser_schritt(self):
+        klein = self._haltend()
+        klein.update_soc(82, 0.0)
+        gross = self._haltend()
+        gross.update_soc(99, 0.0)
+        start = cc._DEFAULT_SETTINGS['harbor']['hold_voltage']
+        self.assertGreater(start - gross._state['hold_learned_v'],
+                           start - klein._state['hold_learned_v'])
+
+    def test_schrittweite_bleibt_gedeckelt(self):
+        r = self._haltend()
+        r.update_soc(100, 0.0)
+        start = cc._DEFAULT_SETTINGS['harbor']['hold_voltage']
+        self.assertLessEqual(start - r._state['hold_learned_v'],
+                             cc._DEFAULT_SETTINGS['harbor']['hold_step_max_v'] + 1e-9)
+
+    def test_hoechstens_so_viele_schritte_am_tag(self):
+        # Jede Aenderung ist ein Schreibvorgang in das Flash des Ladegeraets.
+        r = self._haltend()
+        schritte = 0
+        for _ in range(30):
+            r._state['hold_learn_last'] = None
+            r._halte_seit = time.monotonic() - 10 * 3600
+            if r.update_soc(85, 0.0):
+                schritte += 1
+        self.assertEqual(schritte, cc._DEFAULT_SETTINGS['harbor']['hold_max_pro_tag'])
+
+    def test_druckender_lader_wird_schnell_nachgeregelt(self):
+        # Das schnelle Signal: der Ladestrom sagt in Minuten, was der
+        # Ladezustand erst nach Stunden zeigt.
+        r = self._regler(settings={'harbor': {'hold_auto': True}})
+        r.update_soc(85, 0.0)
+        r._laedt_seit = time.monotonic() - 3600
+        self.assertTrue(r.update_soc(85, 6.0))
+        self.assertLess(r._state['hold_learned_v'],
+                        cc._DEFAULT_SETTINGS['harbor']['hold_voltage'])
+
+    def test_kurzes_druecken_reicht_nicht(self):
+        r = self._regler(settings={'harbor': {'hold_auto': True}})
+        r.update_soc(85, 0.0)
+        self.assertFalse(r.update_soc(85, 6.0))
+        self.assertIsNone(r._state['hold_learned_v'])
+
+    # ── Zuruecksetzen ──────────────────────────────────────────────────────
+
+    def test_zuruecksetzen_raeumt_alles_weg(self):
+        r = self._kurve(self._regler(settings={'harbor': {'hold_auto': True}}),
+                        [(70, 13.20), (90, 13.40)])
+        r._state['hold_learned_v'] = 13.11
+        r.kennlinie_zuruecksetzen()
+        self.assertEqual(r._state['kennpunkte'], [])
+        self.assertIsNone(r._state['hold_learned_v'])
+        self.assertIsNone(r._state['kenn_letzte'])
+        # Von Hand Eingestelltes bleibt.
+        self.assertAlmostEqual(r._settings['harbor']['hold_voltage'],
+                               cc._DEFAULT_SETTINGS['harbor']['hold_voltage'], places=3)
+        self.assertEqual(r._haltespannung_quelle(), 'manuell')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1171,6 +1171,19 @@
         <div id="sChgOffsetPreview" style="font-size:12px;color:var(--text3);margin-top:8px"></div>
       </div>
 
+      <!-- Gelernte Kennlinie -->
+      <div class="set-card">
+        <div class="set-card-hd">Gelernte Kennlinie</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Jedes Mal, wenn die Bank zur Ruhe kommt, wird ein Punkt aufgenommen: welche Spannung bei welchem Ladezustand steht. Daraus liest der Regler die Haltespannung für jedes Ziel ab, statt sie in kleinen Schritten zu erlaufen. Abgelesen wird nur zwischen gemessenen Punkten — über den gemessenen Bereich hinaus wird nicht gerechnet.</div>
+        <div id="sChgKennStand" style="font-size:12px;margin-bottom:10px"></div>
+        <div id="sChgKennTabelle"></div>
+        <div class="settings-actions" style="margin-top:12px">
+          <span class="settings-feedback" id="settingsFeedbackKenn"></span>
+          <button class="btn-primary" onclick="resetChargerKennlinie()"
+            style="background:var(--surface2);color:var(--text);border:1px solid var(--border)">Gelerntes verwerfen</button>
+        </div>
+      </div>
+
       <!-- Balancing -->
       <div class="set-card">
         <div class="set-card-hd">Balancing</div>
