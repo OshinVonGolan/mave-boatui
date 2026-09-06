@@ -541,6 +541,7 @@ function _populateChargerInputs() {
     ['sChgBalHaltenH',   'halten_h',     2],
     ['sChgBalMaxH',      'max_h',        48],
   ];
+  if ($('sChgBalAuto')) $('sChgBalAuto').checked = b.auto === true;
   balFelder.forEach(([id, schluessel, vorgabe]) => {
     const el = $(id);
     if (el) el.value = b[schluessel] ?? vorgabe;
@@ -655,6 +656,7 @@ async function saveChargerSettings() {
                              ? _chargerStatus.settings.profile : []),
     balance_interval_days:  _intOr($('sChgBalInterval')?.value,    30),
     balance: {
+      auto:        $('sChgBalAuto')?.checked === true,
       start_soc:   _intOr($('sChgBalStartSoc')?.value,      60),
       strom_a:     _floatOr($('sChgBalStromA')?.value,      10),
       start_v:     _floatOr($('sChgBalStartV')?.value,      13.6),

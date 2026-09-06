@@ -2821,13 +2821,15 @@ async def update_charger_settings(body: dict):
     if not isinstance(body, dict):
         raise HTTPException(400, detail='Objekt erwartet')
     _pruefe_ladewerte(body)
-    # hold_auto steuert, ob der Regler selbst an den Ladespannungen dreht —
-    # das muss ein echter Wahrheitswert sein. Ein Text waere in Python wahr,
-    # und ein versehentliches "false" haette die Selbstermittlung eingeschaltet.
-    for profil in ('harbor',):
-        p = body.get(profil)
-        if isinstance(p, dict) and 'hold_auto' in p and not isinstance(p['hold_auto'], bool):
-            raise HTTPException(400, detail=f'{profil}.hold_auto: true oder false erwartet')
+    # Diese beiden Schalter lassen den Regler von sich aus handeln — an den
+    # Ladespannungen drehen, einen stundenlangen Balance-Lauf beginnen. Sie
+    # muessen echte Wahrheitswerte sein: ein Text waere in Python wahr, und ein
+    # versehentliches "false" haette beides eingeschaltet.
+    for bereich, schluessel in (('harbor', 'hold_auto'), ('balance', 'auto')):
+        p = body.get(bereich)
+        if isinstance(p, dict) and schluessel in p and not isinstance(p[schluessel], bool):
+            raise HTTPException(400,
+                detail=f'{bereich}.{schluessel}: true oder false erwartet')
     # Absorption darf nicht unter Float liegen — das ergibt kein sinnvolles Ladeprofil.
     for profil in ('harbor', 'full', 'balance'):
         p = body.get(profil)

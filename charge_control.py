@@ -76,6 +76,10 @@ _DEFAULT_SETTINGS: dict = {
         'ziel_soc':      100,     # ab hier wird gehalten
         'halten_h':        2.0,   # so lange auf dem Ziel halten
         'max_h':          48.0,   # Sicherheitsdeckel für den ganzen Lauf
+        # Fälligen Lauf von selbst starten. Aus, bis jemand es einschaltet: ein
+        # Ablauf, der die Bank erst leerlaufen lässt und danach Stunden lädt,
+        # beginnt nicht ungefragt.
+        'auto':          False,
     },
 }
 
@@ -99,6 +103,7 @@ _DEFAULT_STATE: dict = {
     'balance_spannung':    None,    # gerade gefahrene Spannung der Ladephase
     'balance_phase_seit':  None,    # Beginn der aktuellen Phase
     'balance_schritt':     None,    # Zeitpunkt des letzten Spannungsschritts
+    'balance_sperre':      None,    # nach einem Abbruch: fruehestens danach wieder starten
 }
 
 
@@ -175,6 +180,9 @@ _PROFIL_NAME_MAX = 40
 #   halten    Das erreichte Ziel eine Weile halten, dann zurück in den Modus,
 #             aus dem gestartet wurde.
 _BAL_PHASEN = ('entladen', 'laden', 'halten')
+
+# So lange wird nach einem abgebrochenen Lauf nicht automatisch neu gestartet.
+_BAL_SPERRE_H = 24.0
 
 # Totband der Selbstermittlung in SOC-Prozentpunkten. Enger lohnt nicht: die
 # LiFePO4-Kennlinie ist so flach, dass ein Prozentpunkt bereits im Rauschen der
@@ -610,6 +618,8 @@ class ChargeController:
                             self._nachsetz_zaehler)
 
         mode = self._state['mode']
+        if mode in ('harbor', 'full') and self._balance_faellig_starten(landstrom):
+            return True
         if mode == 'balance':
             return self._balance_takten(soc, current_a, zelldiff_mv, landstrom) or nachsetzen
         if mode != 'harbor':
@@ -768,6 +778,11 @@ class ChargeController:
         """
         if erfolgreich:
             self._state['last_balance'] = date.today().isoformat()
+        else:
+            # Ein abgebrochener Lauf setzt das Datum nicht — ohne Sperre wuerde
+            # der automatische Start ihn sofort wieder anwerfen, in einer
+            # Schleife aus Abbrechen und Neustarten.
+            self._state['balance_sperre'] = datetime.now().isoformat()
         zurueck = self._state.get('balance_zurueck')
         if zurueck not in ('harbor', 'full'):
             zurueck = 'harbor'
@@ -881,6 +896,28 @@ class ChargeController:
     #
     # Drei Phasen, siehe _BAL_PHASEN. Getaktet wird er aus update_soc(); der
     # Rueckgabewert sagt wie ueberall, ob neue Sollwerte an die Lader muessen.
+
+    def _balance_faellig_starten(self, landstrom: bool | None) -> bool:
+        """Startet einen faelligen Balance-Lauf von selbst — wenn erlaubt.
+
+        Drei Bedingungen, alle notwendig: eingeschaltet, faellig, und Landstrom.
+        Der Landstrom ist die wichtigste: der Lauf laesst die Bank zuerst
+        leerlaufen. Ihn ohne Steckdose zu beginnen hiesse, die Bank zu entladen
+        ohne sie danach fuellen zu koennen.
+        """
+        b = self._bal()
+        if b.get('auto') is not True:
+            return False
+        if landstrom is not True:
+            return False
+        if self._days_until_balance() > 0:
+            return False
+        sperre = self._state.get('balance_sperre')
+        if sperre and _stunden_seit(sperre) < _BAL_SPERRE_H:
+            return False
+        log.info('Balance-Lauf faellig und Landstrom da — automatisch gestartet')
+        self.set_mode('balance')
+        return True
 
     def _bal(self) -> dict:
         b = self._settings.get('balance')

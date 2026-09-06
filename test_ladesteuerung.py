@@ -11,7 +11,7 @@ Aufruf:  python3 -m unittest test_ladesteuerung -v
 import json
 import time
 import unittest
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from unittest import mock
 
 import charge_control as cc
@@ -515,6 +515,65 @@ class KaputteProfillisteWirdRepariert(Basis):
     def test_langer_name_wird_gekuerzt(self):
         r = self._regler(settings={'profile': [{'id': 2, 'name': 'x' * 200}]})
         self.assertLessEqual(len(r._profil(2)['name']), cc._PROFIL_NAME_MAX)
+
+
+class BalanceStartetVonSelbst(Basis):
+    """Drei Bedingungen, alle notwendig: eingeschaltet, faellig, Landstrom.
+
+    Geprueft wird der Modus, nicht der Rueckgabewert von update_soc: der sagt
+    nur "neue Sollwerte noetig", und bei 90 % schaltet auch die Hafen-Hysterese
+    ins Halten.
+    """
+
+    AN = {'balance': {'auto': True}}
+
+    def test_aus_wenn_nicht_eingeschaltet(self):
+        r = self._regler()
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_faellig_und_landstrom_startet(self):
+        # last_balance fehlt = noch nie balanciert = faellig.
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'balance')
+        self.assertEqual(r._state['balance_zurueck'], 'harbor')
+
+    def test_ohne_landstrom_wird_nicht_gestartet(self):
+        # Der Lauf laesst die Bank zuerst leerlaufen. Ohne Steckdose hiesse das,
+        # sie zu entladen ohne sie danach fuellen zu koennen.
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, False)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_unbekannter_landstrom_startet_nicht(self):
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, None)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_noch_nicht_faellig_startet_nicht(self):
+        r = self._regler({'last_balance': date.today().isoformat()}, dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_nach_einem_abbruch_gilt_eine_sperre(self):
+        # Sonst wirft der automatische Start den abgebrochenen Lauf sofort
+        # wieder an — eine Schleife aus Abbrechen und Neustarten.
+        r = self._regler(settings=dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'balance')
+        r._balance_mono = time.monotonic() - 100 * 3600
+        r.update_soc(70, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+        self.assertIsNotNone(r._state['balance_sperre'])
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'harbor')
+
+    def test_nach_der_sperre_geht_es_wieder(self):
+        r = self._regler({'balance_sperre': (datetime.now() - timedelta(hours=48)).isoformat()},
+                         dict(self.AN))
+        r.update_soc(90, 0.0, 5.0, True)
+        self.assertEqual(r._state['mode'], 'balance')
 
 
 class BalanceLauf(Basis):
