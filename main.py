@@ -503,6 +503,12 @@ _grob_eimer: dict = {}
 _grob_minute: int = -1
 
 
+# Mehr Zellen als das meldet kein Akku, den man auf ein Boot stellt (sechzehn
+# in Reihe sind 48 V). Die Grenze schuetzt den Verlauf davor, dass ein BMS mit
+# kaputtem Zaehler hunderte Felder je Zeile erzeugt.
+_ZELLEN_MAX = 16
+
+
 # Welche Alarme schon nach draussen gemeldet sind, und ob sie beim letzten Mal
 # quittiert waren. Nur das — die Alarme selbst haelt die Engine.
 _alarm_gemeldet: dict = {}
@@ -730,6 +736,19 @@ async def broadcast(data: dict):
         v = bms.get(bms_key)
         if v is not None:
             entry[bms_key] = v
+    # Die einzelnen Zellspannungen. Die Zelldifferenz darunter sagt, WIE WEIT
+    # die Zellen auseinanderliegen; erst diese Reihen sagen, WELCHE Zelle
+    # wegläuft und seit wann. Bei vier Zellen sind das vier Zahlen je Zeile —
+    # das faellt neben den uebrigen zwanzig nicht ins Gewicht.
+    #
+    # Die Zahl der Zellen steht nicht fest: eine 12-V-Bank hat vier, eine
+    # 48-V-Bank sechzehn. Geschrieben wird, was das BMS meldet; die Obergrenze
+    # ist nur eine Bremse gegen ein BMS, das Unsinn erzaehlt.
+    for nr, zelle in enumerate((bms.get('cells') or [])[:_ZELLEN_MAX], start=1):
+        v = zelle.get('voltage') if isinstance(zelle, dict) else None
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            entry[f'zelle{nr}'] = round(v, 3)      # Millivolt, darum drei Stellen
+
     # Zelldifferenz gehoert in den Server-Verlauf, nicht nur in den Browser.
     # Vorher rechnete sie ausschliesslich charts.js aus den Live-Daten — die
     # aus der Datei geladenen aelteren Punkte hatten das Feld deshalb nie und

@@ -197,6 +197,61 @@ class HerkunftHinterDemWeiterreicher(unittest.TestCase):
         self.assertEqual(self._herkunft(None), '')
 
 
+class Zellspannungen(unittest.TestCase):
+    """Die einzelnen Zellen im Verlauf.
+
+    Die Zelldifferenz sagt, WIE WEIT die Zellen auseinanderliegen. Erst diese
+    Reihen sagen, WELCHE wegläuft und seit wann.
+    """
+
+    def _entry(self, bms):
+        """Genau der Abschnitt aus `broadcast`, der die Zellen herausschreibt."""
+        import main
+        raus = {}
+        for nr, zelle in enumerate((bms.get('cells') or [])[:main._ZELLEN_MAX], start=1):
+            v = zelle.get('voltage') if isinstance(zelle, dict) else None
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                raus[f'zelle{nr}'] = round(v, 3)
+        return raus
+
+    def test_vier_zellen_wie_an_bord(self):
+        # Die Werte stammen aus der Serverkopie des laufenden Bootes.
+        w = self._entry({'cell_count': 4, 'cells': [
+            {'voltage': 3.275, 'temp': 18.2}, {'voltage': 3.275, 'temp': 16.5},
+            {'voltage': 3.275, 'temp': 18.2}, {'voltage': 3.25, 'temp': 17.3}]})
+        self.assertEqual(w, {'zelle1': 3.275, 'zelle2': 3.275,
+                             'zelle3': 3.275, 'zelle4': 3.25})
+
+    def test_millivolt_bleiben_erhalten(self):
+        # Auf zwei Stellen gerundet waeren 3,275 und 3,25 beide 3,28 bzw 3,25 —
+        # und eine Abweichung von 25 mV waere nicht mehr zu sehen. Genau darum
+        # geht es hier aber.
+        w = self._entry({'cells': [{'voltage': 3.2751}, {'voltage': 3.2499}]})
+        self.assertEqual(w, {'zelle1': 3.275, 'zelle2': 3.25})
+
+    def test_ohne_bms_nichts(self):
+        for leer in ({}, {'cells': None}, {'cells': []}):
+            self.assertEqual(self._entry(leer), {})
+
+    def test_einzelne_zelle_ohne_wert_faellt_weg(self):
+        # Das BMS meldet 0xFFFF als "kein Wert"; der Parser macht daraus None.
+        # Eine Null im Verlauf waere hier eine erfundene Messung.
+        w = self._entry({'cells': [{'voltage': 3.3}, {'voltage': None},
+                                   {'voltage': 3.29}]})
+        self.assertEqual(w, {'zelle1': 3.3, 'zelle3': 3.29})
+
+    def test_sechzehn_zellen_gehen_auch(self):
+        w = self._entry({'cells': [{'voltage': 3.3} for _ in range(16)]})
+        self.assertEqual(len(w), 16)
+        self.assertIn('zelle16', w)
+
+    def test_mehr_als_sechzehn_werden_gedeckelt(self):
+        # Ein BMS mit kaputtem Zaehler soll nicht hunderte Felder je Zeile
+        # erzeugen — der Verlauf geht ueber Mobilfunk.
+        w = self._entry({'cells': [{'voltage': 3.3} for _ in range(400)]})
+        self.assertEqual(len(w), 16)
+
+
 class RouterWerte(unittest.TestCase):
     """Die Zahlen, mit denen sich der Router-Absturz aufklaeren laesst.
 

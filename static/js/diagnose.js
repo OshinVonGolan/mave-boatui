@@ -2386,6 +2386,35 @@ const GRUPPEN = [
   { schluessel: 'zellen',   name: 'Zellabweichung', einheit: 'V',
     felder: [{ f: 'zelldiff', n: 'Größte Abweichung', farbe: '#a78bfa' }] },
 
+  // Die Zellen einzeln, uebereinander auf EINER Achse — nur so sieht man, ob
+  // eine ausschert, und welche. Die Gruppe darueber sagt, wie weit sie
+  // auseinanderliegen; diese sagt, wer es ist und seit wann.
+  //
+  // Sechzehn sind angemeldet, gezeichnet werden nur die, die es gibt: die
+  // Messwerte-Seite blendet Felder aus, die im Verlauf nicht vorkommen. Eine
+  // 12-V-Bank hat vier, eine 48-V-Bank sechzehn — beide funktionieren ohne
+  // Aenderung. Die Farben liegen gleichmaessig auf dem Farbkreis bei gleicher
+  // Saettigung und Helligkeit, damit keine Zelle wichtiger aussieht als die
+  // anderen.
+  { schluessel: 'zellenv',  name: 'Zellspannungen', einheit: 'V',
+    felder: [
+             { f: 'zelle1', n: 'Zelle 1', farbe: '#de7373' },
+             { f: 'zelle2', n: 'Zelle 2', farbe: '#de9b73' },
+             { f: 'zelle3', n: 'Zelle 3', farbe: '#dec373' },
+             { f: 'zelle4', n: 'Zelle 4', farbe: '#d1de73' },
+             { f: 'zelle5', n: 'Zelle 5', farbe: '#a8de73' },
+             { f: 'zelle6', n: 'Zelle 6', farbe: '#80de73' },
+             { f: 'zelle7', n: 'Zelle 7', farbe: '#73de8d' },
+             { f: 'zelle8', n: 'Zelle 8', farbe: '#73deb6' },
+             { f: 'zelle9', n: 'Zelle 9', farbe: '#73dede' },
+             { f: 'zelle10', n: 'Zelle 10', farbe: '#73b6de' },
+             { f: 'zelle11', n: 'Zelle 11', farbe: '#738dde' },
+             { f: 'zelle12', n: 'Zelle 12', farbe: '#8073de' },
+             { f: 'zelle13', n: 'Zelle 13', farbe: '#a873de' },
+             { f: 'zelle14', n: 'Zelle 14', farbe: '#d173de' },
+             { f: 'zelle15', n: 'Zelle 15', farbe: '#de73c3' },
+             { f: 'zelle16', n: 'Zelle 16', farbe: '#de739b' }] },
+
   // Drei getrennte Kurven statt einer: Minuten, Prozent und An/Aus teilen sich
   // keine Achse. Nebeneinander auf derselben ZEITachse beantworten sie
   // zusammen die Frage, warum der Router faellt — bricht 2,4 GHz weg und ERST
