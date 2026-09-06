@@ -25,13 +25,19 @@ _DEFAULT_SETTINGS: dict = {
         'orion': {'enabled': False, 'is_solar': False, 'label': 'Orion XS',    'instance': 0},
     },
     'harbor':  {
-        'absorption_v':      13.8,   # Maximalspannung beim Laden
-        'float_v':           13.3,   # Float (nur für Preset-Match-Erkennung)
-        'hold_voltage':      13.2,   # P-Regler-Nullpunkt: Ruhespannung bei Ziel-SOC (LiFePO4 ~13.2 V)
-        'soc_ramp_pct':      15,     # % SOC unter Ziel bis volle Absorption einsetzt
+        'absorption_v':      13.8,   # Ladeprofil: Absorption bis der Ziel-SOC steht
+        'float_v':           13.3,   # Ladeprofil: Erhaltung
+        'hold_voltage':      13.2,   # Halteprofil: Absorption = Erhaltung = dieser Wert
         'target_soc':        80,     # Ziel-SOC (%)
-        'soc_hysteresis_pct': 3,     # Hysterese: Wiedereinschalten erst bei Ziel − diesem Wert
-        'off_voltage':       11.5,   # Spannung wenn gehalten wird → 0 A (unter Batterieruhespannung)
+        'soc_hysteresis_pct': 3,     # Hysterese: zurück ins Laden erst bei Ziel − diesem Wert
+        # Wie am Ziel-SOC gehalten wird:
+        #   'spannung' — Ladespannung auf hold_voltage, Lader bleibt an. Der Lader
+        #                hört von selbst auf zu drücken, der Ladezyklus startet
+        #                nicht neu, und ein ausgefallener Pi hinterlässt einen
+        #                harmlosen Zustand statt eines abgeschalteten Laders.
+        #   'aus'      — Lader abschalten. Harter Stopp, aber jedes
+        #                Wiedereinschalten beginnt erneut mit Bulk.
+        'hold_mode':         'spannung',
     },
     'full':    {'absorption_v': 14.4, 'float_v': 13.5},
     'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
@@ -69,10 +75,18 @@ def _num(value, default: float) -> float:
     return float(value)
 
 
+# Ab dieser Abweichung zwischen gewollten und zurückgelesenen Sollwerten gilt
+# der Lader als verstellt und bekommt sie erneut geschickt.
+_SOLL_TOLERANZ_V = 0.05
+
+# Zulässige Werte für harbor.hold_mode.
+_HALTEARTEN = ('spannung', 'aus')
+
+
 class ChargeController:
     def __init__(self):
         self._last_soc: float | None = None
-        self._last_applied_soc: float | None = None  # SOC bei letztem Setpoint-Senden
+        self._nachsetzen: bool = False               # Rückmeldung wich ab → neu senden
         self._last_written: str | None = None        # zuletzt auf Disk geschriebener Stand
         self._balance_mono: float | None = None      # Start des laufenden Balance-Laufs (monoton)
         # _save() wird aus zwei Richtungen aufgerufen: aus dem Event-Loop
@@ -160,42 +174,49 @@ class ChargeController:
             return bool(prev)
         h      = self._settings.get('harbor', {})
         target = _num(h.get('target_soc'), 80)
-        ramp   = max(1.0, _num(h.get('soc_ramp_pct'), 15))
-        # Die Hysterese kommt ungeprueft aus PATCH /api/charger/settings. Sie darf
-        # weder das Rampenfenster ueberschreiten (dort will der Regler bereits
-        # volle Absorption) noch _MAX_HYSTERESIS_PCT. Ohne diese Grenze schaltet
-        # ein Wert >= Ziel-SOC den Lader nie wieder ein: der SOC faellt dann bis
+        # Die Hysterese kommt ungeprueft aus PATCH /api/charger/settings und darf
+        # _MAX_HYSTERESIS_PCT nicht ueberschreiten. Ohne diese Grenze schaltet ein
+        # Wert >= Ziel-SOC nie wieder ins Laden zurueck: der SOC faellt dann bis
         # zur BMS-Abschaltung, also Tiefentladung.
-        hyst   = min(max(0.0, _num(h.get('soc_hysteresis_pct'), 3)), ramp, _MAX_HYSTERESIS_PCT)
+        hyst   = min(max(0.0, _num(h.get('soc_hysteresis_pct'), 3)), _MAX_HYSTERESIS_PCT)
         if soc >= target:
             return True
         if soc <= target - hyst:
             return False
         return bool(prev) if prev is not None else False   # unbekannt im Band → laden
 
-    def _harbor_voltage(self, soc: float, holding: bool | None = None) -> float:
-        """P-Regler: berechnet Absorptionsspannung basierend auf SOC.
+    def _harbor_profile(self, holding: bool) -> tuple[float, float, bool]:
+        """Die Sollwerte des Hafen-Modus: (Absorption, Erhaltung, Lader ein).
 
-        Halten (Ziel-SOC erreicht) → off_voltage (unter Ruhespannung → 0 A)
-        Ziel-ramp ≤ SOC < Ziel     → linearer Anstieg hold_voltage → absorption_v
-        SOC < Ziel-ramp            → absorption_v (volle Ladung)
+        Zwei feste Profile statt einer laufend nachgeführten Spannung. Der Grund
+        steht in der Hardware: die Sollwert-Register des Laders liegen in seinem
+        Flash. Eine Regelung, die bei jeder SOC-Änderung schreibt, nutzt es ab.
+        Geschrieben wird deshalb nur beim Wechsel zwischen Laden und Halten.
+        """
+        h = self._settings.get('harbor', {})
+        abs_v = _num(h.get('absorption_v'), 13.8)
+        flt_v = _num(h.get('float_v'),      13.3)
+        if not holding:
+            return abs_v, flt_v, True
+        art = h.get('hold_mode')
+        if art not in _HALTEARTEN:
+            art = 'spannung'
+        if art == 'aus':
+            # Sollwerte unverändert stehen lassen, nur abschalten — so muss beim
+            # Wiedereinschalten nichts ins Flash zurückgeschrieben werden.
+            return abs_v, flt_v, False
+        hold_v = _num(h.get('hold_voltage'), 13.2)
+        return hold_v, hold_v, True
+
+    def _harbor_voltage(self, soc: float, holding: bool | None = None) -> float:
+        """Absorptionsspannung, die im Hafen-Modus gerade gelten soll.
 
         holding=None ermittelt den Halte-Zustand selbst (rein lesend, ohne die
         Hysterese umzuschalten) — so darf status() jederzeit rechnen.
         """
-        h      = self._settings.get('harbor', {})
-        target = _num(h.get('target_soc'),    80)
-        abs_v  = _num(h.get('absorption_v'), 13.8)
-        hold_v = _num(h.get('hold_voltage'), 13.2)
-        off_v  = _num(h.get('off_voltage'),  11.5)
-        ramp   = max(1.0, _num(h.get('soc_ramp_pct'), 15))
-
         if holding is None:
             holding = self._holding_for(soc)
-        if holding:
-            return off_v
-        t = min(1.0, max(0.0, (target - soc) / ramp))   # 0 bei Ziel, 1 bei Ziel−ramp
-        return round(hold_v + t * (abs_v - hold_v), 3)
+        return self._harbor_profile(holding)[0]
 
     # ── Lese-API ────────────────────────────────────────────────────────────
 
@@ -224,33 +245,38 @@ class ChargeController:
     def device_setpoints(self) -> list[dict]:
         """Gibt pro aktiviertem Gerät die effektiven Spannungs-Sollwerte zurück.
 
-        Hafen-Modus: P-Regler-Spannung, Solar-Priorität nur beim aktiven Laden.
-        Balance-Modus: Float = Absorption → Konstantspannung (CV).
+        Hafen-Modus: Lade- oder Halteprofil, Solar-Priorität nur beim Laden.
+        Balance-Modus: Erhaltung = Absorption → Konstantspannung (CV).
         """
         mode   = self._state['mode']
         preset = self._settings.get(mode, self._settings['harbor'])
 
         if mode == 'harbor':
-            soc     = self._last_soc
-            holding = self._holding_for(soc) if soc is not None else False
-            eff_v   = self._harbor_voltage(soc, holding) if soc is not None else preset['absorption_v']
-            offset  = self._settings.get('solar_priority_offset_v', 0.3) if not holding else 0.0
-            # Normaler Charge-Voltage wenn eingeschaltet, sonst Referenzwert (spielt keine Rolle)
-            charge_v = preset['absorption_v'] if holding else eff_v
-            result  = []
+            soc          = self._last_soc
+            holding      = self._holding_for(soc) if soc is not None else False
+            abs_v, flt_v, ein = self._harbor_profile(holding)
+            # Solar-Vorrang nur beim aktiven Laden: die Nicht-Solar-Geräte gehen
+            # etwas tiefer, damit die Solaranlage den Rest macht. Beim Halten
+            # gilt für alle derselbe Wert, sonst läge der Landlader unter der
+            # Ruhespannung und wäre faktisch aus.
+            offset = _num(self._settings.get('solar_priority_offset_v'), 0.3) if (ein and not holding) else 0.0
+            result = []
             for dev_id, dev in self._settings.get('devices', {}).items():
                 if not dev.get('enabled', False):
                     continue
                 is_solar = dev.get('is_solar', False)
-                v = round(charge_v - (0.0 if is_solar else offset), 3) if not holding else charge_v
+                v_abs    = round(abs_v - (0.0 if is_solar else offset), 3)
+                # Erhaltung darf nie über der Absorption liegen — sonst würde der
+                # Lader in der Erhaltungsphase härter laden als in der Absorption.
+                v_flt    = round(min(flt_v, v_abs), 3)
                 result.append({
                     'id':           dev_id,
                     'label':        dev.get('label', dev_id),
                     'instance':     dev.get('instance', 1),
                     'is_solar':     is_solar,
-                    'absorption_v': v,
-                    'float_v':      v,
-                    'on':           not holding,   # False → DeviceMode=0 (aus), True → DeviceMode=1 (ein)
+                    'absorption_v': v_abs,
+                    'float_v':      v_flt,
+                    'on':           ein,   # False → DeviceMode=0 (aus), True → DeviceMode=1 (ein)
                 })
             return result
 
@@ -276,9 +302,15 @@ class ChargeController:
     def update_soc(self, soc: float | None, current_a: float | None = None) -> bool:
         """Aktualisiert SOC (optional den Batteriestrom). True = neue Setpoints senden.
 
-        Hafen-Modus: bei SOC-Änderung ≥ 0.5 % oder beim Umschalten Laden↔Halten.
+        Hafen-Modus: nur beim Wechsel zwischen Laden und Halten. Die Sollwerte
+        liegen im Flash des Laders — eine Regelung, die bei jeder SOC-Änderung
+        schreibt, nutzt es ab. Frueher loeste hier jede Aenderung ab 0,5 % aus.
+
         Balance-Modus: prüft die Abbruchbedingungen; ist der Lauf fertig, wechselt
         der Regler selbst in den Hafen-Modus und meldet True.
+
+        Ausserdem in jedem Modus: hat die Rueckmeldung des Laders von den
+        gewollten Sollwerten abgewichen, wird einmal nachgesetzt.
 
         current_a ist optional: das Schweifstrom-Kriterium greift nur, wenn der
         Aufrufer den Batteriestrom mitgibt. Ohne ihn beendet allein die Höchstdauer
@@ -288,31 +320,26 @@ class ChargeController:
             return False
         self._last_soc = soc
 
+        nachsetzen = self._nachsetzen
+        self._nachsetzen = False
+
         mode = self._state['mode']
         if mode == 'balance':
-            return self._check_balance_end(soc, current_a)
+            return self._check_balance_end(soc, current_a) or nachsetzen
         if mode != 'harbor':
-            return False
+            return nachsetzen
 
         prev_holding = self._state.get('harbor_holding')
         holding      = self._holding_for(soc)
-        flipped      = holding != prev_holding
-
-        old_v = (self._harbor_voltage(self._last_applied_soc, prev_holding)
-                 if self._last_applied_soc is not None and prev_holding is not None else None)
-
-        if flipped:
+        if holding != prev_holding:
             self._state['harbor_holding'] = holding
             self._save()
-            log.info('Hafen-Hysterese: SOC=%.1f%% → %s', soc, 'Halten' if holding else 'Laden')
-
-        if flipped or self._last_applied_soc is None or abs(soc - self._last_applied_soc) >= 0.5:
-            new_v = self._harbor_voltage(soc, holding)
-            self._last_applied_soc = soc
-            if old_v is None or abs(new_v - old_v) >= 0.01:
-                log.info('Hafen-P-Regler: SOC=%.1f%% → %.3f V', soc, new_v)
+            abs_v, flt_v, ein = self._harbor_profile(holding)
+            log.info('Hafen: SOC=%.1f%% → %s (%.2f/%.2f V, Lader %s)', soc,
+                     'Halten' if holding else 'Laden', abs_v, flt_v,
+                     'ein' if ein else 'aus')
             return True
-        return False
+        return nachsetzen
 
     def set_mode(self, mode: str) -> dict:
         if mode not in _MODI:
@@ -325,7 +352,6 @@ class ChargeController:
             self._state['balance_start'] = None
             self._balance_mono           = None
         if mode == 'harbor':
-            self._last_applied_soc        = None   # sofort neu berechnen bei nächstem SOC
             self._state['harbor_holding'] = None   # Hysterese neu entscheiden lassen
         self._save()
         return self.status()
@@ -336,7 +362,6 @@ class ChargeController:
         self._state['balance_start']  = None
         self._state['mode']           = 'harbor'
         self._state['harbor_holding'] = None
-        self._last_applied_soc        = None
         self._balance_mono            = None
         self._save()
 
@@ -356,6 +381,33 @@ class ChargeController:
         self._state['actual_last_read']    = datetime.now().isoformat()
         if changed:
             self._save()
+        self._pruefe_abweichung(new_abs, new_flt)
+
+    def _pruefe_abweichung(self, ist_abs: float, ist_flt: float):
+        """Merkt sich, wenn der Lader andere Sollwerte meldet als gewollt.
+
+        Zurueckgelesen wird nur Instanz 1 (Smart IP43). Weicht sie ab, hat den
+        Lader etwas anderes verstellt — die App, ein Werksreset, ein Stromausfall.
+        Dann wird beim naechsten SOC-Takt einmal nachgesetzt. Das ersetzt ein
+        periodisches Wiederholen, das sonst nur das Flash des Laders abnutzen
+        wuerde.
+
+        Ohne bekannten SOC wird nicht geprueft: device_setpoints() nimmt dann
+        'Laden' an, und ein tatsaechlich haltender Lader saehe faelschlich
+        verstellt aus — bei jedem Neustart ein Schreibvorgang.
+        """
+        if self._last_soc is None:
+            return
+        ziel = next((d for d in self.device_setpoints() if d.get('instance') == 1), None)
+        if not ziel or ziel.get('on') is False:
+            return
+        if (abs(ist_abs - ziel['absorption_v']) <= _SOLL_TOLERANZ_V and
+                abs(ist_flt - ziel['float_v']) <= _SOLL_TOLERANZ_V):
+            return
+        if not self._nachsetzen:
+            log.info('Lader meldet %.2f/%.2f V, gewollt sind %.2f/%.2f V — wird nachgesetzt',
+                     ist_abs, ist_flt, ziel['absorption_v'], ziel['float_v'])
+        self._nachsetzen = True
 
     def update_settings(self, patch: dict) -> dict:
         self._settings = self._deep_merge(self._settings, patch)
@@ -448,10 +500,11 @@ class ChargeController:
         fv   = self._state.get('actual_float_v')
         if av is None or fv is None:
             return None
-        # Hafen-Modus: Soll-Spannung ändert sich kontinuierlich → P-Regler-Wert prüfen
+        # Hafen-Modus: gegen das gerade gueltige Profil pruefen, nicht gegen die
+        # Voreinstellung — beim Halten stehen andere Werte im Lader als beim Laden.
         if mode == 'harbor' and self._last_soc is not None:
-            harbor_v = self._harbor_voltage(self._last_soc)
-            if abs(av - harbor_v) < 0.1 and abs(fv - harbor_v) < 0.1:
+            ziel_abs, ziel_flt, _ = self._harbor_profile(self._holding_for(self._last_soc))
+            if abs(av - ziel_abs) < 0.06 and abs(fv - ziel_flt) < 0.06:
                 return 'harbor'
             return 'custom'
         for name in ('harbor', 'full', 'balance'):

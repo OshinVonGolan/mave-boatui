@@ -401,8 +401,7 @@ function _renderChargerStatus() {
   let modeLabel = _chgModeLabel(d.mode);
   if (d.mode === 'harbor' && d.harbor_voltage != null) {
     const hv = d.harbor_voltage.toFixed(2);
-    const offV = d.settings?.harbor?.off_voltage ?? 11.5;
-    modeLabel += d.harbor_voltage <= offV + 0.05 ? ` · Halten (${hv} V)` : ` · Laden (${hv} V)`;
+    modeLabel += d.harbor_holding ? ` · Halten (${hv} V)` : ` · Laden (${hv} V)`;
   }
   const modeColor = { harbor: 'var(--text2)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
 
@@ -444,14 +443,43 @@ function _renderChargerStatus() {
     </div>`;
 }
 
+// Die Rampe des alten P-Reglers gibt es nicht mehr: die Sollwert-Register
+// liegen im Flash des Laders, deshalb wird nur noch beim Umschalten zwischen
+// Laden und Halten geschrieben. Das Eingabefeld steht noch im Markup — es wird
+// hier ausgeblendet und an seiner Stelle die Halteart angeboten. Sobald das
+// Markup nachgezogen ist, kann dieser Block ersatzlos weg.
+function _chgHafenUmbau() {
+  const ramp = $('sChgSocRamp');
+  if (!ramp || ramp.dataset.ersetzt) return;
+  ramp.dataset.ersetzt = '1';
+  const zeile = ramp.closest('.settings-row');
+  if (!zeile) return;
+  zeile.hidden = true;
+  const hinweis = zeile.nextElementSibling;
+  if (hinweis && hinweis.textContent.trim().startsWith('P-Regler')) {
+    hinweis.textContent = 'Zwei feste Profile: bis zum Ziel-SOC wird mit Absorption und Erhaltung geladen, '
+      + 'ab dem Ziel-SOC gilt die Haltespannung. Geschrieben wird nur beim Umschalten, '
+      + 'denn die Sollwerte liegen im Flash des Ladegeräts.';
+  }
+  const neu = document.createElement('div');
+  neu.className = 'settings-row';
+  neu.innerHTML = '<label class="settings-label" for="sChgHoldMode">Halten durch</label>'
+    + '<select class="settings-input narrow" id="sChgHoldMode">'
+    + '<option value="spannung">Haltespannung</option>'
+    + '<option value="aus">Lader aus</option>'
+    + '</select>';
+  zeile.parentNode.insertBefore(neu, zeile);
+}
+
 function _populateChargerInputs() {
   const s = _chargerStatus?.settings;
   if (!s) return;
+  _chgHafenUmbau();
   if ($('sChgHarborAbs'))    $('sChgHarborAbs').value   = s.harbor?.absorption_v  ?? 13.8;
   if ($('sChgHarborFloat'))  $('sChgHarborFloat').value = s.harbor?.float_v        ?? 13.3;
   if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
   if ($('sChgHoldV'))        $('sChgHoldV').value       = s.harbor?.hold_voltage  ?? 13.2;
-  if ($('sChgSocRamp'))      $('sChgSocRamp').value     = s.harbor?.soc_ramp_pct  ?? 15;
+  if ($('sChgHoldMode'))     $('sChgHoldMode').value    = s.harbor?.hold_mode     ?? 'spannung';
   if ($('sChgFullAbs'))      $('sChgFullAbs').value     = s.full?.absorption_v     ?? 14.4;
   if ($('sChgFullFloat'))    $('sChgFullFloat').value   = s.full?.float_v           ?? 13.5;
   if ($('sChgBalInterval'))  $('sChgBalInterval').value = s.balance_interval_days  ?? 30;
@@ -490,8 +518,7 @@ async function saveChargerSettings() {
       float_v:      _floatOr($('sChgHarborFloat').value, 13.3),
       target_soc:   _intOr($('sChgTargetSoc')?.value,    80),
       hold_voltage: _floatOr($('sChgHoldV')?.value,      13.2),
-      // Rampe 0 = kein Anstieg, ein gueltiger Wunsch
-      soc_ramp_pct: _intOr($('sChgSocRamp')?.value,      15),
+      hold_mode:    $('sChgHoldMode')?.value === 'aus' ? 'aus' : 'spannung',
     },
     full:    {
       absorption_v: _floatOr($('sChgFullAbs').value,   14.4),
