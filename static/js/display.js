@@ -1674,7 +1674,20 @@ function _sbRenderTank(data) {
   const bar = document.getElementById('sbT1Bar');
   if (bar) {
     const anteil = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+    // PROZENT, vom Browser auf ganze Pixel gerundet — nicht in JS gerechnet.
+    //
+    // Ausgerechnete Pixel waren der erste Versuch (gegen eine Kante, die je
+    // nach Fuellstand mal scharf und mal verwaschen aussah). Sie stimmen aber
+    // nur, solange sich die Breite des Feldes nicht aendert — und genau das
+    // tut sie beim Andocken der Leiste, in jedem Bild. Der Balken folgte
+    // sofort, die Kante erst beim naechsten Datensatz und dann noch mit ihrer
+    // halben Sekunde Uebergang: sie hing sichtbar hinterher (Eignermeldung).
+    //
+    // `round()` rechnet der Browser beim Layout, also in jedem Bild mit. Die
+    // erste Zuweisung bleibt als Rueckfall stehen: wer `round()` nicht kennt,
+    // ignoriert die zweite und bekommt das alte Verhalten.
     bar.style.width = anteil.toFixed(1) + '%';
+    bar.style.setProperty('width', `round(${anteil.toFixed(1)}%, 1px)`);
     // Ohne eigene Farbe bleibt es beim Zustandsfarbton aus dem Stylesheet.
     bar.style.color = c.color || '';
     if (c.color) {
@@ -1710,51 +1723,15 @@ function _sbRenderTank(data) {
       bar.style.backgroundRepeat = 'no-repeat';
       bar.style.backgroundSize = '100% 100%';
       bar.style.maskImage = bar.style.webkitMaskImage = '';
-      bar.classList.add('mit-verlauf');
     } else {
       bar.style.background = '';
       bar.style.backgroundSize = '';
       bar.style.maskImage = bar.style.webkitMaskImage = '';
-      bar.classList.remove('mit-verlauf');
     }
   }
-  // Die Kante des Balkens: sie sitzt genau auf dem Stand und ist kraeftiger
-  // als die Flaeche — dasselbe Verhaeltnis wie bei den Verlaufsgraphen in den
-  // Nachbarfeldern, wo eine Linie ueber der Flaeche liegt. Ohne Wert keine
-  // Kante: eine Linie bei null waere eine Aussage ueber einen Stand, den
-  // niemand kennt.
-  const kante = document.getElementById('sbT1Kante');
-  if (kante) {
-    const anteil2 = pct == null ? null : Math.max(0, Math.min(100, pct));
-    // .34 statt kraeftiger: die Linie ueber der Flaeche eines Verlaufsgraphen
-    // liegt bei .3 — die Kante soll dazu passen und nicht daneben schreien.
-    kante.style.opacity = anteil2 == null ? 0 : 0.34;
-    // AUF GANZE GERAETEPIXEL GERASTERT.
-    //
-    // Vorher stand hier ein Prozentwert. Der landet fast nie genau auf einem
-    // Pixel: bei 61,0 % faellt die Kante mal auf eine Pixelgrenze und mal
-    // dazwischen, und dann malt der Browser aus einem Strich zwei halbe. Sie
-    // sah dadurch je nach Fuellstand mal duenn und scharf, mal breit und
-    // verwaschen aus (Eignermeldung) — bei zwei Pixeln Breite fiel es nicht
-    // auf, bei einem sofort.
-    //
-    // `clientWidth` liest die Breite des Feldes. Das ist ein Layoutzugriff,
-    // aber einer pro Tankfeld und Datensatz, und `contain: layout style` auf
-    // dem Feld haelt ihn klein.
-    const feld = kante.parentElement;
-    const breite = feld ? feld.clientWidth : 0;
-    if (anteil2 == null || !breite) {
-      kante.style.left = '0px';
-    } else {
-      const dpr = window.devicePixelRatio || 1;
-      const x = Math.round((anteil2 / 100) * breite * dpr) / dpr;
-      // Um die eigene Breite nach links versetzt: die Kante liegt damit INNEN
-      // am Balken an und steht nicht ueber den Stand hinaus.
-      kante.style.left = `${Math.max(0, x - 1)}px`;
-    }
-    kante.style.color = c.color || '';
-  }
-
+  // Die Kante des Balkens steckt als Innenschatten IM Balken (siehe
+  // .sb-balken im Stylesheet) und nicht mehr in einem eigenen Element. Damit
+  // gibt es nichts mehr zu synchronisieren: sie IST die rechte Kante.
   // Die Zahl traegt die Farbe auch — aber nicht dieselbe.
   //
   // Die eingestellten Tankfarben sind fuer eine FLAECHE gedacht: Wasser ist

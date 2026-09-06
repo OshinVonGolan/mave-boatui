@@ -889,7 +889,21 @@
       /* Ohne eigene Tankfarbe: der Zustandsfarbton, dezent im Hintergrund.
          MIT Farbverlauf (siehe _sbRenderTank) setzt JS ein eigenes Bild und
          hebt die Deckkraft an — ein Verlauf bei 18 % waere keiner. */
-      background: currentColor; opacity: .18;
+      /* Deckkraft in den FARBEN und nicht am Element.
+         Am Element multiplizierte sie sich mit der Kante darin — und die soll
+         ja gerade KRAEFTIGER sein als die Flaeche, was ueber eine gemeinsame
+         Deckkraft nicht geht. */
+      --balken-alpha: 18%;
+      --kante-alpha: 34%;
+      opacity: 1;
+      background: color-mix(in srgb, currentColor var(--balken-alpha), transparent);
+      /* Die Kante sitzt IM Balken, als Innenschatten an seiner rechten Seite.
+         Vorher war sie ein eigenes Element mit eigener Position — und das
+         musste jemand mit der Balkenbreite gleichhalten. Beim Andocken der
+         Leiste aendert sich die Feldbreite in jedem Bild; der Balken folgte
+         sofort, die Kante hing hinterher. Als Teil des Balkens kann sie das
+         nicht mehr. */
+      box-shadow: inset -1px 0 0 color-mix(in srgb, currentColor var(--kante-alpha), transparent);
       pointer-events: none; z-index: 0;
       color: var(--text3);
       transition: width .5s ease;
@@ -899,24 +913,6 @@
        genau die Warnung verloren, fuer die die Farben da sind. */
     .sb-item.sb-wasser.sb-ok .sb-val b,
     .sb-item.sb-wasser.sb-ok .sb-balken { color: var(--accent); }
-    /* Mit Verlauf steckt die Deckkraft in den Farbstopps selbst (siehe
-       _sbRenderTank) — genau wie bei den Verlaufsgraphen, die ihre Flaeche
-       ueber stop-opacity aufbauen. Das Element bleibt deshalb voll deckend,
-       sonst multiplizierte sich beides. */
-    .sb-balken.mit-verlauf { opacity: 1; }
-    /* Die Kante markiert den Stand — so, wie die Linie ueber der Flaeche eines
-       Verlaufsgraphen ihn markiert. Sie ist kraeftiger als die Flaeche
-       dahinter, sonst waere sie keine Kante.
-
-       EIN Pixel breit (auf Ansage von zwei heruntergenommen): eine Marke soll
-       den Stand zeigen, nicht ihn verbreitern — und die Linie ueber den
-       Verlaufsgraphen daneben ist auch einen Pixel breit. */
-    .sb-kante {
-      position: absolute; top: 0; bottom: 0; width: 1px; left: 0;
-      background: currentColor; opacity: 0;
-      pointer-events: none; z-index: 1;
-      transition: left .5s ease, opacity .3s;
-    }
 
     .sb-item.sb-ok   .sb-balken { color: var(--green); }
     .sb-item.sb-low  .sb-balken { color: var(--yellow); }
@@ -988,7 +984,11 @@
     /* Ruhiger im Hintergrund, je flacher die Leiste wird: auf 40 px Hoehe
        arbeitet die volle Deckkraft gegen die kleine Schrift. */
     .sb-spark  { opacity: calc(.9 - .25 * var(--leiste-eng)); }
-    .sb-balken { opacity: calc(.18 - .05 * var(--leiste-eng)); }
+    /* Ueber die Farbanteile und nicht ueber die Deckkraft des Elements —
+       sonst waere die Kante darin gleich mit erledigt. Beide werden im selben
+       Verhaeltnis leiser. */
+    .sb-balken { --balken-alpha: calc(18% - 5% * var(--leiste-eng));
+                 --kante-alpha:  calc(34% - 9% * var(--leiste-eng)); }
 
     /* Bis 700 px zwei Zeilen a drei Feldern — darunter reicht die Breite fuer
        sechs nebeneinander nicht, ohne dass die Unterzeilen abschneiden.
