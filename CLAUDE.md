@@ -151,8 +151,7 @@ Raspberry Pi
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |
 | `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
 | `static/js/weather.js` | Wetterkachel und Wetterseite. Bis zu fünf Orte plus die eigene Position, Modellwahl, Modellvergleich; Wind/Böen/Seegang/Regen als Leinwand-Streifen über 72 Stunden. Quelle Open-Meteo über `/api/weather`, `/api/wetter/*` |
-| `static/js/grundrisseditor.js` | Werkzeug zum Zeichnen des Grundrisses — **läuft im LOGBUCH auf dem Server**, nicht am Boot. Rechteck- und Vieleckwerkzeug, sieben gerechnete Rumpfformen, Planvorlage zum Nachziehen. Arbeitet auf einer Kopie, speichert über `PUT /api/logbuch/grundriss`; ans Boot geht eine Datei. Konzept: `KONZEPT-GRUNDRISS.md` |
-| `sync/grundriss.py` | Die Prüfung des Risses — dieselbe auf Server und Pi. Der Prüfer baut ein neues Objekt, statt das eingehende zu säubern |
+| `server/ki.py` | KI im Logbuch: **ein** Zugang für alle Funktionen, über das Claude-Abo des Eigners (OAuth gegen claude.ai). `frage(text, bilder=…)` ist die einzige Stelle, die jemand aufruft. Direkt an die Messages-API und mit `urllib` — das Serverabbild bleibt klein |
 
 ### Konfiguration / Daten
 
@@ -164,7 +163,7 @@ Raspberry Pi
 | `monday.json` | Monday.com Token, Board-IDs |
 | `PROTOCOL.md` | Vollständige NMEA 2000 PGN-Spezifikation dieses Systems |
 | `NETZWERK-UND-ZUGANG.md` | Wie man an Pi, Server und GitHub kommt, wie das Netz aufgebaut ist und welche Fallen es hat. Am laufenden System erhoben |
-| `KONZEPT-GRUNDRISS.md` | Der Grundriss als Daten: Aufbau, Prüfung beim Speichern, das Zeichenwerkzeug, die gerechneten Rumpfformen — und warum die automatische Planerkennung noch fehlt |
+| `KONZEPT-GRUNDRISS.md` | Der Grundriss als Daten: Aufbau und Prüfung beim Speichern. Das Zeichenwerkzeug gab es kurz und ist auf Eignerentscheidung wieder raus (Historie: `dfd0de9`) |
 | `KONZEPT-SERVER.md` | Der geplante Betrieb mit Server: eine PWA für beide Seiten, Sync, Konten, Sicherheit, Etappen |
 | `devices.json` | Geräteliste an Bord: Stammdaten, Einbauort, Netz, Zuordnung zur Live-Quelle |
 

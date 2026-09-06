@@ -1277,6 +1277,29 @@ function _sparkAbschnitt(werte, von, bis, tief, spanne, n) {
   return { linie, flaeche };
 }
 
+/** Einzelne fehlende Stuetzstellen ueberbruecken.
+ *
+ * Ein Eimer ist 24 Minuten breit. Faellt genau EINER aus — die Messung kam in
+ * dem Fenster nicht durch —, ist das keine Luecke im Verlauf, sondern Rauschen.
+ * Ungefuellt schlaegt sie als schwarze Kerbe mitten in den Graphen, weil die
+ * Flaeche links davon senkrecht abfaellt und rechts davon senkrecht wieder
+ * aufsteigt. Das sieht nach kaputt aus, nicht nach "keine Daten".
+ *
+ * Zwei fehlende Eimer hintereinander werden NICHT ueberbrueckt: ab einer
+ * knappen Stunde ohne Messung war wirklich etwas aus, und das soll man sehen.
+ * Gelesen wird dafuer aus der Vorlage, nicht aus der Kopie — sonst fuellt der
+ * erste geratene Wert gleich den naechsten Eimer mit.
+ */
+function _sparkLuecken(werte) {
+  const aus = werte.slice();
+  for (let i = 1; i < werte.length - 1; i++) {
+    if (typeof werte[i] === 'number') continue;
+    if (typeof werte[i - 1] === 'number' && typeof werte[i + 1] === 'number')
+      aus[i] = (werte[i - 1] + werte[i + 1]) / 2;
+  }
+  return aus;
+}
+
 /**
  * @param opt.tief    feste Untergrenze der Skala (undefined = aus den Daten)
  * @param opt.hoch    feste Obergrenze der Skala  (undefined = aus den Daten)
@@ -1284,7 +1307,8 @@ function _sparkAbschnitt(werte, von, bis, tief, spanne, n) {
  */
 function _sparkSvg(werte, opt, id) {
   const echt = werte.filter(v => typeof v === 'number');
-  if (echt.length < 2) return '';        // ein Punkt ist kein Verlauf
+  const nichts = { bild: '', blende: null };
+  if (echt.length < 2) return nichts;    // ein Punkt ist kein Verlauf
   const dTief = Math.min(...echt), dHoch = Math.max(...echt);
   const mind  = opt.spanne || 1;
   let tief, spanne;
@@ -1304,21 +1328,38 @@ function _sparkSvg(werte, opt, id) {
     tief = dTief - (spanne - (dHoch - dTief)) / 2;
   }
   const basis = tief;
-  const n = werte.length;
+  const reihe = _sparkLuecken(werte);
+  const n = reihe.length;
   let linien = '', flaechen = '';
+  let erster = -1;                        // erster gezeichneter Stuetzpunkt
   let i = 0;
   while (i < n) {
-    if (typeof werte[i] !== 'number') { i++; continue; }
+    if (typeof reihe[i] !== 'number') { i++; continue; }
     let j = i;
-    while (j + 1 < n && typeof werte[j + 1] === 'number') j++;
-    if (j > i) {                          // Luecken bleiben Luecken
-      const a = _sparkAbschnitt(werte, i, j, basis, spanne, n);
+    while (j + 1 < n && typeof reihe[j + 1] === 'number') j++;
+    if (j > i) {                          // laengere Luecken bleiben Luecken
+      const a = _sparkAbschnitt(reihe, i, j, basis, spanne, n);
       linien += a.linie; flaechen += ` ${a.flaeche}`;
+      if (erster < 0) erster = i;
     }
     i = j + 1;
   }
-  if (!flaechen) return '';
-  return `<svg viewBox="0 0 100 ${SPARK_H}" preserveAspectRatio="none" focusable="false">
+  if (!flaechen) return nichts;
+  // Faengt die Reihe erst mitten im Fenster an — eine Messgroesse, die es vor
+  // acht Stunden noch nicht gab —, dann stand der Verlauf als senkrechte Wand
+  // mitten im Feld und sah aus, als waere er links abgeschnitten. Er laeuft
+  // jetzt nach links aus, wie der Fuellbalken daneben auch: rechts ist jetzt,
+  // nach links wird es vage.
+  //
+  // Die Blende macht eine CSS-Maske auf dem UMGEBENDEN Element, keine
+  // SVG-Maske im Bild. Grund ist das Anzeigegeraet: das SVG wird mit
+  // preserveAspectRatio="none" waagerecht gestreckt, und eine SVG-Maske in
+  // gestrecktem Benutzerkoordinatenraum ist genau die Ecke, in der Safari
+  // schon oefter danebenlag. Prozente auf dem Element treffen dagegen immer
+  // die sichtbare Breite. Zurueck kommt deshalb nicht nur das Bild.
+  const x0 = erster > 0 && n > 1 ? (erster / (n - 1)) * 100 : 0;
+  const bis = x0 > 0 ? Math.min(x0 + 14, 100) : 0;
+  const bild = `<svg viewBox="0 0 100 ${SPARK_H}" preserveAspectRatio="none" focusable="false">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="currentColor" stop-opacity=".22"/>
       <stop offset=".85" stop-color="currentColor" stop-opacity="0"/>
@@ -1328,6 +1369,7 @@ function _sparkSvg(werte, opt, id) {
       stroke-width="1" vector-effect="non-scaling-stroke"
       stroke-linejoin="round" stroke-linecap="round"/>
   </svg>`;
+  return { bild, blende: x0 > 0 ? [x0, bis] : null };
 }
 
 function _sparkZeichnen() {
@@ -1338,13 +1380,26 @@ function _sparkZeichnen() {
     const werte = serien[reihe];
     const zahl = a => (el.dataset[a] === undefined || el.dataset[a] === ''
       ? undefined : +el.dataset[a]);
-    const neu = Array.isArray(werte)
+    const g = Array.isArray(werte)
       ? _sparkSvg(werte, { tief: zahl('tief'), hoch: zahl('hoch'),
-                           spanne: +el.dataset.spanne || 1 }, 'spk_' + reihe) : '';
+                           spanne: +el.dataset.spanne || 1 }, 'spk_' + reihe)
+      : { bild: '', blende: null };
     // Nur schreiben, wenn sich wirklich etwas geaendert hat: der Streifen wird
     // bei jedem Broadcast angefasst, und innerHTML kostet jedes Mal Umbruch —
     // auf dem anzeigenden Geraet, nicht auf dem Pi.
-    if (el.innerHTML !== neu) el.innerHTML = neu;
+    if (el.innerHTML !== g.bild) el.innerHTML = g.bild;
+    // Dasselbe fuer die Anlaufblende: sie aendert sich nur, wenn die Reihe an
+    // einer anderen Stelle anfaengt. Verglichen wird an einem kurzen
+    // Schluessel, nicht am zurueckgelesenen Stil — den schreibt der Browser um.
+    const schluessel = g.blende ? g.blende.map(v => v.toFixed(1)).join(':') : '';
+    if (el.dataset.blende !== schluessel) {
+      el.dataset.blende = schluessel;
+      const maske = g.blende
+        ? `linear-gradient(to right, transparent ${g.blende[0].toFixed(1)}%,`
+          + ` #000 ${g.blende[1].toFixed(1)}%)`
+        : '';
+      el.style.maskImage = el.style.webkitMaskImage = maske;
+    }
   });
 }
 

@@ -571,6 +571,98 @@ class StreifenDurchschalten(Pruefstand):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class Verlaufsgraphen(Pruefstand):
+    """Der Hintergrundgraph der Statusleiste: Lücken und linker Rand.
+
+    Beides sah nach „abgeschnitten" aus und war es nicht: ein einzelner
+    ausgefallener Eimer schlug als schwarze Kerbe mitten in die Fläche, und
+    eine Messgröße, die es vor acht Stunden noch nicht gab, begann mit einer
+    senkrechten Wand mitten im Feld.
+
+    Geprüft wird durch `_sparkZeichnen` hindurch am echten Element — die
+    Blende sitzt als CSS-Maske auf dem Element und nicht im SVG, die käme bei
+    einer Prüfung nur des Bildes gar nicht vor.
+    """
+
+    def graph(self, werte, **ds):
+        """Die Reihe ins Batteriefeld zeichnen und zerlegt zurückgeben."""
+        return self.pg.evaluate("""([w, ds]) => {
+            const el = document.querySelector('#sbBattItem .sb-spark');
+            el.dataset.reihe = 'pruef';
+            for (const k of ['tief', 'hoch', 'spanne']) delete el.dataset[k];
+            for (const k in ds) el.dataset[k] = String(ds[k]);
+            _sparkDaten = { serien: { pruef: w } };
+            _sparkZeichnen();
+            const p = el.querySelectorAll('path');
+            return {
+              leer: !el.innerHTML,
+              linie: p[1] ? p[1].getAttribute('d') : null,
+              blende: el.dataset.blende,
+              maske: el.style.maskImage,
+            };
+        }""", [werte, ds])
+
+    def stuecke(self, werte, **ds):
+        """Wie viele zusammenhängende Stücke gezeichnet wurden."""
+        return self.graph(werte, **ds)['linie'].count('M')
+
+    # ── Lücken ─────────────────────────────────────────────────────────────
+
+    def test_einzelne_luecke_wird_ueberbrueckt(self):
+        """Ein Eimer ist 24 Minuten breit. Fällt genau einer aus, ist das
+        Rauschen und keine Lücke im Verlauf."""
+        werte = [10 + i % 7 for i in range(60)]
+        werte[13] = None
+        self.assertEqual(self.stuecke(werte), 1)
+
+    def test_zwei_luecken_hintereinander_bleiben_eine_luecke(self):
+        """Fast eine Stunde ohne Messung — da war wirklich etwas aus."""
+        werte = [10 + i % 7 for i in range(60)]
+        werte[13] = werte[14] = None
+        self.assertEqual(self.stuecke(werte), 2)
+
+    def test_ueberbrueckt_wird_zwischen_den_nachbarn(self):
+        self.assertEqual(self.pg.evaluate('() => _sparkLuecken([1, null, 3])'),
+                         [1, 2, 3])
+
+    def test_ueberbrueckter_wert_fuellt_nicht_den_naechsten_eimer(self):
+        """Gelesen wird aus der Vorlage, nicht aus der Kopie — sonst wandert
+        der geratene Wert Eimer für Eimer weiter."""
+        self.assertEqual(self.pg.evaluate('() => _sparkLuecken([1, null, null, 4])'),
+                         [1, None, None, 4])
+
+    # ── Linker Rand ────────────────────────────────────────────────────────
+
+    def test_reihe_die_spaeter_beginnt_laeuft_nach_links_aus(self):
+        werte = [None] * 21 + [12.6 + (i % 5) / 10 for i in range(39)]
+        g = self.graph(werte)
+        # 21 von 59 Abständen — dort fängt die Reihe an, dort fängt die Blende an.
+        self.assertEqual(g['blende'].split(':')[0], f'{21 / 59 * 100:.1f}')
+        self.assertIn('linear-gradient', g['maske'])
+        self.assertIn('transparent', g['maske'])
+
+    def test_volle_reihe_bekommt_keine_blende(self):
+        """Was von links bis rechts durchgeht, soll auch so aussehen."""
+        g = self.graph([10 + i % 7 for i in range(60)])
+        self.assertEqual(g['blende'], '')
+        self.assertIn(g['maske'], ('', 'none'))
+
+    def test_blende_bleibt_im_feld(self):
+        """Beginnt die Reihe ganz rechts, darf die Blende nicht hinauslaufen."""
+        g = self.graph([None] * 55 + [4, 5, 6, 7, 8])
+        self.assertEqual(g['blende'].split(':')[1], '100.0')
+
+    def test_blende_verschwindet_wieder(self):
+        """Sonst hinge sie am Feld, wenn es auf eine volle Reihe umschaltet."""
+        self.graph([None] * 21 + [12.6] * 39)
+        g = self.graph([10 + i % 7 for i in range(60)])
+        self.assertEqual(g['blende'], '')
+
+    def test_ohne_werte_bleibt_das_feld_leer(self):
+        self.assertTrue(self.graph([None] * 60)['leer'])
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
 class DoppeltippOeffnetDetail(Pruefstand):
     """Ein schneller Doppeltipp führt zur Detailseite.
 
@@ -1098,8 +1190,11 @@ class Wetterkachel(Pruefstand):
         """Fünf gleich große Tagesspalten beantworten „wie wird die Woche" —
         aber nicht die Frage beim Kaffee: was ist HEUTE los."""
         text = self.pg.evaluate("() => document.getElementById('wxHeute').innerText")
-        for teil in ('kn', 'Bft', 'Böen', 'hPa'):
+        for teil in ('kn', 'Bft', 'Böen'):
             self.assertIn(teil, text, f'{teil} fehlt: {text}')
+        # Der Druck ist Beiwerk und steht in der Wertezeile darunter.
+        self.assertIn('hPa', self.pg.evaluate(
+            "() => document.getElementById('wxWerte').innerText"))
 
     def test_der_wind_kommt_aus_der_aktuellen_stunde(self):
         """„Heute bis 22 kn" hilft um neun Uhr morgens nicht weiter. In der
@@ -1116,6 +1211,22 @@ class Wetterkachel(Pruefstand):
         for tag in ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'):
             self.assertNotIn(f'\n{tag}\n', text, f'{tag} steht noch auf der Kachel')
 
+    def test_die_kachel_bleibt_in_der_hoehe_begrenzt(self):
+        """Bei EINER Spalte setzt display.js `grid-auto-rows: auto` — die
+        Kachel wächst dann mit ihrem Inhalt. Ein `1fr` für den Streifen nutzte
+        das bis zum Anschlag aus, und die Kachel war danach doppelt so hoch
+        wie vorher (Eignermeldung)."""
+        self.pg.set_viewport_size({'width': 420, 'height': 900})
+        self.pg.wait_for_timeout(700)
+        h = self.pg.evaluate(
+            "() => Math.round(document.getElementById('wxCard').getBoundingClientRect().height)")
+        self.assertLess(h, 440, f'die Kachel ist {h} px hoch')
+        # Und nichts davon darf abgeschnitten sein.
+        ueber = self.pg.evaluate(
+            "() => { const c = document.getElementById('wxCard');"
+            "        return c.scrollHeight - c.clientHeight; }")
+        self.assertLessEqual(ueber, 2, 'die Kachel schneidet ihren Inhalt ab')
+
     def test_der_tagesstreifen_zeichnet(self):
         """Er beantwortet, was eine Tageszahl nie beantwortet: frischt es auf
         oder schläft es ein. Ein Canvas der Breite 0 malt still nichts."""
@@ -1131,9 +1242,26 @@ class Wetterkachel(Pruefstand):
 
     def test_die_werte_stehen_mit_ihrer_bezeichnung_da(self):
         """Eine Zahl ohne Wort daneben muss man raten."""
-        text = self.pg.evaluate("() => document.getElementById('wxHeute').innerText")
+        text = self.pg.evaluate("() => document.getElementById('wxWerte').innerText")
         for was in ('Regen', 'Druck', 'Sonne'):
             self.assertIn(was, text)
+
+    def test_der_zustandstext_wird_nicht_abgeschnitten(self):
+        """„wechselnd bewölkt" endete bei mittlerer Breite als „wechselnd
+        bewölk" — mitten im Wort (Eignermeldung mit Foto). Er bricht jetzt um,
+        statt zu klemmen."""
+        for breite in (360, 420, 560, 900, 1400):
+            self.pg.set_viewport_size({'width': breite, 'height': 1000})
+            self.pg.wait_for_timeout(400)
+            klemmt = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-h-klein')]
+                .some(e => e.scrollWidth - e.clientWidth > 1)""")
+            self.assertFalse(klemmt, f'bei {breite} px abgeschnitten')
+
+    def test_die_kachel_hat_zwei_flaechen_und_nicht_vier(self):
+        """Vier verschachtelte Kaesten waren die unruhigste Stelle der Seite."""
+        n = self.pg.evaluate("""() => document.querySelectorAll(
+            '.wx-koerper > .wx-heute, .wx-koerper > .wx-streifen').length""")
+        self.assertEqual(n, 2)
 
     # ── Die Detailseite ────────────────────────────────────────────────────
 
@@ -1215,6 +1343,9 @@ class WetterOhnePosition(Wetterkachel):
     def test_der_wind_kommt_aus_der_aktuellen_stunde(self): pass
     def test_die_kachel_zeigt_nur_heute(self): pass
     def test_der_tagesstreifen_zeichnet(self): pass
+    def test_die_kachel_bleibt_in_der_hoehe_begrenzt(self): pass
+    def test_der_zustandstext_wird_nicht_abgeschnitten(self): pass
+    def test_die_kachel_hat_zwei_flaechen_und_nicht_vier(self): pass
     def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self): pass
     def test_der_kopf_zeigt_die_aktuelle_stunde(self): pass
     def test_boeenfaktor_steht_dabei(self): pass
@@ -1451,402 +1582,6 @@ class Pegelkachel(Pruefstand):
             "() => document.querySelector('#wlStationKnopf svg').style.display"), 'none')
         self.assertTrue(self.pg.evaluate(
             "() => document.getElementById('wlStationLeiste').hidden"))
-
-
-# ── Grundriss-Werkzeug ─────────────────────────────────────────────────────
-
-def _test_png(w: int, h: int) -> bytes:
-    """Ein echtes PNG, von Hand gebaut — Pillow ist hier nicht installiert."""
-    import struct
-    import zlib
-
-    def block(typ, daten):
-        return (struct.pack('>I', len(daten)) + typ + daten
-                + struct.pack('>I', zlib.crc32(typ + daten) & 0xffffffff))
-
-    roh = b''
-    for y in range(h):
-        zeile = bytes([(x * 7 + y * 3) % 256 if (x // 8 + y // 8) % 2 else 240
-                       for x in range(w) for _ in range(3)])
-        roh += b'\x00' + zeile
-    return (b'\x89PNG\r\n\x1a\n'
-            + block(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
-            + block(b'IDAT', zlib.compress(roh))
-            + block(b'IEND', b''))
-
-
-@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
-class Grundrisswerkzeug(Pruefstand):
-    """Räume zeichnen, verschieben, löschen — und was dabei gespeichert wird.
-
-    Das Werkzeug lebt im LOGBUCH auf dem Server, nicht am Boot: Zeichnen ist
-    Planung, dafür sitzt man in Ruhe davor und hat den Bootsplan daneben. Der
-    Pi bekommt davon nur das Ergebnis, als Datei.
-    """
-
-    def setUp(self):
-        self.pg = self._browser.new_page(viewport={'width': 1400, 'height': 950})
-        self.fehler = []
-        self.pg.on('pageerror', lambda e: self.fehler.append(str(e)[:250]))
-        self.pg.on('dialog', lambda d: d.accept())
-        self.gespeichert = []
-        self.ans_boot = []
-        self.vorlage = None
-        self._routen()
-        self.pg.goto(self.basis + '/diagnose', wait_until='domcontentloaded', timeout=30000)
-        self.pg.wait_for_timeout(1500)
-        if self.pg.locator('#anmName').count():
-            self.pg.fill('#anmName', KONTO)
-            self.pg.fill('#anmPw', PASSWORT)
-            self.pg.click('#anmKnopf')
-            self.pg.wait_for_timeout(3000)
-        self.pg.click('.sl-knopf[data-seite="grundriss"]')
-        self.pg.wait_for_timeout(1200)
-        self.kasten = self.pg.locator('#geSvg').bounding_box()
-
-    def tearDown(self):
-        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
-        self.pg.close()
-
-    def _routen(self):
-        def riss(route):
-            if route.request.method == 'PUT':
-                rumpf = json.loads(route.request.post_data or '{}')
-                self.gespeichert.append(rumpf)
-                route.fulfill(status=200, content_type='application/json',
-                              body=json.dumps({**rumpf, 'hat_vorlage': bool(self.vorlage)}))
-            else:
-                route.fulfill(status=200, content_type='application/json',
-                              body=json.dumps({'hat_vorlage': bool(self.vorlage)}))
-        self.pg.route('**/api/logbuch/grundriss', riss)
-
-        def vorlage(route):
-            if route.request.method == 'PUT':
-                self.vorlage = route.request.post_data_buffer
-                route.fulfill(status=200, content_type='application/json',
-                              body=json.dumps({'ok': True, 'bytes': len(self.vorlage or b'')}))
-            elif route.request.method == 'DELETE':
-                self.vorlage = None
-                route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
-            elif self.vorlage:
-                route.fulfill(status=200, content_type='image/jpeg', body=self.vorlage)
-            else:
-                route.fulfill(status=404, body='')
-        self.pg.route('**/api/logbuch/grundriss/vorlage*', vorlage)
-
-        # Der Weg ans Boot geht über den Durchleiter des Servers.
-        def boot(route):
-            self.ans_boot.append(json.loads(route.request.post_data or '{}'))
-            route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
-        self.pg.route('**/api/grundriss', lambda r:
-                      boot(r) if r.request.method == 'PUT' else r.fallback())
-        # Der Stauplan liegt am Boot; ohne Boot antwortet der Server mit 409.
-        self.pg.route('**/api/stauplan', lambda r: r.fulfill(
-            status=200, content_type='application/json', body='[]'))
-
-    # ── Werkzeug ───────────────────────────────────────────────────────────
-
-    def punkt(self, fx, fy):
-        k = self.kasten
-        return (k['x'] + k['width'] * fx, k['y'] + k['height'] * fy)
-
-    def zahl(self):
-        return self.pg.evaluate('() => _geRiss.raeume.length')
-
-    def werkzeug(self, name):
-        self.pg.click(f'[data-werkzeug="{name}"]')
-        self.pg.wait_for_timeout(150)
-
-    def rechteck(self, x0, y0, x1, y1):
-        self.werkzeug('rechteck')
-        a, b = self.punkt(x0, y0)
-        c, d = self.punkt(x1, y1)
-        self.pg.mouse.move(a, b)
-        self.pg.mouse.down()
-        self.pg.mouse.move(c, d, steps=8)
-        self.pg.mouse.up()
-        self.pg.wait_for_timeout(300)
-
-    # ── Prüfungen ──────────────────────────────────────────────────────────
-
-    def test_das_werkzeug_arbeitet_auf_einer_kopie(self):
-        """Erst Speichern macht die Änderung echt. Ohne das stünde jede
-        halbfertige Linie sofort im gespeicherten Riss."""
-        vorher = self.pg.evaluate('() => (_geStand.raeume || []).length')
-        self.rechteck(.35, .60, .65, .70)
-        self.assertEqual(self.zahl(), vorher + 1)
-        self.assertEqual(self.pg.evaluate('() => (_geStand.raeume || []).length'), vorher)
-
-    def test_rechteck_aufziehen_legt_einen_raum_an(self):
-        vorher = self.zahl()
-        self.rechteck(.35, .60, .65, .70)
-        self.assertEqual(self.zahl(), vorher + 1)
-        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.t'), 'rechteck')
-
-    def test_ein_tipp_ohne_bewegung_ist_kein_raum(self):
-        """Sonst legt jeder Fehlgriff eine unsichtbare Null-Fläche an."""
-        vorher = self.zahl()
-        self.werkzeug('rechteck')
-        a, b = self.punkt(.5, .5)
-        self.pg.mouse.click(a, b)
-        self.pg.wait_for_timeout(300)
-        self.assertEqual(self.zahl(), vorher)
-
-    def test_vieleck_mit_der_eingabetaste_schliessen(self):
-        vorher = self.zahl()
-        self.werkzeug('vieleck')
-        for fx, fy in ((.35, .74), (.65, .74), (.60, .84), (.40, .84)):
-            self.pg.mouse.click(*self.punkt(fx, fy))
-            self.pg.wait_for_timeout(120)
-        self.pg.keyboard.press('Enter')
-        self.pg.wait_for_timeout(300)
-        self.assertEqual(self.zahl(), vorher + 1)
-        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.t'), 'vieleck')
-        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).form.punkte.length'), 4)
-
-    def test_zwei_punkte_sind_keine_flaeche(self):
-        self.werkzeug('vieleck')
-        for fx, fy in ((.4, .8), (.6, .8)):
-            self.pg.mouse.click(*self.punkt(fx, fy))
-            self.pg.wait_for_timeout(120)
-        vorher = self.zahl()
-        self.pg.keyboard.press('Enter')
-        self.pg.wait_for_timeout(250)
-        self.assertEqual(self.zahl(), vorher)
-
-    def test_umbenennen_und_faerben(self):
-        self.rechteck(.35, .60, .65, .70)
-        self.pg.fill('#geRaumName', 'Achterpiek')
-        self.pg.wait_for_timeout(250)
-        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).name'), 'Achterpiek')
-        self.pg.click('#geRaumFarben .ge-farbe:nth-child(3)')
-        self.pg.wait_for_timeout(200)
-        self.assertEqual(self.pg.evaluate('() => _geRaum(_geAuswahl).farbe'), '#60a5fa')
-
-    def test_entfernen_taste_loescht_den_gewaehlten_raum(self):
-        self.rechteck(.35, .60, .65, .70)
-        n = self.zahl()
-        # Nach dem Aufziehen steht der Zeiger im Namensfeld — dort loescht die
-        # Taste Buchstaben und keine Raeume. Erst zurueck auf die Flaeche.
-        self.pg.evaluate('() => document.getElementById("geRaumName").blur()')
-        self.pg.keyboard.press('Delete')
-        self.pg.wait_for_timeout(250)
-        self.assertEqual(self.zahl(), n - 1)
-        self.assertIsNone(self.pg.evaluate('() => _geAuswahl'))
-
-    def test_zurueck_nimmt_den_letzten_schritt_zurueck(self):
-        self.rechteck(.35, .60, .65, .70)
-        n = self.zahl()
-        self.pg.click('#geZurueck')
-        self.pg.wait_for_timeout(250)
-        self.assertEqual(self.zahl(), n - 1)
-
-    def test_nichts_liegt_ausserhalb_der_zeichenflaeche(self):
-        """Was draußen liegt, ist unsichtbar — und damit weder wiederzufinden
-        noch zu löschen. Der Zeiger geht über den Rand hinaus, die Fläche nicht."""
-        # Innerhalb anfangen (sonst nimmt die Fläche den Druck gar nicht an)
-        # und weit nach links hinausziehen.
-        self.rechteck(.30, .60, -.45, .70)
-        f = self.pg.evaluate('() => _geRaum(_geAuswahl).form')
-        self.assertGreaterEqual(f['x'], 0)
-        self.assertLessEqual(f['x'] + f['w'], self.pg.evaluate('() => _geRiss.ansicht.w'))
-
-    def test_rumpfform_setzt_das_seitenverhaeltnis(self):
-        self.pg.fill('#geLoa', '9')
-        self.pg.fill('#geBreite', '3')
-        self.pg.click('button:has-text("Rumpfform")')
-        self.pg.wait_for_timeout(400)
-        self.pg.click('.ge-vorlage[data-vorlage="fahrten"]')
-        self.pg.wait_for_timeout(400)
-        a = self.pg.evaluate('() => _geRiss.ansicht')
-        self.assertAlmostEqual(a['h'] / a['w'], 3.0, places=1)
-        self.assertTrue(self.pg.evaluate('() => !!_geRiss.rumpf'))
-
-    def test_raeume_ziehen_beim_rumpfwechsel_mit(self):
-        """Sonst säßen sie danach alle im Vorschiff, obwohl sich am Boot
-        nichts geändert hat."""
-        self.rechteck(.35, .60, .65, .70)
-        vorher = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
-        self.pg.fill('#geLoa', '20')
-        self.pg.fill('#geBreite', '4')
-        self.pg.click('button:has-text("Rumpfform")')
-        self.pg.wait_for_timeout(400)
-        self.pg.click('.ge-vorlage[data-vorlage="breitheck"]')
-        self.pg.wait_for_timeout(400)
-        nach = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
-        self.assertAlmostEqual(vorher['y'] / vorher['h'], nach['y'] / nach['h'], places=2)
-
-    def test_alle_rumpfformen_sind_gueltige_pfade(self):
-        """Sie gehen als SVG in den Browser und durch die Prüfung des Pi.
-        Ein Zeichen zu viel, und der Riss lässt sich nicht mehr speichern."""
-        pfade = self.pg.evaluate("""() => _GE_RUMPF_VORLAGEN.map(v =>
-            [v.id, geRumpfPfad({ w: 200, h: 680, ...v })])""")
-        self.assertEqual(len(pfade), 7)
-        self.assertIn('kat', [k for k, _ in pfade])
-        import main as _main
-        for kennung, d in pfade:
-            self.assertTrue(_main._GR_PFAD.match(d), f'{kennung}: {d[:60]}')
-            self.assertTrue(d.endswith('Z'), kennung)
-
-    def test_der_katamaran_hat_drei_teile(self):
-        """Zwei Rümpfe und das Deck dazwischen. Ein einzelner Umriss wäre
-        kein Katamaran, sondern ein sehr breites Boot."""
-        d = self.pg.evaluate(
-            "() => geRumpfPfad({ w: 200, h: 480, art: 'kat' })")
-        self.assertEqual(d.count('Z'), 3, d[:80])
-
-    def test_kein_rumpf_verlaesst_die_zeichenflaeche(self):
-        """Sonst steht das Boot halb neben dem Blatt."""
-        grenzen = self.pg.evaluate("""() => _GE_RUMPF_VORLAGEN.map(v => {
-            const zahlen = geRumpfPfad({ w: 200, h: 680, ...v })
-                .match(/-?\\d+(\\.\\d+)?/g).map(Number);
-            const xs = zahlen.filter((_, i) => i % 2 === 0);
-            const ys = zahlen.filter((_, i) => i % 2 === 1);
-            return [v.id, Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-        })""")
-        for kennung, x0, x1, y0, y1 in grenzen:
-            self.assertGreaterEqual(x0, -0.5, kennung)
-            self.assertLessEqual(x1, 200.5, kennung)
-            self.assertGreaterEqual(y0, -0.5, kennung)
-            self.assertLessEqual(y1, 680.5, kennung)
-
-    def test_gespeichert_wird_was_der_pi_zurueckgibt(self):
-        """Der Server prüft und schneidet zurecht. Was er antwortet, ist ab
-        dann die Wahrheit — nicht die Arbeitskopie im Browser."""
-        self.rechteck(.35, .60, .65, .70)
-        self.pg.click('#geSpeichern')
-        self.pg.wait_for_timeout(600)
-        self.assertEqual(len(self.gespeichert), 1)
-        geschickt = self.gespeichert[0]
-        self.assertEqual(self.pg.evaluate('() => _geStand.raeume.length'),
-                         len(geschickt['raeume']))
-        self.assertTrue(self.pg.evaluate('() => document.getElementById("geSpeichern").disabled'),
-                        'nach dem Speichern gibt es nichts mehr zu speichern')
-
-    def test_das_geschickte_besteht_die_pruefung_des_pi(self):
-        """Der eigentliche Test: was das Werkzeug baut, muss der Prüfer
-        annehmen — und zwar DERSELBE, der am Boot prüft (sync/grundriss.py).
-        Sonst merkt man es erst beim Laden."""
-        self.rechteck(.35, .60, .65, .70)
-        self.werkzeug('vieleck')
-        for fx, fy in ((.35, .76), (.65, .76), (.60, .86), (.40, .86)):
-            self.pg.mouse.click(*self.punkt(fx, fy))
-            self.pg.wait_for_timeout(120)
-        self.pg.keyboard.press('Enter')
-        self.pg.wait_for_timeout(250)
-        self.pg.click('button:has-text("Rumpfform")')
-        self.pg.wait_for_timeout(400)
-        self.pg.click('.ge-vorlage[data-vorlage="langkieler"]')
-        self.pg.wait_for_timeout(400)
-        self.pg.click('#geSpeichern')
-        self.pg.wait_for_timeout(600)
-
-        import main as _main
-        geprueft = _main._grundriss_pruefen(self.gespeichert[0])
-        self.assertEqual(len(geprueft['raeume']), len(self.gespeichert[0]['raeume']))
-        self.assertTrue(geprueft['rumpf'])
-
-
-    # ── Planvorlage ────────────────────────────────────────────────────────
-
-    def _vorlage_hochladen(self, w=600, h=1600):
-        pfad = pathlib.Path(tempfile.mkdtemp(prefix='mave-plan-')) / 'plan.png'
-        pfad.write_bytes(_test_png(w, h))
-        self.pg.set_input_files('#geVorlageBox input[type=file]', str(pfad))
-        self.pg.wait_for_timeout(2000)
-        return pfad
-
-    def test_vorlage_wird_verkleinert_hochgeladen(self):
-        """Verkleinert wird im Browser: Pillow gibt es auf dem Pi nicht, und
-        ein Handyfoto hat acht Megapixel.
-
-        Gemessen wird die KANTENLÄNGE, nicht die Dateigröße. Ein Bild aus
-        lauter Rauschen — wie das Prüfbild hier — wird als JPEG größer als als
-        PNG, und das wäre trotzdem kein Fehler: verkleinert ist es dann
-        immer noch.
-        """
-        self._vorlage_hochladen(600, 1600)
-        self.assertIsNotNone(self.vorlage, 'nichts hochgeladen')
-        self.assertTrue(self.vorlage.startswith(b'\xff\xd8\xff'), 'kein JPEG')
-        masse = self.pg.evaluate("""async (b64) => {
-            const bild = new Image();
-            await new Promise(ok => { bild.onload = ok;
-                                      bild.src = 'data:image/jpeg;base64,' + b64; });
-            return [bild.width, bild.height];
-        }""", base64.b64encode(self.vorlage).decode())
-        self.assertLessEqual(max(masse), 1400, f'nicht verkleinert: {masse}')
-        # Und das Seitenverhältnis bleibt: 600 zu 1600.
-        self.assertAlmostEqual(masse[0] / masse[1], 600 / 1600, places=2)
-
-    def test_vorlage_erscheint_im_riss(self):
-        self._vorlage_hochladen()
-        self.assertTrue(self.pg.evaluate("() => !!document.querySelector('#geSvg image')"))
-        bild = self.pg.evaluate('() => _geRiss.bild')
-        self.assertGreater(bild['w'], 0)
-        self.assertGreater(bild['h'], 0)
-
-    def test_vorlage_passt_sich_in_die_flaeche_ein(self):
-        """Sie soll beim ersten Mal ganz zu sehen sein und ihr Verhältnis
-        behalten — von da aus wird geschoben."""
-        self._vorlage_hochladen(600, 1600)
-        b = self.pg.evaluate('() => _geRiss.bild')
-        a = self.pg.evaluate('() => _geRiss.ansicht')
-        self.assertAlmostEqual(b['w'] / b['h'], 600 / 1600, places=1)
-        self.assertLessEqual(b['w'], a['w'] + 1)
-        self.assertLessEqual(b['h'], a['h'] + 1)
-
-    def test_regler_aendern_sichtbarkeit_und_groesse(self):
-        self._vorlage_hochladen()
-        vorher = self.pg.evaluate('() => _geRiss.bild')
-        self.pg.evaluate('() => { geVorlageDeckkraft(90); geVorlageGroesse(100); }')
-        self.pg.wait_for_timeout(200)
-        nach = self.pg.evaluate('() => _geRiss.bild')
-        self.assertAlmostEqual(nach['deckkraft'], .9)
-        self.assertEqual(nach['w'], 100)
-        # Die Mitte bleibt stehen, sonst wandert das Bild beim Regeln davon.
-        self.assertAlmostEqual(vorher['x'] + vorher['w'] / 2, nach['x'] + nach['w'] / 2, delta=1)
-
-    def test_vorlage_entfernen(self):
-        self._vorlage_hochladen()
-        self.pg.evaluate('() => geVorlageEntfernen()')
-        self.pg.wait_for_timeout(600)
-        self.assertIsNone(self.vorlage)
-        self.assertFalse(self.pg.evaluate("() => !!document.querySelector('#geSvg image')"))
-        self.assertIsNone(self.pg.evaluate('() => _geRiss.bild || null'))
-
-    def test_die_platzierung_wird_mitgespeichert(self):
-        self._vorlage_hochladen()
-        self.pg.click('#geSpeichern')
-        self.pg.wait_for_timeout(600)
-        self.assertIn('bild', self.gespeichert[-1])
-        import main as _main
-        geprueft = _main._grundriss_pruefen(self.gespeichert[-1])
-        self.assertEqual(set(geprueft['bild']), {'x', 'y', 'w', 'h', 'deckkraft'})
-
-
-    def test_ans_boot_schickt_den_gespeicherten_stand(self):
-        """Und nicht die Arbeitskopie — sonst schickte man dem Boot etwas,
-        das man selbst noch nicht behalten wollte. Die Planvorlage bleibt hier:
-        sie ist Werkzeug und nicht Riss."""
-        self.rechteck(.35, .60, .65, .70)
-        self.pg.click('#geSpeichern')
-        self.pg.wait_for_timeout(600)
-        self.pg.click('#geAnsBoot')
-        self.pg.wait_for_timeout(600)
-        self.assertEqual(len(self.ans_boot), 1)
-        self.assertEqual(len(self.ans_boot[0]['raeume']), 1)
-        self.assertNotIn('bild', self.ans_boot[0])
-        self.assertNotIn('hat_vorlage', self.ans_boot[0])
-
-    def test_die_datei_traegt_den_bootsnamen(self):
-        self.rechteck(.35, .60, .65, .70)
-        self.pg.fill('#geName', 'Mave')
-        self.pg.click('#geSpeichern')
-        self.pg.wait_for_timeout(600)
-        with self.pg.expect_download() as ladung:
-            self.pg.click('button:has-text("Datei")')
-        self.assertEqual(ladung.value.suggested_filename, 'grundriss-mave.json')
-
 
 if __name__ == '__main__':
     unittest.main()

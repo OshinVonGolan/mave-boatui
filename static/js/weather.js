@@ -182,47 +182,53 @@ function _renderWeather() {
   const jetzt = _wxStundeJetzt() || {};
 
   const kopf = $('wxHeute');
+  const wind = jetzt.wind != null ? jetzt.wind : heute.wind;
+  const boe  = jetzt.boe  != null ? jetzt.boe  : heute.gust;
+  const dir  = jetzt.dir  != null ? jetzt.dir  : heute.dir;
+  const welle = jetzt.welle != null ? jetzt.welle : heute.wave;
+
   if (kopf) {
     // Der Wind kommt aus der aktuellen Stunde, nicht aus dem Tagesmaximum:
     // "heute bis 22 kn" hilft um neun Uhr morgens nicht weiter.
-    const wind = jetzt.wind != null ? jetzt.wind : heute.wind;
-    const boe  = jetzt.boe  != null ? jetzt.boe  : heute.gust;
-    const dir  = jetzt.dir  != null ? jetzt.dir  : heute.dir;
-    const bft  = wxBft(wind);
+    const bft = wxBft(wind);
     const faktor = (wind && boe) ? boe / wind : null;
-    const welle = jetzt.welle != null ? jetzt.welle : heute.wave;
     const lage = wxLage(jetzt.wmo != null ? jetzt.wmo : heute.wmo);
 
-    const zeile = (was, wert) => wert
-      ? `<div class="wx-w-zeile"><span>${was}</span><b>${wert}</b></div>` : '';
-
-    // Drei gleich breite Felder. Vorher waren es zwei, die auf einer breiten
-    // Kachel auseinanderliefen — links die Luft, rechts der Wind, dazwischen
-    // eine Handbreit nichts.
+    // EIN Feld mit zwei Haelften statt zweier Kaesten: Luft links, Wind
+    // rechts, dazwischen eine Haarlinie. Vier verschachtelte Flaechen in einer
+    // Kachel waren die unruhigste Stelle der ganzen Seite.
     kopf.innerHTML = `
-      <div class="wx-h-feld wx-h-luft">
-        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 42)}</span>
-        <div>
-          <div class="wx-h-grad">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</div>
-          <div class="wx-h-lage">${_wxEsc(lage)}</div>
-          <div class="wx-h-spanne">${heute.tmin != null ? Math.round(heute.tmin) : '--'}° bis ${heute.tmax != null ? Math.round(heute.tmax) : '--'}°</div>
+      <div class="wx-h-halb">
+        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 40)}</span>
+        <div class="wx-h-text">
+          <div class="wx-h-gross">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</div>
+          <div class="wx-h-klein">${_wxEsc(lage)}</div>
+          <div class="wx-h-klein wx-h-leise">${heute.tmin != null ? Math.round(heute.tmin) : '--'}° bis ${heute.tmax != null ? Math.round(heute.tmax) : '--'}°</div>
         </div>
       </div>
-      <div class="wx-h-feld wx-h-wind">
-        <div class="wx-h-pfeil">${_wxPfeil(dir, 32)}<span>${wxStrich(dir) || '--'}</span></div>
-        <div>
-          <div class="wx-h-gross">${wind != null ? Math.round(wind) : '--'}<small> kn</small>
-            <em>${bft != null ? bft + ' Bft' : ''}</em></div>
-          <div class="wx-h-boe">Böen <b>${boe != null ? Math.round(boe) : '--'}</b> kn${
-            faktor ? ` <em class="${faktor >= 1.5 ? 'boeig' : ''}">${faktor >= 1.5 ? 'böig' : 'gleichmäßig'}</em>` : ''}</div>
+      <div class="wx-h-halb">
+        <span class="wx-h-icon wx-h-pfeil">${_wxPfeil(dir, 34)}</span>
+        <div class="wx-h-text">
+          <div class="wx-h-gross">${wind != null ? Math.round(wind) : '--'}<small>kn</small></div>
+          <div class="wx-h-klein">${wxStrich(dir) || '--'}${bft != null ? ` · ${bft} Bft` : ''}</div>
+          <div class="wx-h-klein wx-h-leise">Böen ${boe != null ? Math.round(boe) : '--'} kn${
+            faktor && faktor >= 1.5 ? ' <em>böig</em>' : ''}</div>
         </div>
-      </div>
-      <div class="wx-h-feld wx-h-werte">
-        ${zeile('Regen', heute.pop != null ? heute.pop + ' %' : '')}
-        ${zeile('Welle', welle != null ? welle.toFixed(1) + ' m' : '')}
-        ${zeile('Druck', jetzt.druck != null ? Math.round(jetzt.druck) + ' hPa' : '')}
-        ${zeile('Sonne', `${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}`)}
       </div>`;
+  }
+
+  // Die uebrigen Werte als schlichte Zeile auf dem Grund der Kachel — sie
+  // brauchen keinen eigenen Rahmen, sie sind Beiwerk.
+  const werte = $('wxWerte');
+  if (werte) {
+    const paar = (was, wert) => wert
+      ? `<span><i>${was}</i> <b>${wert}</b></span>` : '';
+    werte.innerHTML = [
+      paar('Regen', heute.pop != null ? heute.pop + ' %' : ''),
+      paar('Welle', welle != null ? welle.toFixed(1) + ' m' : ''),
+      paar('Druck', jetzt.druck != null ? Math.round(jetzt.druck) + ' hPa' : ''),
+      paar('Sonne', `${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}`),
+    ].filter(Boolean).join('');
   }
 
   _wxTagStreifen();

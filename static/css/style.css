@@ -1264,45 +1264,49 @@
     /* Die Kachel zeigt NUR heute. Vier Tagesspalten daneben machten beides
        klein und keins lesbar (Eignermeldung mit Foto) — die weitere Vorschau
        steht auf der Detailseite. */
-    .wx-koerper { flex: 1; display: grid; gap: 10px;
-      grid-template-rows: auto 1fr; min-height: 0; }
+    /* Feste Zeilen, kein `1fr` fuer den Streifen. Bei EINER Spalte setzt
+       display.js `grid-auto-rows: auto` — die Kachel waechst dann mit ihrem
+       Inhalt, und jede Form von "fuell den Rest" nutzt das bis zum Anschlag
+       aus (zweimal probiert, zweimal wurde die Kachel zu hoch). Dafuer bleibt
+       in quadratischen Kacheln unten eine kleine Luecke; das ist der
+       ruhigere Fehler. */
+    .wx-koerper { flex: 1; display: grid; gap: 9px;
+      grid-template-rows: auto auto auto; align-content: start; min-height: 0; }
 
-    /* Drei gleich breite Felder. Vorher zwei, die auf einer breiten Kachel
-       auseinanderliefen — links die Luft, rechts der Wind, dazwischen eine
-       Handbreit nichts. auto-fit legt sie am Telefon untereinander. */
-    /* 150 px als kleinste Spalte, damit auf einer 330 px breiten Kachel schon
-       ZWEI Felder nebeneinander passen — Luft und Wind. Bei 168 blieb dort
-       eine Spalte uebrig und die Kachel wurde einen halben Meter hoch. */
-    .wx-heute { display: grid; gap: 10px;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .wx-h-feld { background: var(--surface2); border-radius: 12px;
-      padding: 11px 13px; display: flex; align-items: center; gap: 11px; min-width: 0; }
+    /* EIN Feld mit zwei Haelften. Vorher waren es drei Kaesten nebeneinander
+       plus einer darunter — vier verschachtelte Flaechen in einer Kachel, und
+       das war die unruhigste Stelle der ganzen Seite. */
+    .wx-heute { background: var(--surface2); border-radius: 12px;
+      display: grid; grid-template-columns: 1fr 1fr; }
+    .wx-h-halb { display: flex; align-items: center; gap: 11px;
+      padding: 11px 13px; min-width: 0; }
+    .wx-h-halb + .wx-h-halb { border-left: 1px solid var(--border); }
+    /* Schmal wird untereinander gestapelt — nebeneinander bleibt fuer den
+       Zustandstext kein Platz, und der wurde mitten im Wort abgeschnitten. */
+    @media (max-width: 430px) {
+      .wx-heute { grid-template-columns: 1fr; }
+      .wx-h-halb + .wx-h-halb { border-left: 0; border-top: 1px solid var(--border); }
+    }
+
     .wx-h-icon { line-height: 0; color: var(--text2); flex: none; }
-    .wx-h-grad { font-size: 32px; font-weight: 800; line-height: 1; color: var(--text); }
-    .wx-h-lage { font-size: 13px; color: var(--text2); margin-top: 3px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .wx-h-spanne { font-size: 13px; color: var(--text3); }
+    .wx-h-pfeil { color: var(--accent); }
+    .wx-h-text { min-width: 0; }
+    .wx-h-gross { font-size: 28px; font-weight: 800; line-height: 1; color: var(--text);
+      font-variant-numeric: tabular-nums; }
+    .wx-h-gross small { font-size: 13px; font-weight: 600; color: var(--text2);
+      margin-left: 3px; }
+    /* Umbrechen statt abschneiden: „wechselnd bewölkt" passt sonst nicht. */
+    .wx-h-klein { font-size: 12.5px; color: var(--text2); line-height: 1.35;
+      margin-top: 3px; overflow-wrap: anywhere; }
+    .wx-h-leise { color: var(--text3); }
+    .wx-h-klein em { font-style: normal; color: var(--orange); font-weight: 600; }
 
-    .wx-h-pfeil { display: flex; flex-direction: column; align-items: center; gap: 2px;
-      color: var(--accent); flex: none; }
-    .wx-h-pfeil span { font-size: 12px; font-weight: 700; color: var(--text2);
-      letter-spacing: .03em; }
-    .wx-h-gross { font-size: 30px; font-weight: 800; line-height: 1;
-      font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text); }
-    .wx-h-gross small { font-size: 14px; font-weight: 600; color: var(--text2); }
-    .wx-h-gross em { font-style: normal; font-size: 13px; font-weight: 600;
-      color: var(--text3); margin-left: 6px; }
-    .wx-h-boe { font-size: 13px; color: var(--text2); white-space: nowrap; margin-top: 4px; }
-    .wx-h-boe b { color: var(--text); font-weight: 700; }
-    .wx-h-boe em { font-style: normal; color: var(--text3); margin-left: 4px; }
-    .wx-h-boe em.boeig { color: var(--orange); font-weight: 600; }
-
-    /* Die vier Werte laufen ueber die ganze Breite und brechen um, wenn es
-       eng wird. Als dritte Spalte blieb daneben eine leere Zelle stehen,
-       sobald nur zwei Spalten passten. */
-    .wx-h-werte { grid-column: 1 / -1; flex-wrap: wrap; gap: 4px 22px; }
-    .wx-w-zeile { display: flex; gap: 7px; font-size: 13px; color: var(--text3); }
-    .wx-w-zeile b { color: var(--text2); font-weight: 600;
+    /* Beiwerk, also kein eigener Rahmen: eine Zeile auf dem Grund der Kachel. */
+    .wx-werte { display: flex; flex-wrap: wrap; gap: 3px 18px; padding: 0 3px;
+      font-size: 12.5px; }
+    .wx-werte span { display: inline-flex; gap: 6px; white-space: nowrap; }
+    .wx-werte i { font-style: normal; color: var(--text3); }
+    .wx-werte b { color: var(--text2); font-weight: 600;
       font-variant-numeric: tabular-nums; }
 
     .wx-streifen { background: var(--surface2); border-radius: 12px;
@@ -1314,7 +1318,7 @@
        „2–10 KN" liest sich falsch. */
     .wx-streifen-kopf span + span { text-transform: none; letter-spacing: 0;
       font-variant-numeric: tabular-nums; }
-    .wx-tag-canvas { width: 100%; flex: 1; min-height: 76px; display: block; }
+    .wx-tag-canvas { width: 100%; height: 96px; flex: none; display: block; }
 
     /* ── Wasserstand tile ── */
     .card-wl .wl-tile-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }

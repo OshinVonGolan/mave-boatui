@@ -586,6 +586,7 @@
          vier Tagesspalten daneben machten beides klein und keins lesbar. -->
     <div class="wx-koerper tile-hide-half">
       <div class="wx-heute" id="wxHeute"></div>
+      <div class="wx-werte" id="wxWerte"></div>
       <div class="wx-streifen">
         <div class="wx-streifen-kopf"><span>Wind heute</span><span id="wxTagSpanne"></span></div>
         <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
@@ -813,7 +814,6 @@
       <button class="set-nav-btn"        data-cat="licht"   onclick="switchSettingsCat('licht')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg> Licht</button>
       <button class="set-nav-btn"        data-cat="heizung" onclick="switchSettingsCat('heizung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4 4 0 1 0 5 0z"/></svg> Heizung</button>
       <button class="set-nav-btn"        data-cat="wetter"  onclick="switchSettingsCat('wetter')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/></svg> Wetter</button>
-      <button class="set-nav-btn"        data-cat="grundriss" onclick="switchSettingsCat('grundriss')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h16l-2 5H6zM6 14V6l6-3 6 3v8"/></svg> Grundriss</button>
       <button class="set-nav-btn"        data-cat="pegel"   onclick="switchSettingsCat('pegel')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/></svg> Pegel</button>
       <button class="set-nav-btn"        data-cat="wartung" onclick="switchSettingsCat('wartung')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg> Wartung</button>
       <button class="set-nav-btn"        data-cat="netz"    onclick="switchSettingsCat('netz')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/></svg> Netzwerk</button>
@@ -901,23 +901,29 @@
       </div>
     </div>
 
-    <!-- Kategorie: Grundriss. Hier steht nur der Weg hinein — gezeichnet wird
-         im eigenen Werkzeug, das den ganzen Bildschirm braucht. -->
-    <div class="set-pane" id="setPane-grundriss">
+    <!-- Kategorie: Pegel.
+         Bis zu fünf Messstellen der WSV. Anders als beim Wetter ist das keine
+         Koordinate, sondern eine Station mit eigenem Nullpunkt — deshalb wird
+         die Kennung mitgespeichert und nicht nur der Name. -->
+    <div class="set-pane" id="setPane-pegel">
       <div class="set-card">
-        <div class="set-card-hd">Grundriss des Bootes</div>
-        <div class="gr-vorschau"><svg id="grVorschau" preserveAspectRatio="xMidYMid meet"></svg></div>
-        <div id="grVorschauText" style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.55"></div>
-        <label class="btn-primary gr-laden">
-          <input type="file" accept="application/json,.json" onchange="grundrissLadenAusDatei(this)" hidden>
-          Grundriss laden</label>
-        <span class="settings-feedback" id="sGrundrissFeedback"></span>
-        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
-          Gezeichnet wird im <b>Logbuch</b> — dort ist Platz dafür, und dort
-          liegt auch der Bootsplan. Was dabei herauskommt, ist eine Datei; die
-          wird hier geladen. Der Riss trägt die Räume für den Stauplan und die
-          Geräteseite.
+        <div class="set-card-hd">Pegel <span id="sPegelZahl" class="set-card-zahl"></span></div>
+        <div id="sPegelListe"></div>
+        <div class="set-suche">
+          <input type="text" id="sPegelSuche" class="settings-input" autocomplete="off"
+                 placeholder="Pegel suchen, z. B. Warnemünde" oninput="pegelSucheTippen()">
+          <div id="sPegelTreffer" class="set-treffer" hidden></div>
         </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
+          Ein Tipp auf den Pegelnamen in der Kachel geht zum nächsten. Der Stand
+          wird in cm über NHN gerechnet, mit dem Nullpunkt des jeweiligen Pegels
+          — sonst wären die Zahlen zweier Pegel nicht vergleichbar.
+          Eine Vorhersagekurve gibt es nur beim BSH und nur für wenige
+          Ostseepegel; wo es keine gibt, fehlt der Block auf der Seite.
+        </div>
+      </div>
+      <div class="settings-actions">
+        <span class="settings-feedback" id="sPegelFeedback"></span>
       </div>
     </div>
 

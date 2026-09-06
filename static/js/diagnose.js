@@ -259,11 +259,8 @@ function seiteZeigen(name) {
   // Dasselbe fuer die kleine Karte im Ueberblick: auf einer verborgenen Seite
   // ist ihr Feld null Pixel breit und sie bliebe grau.
   if (name === 'ueberblick') dbKarteZeigen();
-  if (name === 'einstellungen') zeichneEinstellungen();
+  if (name === 'einstellungen') { zeichneEinstellungen(); kiLaden(); }
   if (name === 'aufbau') zeichneAufbau();
-  // Das Zeichenwerkzeug misst Pixel — auf einer verborgenen Seite ist die
-  // Flaeche null breit und der Riss bliebe leer.
-  if (name === 'grundriss') requestAnimationFrame(_geAnzeigen);
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();
@@ -2961,4 +2958,102 @@ function exportOeffnen() {
       <a class="knopf" href="/api/verlauf/export?von=${von}&bis=${bis}"
          onclick="setTimeout(popSchliessen, 400)">Herunterladen</a>
     </div>`);
+}
+
+
+// ── KI-Zugang ───────────────────────────────────────────────────────────────
+//
+// EIN Zugang fuers ganze Logbuch — bewusst kein Anhaengsel einer einzelnen
+// Funktion. Wer eine baut, ruft `frage()` auf dem Server und muss sich um
+// Anmeldung, Erneuerung und Fehler nicht mehr kuemmern.
+//
+// Angemeldet wird ueber claude.ai, und von dort kommt ein Code zum Abtippen
+// zurueck — es gibt keinen Rueckweg in diese Anwendung. Das ist kein Mangel:
+// der Server steht hinter Caddy und hat keine Adresse, die Anthropic kennen
+// muesste.
+
+let _ki = null;
+
+async function kiLaden() {
+  _ki = await hole('/api/logbuch/ki');
+  kiZeichnen();
+}
+
+function kiZeichnen() {
+  const feld = $('kiTafel');
+  if (!feld) return;
+  if (!_ki) { feld.innerHTML = ''; return; }
+  const darf = (_konto.handlungen || []).includes('einstellen');
+  const bis = _ki.gueltig_bis
+    ? new Date(_ki.gueltig_bis * 1000).toLocaleString('de-DE',
+        { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  feld.innerHTML = `
+    <div class="tafel-kopf"><h2>KI-Zugang</h2>
+      <span class="hinweis">${_ki.verbunden ? 'verbunden' : 'nicht verbunden'}</span></div>
+    <p class="es-text">Der Zugang für KI-Funktionen im Logbuch. Er läuft über
+      <b>dein Abo</b> und nicht über einen Bezahlschlüssel: angemeldet wird
+      einmal bei claude.ai, danach erneuert sich der Zugang von selbst.
+      Noch benutzt ihn keine Funktion — er steht bereit, damit die nächste es
+      kann.</p>
+    ${_ki.verbunden
+      ? `<p class="es-text">Der Zugang liegt auf dem Server${
+           bis ? ` und gilt bis ${bis}` : ''}. Alles, was eine KI-Funktion
+           schickt, verlässt dabei diesen Rechner.</p>
+         <div class="es-tat">
+           <button class="knopf" ${darf ? '' : 'disabled'} onclick="kiAbmelden()">Zugang entfernen</button>
+         </div>`
+      : `<div class="es-tat">
+           <button class="knopf" ${darf ? '' : 'disabled'} onclick="kiAnmelden()">Mit Claude verbinden</button>
+           ${darf ? '' : '<span class="hinweis">dafür fehlt die Berechtigung</span>'}
+         </div>`}`;
+}
+
+async function kiAnmelden() {
+  // `hole` kennt nur GET — hier muss es ein POST sein.
+  const r = await fetch('/api/logbuch/ki/start', { method: 'POST' }).catch(() => null);
+  const d = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!d || !d.url) { kiMeldung('Die Anmeldung ließ sich nicht starten.'); return; }
+  // Erst das Fenster, dann die Frage nach dem Code — sonst steht der Dialog
+  // hinter einem Fenster, das man noch gar nicht geoeffnet hat.
+  window.open(d.url, '_blank', 'noopener');
+  popZeigen(`<div class="pop-titel">Mit Claude verbinden</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.55">
+      Im neuen Fenster anmelden und den Zugang bestätigen. Claude zeigt danach
+      einen Code — er sieht aus wie <code>abc…#def…</code>. Diesen Code hier
+      einsetzen.</p>
+    <div class="pop-feld"><input type="text" id="kiCode" placeholder="Code einfügen"
+      autocomplete="off" spellcheck="false"></div>
+    <div class="pop-tat">
+      <button class="knopf" onclick="popSchliessen()">Abbrechen</button>
+      <button class="knopf haupt" onclick="kiCodeSenden()">Verbinden</button>
+    </div>`);
+  setTimeout(() => { const e = $('kiCode'); if (e) e.focus(); }, 50);
+}
+
+async function kiCodeSenden() {
+  const feld = $('kiCode');
+  const code = feld ? feld.value.trim() : '';
+  if (!code) { if (feld) feld.focus(); return; }
+  const r = await fetch('/api/logbuch/ki/code', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : {};
+  popSchliessen();
+  if (!r || !r.ok) { kiMeldung(d.detail || 'Der Code wurde nicht angenommen.'); return; }
+  _ki = d;
+  kiZeichnen();
+}
+
+async function kiAbmelden() {
+  const r = await fetch('/api/logbuch/ki', { method: 'DELETE' }).catch(() => null);
+  if (r && r.ok) { _ki = await r.json(); kiZeichnen(); }
+}
+
+function kiMeldung(text) {
+  popZeigen(`<div class="pop-titel">KI-Zugang</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.55">${esc(text)}</p>
+    <div class="pop-tat"><button class="knopf" onclick="popSchliessen()">Gut</button></div>`);
 }

@@ -93,7 +93,6 @@ function switchSettingsCat(cat) {
   if (cat === 'display') openDisplaySettings();
   if (cat === 'wetter')  wetterEinstellungenBauen();
   if (cat === 'pegel')   pegelEinstellungenBauen();
-  if (cat === 'grundriss') grundrissVorschauBauen();
 }
 
 async function fetchSettingsNetwork() {
@@ -762,56 +761,4 @@ async function _pegelSpeichern(stationen) {
   } catch (e) {
     if (fb) _fbError(fb, e.message);
   }
-}
-
-
-// ── Einstellungen: Grundriss ────────────────────────────────────────────────
-
-/**
- * Einen im Logbuch gezeichneten Grundriss laden.
- *
- * Gezeichnet wird auf dem Server — dort ist Platz dafür, und dort liegt auch
- * der Bootsplan. Hierher kommt nur das Ergebnis. Geprüft wird trotzdem am
- * Boot: die Datei kommt aus einem Dateiauswahldialog und könnte alles sein.
- */
-async function grundrissLadenAusDatei(eingabe) {
-  const datei = eingabe.files && eingabe.files[0];
-  const fb = $('sGrundrissFeedback');
-  eingabe.value = '';
-  if (!datei) return;
-  try {
-    if (datei.size > 2 * 1024 * 1024) throw new Error('Die Datei ist zu groß.');
-    let roh;
-    try { roh = JSON.parse(await datei.text()); }
-    catch (_) { throw new Error('Das ist keine Grundriss-Datei.'); }
-    if (!roh || !Array.isArray(roh.raeume)) throw new Error('In der Datei stehen keine Räume.');
-    const antwort = await fetch('/api/grundriss', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(roh),
-    });
-    if (!antwort.ok) {
-      const d = await antwort.json().catch(() => ({}));
-      throw new Error(d.detail || `Fehler ${antwort.status}`);
-    }
-    GRUNDRISS = await antwort.json();
-    if (typeof _orteAufbauen === 'function') _orteAufbauen();
-    grundrissVorschauBauen();
-    if (fb) _fbOk(fb);
-  } catch (e) {
-    if (fb) _fbError(fb, e.message);
-  }
-}
-
-/** Kleine Vorschau des gespeicherten Risses — damit man sieht, was man ändert. */
-function grundrissVorschauBauen() {
-  const svg = $('grVorschau');
-  if (svg) grundrissZeichnen(svg, { klasse: 'gr-vorschau-flaeche' });
-  const text = $('grVorschauText');
-  if (!text) return;
-  const g = GRUNDRISS || {};
-  const teile = [];
-  if (g.name) teile.push(g.name);
-  if (g.loa_m) teile.push(`${g.loa_m} m × ${g.breite_m || '?'} m`);
-  teile.push(`${(g.raeume || []).length} Räume`);
-  text.textContent = teile.join(' · ');
 }

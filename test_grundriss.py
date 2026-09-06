@@ -175,10 +175,18 @@ class WerDenRissAendernDarf(unittest.TestCase):
     def test_aendern_verlangt_einstellen(self):
         self.assertEqual(self.recht('PUT', '/api/grundriss'), 'einstellen')
 
-    def test_die_planvorlage_gibt_es_am_boot_nicht_mehr(self):
-        """Sie gehoert zum Zeichenwerkzeug, und das laeuft auf dem Server."""
-        import main as _main
-        self.assertFalse(hasattr(_main, 'GRUNDRISS_BILD'))
+    def test_der_riss_darf_aus_der_ferne_gesetzt_werden(self):
+        """Der Server bietet nur an, was in DURCHLEITEN steht — ohne Eintrag
+        gaebe es den Weg gar nicht."""
+        from server.befehle import DURCHLEITEN
+        self.assertIn(('PUT', '/api/grundriss'), {(m, p) for m, p, _ in DURCHLEITEN})
+
+    def test_und_die_einstellungen_auch(self):
+        """Dort stand PATCH gegen POST — damit liess sich aus der Ferne
+        UEBERHAUPT keine Einstellung aendern: der Server nahm den Aufruf an,
+        und das Boot antwortete mit 405."""
+        from server.befehle import DURCHLEITEN
+        self.assertIn(('PATCH', '/api/settings'), {(m, p) for m, p, _ in DURCHLEITEN})
 
 
 if __name__ == '__main__':
