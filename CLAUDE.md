@@ -151,7 +151,8 @@ Raspberry Pi
 | `static/js/heizung.js` | Heizungs-Kachel, Detailseite und Einstellungen. Spricht nur mit dem Pi (`/api/heizung/*`), nie direkt mit dem Hub |
 | `static/js/verlauf.js` | Seite „Stromverlauf“: Erzeugung gestapelt, Verbrauch als Linie, Energiesummen. Holt eigene Daten per `/api/history?range=` |
 | `static/js/weather.js` | Wetterkachel und Wetterseite. Bis zu fünf Orte plus die eigene Position, Modellwahl, Modellvergleich; Wind/Böen/Seegang/Regen als Leinwand-Streifen über 72 Stunden. Quelle Open-Meteo über `/api/weather`, `/api/wetter/*` |
-| `static/js/grundrisseditor.js` | Werkzeug zum Zeichnen des Grundrisses: Rechteck- und Vieleckwerkzeug, gerechnete Rumpfformen, Planvorlage zum Nachziehen. Arbeitet auf einer Kopie, speichert über `PUT /api/grundriss`. Konzept: `KONZEPT-GRUNDRISS.md` |
+| `static/js/grundrisseditor.js` | Werkzeug zum Zeichnen des Grundrisses — **läuft im LOGBUCH auf dem Server**, nicht am Boot. Rechteck- und Vieleckwerkzeug, sieben gerechnete Rumpfformen, Planvorlage zum Nachziehen. Arbeitet auf einer Kopie, speichert über `PUT /api/logbuch/grundriss`; ans Boot geht eine Datei. Konzept: `KONZEPT-GRUNDRISS.md` |
+| `sync/grundriss.py` | Die Prüfung des Risses — dieselbe auf Server und Pi. Der Prüfer baut ein neues Objekt, statt das eingehende zu säubern |
 
 ### Konfiguration / Daten
 

@@ -1073,7 +1073,7 @@ class Wetterkachel(Pruefstand):
         self.assertFalse(self.offen())
 
     def test_tippen_auf_die_kachel_oeffnet_die_seite(self):
-        self.pg.click('.card-wx .wx-day')
+        self.pg.click('#wxHeute')
         self.pg.wait_for_timeout(600)
         self.assertTrue(self.offen())
         self.assertEqual(self.pg.evaluate('() => location.hash'), '#wetter')
@@ -1107,12 +1107,14 @@ class Wetterkachel(Pruefstand):
         self.assertIn('33', self.pg.evaluate(
             "() => document.getElementById('wxHeute').innerText"))
 
-    def test_vier_weitere_tage_darunter(self):
-        """Heute steht oben schon — hier die Tage danach."""
-        self.assertEqual(self.pg.locator('.card-wx .wx-day').count(), 4)
-        namen = self.pg.evaluate(
-            "() => [...document.querySelectorAll('.card-wx .wx-day-name')].map(e => e.textContent)")
-        self.assertNotIn('Heute', namen)
+    def test_die_kachel_zeigt_nur_heute(self):
+        """Vier Tagesspalten daneben machten beides klein und keins lesbar
+        (Eignermeldung mit Foto). Die weitere Vorschau steht auf der
+        Detailseite."""
+        self.assertEqual(self.pg.locator('.card-wx .wx-day').count(), 0)
+        text = self.pg.evaluate("() => document.querySelector('.wx-koerper').innerText")
+        for tag in ('Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'):
+            self.assertNotIn(f'\n{tag}\n', text, f'{tag} steht noch auf der Kachel')
 
     def test_der_tagesstreifen_zeichnet(self):
         """Er beantwortet, was eine Tageszahl nie beantwortet: frischt es auf
@@ -1127,14 +1129,11 @@ class Wetterkachel(Pruefstand):
         }""")
         self.assertGreater(n, 300, 'der Streifen ist leer geblieben')
 
-    def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self):
-        """Welle nur an manchen Tagen sah aus, als fehlten Werte. Dann lieber
-        überall die Windrichtung."""
-        zeilen = self.pg.evaluate(
-            "() => [...document.querySelectorAll('.wx-row-welle')].map(e => e.textContent.trim())")
-        self.assertEqual(len(zeilen), 4)
-        self.assertFalse(any('m' in z for z in zeilen),
-                         f'gemischt: {zeilen}')
+    def test_die_werte_stehen_mit_ihrer_bezeichnung_da(self):
+        """Eine Zahl ohne Wort daneben muss man raten."""
+        text = self.pg.evaluate("() => document.getElementById('wxHeute').innerText")
+        for was in ('Regen', 'Druck', 'Sonne'):
+            self.assertIn(was, text)
 
     # ── Die Detailseite ────────────────────────────────────────────────────
 
@@ -1214,7 +1213,7 @@ class WetterOhnePosition(Wetterkachel):
     def test_der_ort_geht_als_koordinate_mit(self): pass
     def test_heute_steht_oben_und_ausfuehrlich(self): pass
     def test_der_wind_kommt_aus_der_aktuellen_stunde(self): pass
-    def test_vier_weitere_tage_darunter(self): pass
+    def test_die_kachel_zeigt_nur_heute(self): pass
     def test_der_tagesstreifen_zeichnet(self): pass
     def test_letzte_zeile_ist_ueberall_dieselbe_groesse(self): pass
     def test_der_kopf_zeigt_die_aktuelle_stunde(self): pass
@@ -1480,30 +1479,46 @@ def _test_png(w: int, h: int) -> bytes:
 class Grundrisswerkzeug(Pruefstand):
     """Räume zeichnen, verschieben, löschen — und was dabei gespeichert wird.
 
-    Der Riss trägt die Räume für den Stauplan und die Geräteseite. Bis hierher
-    war er 250 Zeilen SVG in index.html, gezeichnet für DIESES Boot. Das
-    Werkzeug ist der Weg, ihn ohne Entwickler zu ändern.
+    Das Werkzeug lebt im LOGBUCH auf dem Server, nicht am Boot: Zeichnen ist
+    Planung, dafür sitzt man in Ruhe davor und hat den Bootsplan daneben. Der
+    Pi bekommt davon nur das Ergebnis, als Datei.
     """
 
     def setUp(self):
-        self.pg = self._browser.new_page(viewport={'width': 1280, 'height': 950})
+        self.pg = self._browser.new_page(viewport={'width': 1400, 'height': 950})
         self.fehler = []
         self.pg.on('pageerror', lambda e: self.fehler.append(str(e)[:250]))
         self.pg.on('dialog', lambda d: d.accept())
         self.gespeichert = []
-        # PUT geht beim Pruefserver ins Leere (er reicht nur GET ans Boot
-        # durch). Hier wird die Antwort gefaelscht — der ECHTE Pruefer bekommt
-        # das Ergebnis am Ende trotzdem zu sehen, in Python.
-        def speichern(route):
-            rumpf = json.loads(route.request.post_data or '{}')
-            self.gespeichert.append(rumpf)
-            route.fulfill(status=200, content_type='application/json',
-                          body=json.dumps(rumpf))
-        self.pg.route('**/api/grundriss', lambda r:
-                      speichern(r) if r.request.method == 'PUT' else r.fallback())
-
-        # Die Planvorlage: hochgeladen wird in den Speicher dieses Tests.
+        self.ans_boot = []
         self.vorlage = None
+        self._routen()
+        self.pg.goto(self.basis + '/diagnose', wait_until='domcontentloaded', timeout=30000)
+        self.pg.wait_for_timeout(1500)
+        if self.pg.locator('#anmName').count():
+            self.pg.fill('#anmName', KONTO)
+            self.pg.fill('#anmPw', PASSWORT)
+            self.pg.click('#anmKnopf')
+            self.pg.wait_for_timeout(3000)
+        self.pg.click('.sl-knopf[data-seite="grundriss"]')
+        self.pg.wait_for_timeout(1200)
+        self.kasten = self.pg.locator('#geSvg').bounding_box()
+
+    def tearDown(self):
+        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
+        self.pg.close()
+
+    def _routen(self):
+        def riss(route):
+            if route.request.method == 'PUT':
+                rumpf = json.loads(route.request.post_data or '{}')
+                self.gespeichert.append(rumpf)
+                route.fulfill(status=200, content_type='application/json',
+                              body=json.dumps({**rumpf, 'hat_vorlage': bool(self.vorlage)}))
+            else:
+                route.fulfill(status=200, content_type='application/json',
+                              body=json.dumps({'hat_vorlage': bool(self.vorlage)}))
+        self.pg.route('**/api/logbuch/grundriss', riss)
 
         def vorlage(route):
             if route.request.method == 'PUT':
@@ -1517,21 +1532,17 @@ class Grundrisswerkzeug(Pruefstand):
                 route.fulfill(status=200, content_type='image/jpeg', body=self.vorlage)
             else:
                 route.fulfill(status=404, body='')
-        self.pg.route('**/api/grundriss/vorlage*', vorlage)
-        self.pg.goto(self.basis + '/', wait_until='domcontentloaded', timeout=30000)
-        self.pg.wait_for_timeout(2000)
-        if self.pg.evaluate("() => !!document.querySelector('.anmeldung:not(.hidden)')"):
-            self.pg.fill('#anmName', KONTO)
-            self.pg.fill('#anmPw', PASSWORT)
-            self.pg.click('#anmKnopf')
-            self.pg.wait_for_timeout(4000)
-        self.pg.evaluate('() => openGrundrissEditor()')
-        self.pg.wait_for_timeout(700)
-        self.kasten = self.pg.locator('#geSvg').bounding_box()
+        self.pg.route('**/api/logbuch/grundriss/vorlage*', vorlage)
 
-    def tearDown(self):
-        self.assertEqual(self.fehler, [], 'Die Seite hat Fehler geworfen')
-        self.pg.close()
+        # Der Weg ans Boot geht über den Durchleiter des Servers.
+        def boot(route):
+            self.ans_boot.append(json.loads(route.request.post_data or '{}'))
+            route.fulfill(status=200, content_type='application/json', body='{"ok":true}')
+        self.pg.route('**/api/grundriss', lambda r:
+                      boot(r) if r.request.method == 'PUT' else r.fallback())
+        # Der Stauplan liegt am Boot; ohne Boot antwortet der Server mit 409.
+        self.pg.route('**/api/stauplan', lambda r: r.fulfill(
+            status=200, content_type='application/json', body='[]'))
 
     # ── Werkzeug ───────────────────────────────────────────────────────────
 
@@ -1559,12 +1570,12 @@ class Grundrisswerkzeug(Pruefstand):
     # ── Prüfungen ──────────────────────────────────────────────────────────
 
     def test_das_werkzeug_arbeitet_auf_einer_kopie(self):
-        """Erst Speichern macht die Änderung echt. Ohne das wäre jeder
-        Fehlgriff sofort im Stauplan und auf der Geräteseite zu sehen."""
-        vorher = self.pg.evaluate('() => GRUNDRISS.raeume.length')
+        """Erst Speichern macht die Änderung echt. Ohne das stünde jede
+        halbfertige Linie sofort im gespeicherten Riss."""
+        vorher = self.pg.evaluate('() => (_geStand.raeume || []).length')
         self.rechteck(.35, .60, .65, .70)
         self.assertEqual(self.zahl(), vorher + 1)
-        self.assertEqual(self.pg.evaluate('() => GRUNDRISS.raeume.length'), vorher)
+        self.assertEqual(self.pg.evaluate('() => (_geStand.raeume || []).length'), vorher)
 
     def test_rechteck_aufziehen_legt_einen_raum_an(self):
         vorher = self.zahl()
@@ -1660,7 +1671,7 @@ class Grundrisswerkzeug(Pruefstand):
         self.pg.fill('#geBreite', '4')
         self.pg.click('button:has-text("Rumpfform")')
         self.pg.wait_for_timeout(400)
-        self.pg.click('.ge-vorlage[data-vorlage="modern"]')
+        self.pg.click('.ge-vorlage[data-vorlage="breitheck"]')
         self.pg.wait_for_timeout(400)
         nach = self.pg.evaluate('() => ({y: _geRaum(_geAuswahl).form.y, h: _geRiss.ansicht.h})')
         self.assertAlmostEqual(vorher['y'] / vorher['h'], nach['y'] / nach['h'], places=2)
@@ -1700,21 +1711,22 @@ class Grundrisswerkzeug(Pruefstand):
             self.assertLessEqual(y1, 680.5, kennung)
 
     def test_gespeichert_wird_was_der_pi_zurueckgibt(self):
-        """Der Pi prüft und schneidet zurecht. Was er antwortet, ist ab dann
-        die Wahrheit — nicht die Arbeitskopie im Browser."""
+        """Der Server prüft und schneidet zurecht. Was er antwortet, ist ab
+        dann die Wahrheit — nicht die Arbeitskopie im Browser."""
         self.rechteck(.35, .60, .65, .70)
         self.pg.click('#geSpeichern')
         self.pg.wait_for_timeout(600)
         self.assertEqual(len(self.gespeichert), 1)
         geschickt = self.gespeichert[0]
-        self.assertEqual(self.pg.evaluate('() => GRUNDRISS.raeume.length'),
+        self.assertEqual(self.pg.evaluate('() => _geStand.raeume.length'),
                          len(geschickt['raeume']))
         self.assertTrue(self.pg.evaluate('() => document.getElementById("geSpeichern").disabled'),
                         'nach dem Speichern gibt es nichts mehr zu speichern')
 
     def test_das_geschickte_besteht_die_pruefung_des_pi(self):
         """Der eigentliche Test: was das Werkzeug baut, muss der Prüfer
-        annehmen. Sonst merkt man es erst beim Speichern am Boot."""
+        annehmen — und zwar DERSELBE, der am Boot prüft (sync/grundriss.py).
+        Sonst merkt man es erst beim Laden."""
         self.rechteck(.35, .60, .65, .70)
         self.werkzeug('vieleck')
         for fx, fy in ((.35, .76), (.65, .76), (.60, .86), (.40, .86)):
@@ -1724,7 +1736,7 @@ class Grundrisswerkzeug(Pruefstand):
         self.pg.wait_for_timeout(250)
         self.pg.click('button:has-text("Rumpfform")')
         self.pg.wait_for_timeout(400)
-        self.pg.click('.ge-vorlage[data-vorlage="klassisch"]')
+        self.pg.click('.ge-vorlage[data-vorlage="langkieler"]')
         self.pg.wait_for_timeout(400)
         self.pg.click('#geSpeichern')
         self.pg.wait_for_timeout(600)
@@ -1738,10 +1750,6 @@ class Grundrisswerkzeug(Pruefstand):
     # ── Planvorlage ────────────────────────────────────────────────────────
 
     def _vorlage_hochladen(self, w=600, h=1600):
-        # Der Prüfserver ist ein SERVER, und über den geht kein Bild — deshalb
-        # blendet das Werkzeug den Knopf dort aus. Hier wird die Lage am Boot
-        # nachgestellt, denn genau die soll geprüft werden.
-        self.pg.evaluate("() => { _quelle.art = 'direkt'; _geVorlageLeiste(); }")
         pfad = pathlib.Path(tempfile.mkdtemp(prefix='mave-plan-')) / 'plan.png'
         pfad.write_bytes(_test_png(w, h))
         self.pg.set_input_files('#geVorlageBox input[type=file]', str(pfad))
@@ -1816,14 +1824,28 @@ class Grundrisswerkzeug(Pruefstand):
         self.assertEqual(set(geprueft['bild']), {'x', 'y', 'w', 'h', 'deckkraft'})
 
 
-    def test_ueber_den_server_wird_das_hochladen_gar_nicht_erst_angeboten(self):
-        """Der Durchleiter nimmt nur JSON und höchstens 256 kB. Einen Knopf
-        anzubieten, der dann scheitert, ist schlechter als keiner."""
-        self.pg.evaluate("() => { _quelle.art = 'server_live'; _geVorlageLeiste(); }")
-        self.assertTrue(self.pg.evaluate(
-            "() => document.querySelector('#geVorlageBox .ge-datei').hidden"))
-        self.assertFalse(self.pg.evaluate(
-            "() => document.getElementById('geVorlageFern').hidden"))
+    def test_ans_boot_schickt_den_gespeicherten_stand(self):
+        """Und nicht die Arbeitskopie — sonst schickte man dem Boot etwas,
+        das man selbst noch nicht behalten wollte. Die Planvorlage bleibt hier:
+        sie ist Werkzeug und nicht Riss."""
+        self.rechteck(.35, .60, .65, .70)
+        self.pg.click('#geSpeichern')
+        self.pg.wait_for_timeout(600)
+        self.pg.click('#geAnsBoot')
+        self.pg.wait_for_timeout(600)
+        self.assertEqual(len(self.ans_boot), 1)
+        self.assertEqual(len(self.ans_boot[0]['raeume']), 1)
+        self.assertNotIn('bild', self.ans_boot[0])
+        self.assertNotIn('hat_vorlage', self.ans_boot[0])
+
+    def test_die_datei_traegt_den_bootsnamen(self):
+        self.rechteck(.35, .60, .65, .70)
+        self.pg.fill('#geName', 'Mave')
+        self.pg.click('#geSpeichern')
+        self.pg.wait_for_timeout(600)
+        with self.pg.expect_download() as ladung:
+            self.pg.click('button:has-text("Datei")')
+        self.assertEqual(ladung.value.suggested_filename, 'grundriss-mave.json')
 
 
 if __name__ == '__main__':

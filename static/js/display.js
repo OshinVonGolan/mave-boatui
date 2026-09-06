@@ -1419,7 +1419,13 @@ function _zeigerartMerken() {
 
 // Kurz genug, dass das Weiterschalten nicht traege wirkt, lang genug fuer
 // einen bequemen Doppeltipp.
-const _SB_DOPPEL_MS = 240;
+//
+// Erst 240 ms — das war zu spueren (Eignermeldung). 150 ms faengt den
+// ueblichen Doppeltipp noch ab (Menschen tippen ihn meist in 100 bis 150 ms)
+// und ist beim einfachen Weiterschalten kaum noch wahrzunehmen. Ein sehr
+// gemaechlicher Doppeltipp schaltet dafuer weiter, statt die Seite zu oeffnen;
+// das ist der bewusst in Kauf genommene Tausch.
+const _SB_DOPPEL_MS = 150;
 let _sbWartend = null;      // {feld, los, uhr} — ein Tipp, der noch abwartet
 
 function _sbHaltenBinden() {

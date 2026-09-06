@@ -187,8 +187,6 @@ STATIC_DIR    = BASE_DIR / 'static'
 STAUPLAN_FILE = BASE_DIR / 'stauplan.json'
 GRUNDRISS_FILE = BASE_DIR / 'grundriss.json'
 GRUNDRISS_VORLAGE = BASE_DIR / 'grundriss.example.json'
-# Das abfotografierte oder eingescannte Original, ueber das gezeichnet wird.
-GRUNDRISS_BILD = BASE_DIR / 'grundriss-vorlage.jpg'
 HEIZUNG_FILE  = BASE_DIR / 'heizung.json'
 WARTUNG_FILE  = BASE_DIR / 'wartung.json'
 DEVICES_FILE  = BASE_DIR / 'devices.json'
@@ -2258,173 +2256,27 @@ async def save_stauplan(request: Request):
 # Pfaddaten nur aus den Zeichen, die eine Pfadangabe braucht. Texte werden im
 # Browser ueber textContent gesetzt, nie ueber innerHTML.
 
-_GR_FORMEN = {
-    'rect':    ('x', 'y', 'w', 'h', 'rx', 'ry'),
-    'line':    ('x1', 'y1', 'x2', 'y2'),
-    'circle':  ('cx', 'cy', 'r'),
-    'ellipse': ('cx', 'cy', 'rx', 'ry'),
-    'path':    (),
-    'text':    ('x', 'y', 'fs'),
-}
-_GR_ZAHL_FELDER = {'x', 'y', 'w', 'h', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2',
-                   'cx', 'cy', 'r', 'fs', 'sw'}
-_GR_TEXT_FELDER = {'fill', 'stroke', 'anker', 'fw', 'ls', 'strich', 's', 'd', 'ff'}
-_GR_FARBE   = re.compile(r'^(#[0-9a-fA-F]{6}|none|transparent|schraffur)$')
-_GR_PFAD    = re.compile(r'^[MmLlHhVvCcSsQqTtAaZz0-9\s,.+-]{1,4000}$')
-_GR_EINFACH = re.compile(r'^[\w .,%-]{0,32}$')       # Anker, Strichmuster, ...
-# Schriftfamilien sind Listen und damit laenger — dieselben Zeichen, mehr davon.
-_GR_SCHRIFT = re.compile(r'^[\w .,\'"-]{0,64}$')
-
-
-def _gr_zahl(wert, name: str) -> float:
-    if isinstance(wert, bool) or not isinstance(wert, (int, float)) or not math.isfinite(wert):
-        raise HTTPException(400, detail=f'{name}: Zahl erwartet')
-    # Grosszuegig, aber begrenzt: die Zeichenflaeche ist ein paar hundert
-    # Einheiten gross, alles darueber ist ein Tippfehler oder Absicht.
-    if not -10000 <= wert <= 10000:
-        raise HTTPException(400, detail=f'{name}: {wert} liegt ausserhalb von -10000 bis 10000')
-    return round(float(wert), 3)
-
-
-def _gr_farbe(wert, name: str) -> str:
-    wert = _text(wert, 32, name)
-    if not _GR_FARBE.match(wert):
-        raise HTTPException(400, detail=f'{name}: {wert!r} ist keine erlaubte Farbe')
-    return wert
-
-
-def _gr_form(roh, name: str) -> dict:
-    if not isinstance(roh, dict):
-        raise HTTPException(400, detail=f'{name}: Objekt erwartet')
-    t = _text(roh.get('t', ''), 12, f'{name}.t')
-    if t not in _GR_FORMEN:
-        raise HTTPException(400, detail=f'{name}.t: {t!r} ist keine bekannte Form')
-    aus = {'t': t}
-    for feld, wert in roh.items():
-        if feld == 't':
-            continue
-        if feld in _GR_ZAHL_FELDER:
-            aus[feld] = _gr_zahl(wert, f'{name}.{feld}')
-        elif feld in ('fill', 'stroke'):
-            aus[feld] = _gr_farbe(wert, f'{name}.{feld}')
-        elif feld == 'd':
-            d = _text(wert, 4000, f'{name}.d')
-            if not _GR_PFAD.match(d):
-                raise HTTPException(400, detail=f'{name}.d: unerlaubte Zeichen in der Pfadangabe')
-            aus['d'] = d
-        elif feld == 's':
-            aus['s'] = _text(wert, 120, f'{name}.s')
-        elif feld == 'frei':
-            # Liegt die Form ausserhalb des Rumpfumrisses? Dann wird sie nicht
-            # beschnitten — die Beschriftungen "Bug" und "Heck" stehen neben
-            # dem Boot, nicht darin.
-            aus['frei'] = bool(wert)
-        elif feld in _GR_TEXT_FELDER:
-            # Schriftfamilien sind laenger als die uebrigen Angaben.
-            v = _text(wert, 64 if feld == 'ff' else 32, f'{name}.{feld}')
-            if not (_GR_SCHRIFT if feld == 'ff' else _GR_EINFACH).match(v):
-                raise HTTPException(400, detail=f'{name}.{feld}: unerlaubte Zeichen')
-            aus[feld] = v
-        else:
-            raise HTTPException(400, detail=f'{name}: unbekanntes Feld {feld!r}')
-    return aus
-
-
-def _gr_raum(roh, name: str) -> dict:
-    if not isinstance(roh, dict):
-        raise HTTPException(400, detail=f'{name}: Objekt erwartet')
-    kennung = _text(roh.get('id', ''), 40, f'{name}.id').strip()
-    if not re.match(r'^[a-z0-9][a-z0-9_-]{0,39}$', kennung):
-        raise HTTPException(400, detail=f'{name}.id: nur Kleinbuchstaben, Ziffern, - und _')
-    form = roh.get('form') or {}
-    if not isinstance(form, dict):
-        raise HTTPException(400, detail=f'{name}.form: Objekt erwartet')
-    art = _text(form.get('t', ''), 12, f'{name}.form.t')
-    if art == 'rechteck':
-        geprueft = {'t': 'rechteck'}
-        for feld in ('x', 'y', 'w', 'h'):
-            geprueft[feld] = _gr_zahl(form.get(feld), f'{name}.form.{feld}')
-    elif art == 'vieleck':
-        punkte = form.get('punkte')
-        if not isinstance(punkte, list) or not 3 <= len(punkte) <= 200:
-            raise HTTPException(400, detail=f'{name}.form.punkte: 3 bis 200 Punkte erwartet')
-        geprueft = {'t': 'vieleck', 'punkte': [
-            [_gr_zahl((pt or [None, None])[0], f'{name}.form.punkte[{i}].x'),
-             _gr_zahl((pt or [None, None])[1], f'{name}.form.punkte[{i}].y')]
-            for i, pt in enumerate(punkte)]}
-    else:
-        raise HTTPException(400, detail=f'{name}.form.t: rechteck oder vieleck erwartet')
-    return {
-        'id': kennung,
-        'name': _text(roh.get('name', ''), 60, f'{name}.name').strip() or kennung,
-        'farbe': _gr_farbe(roh.get('farbe', '#94a3b8'), f'{name}.farbe'),
-        'form': geprueft,
-    }
-
-
-def _grundriss_pruefen(body) -> dict:
-    if not isinstance(body, dict):
-        raise HTTPException(400, detail='Grundriss: Objekt erwartet')
-    ansicht = body.get('ansicht') or {}
-    if not isinstance(ansicht, dict):
-        raise HTTPException(400, detail='ansicht: Objekt erwartet')
-    rumpf = _text(body.get('rumpf', ''), 4000, 'rumpf')
-    if rumpf and not _GR_PFAD.match(rumpf):
-        raise HTTPException(400, detail='rumpf: unerlaubte Zeichen in der Pfadangabe')
-    raeume = body.get('raeume') or []
-    if not isinstance(raeume, list) or len(raeume) > 200:
-        raise HTTPException(400, detail='raeume: Liste mit hoechstens 200 Eintraegen erwartet')
-    hintergrund = body.get('hintergrund') or []
-    if not isinstance(hintergrund, list) or len(hintergrund) > 2000:
-        raise HTTPException(400, detail='hintergrund: Liste mit hoechstens 2000 Formen erwartet')
-    geprueft_raeume = [_gr_raum(r, f'raeume[{i}]') for i, r in enumerate(raeume)]
-    kennungen = [r['id'] for r in geprueft_raeume]
-    doppelt = {k for k in kennungen if kennungen.count(k) > 1}
-    if doppelt:
-        raise HTTPException(400, detail=f'raeume: Kennung mehrfach vergeben: {sorted(doppelt)}')
-    geprueft = {
-        'name':  _text(body.get('name', ''), 60, 'name').strip(),
-        'loa_m': _gr_zahl(body.get('loa_m', 0) or 0, 'loa_m'),
-        'breite_m': _gr_zahl(body.get('breite_m', 0) or 0, 'breite_m'),
-        'ansicht': {'w': _gr_zahl(ansicht.get('w', 200), 'ansicht.w'),
-                    'h': _gr_zahl(ansicht.get('h', 680), 'ansicht.h')},
-        'rumpf': rumpf,
-        'hintergrund': [_gr_form(f, f'hintergrund[{i}]') for i, f in enumerate(hintergrund)],
-        'raeume': geprueft_raeume,
-    }
-    # Wo die Planvorlage liegt und wie stark sie durchscheint. Nur Zahlen — das
-    # BILD selbst steht nicht hier drin, sondern in einer eigenen Datei; ein
-    # halbes Megabyte Base64 in der Antwort holt sich sonst jede Seite mit,
-    # die nur die Raumnamen braucht.
-    bild = body.get('bild')
-    if isinstance(bild, dict):
-        geprueft['bild'] = {
-            'x': _gr_zahl(bild.get('x', 0) or 0, 'bild.x'),
-            'y': _gr_zahl(bild.get('y', 0) or 0, 'bild.y'),
-            'w': _gr_zahl(bild.get('w', 0) or 0, 'bild.w'),
-            'h': _gr_zahl(bild.get('h', 0) or 0, 'bild.h'),
-            'deckkraft': min(1.0, max(0.0, _gr_zahl(
-                bild.get('deckkraft', .5), 'bild.deckkraft'))),
-        }
-    return geprueft
+# Die Pruefung steht in sync/grundriss.py — sie gilt fuer den Pi UND fuer das
+# Planungswerkzeug im Logbuch. Zwei Fassungen waeren zwei Gelegenheiten,
+# auseinanderzulaufen.
+from sync.grundriss import grundriss_pruefen as _grundriss_pruefen, _GR_PFAD  # noqa: E402
 
 
 @app.get('/api/grundriss')
 async def get_grundriss():
-    """Der Grundriss — oder die mitgelieferte Vorlage, solange keiner gezeichnet ist.
+    """Der Grundriss — oder die mitgelieferte Vorlage, solange keiner geladen ist.
 
-    Wie devices.json: die echte Datei ist Laufzeitdatei, wird ueber die
-    Oberflaeche gepflegt und gehoert nicht ins Repo (sonst scheitert am Pi jeder
-    `git pull`). Damit ein frisches Geraet trotzdem nicht mit einer leeren
-    Flaeche dasteht, liegt eine Vorlage daneben.
+    GEZEICHNET wird er nicht hier, sondern im Logbuch auf dem Server (siehe
+    KONZEPT-GRUNDRISS.md). Am Boot kommt er als Datei an, ueber die
+    Einstellungen oder ueber den Durchleiter des Servers.
+
+    Wie devices.json: die echte Datei ist Laufzeitdatei und gehoert nicht ins
+    Repo (sonst scheitert am Pi jeder `git pull`). Damit ein frisches Geraet
+    trotzdem nicht mit einer leeren Flaeche dasteht, liegt eine Vorlage daneben.
     """
     daten = read_json(GRUNDRISS_FILE, {})
     if not daten:
         daten = read_json(GRUNDRISS_VORLAGE, {})
-    # Ob eine Planvorlage hinterlegt ist, steht HIER — sonst muesste das
-    # Werkzeug beim Oeffnen erst danach fragen, und ein 404 auf diese Frage
-    # schreibt in jedem Browser einen roten Fehler in die Konsole.
-    daten['hat_vorlage'] = GRUNDRISS_BILD.exists()
     return daten
 
 
@@ -2432,53 +2284,7 @@ async def get_grundriss():
 async def save_grundriss(request: Request):
     geprueft = _grundriss_pruefen(await _json_body(request))
     await _run_blocking(write_json, GRUNDRISS_FILE, geprueft)
-    return {**geprueft, 'hat_vorlage': GRUNDRISS_BILD.exists()}
-
-
-# Die Planvorlage: das abfotografierte oder eingescannte Original, ueber das im
-# Werkzeug gezeichnet wird.
-#
-# Verkleinert wird im BROWSER, nicht hier. Pillow und numpy sind auf dem Pi
-# nicht installiert (siehe requirements.txt) — sie dort zu bauen dauert auf
-# einem ARMv6-Kern Stunden. Der Browser kann dasselbe in einem Wimpernschlag,
-# und was ankommt, ist dann schon klein.
-_GR_BILD_MAX = 3 * 1024 * 1024
-_GR_BILD_TYPEN = {'image/jpeg': b'\xff\xd8\xff', 'image/png': b'\x89PNG'}
-
-
-@app.get('/api/grundriss/vorlage', include_in_schema=False)
-async def get_grundriss_bild():
-    if not GRUNDRISS_BILD.exists():
-        raise HTTPException(404, detail='Keine Planvorlage hinterlegt')
-    daten = await _run_blocking(GRUNDRISS_BILD.read_bytes)
-    return Response(content=daten, media_type='image/jpeg',
-                    headers={'Cache-Control': 'no-cache'})
-
-
-@app.put('/api/grundriss/vorlage', include_in_schema=False)
-async def put_grundriss_bild(request: Request):
-    """Die Planvorlage ablegen.
-
-    Geprueft wird nicht der gemeldete Typ, sondern der Dateianfang: ein
-    Browser darf behaupten, was er will, und diese Datei wird spaeter wieder
-    ausgeliefert.
-    """
-    daten = await request.body()
-    if not daten:
-        raise HTTPException(400, detail='Leere Datei')
-    if len(daten) > _GR_BILD_MAX:
-        raise HTTPException(413, detail='Die Vorlage ist zu gross (mehr als 3 MB)')
-    if not any(daten.startswith(m) for m in _GR_BILD_TYPEN.values()):
-        raise HTTPException(400, detail='Nur JPEG oder PNG')
-    await _run_blocking(GRUNDRISS_BILD.write_bytes, daten)
-    return {'ok': True, 'bytes': len(daten)}
-
-
-@app.delete('/api/grundriss/vorlage', include_in_schema=False)
-async def del_grundriss_bild():
-    if GRUNDRISS_BILD.exists():
-        await _run_blocking(GRUNDRISS_BILD.unlink)
-    return {'ok': True}
+    return geprueft
 
 
 # Bekannte Schluessel je Abschnitt. Unbekannte werden mit 400 abgelehnt, damit

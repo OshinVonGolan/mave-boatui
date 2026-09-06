@@ -582,11 +582,14 @@
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
     </div>
-    <!-- Normal: heute ausfuehrlich, danach die naechsten Tage knapp -->
+    <!-- Normal: NUR heute. Die weitere Vorschau steht auf der Detailseite —
+         vier Tagesspalten daneben machten beides klein und keins lesbar. -->
     <div class="wx-koerper tile-hide-half">
       <div class="wx-heute" id="wxHeute"></div>
-      <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
-      <div class="wx-grid" id="wxGrid"></div>
+      <div class="wx-streifen">
+        <div class="wx-streifen-kopf"><span>Wind heute</span><span id="wxTagSpanne"></span></div>
+        <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
+      </div>
     </div>
     <!-- Half: heute -->
     <div class="tile-show-half wx-half">
@@ -905,12 +908,15 @@
         <div class="set-card-hd">Grundriss des Bootes</div>
         <div class="gr-vorschau"><svg id="grVorschau" preserveAspectRatio="xMidYMid meet"></svg></div>
         <div id="grVorschauText" style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.55"></div>
-        <button class="btn-primary" style="margin-top:12px;width:100%"
-                onclick="openGrundrissEditor()">Grundriss bearbeiten</button>
+        <label class="btn-primary gr-laden">
+          <input type="file" accept="application/json,.json" onchange="grundrissLadenAusDatei(this)" hidden>
+          Grundriss laden</label>
+        <span class="settings-feedback" id="sGrundrissFeedback"></span>
         <div style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.55">
-          Der Riss trägt die Räume für den Stauplan und die Geräteseite. Nur
-          Draufsicht — übereinanderliegende Fächer werden nebeneinander
-          eingezeichnet.
+          Gezeichnet wird im <b>Logbuch</b> — dort ist Platz dafür, und dort
+          liegt auch der Bootsplan. Was dabei herauskommt, ist eine Datei; die
+          wird hier geladen. Der Riss trägt die Räume für den Stauplan und die
+          Geräteseite.
         </div>
       </div>
     </div>
@@ -1767,120 +1773,6 @@
       <img id="wlForecastImg" src="" style="width:100%;border-radius:8px;display:block" alt="BSH Wasserstandsprognose">
       <div style="font-size:0.7rem;color:var(--text3);margin-top:6px">Quelle: Bundesamt für Seeschifffahrt und Hydrographie — keine offizielle Vorhersage</div>
     </div>
-  </div>
-</div>
-
-<!-- ── Grundriss-Werkzeug ───────────────────────────────────────────────────── -->
-<div id="grEditorOverlay" class="overlay hidden">
-  <div class="ov-header">
-    <button class="ov-close-arrow" onclick="closeGrundrissEditor()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <div class="ov-title">Grundriss</div>
-    <div class="ov-header-spacer"></div>
-    <span class="settings-feedback" id="geFeedback"></span>
-    <button class="btn-primary" id="geSpeichern" onclick="grundrissSpeichern()" disabled>Speichern</button>
-  </div>
-  <div class="ov-body ge-seite">
-
-    <div class="ge-werkzeuge" id="geWerkzeuge">
-      <button class="ge-wz aktiv" data-werkzeug="auswahl" onclick="_geWerkzeugSetzen('auswahl')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.5 18 2.5-7.5L20.5 11z"/></svg> Auswählen</button>
-      <button class="ge-wz" data-werkzeug="rechteck" onclick="_geWerkzeugSetzen('rechteck')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="1"/></svg> Rechteck</button>
-      <button class="ge-wz" data-werkzeug="vieleck" onclick="_geWerkzeugSetzen('vieleck')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 6-3 10H7L4 9z"/></svg> Vieleck</button>
-      <button class="ge-wz" data-werkzeug="vorlage" onclick="_geWerkzeugSetzen('vorlage')">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> Vorlage</button>
-      <span class="ge-trenner"></span>
-      <button class="ge-wz" onclick="geRumpfDialogOeffnen()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 14h16l-2 5H6zM6 14V6l6-3 6 3v8"/></svg> Rumpfform</button>
-      <button class="ge-wz" id="geZurueck" onclick="grundrissZurueck()" disabled>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg> Zurück</button>
-    </div>
-
-    <div class="ge-flaeche">
-      <svg id="geSvg" preserveAspectRatio="xMidYMid meet"></svg>
-    </div>
-
-    <div class="ge-leiste">
-      <div class="set-card">
-        <div class="set-card-hd">Boot</div>
-        <div class="ge-feld"><label for="geName">Name</label>
-          <input type="text" id="geName" class="settings-input" oninput="geMasseGeaendert()"></div>
-        <div class="ge-feld"><label for="geLoa">Länge über alles (m)</label>
-          <input type="number" id="geLoa" class="settings-input" step="0.1" min="1" oninput="geMasseGeaendert()"></div>
-        <div class="ge-feld"><label for="geBreite">Breite (m)</label>
-          <input type="number" id="geBreite" class="settings-input" step="0.1" min="0.5" oninput="geMasseGeaendert()"></div>
-      </div>
-
-      <div class="set-card" id="geRaumBox" hidden>
-        <div class="set-card-hd">Gewählter Raum</div>
-        <div class="ge-feld"><label for="geRaumName">Name</label>
-          <input type="text" id="geRaumName" class="settings-input"
-                 oninput="geRaumNameGeaendert(this.value)"></div>
-        <div class="ge-feld"><label>Farbe</label>
-          <div class="ge-farben" id="geRaumFarben"></div></div>
-        <button class="btn-secondary ge-loeschen" onclick="geRaumLoeschen()">Raum entfernen</button>
-      </div>
-
-      <div class="set-card" id="geVorlageBox">
-        <div class="set-card-hd">Planvorlage</div>
-        <div id="geVorlageLeer" style="font-size:12px;color:var(--text3);line-height:1.55;margin-bottom:10px">
-          Foto oder Scan des Bootsplans hochladen und die Räume darüber
-          nachziehen. Das Bild bleibt auf dem Boot und wird beim Hochladen
-          verkleinert.
-        </div>
-        <label class="btn-secondary ge-datei">
-          <input type="file" accept="image/jpeg,image/png" onchange="geVorlageWaehlen(this)" hidden>
-          Bild wählen</label>
-        <div id="geVorlageFern" hidden style="font-size:12px;color:var(--text3);line-height:1.55">
-          Ein Bild hochladen geht nur direkt am Boot — über den Server wird
-          nur Text durchgereicht, und ein Planfoto über die Mobilfunkverbindung
-          wäre ohnehin die falsche Richtung.
-        </div>
-        <div class="ge-vorlage-an" hidden>
-          <div class="ge-feld" style="margin-top:10px">
-            <label for="geVorlageDeckkraft">Sichtbarkeit</label>
-            <input type="range" id="geVorlageDeckkraft" min="5" max="100" value="50"
-                   oninput="geVorlageDeckkraft(this.value)"></div>
-          <div class="ge-feld">
-            <label for="geVorlageGroesse">Größe</label>
-            <input type="range" id="geVorlageGroesse" min="40" max="600" value="200"
-                   oninput="geVorlageGroesse(this.value)"></div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px">
-            Mit dem Werkzeug „Vorlage“ lässt sich das Bild verschieben.
-          </div>
-          <button class="btn-secondary" style="width:100%" onclick="geVorlageEntfernen()">Vorlage entfernen</button>
-        </div>
-      </div>
-
-      <div class="ge-hilfe">
-        <b>Rechteck:</b> aufziehen. <b>Vieleck:</b> Punkte antippen, letzter Punkt
-        zurück auf den ersten (oder Eingabetaste) schließt die Fläche.
-        <b>Auswählen:</b> Fläche verschieben, Eckpunkte ziehen; Entfernen-Taste
-        löscht. Alles rastet auf ein Raster von 2 Einheiten.
-        <br><br>
-        Nur Draufsicht — übereinanderliegende Fächer werden nebeneinander
-        eingezeichnet.
-      </div>
-    </div>
-
-    <div class="ge-dialog" id="geRumpfDialog" hidden>
-      <div class="ge-dialog-innen">
-        <div class="set-card-hd">Rumpfform</div>
-        <div class="ge-hilfe" style="margin:0 0 12px">
-          Aus Länge und Breite gerechnet, nicht abgezeichnet. Sie muss nicht
-          genau stimmen — sie ist der Rahmen, in den die Räume kommen.
-          <b>Achtung:</b> eine neue Rumpfform verwirft die Möbellinien des alten Risses.
-        </div>
-        <div class="ge-vorlagen" id="geRumpfListe"></div>
-        <div class="settings-actions">
-          <button class="btn-secondary" onclick="geRumpfDialogSchliessen()">Abbrechen</button>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 

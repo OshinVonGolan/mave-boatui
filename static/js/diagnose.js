@@ -261,6 +261,9 @@ function seiteZeigen(name) {
   if (name === 'ueberblick') dbKarteZeigen();
   if (name === 'einstellungen') zeichneEinstellungen();
   if (name === 'aufbau') zeichneAufbau();
+  // Das Zeichenwerkzeug misst Pixel — auf einer verborgenen Seite ist die
+  // Flaeche null breit und der Riss bliebe leer.
+  if (name === 'grundriss') requestAnimationFrame(_geAnzeigen);
   // Das Abfragen kostet ein git fetch am Boot — also nur beim Öffnen der
   // Seite und nicht im Dauertakt.
   if (name === 'aenderungen') staendeLaden();

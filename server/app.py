@@ -33,6 +33,8 @@ from server.befehle import (DURCHLEITEN, KeinBoot, Vermittlung,
                             Zeitueberschreitung, gesperrt)
 from pydantic import BaseModel
 
+import jsonio
+from sync.grundriss import grundriss_pruefen
 from konten_speicher import Konten
 from sync.konten import KontoFehler
 from konten_speicher import SITZUNG_DAUER_S
@@ -1273,6 +1275,82 @@ def logbuch_einstellungen_setzen(body: LogbuchEinstellungen,
     return JSONResponse({'ok': True,
                          'wetter_modell': speicher.merker('wetter_modell',
                                                           vorgabe=_MODELL_VORGABE)})
+
+
+# ── Grundriss: das Planungswerkzeug ─────────────────────────────────────────
+# Es laeuft HIER und nicht am Boot. Zeichnen ist Planung: man sitzt in Ruhe
+# davor, hat den Bootsplan daneben liegen und braucht Platz auf dem Bildschirm.
+# Der Pi wiederum braucht nur das Ergebnis — eine Datei, die man ihm gibt.
+#
+# Deshalb hat der Server eine EIGENE Fassung des Risses. Sie ist der
+# Arbeitsstand; was ans Boot geht, wird ausdruecklich exportiert und dort
+# geladen. Ein stiller Abgleich waere hier falsch: dann waere jede halbfertige
+# Linie sofort im Stauplan an Bord.
+
+GRUNDRISS_DATEI = DATEN / 'grundriss.json'
+GRUNDRISS_BILD = DATEN / 'grundriss-vorlage.jpg'
+_GR_BILD_MAX = 3 * 1024 * 1024
+_GR_BILD_MAGIE = (b'\xff\xd8\xff', b'\x89PNG')
+
+
+@app.get('/api/logbuch/grundriss')
+def logbuch_grundriss(k: dict = Depends(braucht(r.LESEN))) -> JSONResponse:
+    daten = jsonio.read_json(GRUNDRISS_DATEI, {})
+    daten['hat_vorlage'] = GRUNDRISS_BILD.exists()
+    return JSONResponse(daten)
+
+
+@app.put('/api/logbuch/grundriss')
+async def logbuch_grundriss_setzen(request: Request,
+                                   k: dict = Depends(braucht(r.EINSTELLEN))) -> JSONResponse:
+    """Den Arbeitsstand ablegen.
+
+    Geprueft wird mit demselben Raster wie am Boot (`grundriss_pruefen`) —
+    was hier durchgeht, muss dort auch durchgehen, sonst faellt es erst beim
+    Laden auf. Der Pruefer baut ein neues Objekt: was er nicht kennt,
+    existiert danach nicht.
+    """
+    try:
+        roh = await request.json()
+    except Exception:
+        raise HTTPException(400, detail='Ungültiges JSON') from None
+    geprueft = grundriss_pruefen(roh)
+    jsonio.write_json(GRUNDRISS_DATEI, geprueft)
+    return JSONResponse({**geprueft, 'hat_vorlage': GRUNDRISS_BILD.exists()})
+
+
+@app.get('/api/logbuch/grundriss/vorlage', include_in_schema=False)
+def logbuch_grundriss_vorlage(k: dict = Depends(braucht(r.LESEN))) -> Response:
+    if not GRUNDRISS_BILD.exists():
+        raise HTTPException(404, detail='Keine Planvorlage hinterlegt')
+    return Response(content=GRUNDRISS_BILD.read_bytes(), media_type='image/jpeg',
+                    headers={'Cache-Control': 'no-cache'})
+
+
+@app.put('/api/logbuch/grundriss/vorlage', include_in_schema=False)
+async def logbuch_grundriss_vorlage_setzen(
+        request: Request, k: dict = Depends(braucht(r.EINSTELLEN))) -> JSONResponse:
+    """Das abfotografierte Original, ueber das gezeichnet wird.
+
+    Geprueft wird der Dateianfang und nicht der gemeldete Typ: ein Browser
+    darf behaupten, was er will, und diese Datei wird spaeter wieder
+    ausgeliefert. Verkleinert hat sie der Browser schon.
+    """
+    daten = await request.body()
+    if not daten:
+        raise HTTPException(400, detail='Leere Datei')
+    if len(daten) > _GR_BILD_MAX:
+        raise HTTPException(413, detail='Die Vorlage ist zu groß (mehr als 3 MB)')
+    if not any(daten.startswith(m) for m in _GR_BILD_MAGIE):
+        raise HTTPException(400, detail='Nur JPEG oder PNG')
+    GRUNDRISS_BILD.write_bytes(daten)
+    return JSONResponse({'ok': True, 'bytes': len(daten)})
+
+
+@app.delete('/api/logbuch/grundriss/vorlage', include_in_schema=False)
+def logbuch_grundriss_vorlage_weg(k: dict = Depends(braucht(r.EINSTELLEN))) -> JSONResponse:
+    GRUNDRISS_BILD.unlink(missing_ok=True)
+    return JSONResponse({'ok': True})
 
 
 # ── Wetter am Liegeplatz ────────────────────────────────────────────────────

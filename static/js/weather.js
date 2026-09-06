@@ -191,50 +191,41 @@ function _renderWeather() {
     const bft  = wxBft(wind);
     const faktor = (wind && boe) ? boe / wind : null;
     const welle = jetzt.welle != null ? jetzt.welle : heute.wave;
+    const lage = wxLage(jetzt.wmo != null ? jetzt.wmo : heute.wmo);
 
-    const zahl = (v, e) => `${v != null ? Math.round(v) : '--'}<small>${e}</small>`;
+    const zeile = (was, wert) => wert
+      ? `<div class="wx-w-zeile"><span>${was}</span><b>${wert}</b></div>` : '';
+
+    // Drei gleich breite Felder. Vorher waren es zwei, die auf einer breiten
+    // Kachel auseinanderliefen — links die Luft, rechts der Wind, dazwischen
+    // eine Handbreit nichts.
     kopf.innerHTML = `
-      <div class="wx-h-luft">
-        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 40)}</span>
+      <div class="wx-h-feld wx-h-luft">
+        <span class="wx-h-icon">${_wxIconHtml(jetzt.wmo != null ? jetzt.wmo : heute.wmo, heute.storm, 42)}</span>
         <div>
           <div class="wx-h-grad">${jetzt.temp != null ? Math.round(jetzt.temp) : '--'}°</div>
-          <div class="wx-h-lage">${_wxEsc(wxLage(jetzt.wmo != null ? jetzt.wmo : heute.wmo))}</div>
+          <div class="wx-h-lage">${_wxEsc(lage)}</div>
           <div class="wx-h-spanne">${heute.tmin != null ? Math.round(heute.tmin) : '--'}° bis ${heute.tmax != null ? Math.round(heute.tmax) : '--'}°</div>
         </div>
       </div>
-      <div class="wx-h-wind">
-        <div class="wx-h-pfeil">${_wxPfeil(dir, 30)}<span>${wxStrich(dir) || '--'}</span></div>
-        <div class="wx-h-zahlen">
-          <div class="wx-h-gross">${zahl(wind, ' kn')}<em>${bft != null ? bft + ' Bft' : ''}</em></div>
-          <div class="wx-h-boe">Böen ${zahl(boe, ' kn')}${
-            faktor ? ` <em>${faktor >= 1.5 ? 'böig' : 'gleichmäßig'}</em>` : ''}</div>
+      <div class="wx-h-feld wx-h-wind">
+        <div class="wx-h-pfeil">${_wxPfeil(dir, 32)}<span>${wxStrich(dir) || '--'}</span></div>
+        <div>
+          <div class="wx-h-gross">${wind != null ? Math.round(wind) : '--'}<small> kn</small>
+            <em>${bft != null ? bft + ' Bft' : ''}</em></div>
+          <div class="wx-h-boe">Böen <b>${boe != null ? Math.round(boe) : '--'}</b> kn${
+            faktor ? ` <em class="${faktor >= 1.5 ? 'boeig' : ''}">${faktor >= 1.5 ? 'böig' : 'gleichmäßig'}</em>` : ''}</div>
         </div>
       </div>
-      <div class="wx-h-rest">
-        <span>${icon('droplet', { size: 13 })} ${heute.pop != null ? heute.pop : '--'} %</span>
-        ${welle != null ? `<span>${icon('waves', { size: 13 })} ${welle.toFixed(1)} m</span>` : ''}
-        ${jetzt.druck != null ? `<span>${Math.round(jetzt.druck)} hPa</span>` : ''}
-        <span>${icon('sun', { size: 13 })} ${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}</span>
+      <div class="wx-h-feld wx-h-werte">
+        ${zeile('Regen', heute.pop != null ? heute.pop + ' %' : '')}
+        ${zeile('Welle', welle != null ? welle.toFixed(1) + ' m' : '')}
+        ${zeile('Druck', jetzt.druck != null ? Math.round(jetzt.druck) + ' hPa' : '')}
+        ${zeile('Sonne', `${_wxUhrZeit(heute.auf)}–${_wxUhrZeit(heute.unter)}`)}
       </div>`;
   }
 
   _wxTagStreifen();
-
-  const grid = $('wxGrid');
-  if (grid) {
-    // Heute steht oben schon ausfuehrlich — hier die Tage danach.
-    const rest = tage.slice(1, 5);
-    const alleWellen = rest.length > 0 && rest.every(t => t.wave != null);
-    grid.innerHTML = rest.map((td, i) => `<div class="wx-day">
-        <div class="wx-day-name">${_wxDayName(td.date, i + 1)}</div>
-        <div class="wx-icon">${_wxIconHtml(td.wmo, td.storm, 26)}</div>
-        <div class="wx-temp"><b>${td.tmax != null ? Math.round(td.tmax) : '--'}°</b> <span>${td.tmin != null ? Math.round(td.tmin) : '--'}°</span></div>
-        <div class="wx-row">${icon('wind', { size: 12 })} ${td.wind != null ? Math.round(td.wind) : '--'}<span class="wx-boe">/${td.gust != null ? Math.round(td.gust) : '--'}</span></div>
-        <div class="wx-row wx-row-welle">${alleWellen
-            ? icon('waves', { size: 12 }) + ' ' + td.wave.toFixed(1) + ' m'
-            : _wxPfeil(td.dir, 12) + ' ' + (wxStrich(td.dir) || '--')}</div>
-      </div>`).join('');
-  }
 
   // Halbe Kachel: heute, knapp
   const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
@@ -248,11 +239,18 @@ function _renderWeather() {
 }
 
 /**
- * Der Wind der naechsten zwoelf Stunden, fingernagelgross.
+ * Der Wind der naechsten zwoelf Stunden.
  *
  * Er beantwortet die eine Frage, die eine Tageszahl nie beantwortet: frischt
- * es auf oder schlaeft es ein. Dieselbe Sprache wie der grosse Streifen auf
- * der Detailseite — Flaeche zwischen Wind und Boe, Zeit von links nach rechts.
+ * es auf oder schlaeft es ein.
+ *
+ * Die erste Fassung war nicht abzulesen (Eignermeldung mit Foto). Drei Gruende,
+ * alle behoben: der Streifen war 44 Pixel hoch, die Skala begann bei null — bei
+ * 5 Knoten Wind und 19 Knoten Spitze klebte die Linie am Boden —, und es gab
+ * keine einzige Zahl darin ausser der Obergrenze.
+ *
+ * Jetzt: hoeher, eine Hilfslinie auf einem runden Wert MIT Beschriftung, der
+ * Boeenbereich als Flaeche darueber, und die Spitze mit ihrer Zahl markiert.
  */
 function _wxTagStreifen() {
   const cv = $('wxTagCanvas');
@@ -271,33 +269,53 @@ function _wxTagStreifen() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, W, H);
 
-  const pad = { t: 4, b: 13 };
-  const cH = H - pad.t - pad.b;
-  const max = Math.max(10, ...st.map(s => s.boe || s.wind || 0));
+  const pad = { t: 8, b: 16, l: 26 };
+  const cH = H - pad.t - pad.b, cW = W - pad.l;
+  const spitze = Math.max(...st.map(s => s.boe || s.wind || 0), 0);
+  // Nie unter 10 kn Skala: sonst wirkt eine Flaute wie ein Sturm. Und immer
+  // etwas Luft ueber der Spitze, damit sie nicht am Rand klebt.
+  const max = Math.max(10, Math.ceil((spitze * 1.15) / 5) * 5);
   const n = st.length - 1;
-  const xOf = i => (i / n) * W;
+  const xOf = i => pad.l + (i / n) * cW;
   const yOf = v => pad.t + (1 - v / max) * cH;
 
-  // Nacht hinterlegen — dieselbe Auskunft wie auf der grossen Seite.
+  // Nacht hinterlegen — 20 Knoten um drei Uhr sind etwas anderes als um drei.
   const tag = (_wxData.tage || [])[0] || {};
   const auf = _wxZeit(tag.auf), unter = _wxZeit(tag.unter);
   if (auf && unter) {
-    ctx.fillStyle = 'rgba(128,128,160,.13)';
+    ctx.fillStyle = 'rgba(128,128,160,.14)';
     st.forEach((s, i) => {
       const t = _wxZeit(s.t);
       if (!t) return;
       const h = t.getHours();
       if (h < auf.getHours() || h >= unter.getHours()) {
-        ctx.fillRect(xOf(Math.max(0, i - .5)), pad.t, xOf(1) - xOf(0), cH);
+        const a = xOf(Math.max(0, i - .5)), b = xOf(Math.min(n, i + .5));
+        ctx.fillRect(a, pad.t, b - a, cH);
       }
     });
   }
 
+  // Hilfslinie auf der halben Skala, mit Zahl. Ohne sie ist eine Kurve nur
+  // eine Form.
+  const mitte = max / 2;
+  ctx.strokeStyle = 'rgba(148,163,184,.22)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
+  ctx.moveTo(pad.l, yOf(mitte)); ctx.lineTo(W, yOf(mitte)); ctx.stroke();
+  ctx.fillStyle = 'rgba(148,163,184,.85)';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(String(Math.round(mitte)), pad.l - 5, yOf(mitte) + 4);
+  ctx.fillText(String(max), pad.l - 5, pad.t + 8);
+
+  // Boeen als Flaeche ueber dem Wind — die Flaeche IST der Unterschied.
+  ctx.beginPath();
+  let start = true;
   st.forEach((s, i) => {
     const v = s.boe != null ? s.boe : s.wind;
     if (v == null) return;
-    i === 0 ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+    start ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+    start = false;
   });
   for (let i = st.length - 1; i >= 0; i--) {
     if (st[i].wind == null) continue;
@@ -307,28 +325,60 @@ function _wxTagStreifen() {
   ctx.fillStyle = 'rgba(251,146,60,.22)';
   ctx.fill();
 
+  // Die Oberkante der Boeen als eigene duenne Linie: ohne sie ist die Flaeche
+  // ein Fleck, und man sieht nicht, WO die Boe sitzt.
+  ctx.beginPath();
+  ctx.strokeStyle = 'rgba(251,146,60,.9)';
+  ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
+  let erste = true;
+  st.forEach((s, i) => {
+    const v = s.boe != null ? s.boe : s.wind;
+    if (v == null) return;
+    erste ? ctx.moveTo(xOf(i), yOf(v)) : ctx.lineTo(xOf(i), yOf(v));
+    erste = false;
+  });
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.strokeStyle = _wxFarbe('--accent', '#38bdf8');
-  ctx.lineWidth = 1.8; ctx.lineJoin = 'round';
+  ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
   st.forEach((s, i) => {
     if (s.wind == null) return;
     i === 0 ? ctx.moveTo(xOf(i), yOf(s.wind)) : ctx.lineTo(xOf(i), yOf(s.wind));
   });
   ctx.stroke();
 
-  // Stunden darunter, alle drei — mehr passt hier nicht hin.
-  ctx.fillStyle = 'rgba(148,163,184,.8)';
-  ctx.font = '9px sans-serif';
+  // Die hoechste Boe mit ihrer Zahl — die ist es, worauf man sich einrichtet.
+  let iMax = 0, vMax = -1;
+  st.forEach((s, i) => {
+    const v = s.boe != null ? s.boe : s.wind;
+    if (v != null && v > vMax) { vMax = v; iMax = i; }
+  });
+  if (vMax > 0) {
+    const x = xOf(iMax), y = yOf(vMax);
+    ctx.fillStyle = 'rgba(251,146,60,.95)';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '600 11px sans-serif';
+    ctx.textAlign = x > W - 40 ? 'right' : 'left';
+    ctx.fillText(`${Math.round(vMax)} kn`, x + (x > W - 40 ? -6 : 6), y - 5);
+  }
+
+  // Stunden darunter, alle drei.
+  ctx.fillStyle = 'rgba(148,163,184,.85)';
+  ctx.font = '11px sans-serif';
   ctx.textAlign = 'center';
   st.forEach((s, i) => {
     if (i % 3) return;
-    const x = Math.min(W - 8, Math.max(8, xOf(i)));
-    ctx.fillText(_wxUhr(s.t), x, H - 3);
+    ctx.fillText(_wxUhr(s.t), Math.min(W - 10, Math.max(pad.l + 8, xOf(i))), H - 3);
   });
-  // Links oben, nicht rechts: rechts liegt am Abend die Nachtflaeche, und die
-  // Beschriftung darauf sah aus wie ein Schildchen.
-  ctx.textAlign = 'left';
-  ctx.fillText(`${Math.round(max)} kn`, 1, pad.t + 8);
+
+  const spanne = $('wxTagSpanne');
+  if (spanne) {
+    const winde = st.map(s => s.wind).filter(v => v != null);
+    spanne.textContent = winde.length
+      ? `${Math.round(Math.min(...winde))}–${Math.round(Math.max(...winde))} kn`
+      : '';
+  }
 }
 
 // ── Abruf ───────────────────────────────────────────────────────────────────

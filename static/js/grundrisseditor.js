@@ -1,71 +1,78 @@
-// ── Grundriss zeichnen ──────────────────────────────────────────────────────
+// ── Grundriss zeichnen (Logbuch) ────────────────────────────────────────────
 //
-// Der Grundriss war 250 Zeilen SVG in index.html — für DIESES Boot gezeichnet
-// und für kein anderes. Seit er als Daten unter /api/grundriss liegt, fehlte
-// nur noch der Weg, ihn ohne Editor und ohne Entwickler zu ändern. Das ist
-// dieser hier.
+// Dieses Werkzeug laeuft auf dem SERVER und nicht am Boot. Zeichnen ist
+// Planung: man sitzt in Ruhe davor, hat den Bootsplan daneben liegen und
+// braucht Platz auf dem Bildschirm. Der Pi braucht davon nur das Ergebnis —
+// eine Datei, die man ihm gibt.
+//
+// Deshalb hat der Server seinen eigenen Arbeitsstand. Was ans Boot geht, wird
+// ausdruecklich exportiert und dort geladen; ein stiller Abgleich waere hier
+// falsch, dann stuende jede halbfertige Linie sofort im Stauplan an Bord.
 //
 // Zwei Dinge bewusst NICHT:
 //
-//   * Keine Seitenansicht. Übereinanderliegende Fächer zeichnet man
+//   * Keine Seitenansicht. Uebereinanderliegende Faecher zeichnet man
 //     nebeneinander ein — ein Stauplan beantwortet "wo liegt das Ding", und
-//     dafür genügt die Draufsicht. Eine zweite Ansicht verdoppelt die Arbeit
-//     beim Zeichnen und halbiert die Übersicht beim Suchen.
+//     dafuer genuegt die Draufsicht. Eine zweite Ansicht verdoppelt die Arbeit
+//     beim Zeichnen und halbiert die Uebersicht beim Suchen.
 //   * Keine zehn fertigen Bootszeichnungen. Kein Boot sieht aus wie eine
-//     Zeichnung von einem anderen Boot. Stattdessen eine Handvoll RUMPFFORMEN
-//     mit Reglern — Länge, Breite, wie spitz der Bug, wie breit das Heck.
-//     Damit kommt man jedem Rumpf nahe genug, um Räume einzuzeichnen, und
-//     genau dafür ist der Riss da.
+//     Zeichnung von einem anderen Boot. Stattdessen gerechnete RUMPFFORMEN.
 
 const _GE_RASTER = 2;           // Fangraster in Zeichnungseinheiten
-const _GE_VERLAUF_MAX = 40;     // so viele Schritte lassen sich zurücknehmen
+const _GE_VERLAUF_MAX = 40;     // so viele Schritte lassen sich zuruecknehmen
 const _GE_GRIFF_R = 5;          // Radius der Anfasser, in Zeichnungseinheiten
 
 let _geRiss     = null;         // Arbeitskopie, erst beim Speichern echt
+let _geStand    = null;         // was auf dem Server liegt
 let _geWerkzeug = 'auswahl';    // auswahl | rechteck | vieleck | vorlage
-let _geAuswahl  = null;         // id des gewählten Raums
+let _geAuswahl  = null;         // id des gewaehlten Raums
 let _geVieleck  = null;         // Punkte, die gerade gesetzt werden
 let _geVerlauf  = [];
-let _geZiehen   = null;         // {art, id, ...} während einer Bewegung
-let _geSchmutzig = false;       // ungespeicherte Änderungen
+let _geZiehen   = null;         // {art, id, ...} waehrend einer Bewegung
+let _geSchmutzig = false;       // ungespeicherte Aenderungen
 let _geBildUrl  = null;         // Adresse der Planvorlage, wenn eine da ist
 let _geStauzahl = null;         // {raumId: Anzahl} — was im Stauplan drinliegt
+let _geGeladen  = false;
 
 const _GE_FARBEN = ['#f59e0b', '#fbbf24', '#60a5fa', '#38bdf8', '#4ade80',
                     '#34d399', '#f472b6', '#a78bfa', '#fb923c', '#94a3b8'];
 
-// ── Öffnen und Schließen ───────────────────────────────────────────────────
-
-function openGrundrissEditor() {
-  _closeAllOverlays();
-  history.pushState({ overlay: 'grundriss' }, '', '#grundriss');
-  _geAnzeigen();
+/** Der Umriss eines Raums als Pfad. Steht hier, weil das Logbuch orte.js nicht kennt. */
+function _geRaumPfad(form) {
+  if (!form) return '';
+  if (form.t === 'vieleck') {
+    return 'M' + (form.punkte || []).map(p => `${p[0]},${p[1]}`).join(' L') + ' Z';
+  }
+  const { x, y, w, h } = form;
+  return `M${x},${y} L${x + w},${y} L${x + w},${y + h} L${x},${y + h} Z`;
 }
 
-function _geAnzeigen() {
-  $('grEditorOverlay').classList.remove('hidden');
-  // Arbeitskopie: erst Speichern macht die Änderung echt. Ohne das wäre jeder
-  // Fehlgriff sofort im Stauplan und auf der Geräteseite zu sehen.
-  _geRiss = JSON.parse(JSON.stringify(GRUNDRISS || {}));
-  if (!Array.isArray(_geRiss.raeume)) _geRiss.raeume = [];
-  if (!Array.isArray(_geRiss.hintergrund)) _geRiss.hintergrund = [];
-  if (!_geRiss.ansicht) _geRiss.ansicht = { w: 200, h: 680 };
-  _geVerlauf = [];
-  _geAuswahl = null;
-  _geVieleck = null;
-  _geSchmutzig = false;
+// ── Die Seite oeffnen ──────────────────────────────────────────────────────
+
+/** Wird von seiteZeigen('grundriss') gerufen. */
+async function _geAnzeigen() {
+  if (!_geGeladen) {
+    _geGeladen = true;
+    try {
+      const d = await hole('/api/logbuch/grundriss');
+      _geStand = d || {};
+    } catch (_) { _geStand = {}; }
+  }
+  // Arbeitskopie: erst Speichern macht die Aenderung echt. Ohne das waere
+  // jeder Fehlgriff sofort im gespeicherten Riss.
+  if (!_geRiss) {
+    _geRiss = JSON.parse(JSON.stringify(_geStand || {}));
+    if (!Array.isArray(_geRiss.raeume)) _geRiss.raeume = [];
+    if (!Array.isArray(_geRiss.hintergrund)) _geRiss.hintergrund = [];
+    if (!_geRiss.ansicht) _geRiss.ansicht = { w: 200, h: 680 };
+    _geVerlauf = [];
+    _geSchmutzig = false;
+  }
   _geBinden();
   _geVorlagePruefen();
-  _geStauplanZaehlen();
-  _geWerkzeugSetzen('auswahl');
+  _geWerkzeugSetzen(_geWerkzeug === 'vorlage' && !_geBildUrl ? 'auswahl' : _geWerkzeug);
   _geMasseFuellen();
   _geZeichnen();
-}
-
-function closeGrundrissEditor() {
-  if (_geSchmutzig && !confirm('Der Grundriss ist geändert und noch nicht gespeichert. Verwerfen?')) return;
-  $('grEditorOverlay').classList.add('hidden');
-  history.replaceState(null, '', location.pathname);
 }
 
 // ── Zustand ────────────────────────────────────────────────────────────────
@@ -176,7 +183,7 @@ function _geZeichnen() {
   for (const r of _geRiss.raeume) {
     const gewaehlt = r.id === _geAuswahl;
     const flaeche = _geEl('path', {
-      d: raumPfad(r.form), fill: r.farbe, 'fill-opacity': gewaehlt ? .55 : .3,
+      d: _geRaumPfad(r.form), fill: r.farbe, 'fill-opacity': gewaehlt ? .55 : .3,
       stroke: r.farbe, 'stroke-width': gewaehlt ? 2 : 1,
     });
     flaeche.dataset.raum = r.id;
@@ -200,6 +207,21 @@ function _geZeichnen() {
 
   if (_geAuswahl) _geGriffeZeichnen(svg, _geRaum(_geAuswahl));
   if (_geVieleck) _geVieleckVorschau(svg);
+
+  // Leeres Blatt: sagen, womit man anfaengt. Eine leere Flaeche mit Raster
+  // sieht aus, als fehle etwas — und der erste Schritt ist nicht zu erraten.
+  if (!_geRiss.rumpf && !_geRiss.raeume.length && !_geBildUrl) {
+    const zeilen = ['Leeres Blatt.', 'Fang mit einer Rumpfform an —',
+                    'oder lade ein Foto des Bootsplans.'];
+    zeilen.forEach((zeile, i) => {
+      const t = _geEl('text', { x: w / 2, y: h / 2 - 14 + i * 16,
+                                'text-anchor': 'middle', 'font-size': 11,
+                                fill: 'rgba(148,163,184,.75)',
+                                'pointer-events': 'none' });
+      t.textContent = zeile;
+      svg.appendChild(t);
+    });
+  }
   _geSeitenleiste();
 }
 
@@ -265,11 +287,16 @@ function geRaumNameGeaendert(wert) {
  * — still, und erst beim naechsten Suchen zu merken.
  */
 function _geStauplanZaehlen() {
-  fetch('/api/stauplan')
+  // Erst beim ersten Loeschen gefragt und nicht beim Oeffnen: der Stauplan
+  // liegt am BOOT, und liegt das ohne Strom, antwortet der Server mit 409 —
+  // eine rote Zeile in der Konsole fuer eine Auskunft, die meist niemand
+  // braucht.
+  if (_geStauzahl !== null) return Promise.resolve();
+  _geStauzahl = {};
+  return fetch('/api/stauplan')
     .then(r => r.ok ? r.json() : null)
     .then(liste => {
       if (!Array.isArray(liste)) return;
-      _geStauzahl = {};
       for (const eintrag of liste) {
         const k = eintrag && eintrag.fach;
         if (k) _geStauzahl[k] = (_geStauzahl[k] || 0) + 1;
@@ -278,9 +305,10 @@ function _geStauplanZaehlen() {
     .catch(() => {});
 }
 
-function geRaumLoeschen() {
+async function geRaumLoeschen() {
   const r = _geRaum(_geAuswahl);
   if (!r) return;
+  await _geStauplanZaehlen();
   const drin = _geStauzahl && _geStauzahl[r.id];
   if (drin && !confirm(
       `Im Raum „${r.name}" liegen laut Stauplan ${drin} ` +
@@ -455,7 +483,7 @@ function _geBinden() {
   });
 
   document.addEventListener('keydown', e => {
-    if ($('grEditorOverlay').classList.contains('hidden')) return;
+    if (typeof _seite !== 'undefined' && _seite !== 'grundriss') return;
     if (e.target.tagName === 'INPUT') return;
     if (e.key === 'Escape') {
       if (_geVieleck) { _geVieleck = null; _geZeichnen(); }
@@ -762,32 +790,14 @@ const _GE_BILD_KANTE = 1400;    // längste Kante nach dem Verkleinern
  * Fehler in die Konsole, für einen Zustand, der völlig in Ordnung ist.
  */
 function _geVorlagePruefen() {
-  _geBildUrl = (GRUNDRISS && GRUNDRISS.hat_vorlage)
-    ? '/api/grundriss/vorlage?t=' + Date.now() : null;
+  _geBildUrl = (_geStand && _geStand.hat_vorlage)
+    ? '/api/logbuch/grundriss/vorlage?t=' + Date.now() : null;
   _geVorlageLeiste();
-}
-
-/**
- * Geht das Hochladen hier ueberhaupt?
- *
- * Nur am Boot. Der Server leitet an den Pi nur JSON durch und hoechstens
- * 256 kB — ein Planfoto ueber die Mobilfunkverbindung des Bootes zu schicken
- * waere ohnehin die falsche Richtung. Statt es scheitern zu lassen, steht es
- * vorher da.
- */
-function _geAmBoot() {
-  return typeof _quelle === 'undefined' || !_quelle || _quelle.art === 'direkt'
-      || _quelle.art === 'unbekannt';
 }
 
 function _geVorlageLeiste() {
   const box = $('geVorlageBox');
   if (!box) return;
-  const amBoot = _geAmBoot();
-  const waehlen = box.querySelector('.ge-datei');
-  if (waehlen) waehlen.hidden = !amBoot;
-  const fern = $('geVorlageFern');
-  if (fern) fern.hidden = amBoot;
   const da = !!_geBildUrl;
   box.querySelectorAll('.ge-vorlage-an').forEach(el => { el.hidden = !da; });
   const hinweis = $('geVorlageLeer');
@@ -809,22 +819,15 @@ function _geVorlageLeiste() {
 async function geVorlageWaehlen(eingabe) {
   const datei = eingabe.files && eingabe.files[0];
   if (!datei) return;
-  const fb = $('geFeedback');
   try {
     const klein = await _geVerkleinern(datei);
-    const antwort = await fetch('/api/grundriss/vorlage', {
+    const antwort = await fetch('/api/logbuch/grundriss/vorlage', {
       method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: klein.blob });
     if (!antwort.ok) {
-      // 404/405 heisst hier fast immer: die Oberflaeche laeuft ueber den
-      // Server, und der leitet Bilder nicht durch. Die nackte Zahl waere
-      // keine Auskunft.
-      if (antwort.status === 404 || antwort.status === 405) {
-        throw new Error('Die Planvorlage lässt sich nur direkt am Boot hochladen.');
-      }
       const d = await antwort.json().catch(() => ({}));
       throw new Error(d.detail || `Fehler ${antwort.status}`);
     }
-    _geBildUrl = '/api/grundriss/vorlage?t=' + Date.now();
+    _geBildUrl = '/api/logbuch/grundriss/vorlage?t=' + Date.now();
     _geMerken();
     // Erstmal so einpassen, dass die Vorlage die Zeichenfläche ausfüllt und
     // dabei ihr Seitenverhältnis behält — von da aus wird geschoben.
@@ -838,7 +841,7 @@ async function geVorlageWaehlen(eingabe) {
     _geVorlageLeiste();
     _geWerkzeugSetzen('vorlage');
   } catch (e) {
-    if (fb) { fb.className = 'settings-feedback error show'; fb.textContent = e.message; }
+    _geMeldung(e.message, true);
   } finally {
     eingabe.value = '';
   }
@@ -896,7 +899,7 @@ function geVorlageGroesse(wert) {
 
 async function geVorlageEntfernen() {
   if (!confirm('Die Planvorlage entfernen?')) return;
-  await fetch('/api/grundriss/vorlage', { method: 'DELETE' }).catch(() => {});
+  await fetch('/api/logbuch/grundriss/vorlage', { method: 'DELETE' }).catch(() => {});
   _geBildUrl = null;
   _geMerken();
   delete _geRiss.bild;
@@ -905,14 +908,79 @@ async function geVorlageEntfernen() {
   else _geZeichnen();
 }
 
-// ── Speichern ──────────────────────────────────────────────────────────────
+// ── Hinaus ans Boot ─────────────────────────────────────────────────────────
+//
+// Zwei Wege, und beide werden gebraucht. Die DATEI geht immer — auch wenn das
+// Boot seit Wochen ohne Strom liegt; sie wird am Boot in den Einstellungen
+// geladen. Der direkte Weg ist bequemer, setzt aber voraus, dass die
+// Verbindung steht.
+//
+// Was hinausgeht, ist der GESPEICHERTE Stand und nicht die Arbeitskopie: sonst
+// schickte man ans Boot etwas, das man selbst noch nicht behalten wollte.
 
-async function grundrissSpeichern() {
-  const fb = $('geFeedback');
-  const knopf = $('geSpeichern');
+/** Was das Boot bekommt — ohne die Planvorlage, die ist Werkzeug und kein Riss. */
+function _geAusfuhr() {
+  const r = JSON.parse(JSON.stringify(_geStand || {}));
+  delete r.bild;
+  delete r.hat_vorlage;
+  return r;
+}
+
+function grundrissExportieren() {
+  const r = _geAusfuhr();
+  if (!r.raeume || !r.raeume.length) {
+    _geMeldung('Noch nichts zu exportieren — erst Räume einzeichnen und speichern.', true);
+    return;
+  }
+  const name = (r.name || 'boot').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `grundriss-${name || 'boot'}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  _geMeldung('Datei erzeugt. Am Boot unter Einstellungen › Grundriss laden.');
+}
+
+async function grundrissAnsBoot() {
+  const knopf = $('geAnsBoot');
   if (knopf) knopf.disabled = true;
   try {
     const antwort = await fetch('/api/grundriss', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_geAusfuhr()),
+    });
+    if (antwort.status === 409) throw new Error('Das Boot ist gerade nicht verbunden.');
+    if (!antwort.ok) {
+      const d = await antwort.json().catch(() => ({}));
+      throw new Error(d.detail || `Fehler ${antwort.status}`);
+    }
+    _geMeldung('Der Riss liegt jetzt am Boot.');
+  } catch (e) {
+    _geMeldung(e.message, true);
+  } finally {
+    if (knopf) knopf.disabled = false;
+  }
+}
+
+function _geMeldung(text, schlimm = false) {
+  const fb = $('geFeedback');
+  if (!fb) return;
+  fb.textContent = text;
+  fb.className = 'ge-meldung' + (schlimm ? ' schlimm' : ' gut');
+  clearTimeout(_geMeldung._uhr);
+  _geMeldung._uhr = setTimeout(() => { fb.className = 'ge-meldung'; }, 6000);
+}
+
+// ── Speichern ──────────────────────────────────────────────────────────────
+
+async function grundrissSpeichern() {
+  const knopf = $('geSpeichern');
+  if (knopf) knopf.disabled = true;
+  try {
+    const antwort = await fetch('/api/logbuch/grundriss', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(_geRiss),
     });
@@ -923,17 +991,15 @@ async function grundrissSpeichern() {
     // Der Pi hat geprüft und zurückgegeben, was er behalten hat — das ist ab
     // jetzt die Wahrheit, nicht die Arbeitskopie.
     const geprueft = await antwort.json();
-    GRUNDRISS = geprueft;
-    _geBildUrl = geprueft.hat_vorlage ? (_geBildUrl || '/api/grundriss/vorlage?t=' + Date.now()) : null;
+    _geStand = geprueft;
+    _geBildUrl = geprueft.hat_vorlage ? (_geBildUrl || '/api/logbuch/grundriss/vorlage?t=' + Date.now()) : null;
     _geRiss = JSON.parse(JSON.stringify(geprueft));
-    if (typeof _orteAufbauen === 'function') _orteAufbauen();
-    _geSchmutzig = false;
+      _geSchmutzig = false;
     _geKnoepfe();
-    if (fb) { fb.className = 'settings-feedback show'; fb.textContent = 'Gespeichert'; 
-              setTimeout(() => fb.classList.remove('show'), 2500); }
+    _geMeldung('Gespeichert.');
     _geZeichnen();
   } catch (e) {
-    if (fb) { fb.className = 'settings-feedback error show'; fb.textContent = e.message; }
+    _geMeldung(e.message, true);
     if (knopf) knopf.disabled = false;
   }
 }

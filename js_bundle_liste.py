@@ -17,10 +17,13 @@ JS_FILES = [
     'alarms.js', 'alarmton.js', 'settings.js', 'connectivity.js', 'ws.js', 'lightdetail.js',
     'wartung.js', 'stauplan.js', 'monday.js', 'flow.js', 'display.js',
     'wandbetrieb.js', 'waterlevel.js', 'weather.js', 'verlauf.js', 'heizung.js',
-    'orte.js', 'grundrisseditor.js', 'topologie.js', 'geraete.js', 'init.js',
+    'orte.js', 'topologie.js', 'geraete.js', 'init.js',
 ]
 
 # Das Logbuch hat sein eigenes, kleines Buendel. wandbetrieb.js steht in beiden:
 # der Nachtmodus gilt fuer den Bildschirm, nicht fuer eine einzelne Seite —
 # wer nachts im Logbuch liest, will ihn genauso.
-DIAGNOSE_FILES = ['wandbetrieb.js', 'diagnose.js']
+# grundrisseditor.js steht NUR hier: das Planungswerkzeug laeuft auf dem
+# Server und nicht am Boot (siehe KONZEPT-GRUNDRISS.md). Es kommt nach
+# diagnose.js, weil es dessen `$` und `esc` beim Ausfuehren braucht.
+DIAGNOSE_FILES = ['wandbetrieb.js', 'diagnose.js', 'grundrisseditor.js']

@@ -130,76 +130,6 @@ class Vielecke(unittest.TestCase):
                 {'id': 'bug', 'name': 'x', 'form': {'t': 'kreis', 'r': 5}}]))
 
 
-class Planvorlage(unittest.TestCase):
-    """Das abfotografierte Original, über das im Werkzeug gezeichnet wird.
-
-    Es wird wieder ausgeliefert — deshalb wird nicht der gemeldete Typ
-    geprüft, sondern der Dateianfang. Ein Browser darf behaupten, was er will.
-    """
-
-    JPEG = b'\xff\xd8\xff' + b'x' * 200
-    PNG  = b'\x89PNG\r\n\x1a\n' + b'x' * 200
-
-    def setUp(self):
-        self.verz = tempfile.mkdtemp(prefix='mave-riss-')
-        self._alt_bild = main.GRUNDRISS_BILD
-        self._alt_riss = main.GRUNDRISS_FILE
-        main.GRUNDRISS_BILD = Path(self.verz) / 'grundriss-vorlage.jpg'
-        main.GRUNDRISS_FILE = Path(self.verz) / 'grundriss.json'
-
-    def tearDown(self):
-        main.GRUNDRISS_BILD = self._alt_bild
-        main.GRUNDRISS_FILE = self._alt_riss
-        shutil.rmtree(self.verz, ignore_errors=True)
-
-    def hochladen(self, daten):
-        class Anfrage:
-            async def body(self_):
-                return daten
-        return asyncio.run(main.put_grundriss_bild(Anfrage()))
-
-    def test_jpeg_und_png_kommen_durch(self):
-        for daten in (self.JPEG, self.PNG):
-            self.assertEqual(self.hochladen(daten)['bytes'], len(daten))
-            self.assertEqual(main.GRUNDRISS_BILD.read_bytes(), daten)
-
-    def test_alles_andere_nicht(self):
-        """Eine SVG-Datei wäre ein Dokument mit Skripten darin, kein Bild."""
-        for daten in (b'<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>',
-                      b'GIF89a' + b'x' * 100, b'%PDF-1.4', b'irgendwas'):
-            with self.assertRaises(HTTPException, msg=daten[:12]):
-                self.hochladen(daten)
-
-    def test_leere_datei(self):
-        with self.assertRaises(HTTPException):
-            self.hochladen(b'')
-
-    def test_zu_gross(self):
-        """Verkleinert wird im Browser. Was hier gross ankommt, ist entweder
-        ein Fehler oder Absicht — auf einem Pi Zero beides schlecht."""
-        with self.assertRaises(HTTPException) as e:
-            self.hochladen(self.JPEG + b'x' * (3 * 1024 * 1024))
-        self.assertEqual(e.exception.status_code, 413)
-
-    def test_ohne_vorlage_ein_ehrliches_404(self):
-        with self.assertRaises(HTTPException) as e:
-            asyncio.run(main.get_grundriss_bild())
-        self.assertEqual(e.exception.status_code, 404)
-
-    def test_entfernen_geht_auch_wenn_nichts_da_ist(self):
-        self.assertTrue(asyncio.run(main.del_grundriss_bild())['ok'])
-        self.hochladen(self.JPEG)
-        asyncio.run(main.del_grundriss_bild())
-        self.assertFalse(main.GRUNDRISS_BILD.exists())
-
-    def test_der_riss_sagt_ob_eine_vorlage_daliegt(self):
-        """Sonst müsste das Werkzeug danach fragen — und ein 404 auf diese
-        Frage schreibt in jedem Browser einen roten Fehler in die Konsole."""
-        self.assertFalse(asyncio.run(main.get_grundriss())['hat_vorlage'])
-        self.hochladen(self.JPEG)
-        self.assertTrue(asyncio.run(main.get_grundriss())['hat_vorlage'])
-
-
 class BildPlatzierung(unittest.TestCase):
     """Wo die Vorlage liegt, sind fünf Zahlen — und nur Zahlen."""
 
@@ -245,9 +175,10 @@ class WerDenRissAendernDarf(unittest.TestCase):
     def test_aendern_verlangt_einstellen(self):
         self.assertEqual(self.recht('PUT', '/api/grundriss'), 'einstellen')
 
-    def test_die_planvorlage_in_jeder_methode(self):
-        for m in ('GET', 'PUT', 'DELETE'):
-            self.assertEqual(self.recht(m, '/api/grundriss/vorlage'), 'einstellen', m)
+    def test_die_planvorlage_gibt_es_am_boot_nicht_mehr(self):
+        """Sie gehoert zum Zeichenwerkzeug, und das laeuft auf dem Server."""
+        import main as _main
+        self.assertFalse(hasattr(_main, 'GRUNDRISS_BILD'))
 
 
 if __name__ == '__main__':

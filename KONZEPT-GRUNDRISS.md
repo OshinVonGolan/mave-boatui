@@ -32,7 +32,12 @@ holte sich sonst jede Seite mit, die nur die Raumnamen braucht.
 
 Der Inhalt wird im Browser zu SVG. Wer schreiben darf, könnte sonst
 Zeichenketten unterbringen, die im Dokument etwas anderes tun als zeichnen.
-`_grundriss_pruefen()` in `main.py` lässt deshalb nur ein Raster durch:
+
+`grundriss_pruefen()` steht in **`sync/grundriss.py`** und gilt auf BEIDEN
+Seiten — Server und Pi. Zwei Prüfungen wären zwei Gelegenheiten,
+auseinanderzulaufen: was der Server annimmt, müsste der Pi sonst nicht
+annehmen, und das fiele erst beim Laden auf. Durchgelassen wird nur ein
+Raster:
 
 * bekannte Formen, bekannte Felder — der Prüfer **baut ein neues Objekt**,
   statt das eingehende zu säubern. Was er nicht kennt, existiert danach nicht.
@@ -46,9 +51,24 @@ nicht am gemeldeten Typ: ein Browser darf behaupten, was er will, und diese
 Datei wird später wieder ausgeliefert. Ein SVG wäre ein Dokument mit Skripten
 darin und kommt deshalb nicht durch.
 
-## Das Werkzeug (`static/js/grundrisseditor.js`)
+## Das Werkzeug (`static/js/grundrisseditor.js`) — im LOGBUCH
 
-Erreichbar über Einstellungen → Grundriss, oder direkt unter `#grundriss`.
+Es läuft auf dem **Server**, nicht am Boot: Logbuch → Grundriss. Zeichnen ist
+Planung — man sitzt in Ruhe davor, hat den Bootsplan daneben liegen und
+braucht Platz auf dem Bildschirm. Der Pi braucht davon nur das Ergebnis.
+
+Deshalb hat der Server einen **eigenen Arbeitsstand**
+(`/api/logbuch/grundriss`, Datei im Datenverzeichnis). Was ans Boot geht, wird
+ausdrücklich hinausgegeben — als **Datei** (Knopf „Datei", geladen am Boot
+unter Einstellungen › Grundriss) oder direkt (Knopf „Ans Boot", geht über den
+Durchleiter des Servers und braucht eine Verbindung). Ein stiller Abgleich
+wäre falsch: dann stünde jede halbfertige Linie sofort im Stauplan an Bord.
+
+Hinaus geht der **gespeicherte** Stand, nicht die Arbeitskopie — und ohne die
+Planvorlage: die ist Werkzeug und nicht Riss.
+
+Am Boot bleibt vom Werkzeug nichts außer dem Laden der Datei und einer kleinen
+Vorschau in den Einstellungen.
 
 * **Rechteck** aufziehen, **Vieleck** aus Punkten setzen (zurück auf den ersten
   Punkt oder Eingabetaste schließt die Fläche), **Auswählen** verschiebt
@@ -88,10 +108,10 @@ Der Weg, den fast jeder gehen will: Foto oder Scan des Bootsplans hochladen und
 die Räume darüber nachziehen. Sichtbarkeit und Größe als Regler, Verschieben
 mit dem Werkzeug „Vorlage".
 
-**Verkleinert wird im Browser**, nicht auf dem Pi: Pillow und numpy sind dort
-nicht installiert, und sie auf einem ARMv6-Kern zu bauen dauert Stunden (siehe
-`requirements.txt`). Ein Handyfoto hat acht Megapixel; was ankommt, sind
-danach ein paar hundert Kilobyte JPEG mit höchstens 1400 px Kantenlänge.
+**Verkleinert wird im Browser**, nicht auf dem Server: ein Handyfoto hat acht
+Megapixel; was ankommt, sind danach ein paar hundert Kilobyte JPEG mit
+höchstens 1400 px Kantenlänge. Das Bild bleibt auf dem Server — das Boot
+bekommt es nie zu sehen.
 
 ## Was noch fehlt: die automatische Erkennung
 
@@ -103,9 +123,13 @@ Das ist **nicht gebaut**, und der Grund ist kein technischer:
 * Es braucht einen Bilddienst und einen Zugang dazu. In diesem Projekt gibt es
   keinen — weder ein Konto noch einen Schlüssel, und keine Stelle im Quelltext,
   an der einer erwartet würde.
-* Es gehört auf den **Server**, nicht auf den Pi. Der Pi Zero hat einen ARMv6-
-  Kern; und der Weg nach draußen ist die Mobilfunkverbindung des Bootes.
-* Der Eigner sollte wissen, dass das Bild dabei das Boot verlässt.
+* Es läuft ohnehin schon auf dem Server — die Anschlussstelle ist also da.
+* Der Eigner will es mit seinem **Claude-Abo** betreiben (entschieden am
+  06.09.2026). Das Muster dafür steht in `/home/joshy/assistant/backend/agent.py`:
+  OAuth mit PKCE gegen claude.ai, Zugangsdaten abgelegt, der Agent bekommt sie
+  über `CLAUDE_CODE_OAUTH_TOKEN`. **Falle:** bei `console.anthropic.com` darf
+  KEIN Browser-User-Agent mitgehen (sonst 429 beim Token-Tausch),
+  `api.anthropic.com` braucht ihn umgekehrt.
 
 Wenn es kommt, ist die Anschlussstelle klar: die Vorlage liegt bereits als
 Datei da, der Prüfer nimmt Vielecke entgegen, und das Werkzeug kann sie

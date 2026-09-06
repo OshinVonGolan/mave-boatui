@@ -184,11 +184,11 @@ REGELN: tuple[tuple[str, str, str], ...] = (
     # Schwelle wie fuer die uebrigen Einstellungen und nicht die Vorgabe fuer
     # schreibende Aufrufe (Schalten), unter die er sonst fiele.
     #
-    # Die Planvorlage (das abfotografierte Original) gehoert dazu, in JEDER
-    # Methode: sie ist nur im Zeichenwerkzeug zu sehen, und dort kommt ohnehin
-    # nur hin, wer einstellen darf.
+    # Gezeichnet wird er im Logbuch auf dem Server; hierher kommt er als
+    # fertige Datei. Auch dafuer gilt: einstellen, nicht schalten.
     ('PUT',  r'^/api/grundriss$',            r.EINSTELLEN),
-    ('*',    r'^/api/grundriss/vorlage$',    r.EINSTELLEN),
+    # Das Planungswerkzeug samt Planvorlage liegt unter /api/logbuch/ — dort
+    # prueft der Server selbst.
     # Wartungsplan und Bootsaufgaben gehen einen Gast nichts an. Sie sagen,
     # was an dieser Anlage kaputt ist, was ansteht und was sie gekostet hat —
     # das ist eine Aussage ueber das BOOT und seinen Zustand, nicht ueber die
