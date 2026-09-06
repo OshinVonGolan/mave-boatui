@@ -887,6 +887,78 @@ class LadenGemessenStattGerechnet(Pruefstand):
 
 
 @unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
+class VerbindungWeg(Pruefstand):
+    """Wenn nichts mehr ankommt, muss die Oberfläche das sagen.
+
+    Eignermeldung: WLAN am Tablet aus, und die Anwendung bleibt einfach auf
+    ihrem letzten Stand stehen. Auf einem Bootsmonitor ist das die
+    gefährlichste Art von Fehler — die Zahlen sehen aus wie eben gemessen.
+
+    `onclose` allein genügt nicht: fällt das Funknetz weg, bleibt die
+    Verbindung oft halb offen und niemand schließt sie.
+    """
+
+    def zustand(self):
+        return self.pg.evaluate("""() => ({
+            chip: document.querySelector('#quelleChip .quelle-txt')?.textContent,
+            ton: document.getElementById('quelleChip')?.className,
+            banner: !document.getElementById('kopieBanner')?.classList.contains('hidden'),
+            text: document.getElementById('kopieBanner')?.innerText.replace(/\s+/g, ' '),
+            gesperrt: document.documentElement.classList.contains('nur-kopie'),
+        })""")
+
+    def test_stille_wird_bemerkt(self):
+        """Nicht auf ein Ereignis warten, sondern messen, wann zuletzt etwas
+        ankam."""
+        z = self.pg.evaluate("""() => {
+            _letzteNachricht = Date.now() - 60000;
+            _stillePruefen();
+            return document.querySelector('#quelleChip .quelle-txt')?.textContent;
+        }""")
+        self.assertEqual(z, 'Getrennt')
+
+    def test_das_banner_sagt_was_los_ist(self):
+        self.pg.evaluate("() => quelleGetrennt(true)")
+        z = self.zustand()
+        self.assertTrue(z['banner'])
+        # Kleingeschrieben verglichen: die Marke wird per CSS in Grossbuchstaben
+        # gesetzt, und `innerText` gibt das so zurueck.
+        self.assertIn('keine verbindung', z['text'].lower())
+        self.assertIn('stehen still', z['text'])
+        # NICHT der Text für die gespeicherte Kopie — der wäre hier schlicht
+        # falsch, es liegt ja am eigenen Gerät.
+        self.assertNotIn('beim Server nicht angemeldet', z['text'])
+
+    def test_schalten_ist_gesperrt(self):
+        """Ein Schalter, der ins Leere greift, ist schlimmer als einer, der
+        grau ist — dieselbe Sperre wie bei der gespeicherten Kopie."""
+        self.pg.evaluate("() => quelleGetrennt(true)")
+        self.assertTrue(self.zustand()['gesperrt'])
+
+    def test_eine_nachricht_hebt_es_wieder_auf(self):
+        self.pg.evaluate("() => quelleGetrennt(true)")
+        self.assertTrue(self.zustand()['banner'])
+        self.pg.evaluate("() => _lebenszeichen()")
+        self.assertFalse(self.zustand()['banner'])
+
+    def test_kurze_pausen_loesen_nichts_aus(self):
+        """Der Pi meldet sich alle zehn Sekunden. Erst nach 25 Sekunden Stille
+        sind zwei ausgeblieben — vorher wäre es Rauschen."""
+        self.pg.evaluate("""() => {
+            _lebenszeichen();
+            _letzteNachricht = Date.now() - 12000;
+            _stillePruefen();
+        }""")
+        self.assertFalse(self.zustand()['banner'])
+
+    def test_ohne_je_etwas_empfangen_kein_falscher_alarm(self):
+        """Beim Aufschlagen der Seite ist noch nichts angekommen — das ist
+        keine abgerissene Verbindung."""
+        self.pg.evaluate("() => { quelleGetrennt(false); _letzteNachricht = 0; _stillePruefen(); }")
+        self.assertFalse(self.zustand()['banner'])
+
+
+@unittest.skipIf(sync_playwright is None, 'Playwright nicht installiert')
 class GaesteWlan(Pruefstand):
     """Das Popup mit dem QR-Code fürs Gäste-WLAN.
 

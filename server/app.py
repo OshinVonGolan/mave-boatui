@@ -15,6 +15,7 @@ davon nichts.
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import json
 import logging
@@ -1770,8 +1771,18 @@ async def oberflaeche_ws(ws: WebSocket) -> None:
         if speicher.zustand():
             await ws.send_json(_stand_fuer_zuschauer())
         while True:
-            # Die Oberflaeche schickt nichts ausser gelegentlichen Lebenszeichen.
-            await ws.receive_text()
+            # Alle zehn Sekunden ein Lebenszeichen, wenn sonst nichts geht.
+            #
+            # Die Oberflaeche erkennt am AUSBLEIBEN von Nachrichten, dass die
+            # Verbindung weg ist (siehe _STILL_MS in ws.js). Hier gingen aber
+            # nur Rahmen hinaus, wenn das Boot etwas schickte — bei einem
+            # ruhigen Boot also womoeglich minutenlang gar nichts, und die
+            # Oberflaeche haette faelschlich „keine Verbindung" gemeldet.
+            # Derselbe Takt wie beim Pi, damit beide Wege sich gleich anfuehlen.
+            try:
+                await asyncio.wait_for(ws.receive_text(), timeout=10)
+            except asyncio.TimeoutError:
+                await ws.send_json({'ping': True})
     except WebSocketDisconnect:
         pass
     except Exception:

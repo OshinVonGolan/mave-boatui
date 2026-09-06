@@ -12,6 +12,34 @@
 
 let _quelle = { art: 'unbekannt', alter_s: null, boot: null, stand: 0 };
 let _quelleTimer = null;
+// Getrennt schlaegt alles andere: solange nichts ankommt, ist es egal, ueber
+// welchen Weg zuletzt etwas kam.
+let _getrennt = false;
+let _getrenntSeit = 0;
+
+/** Meldet ws.js, wenn nichts mehr eintrifft (oder wieder etwas). */
+function quelleGetrennt(an) {
+  an = !!an;
+  if (an === _getrennt) return;
+  _getrennt = an;
+  if (an) _getrenntSeit = Date.now();
+  renderQuelle();
+}
+
+/** Die Art, die gezeigt wird — mit dem Vorrang von oben. */
+function _quelleArt() {
+  return _getrennt ? 'getrennt' : _quelle.art;
+}
+
+/** Sekunden seit dem letzten frischen Wert. */
+function _quelleAlterSek() {
+  if (_getrennt) {
+    const seit = (Date.now() - _getrenntSeit) / 1000;
+    return (_quelle.alter_s == null ? 0 : _quelle.alter_s) + seit;
+  }
+  return _quelle.alter_s == null ? null
+       : _quelle.alter_s + (Date.now() - _quelle.stand) / 1000;
+}
 
 const _QUELLE_ART = {
   // Drei Zustaende. Der Unterschied zwischen den letzten beiden ist der
@@ -43,6 +71,20 @@ const _QUELLE_ART = {
         + 'der Server nur durchreicht — Internet, Wartung, Geräteliste — gibt es '
         + 'ohne Boot gar nicht und bleibt leer. Schalten ist nicht möglich.',
     weg: ['Dein Browser', 'Server', 'Boot ist weg'],
+  },
+  // Die letzte Strecke: Browser -> Pi bzw. Browser -> Server. Fuer die
+  // Strecke DAHINTER (Server -> Boot) gab es die Unterscheidung schon; diese
+  // hier fehlte, und deshalb blieb die Anwendung beim WLAN-Abriss einfach auf
+  // ihrem letzten Stand stehen (Eignermeldung). Auf einem Bootsmonitor ist das
+  // die gefaehrlichste Art von Fehler: die Zahlen sehen aus wie eben gemessen.
+  getrennt: {
+    kurz: 'Getrennt', ton: 'warn',
+    titel: 'Keine Verbindung',
+    text: 'Dein Gerät erreicht das Bordsystem gerade nicht. Alle Werte auf '
+        + 'dieser Seite stehen still — sie zeigen den Stand vom letzten '
+        + 'Empfang. Schalten ist nicht möglich. Sobald die Verbindung '
+        + 'zurückkommt, läuft alles von selbst weiter.',
+    weg: ['Dein Browser', 'keine Verbindung', 'Bordsystem'],
   },
   unbekannt: {
     kurz: '…', ton: 'neutral',
@@ -117,30 +159,37 @@ function quelleGuete(farbe, wort) {
 function renderQuelle() {
   const chip = $('quelleChip');
   if (!chip) return;
-  const a = _QUELLE_ART[_quelle.art] || _QUELLE_ART.unbekannt;
+  const art = _quelleArt();
+  const a = _QUELLE_ART[art] || _QUELLE_ART.unbekannt;
   chip.className = 'quelle-chip ' + a.ton;
   chip.title = a.titel + ' — ' + _guete.wort;
   chip.setAttribute('aria-label', chip.title);
-  const sym = _quelle.art === 'direkt' ? _QUELLE_SVG.chip : _QUELLE_SVG.wolke;
+  const sym = art === 'direkt' ? _QUELLE_SVG.chip : _QUELLE_SVG.wolke;
   chip.innerHTML = sym + '<span class="quelle-txt">' + a.kurz + '</span>'
     + `<i class="quelle-guete" style="background:${_guete.farbe}"></i>`;
-  const s = _quelle.alter_s == null ? null
-          : _quelle.alter_s + (Date.now() - _quelle.stand) / 1000;
-  _kopieSetzen(_quelle.art === 'server_kopie', _quelleAlterText(s));
+  const s = _quelleAlterSek();
+  // Derselbe Riegel wie bei der gespeicherten Kopie: Banner oben, und alles
+  // was ans Boot schreibt wird sichtbar stillgelegt. Ein Schalter, der ins
+  // Leere greift, ist schlimmer als einer, der grau ist.
+  _kopieSetzen(art === 'server_kopie' || art === 'getrennt',
+               _quelleAlterText(s), art === 'getrennt');
   if (!$('quellePop')?.classList.contains('hidden')) renderQuellePop();
 }
 
 function renderQuellePop() {
   const pop = $('quellePop');
   if (!pop) return;
-  const a = _QUELLE_ART[_quelle.art] || _QUELLE_ART.unbekannt;
+  const art = _quelleArt();
+  const a = _QUELLE_ART[art] || _QUELLE_ART.unbekannt;
   // Das Alter waechst weiter, auch wenn nichts Neues eintrifft.
-  const s = _quelle.alter_s == null ? null
-          : _quelle.alter_s + (Date.now() - _quelle.stand) / 1000;
+  const s = _quelleAlterSek();
   const alter = _quelleAlterText(s);
-  const letzterKnoten = _quelle.art === 'direkt' ? 2 : (_quelle.art === 'server_kopie' ? 1 : 2);
+  const letzterKnoten = art === 'direkt' ? 2
+                      : art === 'server_kopie' ? 1
+                      : art === 'getrennt' ? 0 : 2;
   const weg = a.weg.map((n, i) =>
-    `<div class="qw-knoten${i <= letzterKnoten ? ' an' : ''}${i === 2 && _quelle.art === 'server_kopie' ? ' aus' : ''}">${n}</div>`
+    `<div class="qw-knoten${i <= letzterKnoten ? ' an' : ''}${
+      (i === 2 && art === 'server_kopie') || (i > 0 && art === 'getrennt') ? ' aus' : ''}">${n}</div>`
   ).join('<div class="qw-strich"></div>');
   pop.innerHTML =
     `<div class="qp-kopf">${a.titel}</div>` +
@@ -152,7 +201,7 @@ function renderQuellePop() {
     `<div class="qp-wegtitel">Weg der Daten</div>` +
     `<div class="qp-weg">${weg}</div>` +
     `<div class="qp-text">${a.text}</div>` +
-    (alter && _quelle.art !== 'direkt'
+    (alter && art !== 'direkt'
       ? `<div class="qp-alter">Stand der Daten: <b>${alter}</b></div>` : '');
 }
 
@@ -205,7 +254,7 @@ _quelleUhr();
 
 let _kopieAn = null;
 
-function _kopieSetzen(an, alterText) {
+function _kopieSetzen(an, alterText, getrennt) {
   const banner = $('kopieBanner');
   if (an !== _kopieAn) {
     document.documentElement.classList.toggle('nur-kopie', an);
@@ -213,6 +262,19 @@ function _kopieSetzen(an, alterText) {
   }
   if (!banner) return;
   banner.classList.toggle('hidden', !an);
+  if (an && getrennt) {
+    // Eigener Text: „das Boot ist beim Server nicht angemeldet" waere hier
+    // schlicht falsch — es liegt am eigenen Geraet. Und es fehlt nichts
+    // teilweise, es steht ALLES still.
+    banner.innerHTML =
+      '<span class="kb-mark">Keine Verbindung</span>'
+      + '<span class="kb-txt">Dein Gerät erreicht das Bordsystem nicht. Alle Werte '
+      + 'auf dieser Seite stehen still'
+      + (alterText ? ' — Stand <b>' + alterText + '</b>' : '')
+      + '. Schalten ist nicht möglich. Sobald die Verbindung zurückkommt, '
+      + 'läuft alles von selbst weiter.</span>';
+    return;
+  }
   if (an) {
     // Der Hinweis nennt BEIDES: dass die Werte alt sind, und dass manche
     // ueberhaupt fehlen. Der Server hebt nur auf, was ihm das Boot laufend

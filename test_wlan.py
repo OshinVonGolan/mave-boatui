@@ -33,7 +33,10 @@ from sync import zugang as z                   # noqa: E402
 
 
 def lauf(x):
-    return asyncio.get_event_loop().run_until_complete(x)
+    # `asyncio.run` und nicht `get_event_loop`: letzteres bricht in Python 3.13,
+    # sobald ein anderes Pruefmodul die Schleife geschlossen hat — allein lief
+    # dieses hier durch, zusammen mit den anderen fielen elf Pruefungen um.
+    return asyncio.run(x)
 
 
 class Anfrage:

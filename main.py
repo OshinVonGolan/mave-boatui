@@ -1343,7 +1343,13 @@ async def ws_endpoint(ws: WebSocket):
         client.send({**state.to_dict(), 'version': VERSION})
         while True:
             try:
-                await asyncio.wait_for(ws.receive_text(), timeout=30)
+                # Zehn Sekunden und nicht dreissig: die Oberflaeche erkennt am
+                # AUSBLEIBEN dieser Nachricht, dass die Verbindung weg ist
+                # (siehe _STILL_MS in ws.js). Mit dreissig haette sie erst nach
+                # gut einer Minute etwas sagen koennen, ohne bei einem ruhigen
+                # Boot falschen Alarm zu geben. Ein leerer Rahmen alle zehn
+                # Sekunden je Zuschauer kostet nichts.
+                await asyncio.wait_for(ws.receive_text(), timeout=10)
             except asyncio.TimeoutError:
                 client.send({'ping': True})
     except WebSocketDisconnect:

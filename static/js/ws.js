@@ -2,6 +2,51 @@
 
 let ws = null, reconnectTimer = null;
 
+// ── Wachhund fuer die letzte Strecke ────────────────────────────────────────
+//
+// `onclose` allein genuegt nicht. Faellt das WLAN weg, bleibt die Verbindung
+// oft HALB offen: es kommt nichts mehr an, aber niemand hat sie geschlossen,
+// und der Browser merkt es erst, wenn er selbst etwas schreiben will. Die
+// Oberflaeche stand dann einfach auf ihrem letzten Stand — auf einem
+// Bootsmonitor die gefaehrlichste Art von Fehler, weil die Zahlen aussehen wie
+// eben gemessen (Eignermeldung).
+//
+// Also andersherum gezaehlt: nicht auf ein Ereignis warten, sondern messen,
+// wann zuletzt etwas ankam. Der Pi schickt alle 10 Sekunden ein Lebenszeichen,
+// auch wenn sich am Boot nichts tut — nach 25 Sekunden Stille sind also zwei
+// davon ausgeblieben, und das ist keine Schwankung mehr.
+const _STILL_MS = 25000;
+let _letzteNachricht = 0;
+let _stilleUhr = null;
+
+function _lebenszeichen() {
+  _letzteNachricht = Date.now();
+  if (typeof quelleGetrennt === 'function') quelleGetrennt(false);
+}
+
+function _stillePruefen() {
+  if (!_letzteNachricht) return;             // noch nie etwas bekommen
+  if (Date.now() - _letzteNachricht > _STILL_MS
+      && typeof quelleGetrennt === 'function') quelleGetrennt(true);
+}
+
+function _wachhundStarten() {
+  if (_stilleUhr) return;
+  _stilleUhr = setInterval(_stillePruefen, 3000);
+  // Der schnelle Weg: das Betriebssystem weiss sofort, dass das Funkteil aus
+  // ist. Der Wachhund bleibt trotzdem — `navigator.onLine` luegt regelmaessig,
+  // etwa im WLAN ohne Weg nach draussen.
+  window.addEventListener('offline', () => {
+    if (typeof quelleGetrennt === 'function') quelleGetrennt(true);
+  });
+  window.addEventListener('online', () => {
+    // Nicht die vollen vier Sekunden abwarten: das Netz ist ja gerade wieder
+    // da, und der Blick aufs Tablet kommt sofort danach.
+    clearTimeout(reconnectTimer);
+    if (!ws || ws.readyState > 1) connect();
+  });
+}
+
 // Der Schriftzug neben dem Punkt ist entfallen; der Zustand steckt jetzt in
 // der Farbe des Punktes und im title-Attribut. lbl bleibt optional, damit ein
 // spaeteres Wiedereinsetzen des Labels ohne Aenderung hier funktioniert.
@@ -654,10 +699,17 @@ function connect() {
     // die nie wieder gefüllt wurde.
     _fetchHistory(true);
   };
-  ws.onmessage = ev => { try { handleData(JSON.parse(ev.data)); } catch(_) {} };
+  ws.onmessage = ev => {
+    // ZUERST das Lebenszeichen, auch wenn der Inhalt Unsinn ist: angekommen
+    // ist angekommen, und darum geht es hier.
+    _lebenszeichen();
+    try { handleData(JSON.parse(ev.data)); } catch(_) {}
+  };
   ws.onclose = ws.onerror = () => {
     setConnState('off');
+    if (typeof quelleGetrennt === 'function') quelleGetrennt(true);
     clearTimeout(reconnectTimer);
     reconnectTimer = setTimeout(connect, 4000);
   };
+  _wachhundStarten();
 }
