@@ -733,6 +733,10 @@ function _battDetailAnzeigen() {
   // 24-Stunden-Abruf zu grob (dort liegen die Punkte ~36 s auseinander).
   // Einmal fein nachfassen, sonst bleibt links ein leerer Streifen stehen.
   fetchHistoryFenster(chartRangeSec);
+  // Lademodus: sofort frisch holen und waehrend die Seite offen ist wach
+  // halten. Der _chargerPoller in init.js laeuft nur alle 5 Minuten — zu
+  // traege fuer eine Seite, auf der man den Modus umschalten kann.
+  if (typeof _ladePoller !== 'undefined' && _ladePoller) _ladePoller.start();
 }
 
 function openBattDetail() {
@@ -923,6 +927,7 @@ window.addEventListener('orientationchange', _chartsBeiGroessenwechsel);
 
 function closeBattDetail() {
   $('battOverlay').classList.add('hidden');
+  if (typeof _ladePoller !== 'undefined' && _ladePoller) _ladePoller.stop();
   history.replaceState(null, '', location.pathname);
   // Inverter-Card sofort auf letzten bekannten Zustand setzen (verhindert Flash)
   if (_lastData) updateInverterCard(_lastData.inverter, _lastData.charger);

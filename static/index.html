@@ -55,9 +55,16 @@
   // /api/waterlevel, /api/weather, /api/wartung und die Heizung antworten.
   // Die Klasse wird hier gesetzt, damit sie VOR dem ersten Bild greift.
   document.documentElement.classList.add('startet');
-  // Notbremse: bleibt eine Quelle haengen oder faellt das Bundle aus, wird
-  // die Seite trotzdem sichtbar. Lieber unfertig als gar nicht.
-  setTimeout(function(){ document.documentElement.classList.remove('startet'); }, 4000);
+  // Notbremse fuer den Fall, dass das Bundle GAR NICHT laeuft. Sie muss
+  // deshalb LAENGER sein als der abgestimmte Deckel in init.js
+  // (_START_DECKEL_MS, 8 s) — sonst gibt sie die Seite frei, waehrend dort
+  // noch ordentlich gewartet wird.
+  //
+  // Genau das war der Fall: hier standen 4 Sekunden, dort 8. Alles, was
+  // laenger als vier Sekunden brauchte, erschien halb fertig (Eignermeldung:
+  // „manchmal wird die Seite angezeigt, bevor alle Daten geladen sind").
+  // Wer einen der beiden Werte aendert, muss den anderen mit ansehen.
+  setTimeout(function(){ document.documentElement.classList.remove('startet'); }, 12000);
   </script>
   <script defer src="/js-bundle.js"></script>
 </head>
@@ -68,8 +75,15 @@
      genau das, was er verhindern soll. Er verschwindet mit der Klasse
      `startet` am Wurzelelement, also zusammen mit der Freigabe der Kacheln. -->
 <div class="ladeschirm" id="ladeschirm">
-  <div class="lade-kreis"></div>
-  <div class="lade-text">Bordwerte werden geladen</div>
+  <!-- Die Marke statt einer Beschriftung (Eignerwunsch). Sie atmet, darunter
+       laeuft ein Strich — das sagt „es passiert etwas", ohne dass jemand beim
+       Starten lesen muss. -->
+  <span class="marke-mave lade-marke" aria-hidden="true">Mave</span>
+  <div class="lade-balken" aria-hidden="true"><i></i></div>
+  <!-- Der Text bleibt, taucht aber erst auf, wenn es ungewoehnlich lange
+       dauert. Dann ist er kein Zierrat, sondern die Antwort auf „woran
+       haengt es". -->
+  <div class="lade-text" id="ladeText" role="status" hidden></div>
 </div>
 
 
@@ -250,6 +264,9 @@
         <rect x="2" y="7" width="20" height="12" rx="2.5"/><path d="M7 7V4M17 7V4"/>
       </svg>
       Batterie
+      <!-- Welches Ladeprofil gerade laeuft. Gefuellt von _renderChargerStatus()
+           in settings.js; ohne Antwort vom Lader bleibt es unsichtbar. -->
+      <span id="chgModeBadge" style="display:none;font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;opacity:.9"></span>
       <span class="card-link">Details →</span>
     </div>
     <div class="tile-content">
@@ -1083,11 +1100,13 @@
           <span style="font-size:13px;color:var(--text2)">V</span>
         </div>
         <div class="settings-row">
-          <label class="settings-label" for="sChgSocRamp">Rampe</label>
-          <input class="settings-input narrow" id="sChgSocRamp" type="number" min="1" max="30" step="1" placeholder="15" />
-          <span style="font-size:13px;color:var(--text2)">%</span>
+          <label class="settings-label" for="sChgHoldMode">Halten durch</label>
+          <select class="settings-input narrow" id="sChgHoldMode" style="width:auto;min-width:158px">
+            <option value="spannung">Haltespannung</option>
+            <option value="aus">Lader aus</option>
+          </select>
         </div>
-        <div style="font-size:12px;color:var(--text3);margin:8px 0 10px">P-Regler: bei Ziel-SOC liegt die Spannung auf Haltespannung (≈ Ruhespannung), fällt dann linear auf volle Absorption innerhalb der Rampe.</div>
+        <div style="font-size:12px;color:var(--text3);margin:8px 0 10px">Zwei feste Profile: bis zum Ziel-SOC wird mit Absorption und Erhaltung geladen, ab dem Ziel-SOC gilt die Haltespannung. Geschrieben wird nur beim Umschalten, denn die Sollwerte liegen im Flash des Ladegeräts. „Lader aus“ stoppt hart, startet den Ladezyklus beim Wiedereinschalten aber neu.</div>
         <div class="settings-row">
           <label class="settings-label" for="sChgHarborAbs">Absorption</label>
           <input class="settings-input narrow" id="sChgHarborAbs" type="number" min="12.0" max="14.6" step="0.05" placeholder="13.80" />

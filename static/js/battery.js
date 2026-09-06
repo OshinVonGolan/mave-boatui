@@ -1046,25 +1046,15 @@ const LADE_MODI = [
 
 const LADE_TAKT_MS = 30000;
 
-let _ladeStand  = null;   // Antwort von /api/charger
+// Den Zustand haelt settings.js in _chargerStatus, geholt von
+// refreshChargerStatus(), aufgefrischt vom _chargerPoller in init.js (alle
+// 5 min). Hier wird derselbe Stand gelesen und dieselbe Abfrage benutzt — zwei
+// Poller auf denselben Endpunkt koennten sich widersprechen, und der Pi Zero
+// hat einen Kern.
 let _ladeFehler = null;
 let _ladeLaeuft = false;  // waehrend eines Moduswechsels: Knoepfe sperren
 
-async function _ladeJson(url, opts) {
-  const r = await fetch(url, { cache: 'no-store', ...(opts || {}) });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
-}
-
-async function ladeStandHolen() {
-  try {
-    _ladeStand  = await _ladeJson('/api/charger');
-    _ladeFehler = null;
-  } catch (e) {
-    _ladeFehler = e.message || 'nicht erreichbar';
-  }
-  _ladeKarteNachziehen();
-}
+const _ladeStand = () => (typeof _chargerStatus !== 'undefined' ? _chargerStatus : null);
 
 /**
  * Modus umschalten.
@@ -1076,16 +1066,21 @@ async function ladeStandHolen() {
  */
 async function ladeModusSetzen(modus) {
   if (_ladeLaeuft || !LADE_MODI.some(m => m.id === modus)) return;
-  if (_ladeStand && _ladeStand.mode === modus) return;
+  const jetzt = _ladeStand();
+  if (jetzt && jetzt.mode === modus) return;
   _ladeLaeuft = true;
   _ladeKarteNachziehen();
   try {
-    _ladeStand  = await _ladeJson('/api/charger/mode', {
+    const r = await fetch('/api/charger/mode', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ mode: modus }),
     });
-    _ladeFehler = null;
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _chargerStatus = await r.json();
+    _ladeFehler    = null;
+    // Kachel-Anzeiger und Einstellungsseite hoeren am selben Zustand.
+    if (typeof _renderChargerStatus === 'function') _renderChargerStatus();
   } catch (e) {
     _ladeFehler = e.message || 'Umschalten fehlgeschlagen';
   }
@@ -1128,7 +1123,7 @@ function _ladeZeile(s) {
 }
 
 function _ladeKarte() {
-  const s   = _ladeStand;
+  const s   = _ladeStand();
   const off = !s || _ladeLaeuft;
 
   const knoepfe = LADE_MODI.map(m =>
@@ -1169,7 +1164,12 @@ function _ladeKarteNachziehen() {
   if (alt) alt.outerHTML = _ladeKarte();
 }
 
-const _ladePoller = createPoller(ladeStandHolen, LADE_TAKT_MS);
+// Alle 30 s, solange die Detailseite offen ist — die 5 Minuten des
+// _chargerPoller sind fuer eine offene Seite mit Knoepfen zu traege.
+const _ladePoller = createPoller(async () => {
+  if (typeof refreshChargerStatus === 'function') await refreshChargerStatus();
+  _ladeKarteNachziehen();
+}, LADE_TAKT_MS);
 
 
 /**

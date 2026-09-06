@@ -370,7 +370,8 @@ function _renderChargerStatus() {
   const d = _chargerStatus;
   if (!d) return;
 
-  // Badge auf der Batterie-Kachel
+  // Badge auf der Batterie-Kachel.
+  if (typeof _ladeKarteNachziehen === 'function') _ladeKarteNachziehen();
   const badge = $('chgModeBadge');
   if (badge) {
     const modeColor = { harbor: 'var(--text3)', full: 'var(--yellow)', balance: 'var(--green)' }[d.mode] || 'var(--text2)';
@@ -443,38 +444,9 @@ function _renderChargerStatus() {
     </div>`;
 }
 
-// Die Rampe des alten P-Reglers gibt es nicht mehr: die Sollwert-Register
-// liegen im Flash des Laders, deshalb wird nur noch beim Umschalten zwischen
-// Laden und Halten geschrieben. Das Eingabefeld steht noch im Markup — es wird
-// hier ausgeblendet und an seiner Stelle die Halteart angeboten. Sobald das
-// Markup nachgezogen ist, kann dieser Block ersatzlos weg.
-function _chgHafenUmbau() {
-  const ramp = $('sChgSocRamp');
-  if (!ramp || ramp.dataset.ersetzt) return;
-  ramp.dataset.ersetzt = '1';
-  const zeile = ramp.closest('.settings-row');
-  if (!zeile) return;
-  zeile.hidden = true;
-  const hinweis = zeile.nextElementSibling;
-  if (hinweis && hinweis.textContent.trim().startsWith('P-Regler')) {
-    hinweis.textContent = 'Zwei feste Profile: bis zum Ziel-SOC wird mit Absorption und Erhaltung geladen, '
-      + 'ab dem Ziel-SOC gilt die Haltespannung. Geschrieben wird nur beim Umschalten, '
-      + 'denn die Sollwerte liegen im Flash des Ladegeräts.';
-  }
-  const neu = document.createElement('div');
-  neu.className = 'settings-row';
-  neu.innerHTML = '<label class="settings-label" for="sChgHoldMode">Halten durch</label>'
-    + '<select class="settings-input narrow" id="sChgHoldMode">'
-    + '<option value="spannung">Haltespannung</option>'
-    + '<option value="aus">Lader aus</option>'
-    + '</select>';
-  zeile.parentNode.insertBefore(neu, zeile);
-}
-
 function _populateChargerInputs() {
   const s = _chargerStatus?.settings;
   if (!s) return;
-  _chgHafenUmbau();
   if ($('sChgHarborAbs'))    $('sChgHarborAbs').value   = s.harbor?.absorption_v  ?? 13.8;
   if ($('sChgHarborFloat'))  $('sChgHarborFloat').value = s.harbor?.float_v        ?? 13.3;
   if ($('sChgTargetSoc'))    $('sChgTargetSoc').value   = s.harbor?.target_soc    ?? 80;
