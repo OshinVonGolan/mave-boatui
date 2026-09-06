@@ -879,7 +879,7 @@ main {
    knapp ein Drittel. Auf blankem Grund sind es 6,45:1.
    Die Aussage der Fläche bleibt dabei unberührt: sie ist eine Form über der
    Zeit, ihre Oberkante ist weiterhin ihr eigenes Maximum. */
-.ampel-spur { position: absolute; inset: 22px 0 0; pointer-events: none; }
+.ampel-spur { position: absolute; inset: 29px 0 0; pointer-events: none; }
 .ampel-spur svg { display: block; width: 100%; height: 100%; }
 .ampel > *:not(.ampel-spur) { position: relative; }
 .ampel-kopf { display: flex; align-items: center; gap: 7px; }

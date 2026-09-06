@@ -449,7 +449,7 @@ function _wasch(punkte, farbe, unten, oben) {
   return `<div class="ampel-spur"><svg viewBox="0 0 100 100" preserveAspectRatio="none"
       aria-hidden="true">
     <defs><linearGradient id="${kennung}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${farbe}" stop-opacity=".26"/>
+      <stop offset="0" stop-color="${farbe}" stop-opacity=".16"/>
       <stop offset="1" stop-color="${farbe}" stop-opacity="0"/>
     </linearGradient></defs>${pfade}
   </svg></div>`;
