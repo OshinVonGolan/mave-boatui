@@ -522,6 +522,17 @@ class CanInterface:
                     if self._merge(self.state.battery,
                                    {'voltage': p.get('voltage'), 'current': p.get('current')}):
                         changed = True
+                        # Die Aufteilung an den NEUEN Shunt-Wert angleichen.
+                        #
+                        # Ohne das entsteht genau die Abweichung, die es nicht
+                        # geben soll: korrigiert wurde bisher nur, wenn ein
+                        # BMS-Rahmen ankam, und zwar gegen den Shunt VON DIESEM
+                        # AUGENBLICK. Der Shunt hat aber seinen eigenen Takt und
+                        # wandert zwischen zwei BMS-Rahmen weiter. Am laufenden
+                        # Boot gemessen: Bilanz -7,5 A, Aufteilung 0,0 / 6,7 —
+                        # 0,8 A daneben.
+                        if self._angleichen():
+                            changed = True
                 elif inst == self._starter_instance and dc_type not in (DC_TYPE_SOLAR, DC_TYPE_ALTERNATOR):
                     self.state.touch('battery')
                     if self._merge(self.state.battery, {'starter_voltage': p.get('voltage')}):
@@ -760,6 +771,30 @@ class CanInterface:
     # nahe Null liegt und eine Multiplikation die Einzelströme explodieren ließe.
     _BMS_FACTOR_MIN = 0.2
     _BMS_FACTOR_MAX = 5.0
+
+    def _angleichen(self) -> bool:
+        """Die gespeicherte Aufteilung an den aktuellen Shunt-Strom nachziehen.
+
+        Möglich ist das ohne die Rohwerte des BMS, weil die Korrektur das
+        VERHÄLTNIS erhält: eine bereits skalierte Aufteilung noch einmal auf ein
+        neues Ziel zu skalieren, führt zum selben Ergebnis wie eine Skalierung
+        der Rohwerte. Nur dort, wo die Aufteilung ganz aus dem Shunt abgeleitet
+        wurde (Vorzeichenkonflikt, BMS meldet nichts), ist das Verhältnis
+        ohnehin schon das des Shunts.
+        """
+        if self.state.bms.get('current_charge') is None \
+                and self.state.bms.get('current_discharge') is None:
+            return False
+        neu = self._correct_bms_currents({
+            'current_charge': self.state.bms.get('current_charge'),
+            'current_discharge': self.state.bms.get('current_discharge'),
+        })
+        geaendert = False
+        for k, v in neu.items():
+            if self.state.bms.get(k) != v:
+                self.state.bms[k] = v
+                geaendert = True
+        return geaendert
 
     def _correct_bms_currents(self, p: dict) -> dict:
         """Korrigiert BMS-Lade-/Entladestrom proportional anhand des genaueren Shunt-Stroms.

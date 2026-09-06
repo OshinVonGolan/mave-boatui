@@ -89,6 +89,41 @@ class Stromaufteilung(unittest.TestCase):
             self.assertGreaterEqual(zu, 0.0)
             self.assertGreaterEqual(ve, 0.0)
 
+    def test_aufteilung_folgt_einem_neuen_shuntwert(self):
+        """Der eigentliche Fall aus dem Betrieb.
+
+        Korrigiert wurde bisher nur beim Eintreffen eines BMS-Rahmens, gegen
+        den Shunt von genau diesem Augenblick. Der Shunt hat aber seinen
+        eigenen Takt. Am laufenden Boot gemessen: Bilanz -7,5 A, Aufteilung
+        0,0 / 6,7 — 0,8 A daneben, obwohl die Korrektur "immer" laeuft.
+        """
+        import types
+        stub = types.SimpleNamespace(
+            state=types.SimpleNamespace(battery={'current': -6.7},
+                                        bms={'current_charge': 0.0,
+                                             'current_discharge': 6.7}),
+            _BMS_FACTOR_MIN=can_reader.CanInterface._BMS_FACTOR_MIN,
+            _BMS_FACTOR_MAX=can_reader.CanInterface._BMS_FACTOR_MAX)
+        stub._correct_bms_currents = types.MethodType(
+            can_reader.CanInterface._correct_bms_currents, stub)
+        angleichen = types.MethodType(can_reader.CanInterface._angleichen, stub)
+
+        # Der Shunt wandert weiter, ohne dass ein BMS-Rahmen kommt.
+        stub.state.battery['current'] = -7.5
+        self.assertTrue(angleichen(), 'die Aufteilung haette sich aendern muessen')
+        zu = stub.state.bms['current_charge']
+        ve = stub.state.bms['current_discharge']
+        self.assertAlmostEqual(zu - ve, -7.5, places=1)
+
+    def test_angleichen_ohne_bms_tut_nichts(self):
+        import types
+        stub = types.SimpleNamespace(
+            state=types.SimpleNamespace(battery={'current': 5.0},
+                                        bms={'current_charge': None,
+                                             'current_discharge': None}),
+            _BMS_FACTOR_MIN=0.2, _BMS_FACTOR_MAX=5.0)
+        self.assertFalse(types.MethodType(can_reader.CanInterface._angleichen, stub)())
+
     def test_die_alten_schwellen_gibt_es_nicht_mehr(self):
         # Sonst schleicht sich die Zweiteilung wieder ein.
         self.assertFalse(hasattr(can_reader.CanInterface, '_BMS_CORR_ON'))
