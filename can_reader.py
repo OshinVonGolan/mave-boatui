@@ -196,7 +196,6 @@ class CanInterface:
         self._broadcast_pending = False
         self._broadcast_lock    = None   # asyncio.Lock, wird im Loop angelegt
         self._eilig_bis         = 0.0    # monotone Zeit, bis zu der schnell gerundfunkt wird
-        self._bms_corr_active   = False  # Hysterese der BMS-Stromkorrektur
         self._network:  dict = {}   # (pgn, src) → tracking entry
         self._last_raw: dict = {}   # pgn → {src, len, hex} (Debug)
         self._dc_types: dict = {}   # instance → dc_type (from PGN 127506)
@@ -756,11 +755,6 @@ class CanInterface:
         return self._daily.get_last_n_days(n)
 
     # Hysterese der BMS-Stromkorrektur: eingeschaltet wird sie erst ab
-    # _BMS_CORR_ON A Abweichung, ausgeschaltet erst wieder unter _BMS_CORR_OFF A.
-    # Mit nur einer Schwelle springt die Anzeige bei jedem Frame zwischen Roh-
-    # und Korrekturwert, sobald die Abweichung um 5 A herum pendelt.
-    _BMS_CORR_ON  = 5.0
-    _BMS_CORR_OFF = 3.0
     # Skalierungsfaktoren außerhalb dieses Bereichs sind unbrauchbar: negativ
     # heißt Vorzeichenkonflikt, sehr groß/klein entsteht, wenn das BMS-Netto
     # nahe Null liegt und eine Multiplikation die Einzelströme explodieren ließe.
@@ -774,12 +768,20 @@ class CanInterface:
         skaliert, dass die Differenz (charge − discharge) dem Shunt entspricht;
         das BMS-Verhältnis (wie viel Laden vs. Entladen) bleibt erhalten.
 
-        Zwei Eigenheiten sind hier bewusst behandelt:
-          * Ein-/Ausschaltschwelle liegen auseinander (Hysterese), damit die
-            Korrektur an der Schwelle nicht von Frame zu Frame flattert.
-          * Bei Vorzeichenkonflikt (BMS lädt, Shunt entlädt oder umgekehrt) wurden
-            früher BEIDE Ströme auf 0 gesetzt — jetzt werden sie aus dem Shunt
-            abgeleitet, der die verlässlichere Quelle ist.
+        Korrigiert wird IMMER, nicht erst ab einer Abweichung. Vorher sprang die
+        Korrektur bei 5 A an und erst unter 3 A wieder ab — mit dem Ergebnis,
+        dass Zufluss minus Verbrauch im Normalbetrieb eben NICHT der Bilanz
+        entsprach, sondern bis zu fünf Ampere daneben lag. Drei Zahlen, von
+        denen zwei nicht zur dritten passen, sind schlechter als eine.
+
+        Die Hysterese war nur deshalb nötig, weil es zwei Betriebsarten gab
+        (roh und korrigiert) und die Anzeige an der Schwelle zwischen ihnen
+        flatterte. Mit nur noch einer Betriebsart entfällt der Grund.
+
+        Was bleibt: bei Vorzeichenkonflikt (BMS lädt, Shunt entlädt oder
+        umgekehrt) oder wenn das BMS-Netto nahe Null liegt, werden beide Ströme
+        direkt aus dem Shunt abgeleitet. Eine Skalierung ergäbe dort absurde
+        Werte, und der Shunt ist die verlässlichere Quelle.
         """
         shunt = self.state.battery.get('current')
         if shunt is None:
@@ -788,19 +790,10 @@ class CanInterface:
         discharge = p.get('current_discharge') or 0.0
         bms_net   = charge - discharge   # positiv = Laden
 
-        # Beide nahe Null → kein Handlungsbedarf
+        # Beide nahe Null → nichts zu verteilen, und eine Skalierung von
+        # Rauschen auf Rauschen ergäbe nur Zappeln.
         if abs(bms_net) < 0.5 and abs(shunt) < 0.5:
-            self._bms_corr_active = False
             return p
-
-        diff = abs(bms_net - shunt)
-        if self._bms_corr_active:
-            if diff < self._BMS_CORR_OFF:
-                self._bms_corr_active = False
-        elif diff > self._BMS_CORR_ON:
-            self._bms_corr_active = True
-        if not self._bms_corr_active:
-            return p   # Abweichung akzeptabel
 
         p = dict(p)    # Kopie — Original nicht ändern
         factor = shunt / bms_net if abs(bms_net) > 0.1 else 0.0
