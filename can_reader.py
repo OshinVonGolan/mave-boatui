@@ -768,11 +768,20 @@ class CanInterface:
         skaliert, dass die Differenz (charge − discharge) dem Shunt entspricht;
         das BMS-Verhältnis (wie viel Laden vs. Entladen) bleibt erhalten.
 
-        Korrigiert wird IMMER, nicht erst ab einer Abweichung. Vorher sprang die
-        Korrektur bei 5 A an und erst unter 3 A wieder ab — mit dem Ergebnis,
-        dass Zufluss minus Verbrauch im Normalbetrieb eben NICHT der Bilanz
-        entsprach, sondern bis zu fünf Ampere daneben lag. Drei Zahlen, von
-        denen zwei nicht zur dritten passen, sind schlechter als eine.
+        Korrigiert wird IMMER — ohne Schwelle und ohne Ausnahme für kleine
+        Ströme. Zufluss minus Verbrauch ergibt damit in jeder Lage die Bilanz.
+        Das ist eine ausdrückliche Vorgabe des Eigners: zwischen BMS-Bilanz und
+        Shunt-Strom soll gar keine Abweichung stehenbleiben.
+
+        Vorher sprang die Korrektur erst bei 5 A an und erst unter 3 A wieder
+        ab; im Normalbetrieb ging die Aufteilung damit bis zu fünf Ampere an
+        der eigenen Bilanz vorbei. Drei Zahlen, von denen zwei nicht zur
+        dritten passen, sind schlechter als eine.
+
+        Der Preis: bei ruhendem Boot, wo alle Ströme im Rauschen liegen,
+        springt die Aufteilung zwischen "alles herein" und "alles heraus",
+        sobald der Shunt die Null kreuzt. Das tut die Bilanz selbst aber auch,
+        und es geht um Zehntelampere.
 
         Die Hysterese war nur deshalb nötig, weil es zwei Betriebsarten gab
         (roh und korrigiert) und die Anzeige an der Schwelle zwischen ihnen
@@ -789,11 +798,6 @@ class CanInterface:
         charge    = p.get('current_charge')    or 0.0
         discharge = p.get('current_discharge') or 0.0
         bms_net   = charge - discharge   # positiv = Laden
-
-        # Beide nahe Null → nichts zu verteilen, und eine Skalierung von
-        # Rauschen auf Rauschen ergäbe nur Zappeln.
-        if abs(bms_net) < 0.5 and abs(shunt) < 0.5:
-            return p
 
         p = dict(p)    # Kopie — Original nicht ändern
         factor = shunt / bms_net if abs(bms_net) > 0.1 else 0.0

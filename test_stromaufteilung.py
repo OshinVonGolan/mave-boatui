@@ -63,11 +63,13 @@ class Stromaufteilung(unittest.TestCase):
     def test_grosse_abweichung(self):
         self._passt(-20.0, 0.0, 8.0)
 
-    def test_ruhe_wird_nicht_verstaerkt(self):
-        # Beide unter einem halben Ampere: dort waere eine Skalierung nur
-        # Rauschen mal Rauschen. Die Abweichung ist unsichtbar klein.
-        zu, ve = self._korrigiert(0.2, 0.1, 0.0)
-        self.assertEqual((zu, ve), (0.1, 0.0))
+    def test_auch_im_rauschen_passt_es(self):
+        # Ausdrueckliche Vorgabe des Eigners: keine Abweichung, auch nicht bei
+        # ruhendem Boot. Frueher blieb hier eine Aufteilung stehen, die nicht
+        # zur Bilanz passte.
+        self._passt(0.2, 0.1, 0.0)
+        self._passt(-0.3, 0.2, 0.1)
+        self._passt(0.0, 0.1, 0.1)
 
     def test_ohne_shunt_bleibt_alles_wie_es_war(self):
         # Kein Shunt am Bus heisst: es gibt nichts, woran man korrigieren
