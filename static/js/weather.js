@@ -175,6 +175,7 @@ function _renderWeather() {
   const ort = _wxOrt();
   const nameEl = $('wxOrtName');
   if (nameEl) nameEl.textContent = ort.name;
+  ortPunkte('wxPunkte', _wxOrtListe().length, _wxIndex);
 
   const d = _wxData;
   const tage = (d && d.tage) || [];
@@ -263,8 +264,15 @@ function _wxTagStreifen() {
   if (!cv || !_wxData) return;
   const alle = _wxData.stunden || [];
   const jetzt = _wxStundeJetzt();
-  const von = Math.max(0, alle.indexOf(jetzt));
-  const st = alle.slice(von, von + 13);
+  // Drei Stunden Vergangenheit gehoeren dazu. Vorher fing der Streifen bei
+  // JETZT an — dann ist die Jetzt-Marke der linke Rand und sagt nichts. Mit
+  // dem Stueck davor beantwortet die Kurve die eigentliche Frage: frischt es
+  // auf oder schlaeft es ein.
+  const RUECK = 3;
+  const iJetzt = Math.max(0, alle.indexOf(jetzt));
+  const von = Math.max(0, iJetzt - RUECK);
+  const st = alle.slice(von, iJetzt + 13);
+  const iNun = iJetzt - von;
   if (st.length < 2) return;
 
   const dpr = window.devicePixelRatio || 1;
@@ -373,7 +381,22 @@ function _wxTagStreifen() {
   ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // 4. Die hoechste Boe mit ihrer Zahl — darauf richtet man sich ein, und sie
+  // 4. Die Jetzt-Linie. Sie steht ueber den Kurven, damit sie nicht unter der
+  //    Windflaeche verschwindet, und bleibt duenn und gestrichelt: sie ist
+  //    eine Marke an der Zeitachse und kein Messwert.
+  if (iNun > 0 && iNun < n) {
+    const xn = xOf(iNun);
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = 'rgba(226,232,240,.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xn, 2); ctx.lineTo(xn, pad.t + cH);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 5. Die hoechste Boe mit ihrer Zahl — darauf richtet man sich ein, und sie
   //    ersetzt die Achsenbeschriftung.
   let iMax = 0, vMax = -1;
   st.forEach((s, i) => {
@@ -396,10 +419,12 @@ function _wxTagStreifen() {
 
   // Die Stunden darunter, alle drei. Die erste ist jetzt und steht deshalb
   // links buendig, die letzte rechts — sonst haengen sie halb ueber der Kante.
-  ctx.fillStyle = 'rgba(148,163,184,.7)';
+  // Vom Jetzt-Punkt aus gezaehlt, nicht vom linken Rand: so sitzt eine
+  // Beschriftung genau unter der Jetzt-Linie, und die Marke bekommt ihre Zeit.
   ctx.font = '11px sans-serif';
   st.forEach((s, i) => {
-    if (i % 3) return;
+    if ((i - iNun) % 3) return;
+    ctx.fillStyle = i === iNun ? 'rgba(226,232,240,.85)' : 'rgba(148,163,184,.7)';
     ctx.textAlign = i === 0 ? 'left' : (i === n ? 'right' : 'center');
     ctx.fillText(_wxUhr(s.t), Math.min(W, Math.max(0, xOf(i))), H - 3);
   });

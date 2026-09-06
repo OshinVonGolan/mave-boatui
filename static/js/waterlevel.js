@@ -46,9 +46,9 @@ function _wlNamenSetzen() {
   const st = _wlStation();
   const feld = $('wlStationName');
   if (feld) feld.textContent = st.name;
-  // Bei nur einem Pegel ist der Pfeil eine Lüge — dann bleibt der Name Text.
-  const pfeil = $('wlStationKnopf') && $('wlStationKnopf').querySelector('svg');
-  if (pfeil) pfeil.style.display = _wlStationen.length > 1 ? '' : 'none';
+  // Bei nur einem Pegel bleibt die Punktzeile leer — ein einzelner Punkt wäre
+  // eine Aussage über nichts.
+  ortPunkte('wlPunkte', _wlStationen.length, _wlIndex);
   const titel = $('wlDetailTitel');
   if (titel) titel.textContent = st.name ? `Wasserstand ${st.name}` : 'Wasserstand';
   const leiste = $('wlStationLeiste');

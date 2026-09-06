@@ -1730,10 +1730,29 @@ function _sbRenderTank(data) {
     // .34 statt kraeftiger: die Linie ueber der Flaeche eines Verlaufsgraphen
     // liegt bei .3 — die Kante soll dazu passen und nicht daneben schreien.
     kante.style.opacity = anteil2 == null ? 0 : 0.34;
-    // Um die eigene Breite nach links versetzt: die Kante liegt damit INNEN
-    // am Balken an und steht nicht ueber den Stand hinaus.
-    kante.style.left = anteil2 == null ? '0%'
-      : `calc(${anteil2.toFixed(1)}% - 1px)`;
+    // AUF GANZE GERAETEPIXEL GERASTERT.
+    //
+    // Vorher stand hier ein Prozentwert. Der landet fast nie genau auf einem
+    // Pixel: bei 61,0 % faellt die Kante mal auf eine Pixelgrenze und mal
+    // dazwischen, und dann malt der Browser aus einem Strich zwei halbe. Sie
+    // sah dadurch je nach Fuellstand mal duenn und scharf, mal breit und
+    // verwaschen aus (Eignermeldung) — bei zwei Pixeln Breite fiel es nicht
+    // auf, bei einem sofort.
+    //
+    // `clientWidth` liest die Breite des Feldes. Das ist ein Layoutzugriff,
+    // aber einer pro Tankfeld und Datensatz, und `contain: layout style` auf
+    // dem Feld haelt ihn klein.
+    const feld = kante.parentElement;
+    const breite = feld ? feld.clientWidth : 0;
+    if (anteil2 == null || !breite) {
+      kante.style.left = '0px';
+    } else {
+      const dpr = window.devicePixelRatio || 1;
+      const x = Math.round((anteil2 / 100) * breite * dpr) / dpr;
+      // Um die eigene Breite nach links versetzt: die Kante liegt damit INNEN
+      // am Balken an und steht nicht ueber den Stand hinaus.
+      kante.style.left = `${Math.max(0, x - 1)}px`;
+    }
     kante.style.color = c.color || '';
   }
 

@@ -534,18 +534,23 @@
            style="cursor:pointer;transition:border-color .2s"
            onmouseenter="this.style.borderColor='var(--accent2)'"
            onmouseleave="this.style.borderColor=''">
-    <div class="card-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/>
-      </svg>
-      Wasserstand
-      <!-- Wie bei der Wetterkachel: der Name ist der Schalter zum naechsten
-           Pegel, alles andere auf der Kachel oeffnet die Seite. -->
-      <button class="card-link wx-ort-knopf" id="wlStationKnopf"
+    <!-- Dreigeteilt: Gattung links, Ort MITTIG, und rechts bleibt die Ecke
+         frei fuer „Details" — dort gehoert sie hin, auf jeder anderen Kachel
+         steht sie auch da. Der Ort stand vorher an ihrer Stelle. -->
+    <div class="card-title card-title-ort">
+      <span class="ct-links">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2C6 9 4 13 4 16a8 8 0 0 0 16 0c0-3-2-7-8-14z"/>
+        </svg>
+        Wasserstand
+      </span>
+      <!-- Der Name ist zugleich der Schalter zum naechsten Pegel. Er braucht
+           keinen Rahmen mehr: dass es weitere gibt, sagen die Punkte unten. -->
+      <button class="ct-ort" id="wlStationKnopf"
               onclick="event.stopPropagation(); wlStationWeiter()">
         <span id="wlStationName">Travemünde</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
+      <span class="card-link">Details →</span>
     </div>
     <!-- Normal: full info + Verlauf -->
     <div class="wl-tile-body tile-hide-half">
@@ -555,6 +560,7 @@
         <span id="wlTileTrend" class="wl-tile-trend"></span>
       </div>
       <canvas id="wlTileSpark" class="wl-tile-spark"></canvas>
+      <div class="ort-punkte" id="wlPunkte" aria-hidden="true"></div>
     </div>
     <!-- Half: compact -->
     <div class="tile-show-half">
@@ -568,19 +574,21 @@
 
   <!-- ── Wetter Kachel (Lübeck + Lübecker Bucht) ── -->
   <section class="card card-wx" id="wxCard" onclick="openWetter()" style="cursor:pointer">
-    <div class="card-title">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/>
-      </svg>
-      Wetter
+    <div class="card-title card-title-ort">
+      <span class="ct-links">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19a4.5 4.5 0 1 0 0-9 6 6 0 0 0-11.6-1.5A4 4 0 0 0 6 19z"/>
+        </svg>
+        Wetter
+      </span>
       <!-- Der Ortsname ist ein Schalter, nicht nur eine Beschriftung: ein Tipp
            darauf geht zum nächsten Favoriten. Ein Tipp irgendwo sonst auf die
            Kachel öffnet die Seite — deshalb hält er das Ereignis auf. -->
-      <button class="card-link wx-ort-knopf" id="wxOrtKnopf"
+      <button class="ct-ort" id="wxOrtKnopf"
               onclick="event.stopPropagation(); wxOrtWeiter()">
         <span id="wxOrtName">Wetter</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </button>
+      <span class="card-link">Details →</span>
     </div>
     <!-- Normal: NUR heute. Die weitere Vorschau steht auf der Detailseite —
          vier Tagesspalten daneben machten beides klein und keins lesbar. -->
@@ -588,6 +596,7 @@
       <div class="wx-kopf" id="wxHeute"></div>
       <canvas id="wxTagCanvas" class="wx-tag-canvas"></canvas>
       <div class="wx-werte" id="wxWerte"></div>
+      <div class="ort-punkte" id="wxPunkte" aria-hidden="true"></div>
     </div>
     <!-- Half: heute -->
     <div class="tile-show-half wx-half">

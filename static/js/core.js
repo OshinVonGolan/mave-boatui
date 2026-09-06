@@ -634,3 +634,22 @@ function wischenBinden(el, weiter) {
     e.preventDefault();
   }, true);
 }
+
+
+/**
+ * Die Blaetterpunkte unter einer Kachel: wie viele Orte es gibt und auf
+ * welchem man steht.
+ *
+ * Dieselbe Sprache wie beim Blaettern am Telefon. Sie ersetzen den Pfeil, der
+ * frueher am Ortsnamen hing: ein Pfeil sagt „hier geht es weiter", die Punkte
+ * sagen zusaetzlich, wie weit. Bei nur einem Ort bleibt die Zeile leer — ein
+ * einzelner Punkt waere eine Aussage ueber nichts.
+ */
+function ortPunkte(id, anzahl, aktiv) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const soll = anzahl > 1
+    ? Array.from({ length: anzahl }, (_, i) => `<i${i === aktiv ? ' class="an"' : ''}></i>`).join('')
+    : '';
+  if (el.innerHTML !== soll) el.innerHTML = soll;
+}

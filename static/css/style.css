@@ -1383,6 +1383,51 @@
     .card-link { margin-left: auto; font-size: 10px; color: var(--text3); font-weight: 400;
       letter-spacing: .04em; text-transform: none; }
 
+    /* Kopfzeile mit Ortsnamen: drei Spalten, damit der Name WIRKLICH in der
+       Mitte steht und nicht dort, wo die linke Seite gerade aufhoert. Die
+       aeusseren Spalten sind gleich breit; was nicht passt, wird abgekuerzt.
+
+       Vorher sass der Ort rechts oben — an der Stelle, an der auf jeder
+       anderen Kachel „Details" steht. Zwei Kacheln hatten damit kein Details
+       mehr, und man musste raten, dass sie eine Seite haben. */
+    /* minmax(0, 1fr) und nicht 1fr: eine 1fr-Spalte darf nicht unter ihren
+       Inhalt schrumpfen, also wuchs sie bei „WASSERSTAND" ueber ihr Drittel
+       hinaus und schob die Mitte nach rechts. Mit der Null als Untergrenze
+       sind die aeusseren Spalten wirklich gleich breit; wird es eng, kuerzt
+       die Gattung links ab — das Sinnbild daneben sagt ohnehin, welche
+       Kachel das ist. */
+    .card-title-ort { display: grid; align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+    /* Enger als in der normalen Kopfzeile: bei zwei Spalten (Fenster um die
+       700 px) fehlten der Gattung sonst drei Pixel, und sie endete mit einem
+       Auslassungszeichen. Die sechs Pixel hier und am Ortsnamen reichen. */
+    .card-title-ort .ct-links { display: inline-flex; align-items: center;
+      gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; }
+    .card-title-ort .card-link { margin-left: 0; justify-self: end;
+      white-space: nowrap; }
+    /* Der Ort ist ein Name und kein Bedienelement mit Rahmen. Dass es weitere
+       gibt, sagen die Punkte unten auf der Kachel — dafuer braucht es hier
+       weder Kasten noch Pfeil. Antippbar bleibt er. */
+    .ct-ort { justify-self: center; background: none; border: 0; padding: 0 4px;
+      font: inherit; text-transform: none; letter-spacing: .02em;
+      font-size: 12px; font-weight: 600; color: var(--text2);
+      cursor: pointer; max-width: 100%; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent; }
+    html[data-zeiger="fein"] .ct-ort:hover { color: var(--text); }
+
+    /* Die Punkte unten: dieselbe Sprache wie beim Blaettern am Telefon —
+       wie viele Orte gepflegt sind und auf welchem man gerade steht. Sie
+       ersetzen den Pfeil am Namen: ein Pfeil sagt „hier geht es weiter", die
+       Punkte sagen zusaetzlich, wie weit. */
+    .ort-punkte { display: flex; justify-content: center; gap: 6px;
+      padding-top: 1px; flex: none; }
+    .ort-punkte i { width: 5px; height: 5px; border-radius: 50%;
+      background: var(--text3); opacity: .3;
+      transition: opacity .2s, background .2s; }
+    .ort-punkte i.an { background: var(--accent); opacity: .95; }
+
     /* ── Battery card — clickable ── */
     .card-battery {
       cursor: pointer; transition: border-color .2s, box-shadow .2s;

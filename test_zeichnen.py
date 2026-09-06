@@ -1262,12 +1262,17 @@ class Wetterkachel(Pruefstand):
         gerahmter Streifen — waren drei Sprachen in einer Kachel (Eignerurteil
         „komplett desaströs"). Die Kachel selbst ist die Fläche; alles darin
         hängt an Abstand und Schriftgröße."""
-        n = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-koerper *')]
+        # Gemeint sind FLÄCHEN, nicht jede Farbe: die Blätterpunkte unten sind
+        # 5 px groß und füllen nichts zu.
+        kaesten = self.pg.evaluate("""() => [...document.querySelectorAll('.wx-koerper *')]
             .filter(e => {
               const bg = getComputedStyle(e).backgroundColor;
-              return bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
-            }).length""")
-        self.assertEqual(n, 0, 'in der Kachel liegt noch ein Kasten')
+              if (!bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') return false;
+              const r = e.getBoundingClientRect();
+              return r.width * r.height > 600;
+            })
+            .map(e => e.className || e.tagName)""")
+        self.assertEqual(kaesten, [], 'in der Kachel liegt noch ein Kasten')
 
     def test_nur_ein_grosser_wert(self):
         """Temperatur und Wind standen gleich groß nebeneinander und stritten
@@ -1606,16 +1611,41 @@ class Pegelkachel(Pruefstand):
             "() => document.getElementById('wlTileVal').textContent")
         self.assertEqual(sofort, '+11')
 
-    def test_ein_einziger_pegel_zeigt_keinen_pfeil(self):
-        """Ein Pfeil, der nirgendwo hinfuehrt, ist eine Luege."""
+    def test_ein_einziger_pegel_zeigt_keine_punkte(self):
+        """Ein Punkt allein ist eine Aussage über nichts — genau wie der Pfeil
+        vorher, der nirgendwo hinführte."""
         self.pg.evaluate("""() => {
             _wlStationen = [{ name: 'Nur einer', uuid: 'x' }];
             _wlIndex = 0; _wlNamenSetzen();
         }""")
         self.assertEqual(self.pg.evaluate(
-            "() => document.querySelector('#wlStationKnopf svg').style.display"), 'none')
+            "() => document.getElementById('wlPunkte').children.length"), 0)
         self.assertTrue(self.pg.evaluate(
             "() => document.getElementById('wlStationLeiste').hidden"))
+
+    def test_drei_pegel_geben_drei_punkte(self):
+        self.pg.evaluate("""() => {
+            _wlStationen = [{ name: 'A', uuid: 'a' }, { name: 'B', uuid: 'b' },
+                            { name: 'C', uuid: 'c' }];
+            _wlIndex = 1; _wlNamenSetzen();
+        }""")
+        self.assertEqual(self.pg.evaluate("""() =>
+            [...document.getElementById('wlPunkte').children]
+              .map(e => e.className)"""), ['', 'an', ''])
+
+    def test_der_ort_steht_mittig_und_details_in_seiner_ecke(self):
+        """Rechts oben gehört „Details" hin — auf jeder anderen Kachel steht es
+        da. Der Ortsname hatte diese Ecke besetzt (Eignermeldung)."""
+        for wahl in ('.card-wl', '#wxCard'):
+            m = self.pg.evaluate("""(wahl) => {
+                const t = document.querySelector(wahl + ' .card-title-ort');
+                const o = t.querySelector('.ct-ort').getBoundingClientRect();
+                const r = t.getBoundingClientRect();
+                return { versatz: (o.x + o.width / 2) - (r.x + r.width / 2),
+                         details: !!t.querySelector('.card-link') };
+            }""", wahl)
+            self.assertLess(abs(m['versatz']), 2, f'{wahl}: Ort um {m["versatz"]} px daneben')
+            self.assertTrue(m['details'], f'{wahl}: kein Details in der Ecke')
 
 if __name__ == '__main__':
     unittest.main()
