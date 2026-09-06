@@ -37,6 +37,11 @@ _DEFAULT_SETTINGS: dict = {
     'balance': {'absorption_v': 14.4, 'float_v': 14.4},   # CV: Float = Absorption → kein Float-Abfall
 }
 
+# Die Modi, die es gibt. Alles andere ist ein Fehler und faellt auf 'harbor'
+# zurueck — lieber geregelt laden als unbegrenzt.
+_MODI = ('harbor', 'full', 'balance')
+
+
 _DEFAULT_STATE: dict = {
     'mode':                'harbor',
     'last_balance':        None,
@@ -88,6 +93,17 @@ class ChargeController:
         state    = data.get('state')
         settings = data.get('settings')
         self._state    = {**_DEFAULT_STATE, **(state if isinstance(state, dict) else {})}
+        # Ein gespeichertes null schlaegt beim Zusammenfuehren den Vorgabewert —
+        # und ein unbekannter Modus schaltet die Hafen-Regelung KOMPLETT ab:
+        # `if mode == 'harbor'` ist dann falsch, der Zweig mit SOC-Ziel,
+        # Halten und Hysterese wird uebersprungen, und der Lader bekommt
+        # stumm 13,8/13,3 V ohne jede Begrenzung. Am Boot genau so
+        # vorgefunden (mode war null) — bei SOC 85 kam `on: None` heraus,
+        # also kein Halten bei 80 %.
+        if self._state.get('mode') not in _MODI:
+            log.warning('Unbekannter Lademodus %r — zurueck auf %s',
+                        self._state.get('mode'), _DEFAULT_STATE['mode'])
+            self._state['mode'] = _DEFAULT_STATE['mode']
         self._settings = self._deep_merge(_DEFAULT_SETTINGS,
                                           settings if isinstance(settings, dict) else {})
 
@@ -299,7 +315,7 @@ class ChargeController:
         return False
 
     def set_mode(self, mode: str) -> dict:
-        if mode not in ('harbor', 'full', 'balance'):
+        if mode not in _MODI:
             raise ValueError(f'Unbekannter Modus: {mode}')
         self._state['mode'] = mode
         if mode == 'balance':
