@@ -88,7 +88,30 @@ def _num(value, default: float) -> float:
 
 # Ab dieser Abweichung zwischen gewollten und zurückgelesenen Sollwerten gilt
 # der Lader als verstellt und bekommt sie erneut geschickt.
-_SOLL_TOLERANZ_V = 0.05
+#
+# Eine halbe Registerstufe. Die Sollwert-Register des Laders rechnen in 0,01 V,
+# und der Weg dorthin ist verlustfrei: der Pi schickt Millivolt, das Gateway
+# rundet auf 0,01 V, der Lader meldet genau das zurück. Was hier ankommt, weicht
+# also entweder gar nicht ab oder um mindestens eine ganze Stufe. Die halbe
+# Stufe faengt nur die Rundung ab, wenn der eingestellte Wert selbst feiner ist
+# als 0,01 V (13,833 minus Solar-Versatz).
+#
+# Vorher standen hier 0,05 V, und genau daran ist die Regelung am Boot
+# vorbeigelaufen: gewollt waren 13,50 V, im Lader standen 13,48 V, und die
+# 0,02 V Unterschied galten als "passt schon". Da zugleich kein Wechsel
+# zwischen Laden und Halten stattfand, wurde nie geschrieben — der Lader stand
+# tagelang auf einem Wert, den niemand gesetzt hatte.
+_SOLL_TOLERANZ_V = 0.005
+
+# Bremse fuer das Nachsetzen. Uebernimmt der Lader einen Wert nicht — weil das
+# Register ihn neu berechnet, weil er ihn ablehnt, weil er defekt ist —, wuerde
+# der Regler ihn sonst bei jeder Rueckmeldung erneut schreiben. Bei einer
+# Abfrage alle fuenf Minuten waeren das ueber 100 Schreibvorgaenge am Tag in ein
+# Flash, das dafuer nicht gedacht ist. Also: Mindestabstand zwischen zwei
+# Versuchen, und nach _NACHSETZ_MAX vergeblichen Versuchen wird aufgegeben. Zu
+# sehen bleibt es trotzdem — preset_match steht dann auf 'custom'.
+_NACHSETZ_ABSTAND_S = 1800.0
+_NACHSETZ_MAX       = 3
 
 # Zulässige Werte für harbor.hold_mode.
 _HALTEARTEN = ('spannung', 'aus')
@@ -105,6 +128,8 @@ class ChargeController:
         self._nachsetzen: bool = False               # Rückmeldung wich ab → neu senden
         self._halte_seit: float | None = None        # monoton, Beginn des aktuellen Haltens
         self._halte_geladen: bool = False            # waehrend des Haltens floss Ladung
+        self._nachsetz_zeit: float | None = None     # monoton, letzter Nachsetz-Versuch
+        self._nachsetz_zaehler: int = 0              # vergebliche Versuche in Folge
         self._last_written: str | None = None        # zuletzt auf Disk geschriebener Stand
         self._balance_mono: float | None = None      # Start des laufenden Balance-Laufs (monoton)
         # _save() wird aus zwei Richtungen aufgerufen: aus dem Event-Loop
@@ -372,7 +397,15 @@ class ChargeController:
         self._last_soc = soc
 
         nachsetzen = self._nachsetzen
-        self._nachsetzen = False
+        if nachsetzen:
+            self._nachsetzen        = False
+            self._nachsetz_zeit     = time.monotonic()
+            self._nachsetz_zaehler += 1
+            if self._nachsetz_zaehler >= _NACHSETZ_MAX:
+                log.warning('Der Lader uebernimmt die Sollwerte nicht (%d Versuche) — '
+                            'es wird nicht weiter geschrieben, um sein Flash zu schonen. '
+                            'Der Unterschied bleibt in der Oberflaeche sichtbar.',
+                            self._nachsetz_zaehler)
 
         mode = self._state['mode']
         if mode == 'balance':
@@ -499,6 +532,8 @@ class ChargeController:
         else:
             self._state['balance_start'] = None
             self._balance_mono           = None
+        self._nachsetz_zeit    = None          # neuer Modus, neue Absicht
+        self._nachsetz_zaehler = 0
         if mode == 'harbor':
             self._state['harbor_holding'] = None   # Hysterese neu entscheiden lassen
         self._save()
@@ -551,14 +586,31 @@ class ChargeController:
             return
         if (abs(ist_abs - ziel['absorption_v']) <= _SOLL_TOLERANZ_V and
                 abs(ist_flt - ziel['float_v']) <= _SOLL_TOLERANZ_V):
+            if self._nachsetz_zaehler:
+                log.info('Lader hat die Sollwerte uebernommen: %.2f/%.2f V', ist_abs, ist_flt)
+            self._nachsetz_zaehler = 0
             return
+        if self._nachsetz_zaehler >= _NACHSETZ_MAX:
+            return                                   # aufgegeben, siehe _NACHSETZ_MAX
+        if (self._nachsetz_zeit is not None
+                and time.monotonic() - self._nachsetz_zeit < _NACHSETZ_ABSTAND_S):
+            return                                   # der letzte Versuch ist zu frisch
         if not self._nachsetzen:
             log.info('Lader meldet %.2f/%.2f V, gewollt sind %.2f/%.2f V — wird nachgesetzt',
                      ist_abs, ist_flt, ziel['absorption_v'], ziel['float_v'])
         self._nachsetzen = True
 
     def update_settings(self, patch: dict) -> dict:
-        self._settings = self._deep_merge(self._settings, patch)
+        """Einstellungen aendern — und die neuen Sollwerte auch hinschicken.
+
+        Ohne das Nachsetzen bliebe eine geaenderte Absorptionsspannung im
+        Ladegeraet stehen, bis zufaellig zwischen Laden und Halten gewechselt
+        wird. Das kann Tage dauern.
+        """
+        self._settings          = self._deep_merge(self._settings, patch)
+        self._nachsetzen        = True
+        self._nachsetz_zeit     = None
+        self._nachsetz_zaehler  = 0
         self._save()
         return self.status()
 

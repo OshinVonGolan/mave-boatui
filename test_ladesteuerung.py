@@ -166,12 +166,78 @@ class NachsetzenBeiAbweichung(Basis):
         self.assertTrue(r.update_soc(61))        # einmal nachsetzen
         self.assertFalse(r.update_soc(62))       # danach wieder Ruhe
 
-    def test_kleine_abweichung_bleibt_folgenlos(self):
+    def test_zwei_hundertstel_sind_eine_abweichung(self):
+        """Am Boot vorgefunden: gewollt 13,50 V, im Lader standen 13,48 V.
+
+        Die Schwelle lag bei 0,05 V, die 0,02 V galten also als "passt schon".
+        Da zugleich kein Wechsel zwischen Laden und Halten stattfand, wurde nie
+        geschrieben — der Lader stand tagelang auf einem Wert, den niemand
+        gesetzt hatte. Die Register rechnen in 0,01 V; zwei Stufen sind eine
+        echte Abweichung.
+        """
         r = self._regler()
         r.update_soc(60)
         soll = self._ip43(r)
-        r.update_actual_setpoints(soll['absorption_v'] + 0.01, soll['float_v'])
+        r.update_actual_setpoints(soll['absorption_v'] - 0.02, soll['float_v'])
+        self.assertTrue(r.update_soc(61))
+
+    def test_rundung_feiner_als_eine_stufe_bleibt_folgenlos(self):
+        # Der Weg zum Lader rundet auf 0,01 V. Ist der eingestellte Wert feiner,
+        # darf die Rundung kein dauerndes Nachsetzen ausloesen.
+        r = self._regler()
+        r.update_soc(60)
+        soll = self._ip43(r)
+        r.update_actual_setpoints(soll['absorption_v'] + 0.003, soll['float_v'])
         self.assertFalse(r.update_soc(61))
+
+    def test_geaenderte_einstellung_wird_hingeschickt(self):
+        # Sonst bliebe eine neue Absorptionsspannung im Lader stehen, bis
+        # zufaellig zwischen Laden und Halten gewechselt wird.
+        r = self._regler()
+        r.update_soc(60)
+        soll = self._ip43(r)
+        r.update_actual_setpoints(soll['absorption_v'], soll['float_v'])
+        self.assertFalse(r.update_soc(61))
+        r.update_settings({'harbor': {'absorption_v': 14.0}})
+        self.assertTrue(r.update_soc(62))
+
+    def test_hartnaeckige_abweichung_wird_irgendwann_aufgegeben(self):
+        """Uebernimmt der Lader den Wert nie, darf nicht ewig geschrieben werden.
+
+        Bei einer Rueckmeldung alle fuenf Minuten waeren das ueber hundert
+        Schreibvorgaenge am Tag in ein Flash, das dafuer nicht gedacht ist.
+        """
+        r = self._regler()
+        r.update_soc(60)
+        soll = self._ip43(r)
+        falsch = soll['absorption_v'] - 0.5
+        versuche = 0
+        for _ in range(12):
+            r._nachsetz_zeit = None            # Mindestabstand ueberspringen
+            r.update_actual_setpoints(falsch, soll['float_v'])
+            if r.update_soc(60 + versuche * 0.1):
+                versuche += 1
+        self.assertEqual(versuche, cc._NACHSETZ_MAX)
+
+    def test_innerhalb_des_mindestabstands_kein_zweiter_versuch(self):
+        r = self._regler()
+        r.update_soc(60)
+        soll = self._ip43(r)
+        falsch = soll['absorption_v'] - 0.5
+        r.update_actual_setpoints(falsch, soll['float_v'])
+        self.assertTrue(r.update_soc(61))
+        r.update_actual_setpoints(falsch, soll['float_v'])
+        self.assertFalse(r.update_soc(62))
+
+    def test_uebernommener_wert_loest_die_bremse(self):
+        r = self._regler()
+        r.update_soc(60)
+        soll = self._ip43(r)
+        r.update_actual_setpoints(soll['absorption_v'] - 0.5, soll['float_v'])
+        r.update_soc(61)
+        self.assertEqual(r._nachsetz_zaehler, 1)
+        r.update_actual_setpoints(soll['absorption_v'], soll['float_v'])
+        self.assertEqual(r._nachsetz_zaehler, 0)
 
     def test_ohne_bekannten_soc_wird_nicht_geprueft(self):
         # Sonst schreibt jeder Neustart einmal ins Flash: ohne SOC nimmt
